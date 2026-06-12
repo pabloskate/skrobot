@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "skrobot",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-05-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  }
+
+  // Secrets:
+  //   production →  npx wrangler secret put GEMINI_API_KEY
+  //   local preview (`npm run preview`) → put GEMINI_API_KEY=... in .dev.vars
+
+  // ---- Future D1 backend (see src/shared/db.ts for the enable steps) ----
+  // "d1_databases": [
+  //   {
+  //     "binding": "DB",
+  //     "database_name": "skrobot",
+  //     "database_id": "<from: npx wrangler d1 create skrobot>",
+  //     "migrations_dir": "migrations"
+  //   }
+  // ]
+}
