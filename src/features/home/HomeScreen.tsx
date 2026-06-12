@@ -11,9 +11,6 @@ interface Props {
 const CARDS: { mode: ModeChoice; title: string; blurb: string; icon: string }[] = [
   { mode: { kind: 'category', category: 'flatground' }, title: 'Flatground', blurb: 'Flip tricks, shuvits & spins', icon: '🛹' },
   { mode: { kind: 'category', category: 'grinds' }, title: 'Grinds', blurb: 'Rails, ledges & slides', icon: '🛤️' },
-  { mode: { kind: 'category', category: 'other' }, title: 'Other', blurb: 'Transition, manuals & more', icon: '🌀' },
-  { mode: { kind: 'dice' }, title: 'Skate Dice', blurb: 'Roll a random trick to try', icon: '🎲' },
-  { mode: { kind: 'custom' }, title: 'Custom', blurb: 'Build your own trick list', icon: '✨' },
 ];
 
 export default function HomeScreen({ onPick }: Props) {
