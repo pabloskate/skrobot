@@ -3,6 +3,7 @@
 import dynamic from 'next/dynamic';
 import { useState } from 'react';
 import { DiceScreen } from '@/features/dice';
+import type { GameState } from '@/features/game';
 import { GameScreen } from '@/features/game';
 import type { ModeChoice } from '@/features/home';
 import { HomeScreen } from '@/features/home';
@@ -28,8 +29,8 @@ type Screen =
   | { id: 'dice' }
   | { id: 'custom' }
   | { id: 'robots'; pool: Trick[]; poolLabel: string }
-  | { id: 'game'; pool: Trick[]; poolLabel: string; robot: Robot }
-  | { id: 'voice'; pool: Trick[]; poolLabel: string; robot: Robot };
+  | { id: 'game'; pool: Trick[]; poolLabel: string; robot: Robot; resume?: GameState }
+  | { id: 'voice'; pool: Trick[]; poolLabel: string; robot: Robot; resume?: GameState };
 
 const CATEGORY_LABELS: Record<Category, string> = {
   flatground: 'Flatground',
@@ -98,14 +99,20 @@ export default function AppShell() {
             key={screen.robot.id}
             robot={screen.robot}
             pool={screen.pool}
+            resume={screen.resume}
             onExit={back}
-            onVoice={() =>
-              setScreen({ id: 'voice', pool: screen.pool, poolLabel: screen.poolLabel, robot: screen.robot })
-            }
+            onVoice={(state) => setScreen({ ...screen, id: 'voice', resume: state })}
           />
         )}
         {screen.id === 'voice' && (
-          <VoiceGameScreen key={screen.robot.id} robot={screen.robot} pool={screen.pool} onExit={back} />
+          <VoiceGameScreen
+            key={screen.robot.id}
+            robot={screen.robot}
+            pool={screen.pool}
+            resume={screen.resume}
+            onExit={back}
+            onScreenMode={(state) => setScreen({ ...screen, id: 'game', resume: state })}
+          />
         )}
       </main>
     </>

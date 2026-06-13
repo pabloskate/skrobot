@@ -53,11 +53,16 @@ function specFor(trick: Trick): Spec {
     case 'Heelflip':
       return { ...base, flips: 1 };
     case 'Double Kickflip':
+    case 'Double Heelflip':
       return { ...base, flips: 2 };
     case 'Varial Kickflip':
     case 'Varial Heelflip':
     case 'Hardflip':
     case 'Inward Heelflip':
+    case 'Pressure Flip':
+    case 'Dolphin Flip':
+    case 'Hospital Flip':
+    case 'Casper Flip':
       return { ...base, flips: 1, yaw: 180 };
     case '360 Flip':
     case 'Laser Flip':
@@ -66,17 +71,31 @@ function specFor(trick: Trick): Spec {
     case 'Frontside Shuvit':
       return { ...base, yaw: 180 };
     case '360 Shuvit':
+    case 'Frontside 360 Shuvit':
       return { ...base, yaw: 360 };
     case 'Bigspin':
     case 'FS Bigspin':
       // Board does a full 360 shuvit while the skater only turns 180.
       return { ...base, yaw: 360, bodyYaw: 180 };
+    case 'Bigspin Flip':
+    case 'FS Bigspin Flip':
+    case 'Bigspin Heelflip':
+    case 'FS Bigspin Heelflip':
+      return { ...base, flips: 1, yaw: 360, bodyYaw: 180 };
     case 'Frontside 180':
     case 'Backside 180':
     case 'No Comply 180':
       return { ...base, yaw: 180, bodyYaw: 180 };
+    case 'Backside Flip':
+    case 'Frontside Flip':
+    case 'Backside Heelflip':
+    case 'Frontside Heelflip':
+      return { ...base, flips: 1, yaw: 180, bodyYaw: 180 };
+    case 'Backside 360':
+    case 'Frontside 360':
+      return { ...base, yaw: 360, bodyYaw: 360 };
     case 'Impossible':
-      return { ...base, roll: 360 };
+      return { ...base, roll: trick.stance === 'fakie' || trick.stance === 'nollie' ? 360 : -360 };
     default:
       // Ollies, grinds, manuals, stalls… plain pop.
       return base;

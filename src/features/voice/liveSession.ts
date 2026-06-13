@@ -39,6 +39,7 @@ export class VoiceSession {
   private speaker = new SpeakerQueue();
   private resumeHandle: string | null = null;
   private closedByUser = false;
+  private isSessionOpen = false;
   private captionBuf = { you: '', robot: '' };
   private prevLetters = { player: 0, robot: 0 };
 
@@ -59,9 +60,19 @@ export class VoiceSession {
     this.events.onStatus('connecting');
     await this.speaker.resume();
     await this.connect();
-    await this.mic.start((chunk) => {
-      this.session?.sendRealtimeInput({ audio: { data: chunk, mimeType: 'audio/pcm;rate=16000' } });
-    });
+    await this.mic.start((chunk) => this.sendMicChunk(chunk));
+  }
+
+  private sendMicChunk(chunk: string): void {
+    const session = this.session;
+    if (!session || !this.isSessionOpen) return;
+    try {
+      session.sendRealtimeInput({ audio: { data: chunk, mimeType: 'audio/pcm;rate=16000' } });
+    } catch (error) {
+      this.isSessionOpen = false;
+      this.events.onStatus('error');
+      this.events.onError(error instanceof Error ? error.message : 'Could not send microphone audio.');
+    }
   }
 
   private async connect(): Promise<void> {
@@ -92,12 +103,22 @@ export class VoiceSession {
         contextWindowCompression: { slidingWindow: {} },
       },
       callbacks: {
-        onopen: () => this.events.onStatus('live'),
+        onopen: () => {
+          this.isSessionOpen = true;
+          this.events.onStatus('live');
+        },
         onmessage: (msg: LiveServerMessage) => this.handleMessage(msg),
         onerror: (e: ErrorEvent) => {
+          this.isSessionOpen = false;
+          this.events.onStatus('error');
           this.events.onError(e.message || 'Connection error');
         },
-        onclose: () => {
+        onclose: (e: CloseEvent) => {
+          this.isSessionOpen = false;
+          this.session = null;
+          if (e.code || e.reason) {
+            this.events.onError(`Live connection closed${e.code ? ` (${e.code})` : ''}${e.reason ? `: ${e.reason}` : ''}`);
+          }
           if (!this.closedByUser) void this.reconnect();
         },
       },
@@ -173,6 +194,7 @@ export class VoiceSession {
 
   async stop(): Promise<void> {
     this.closedByUser = true;
+    this.isSessionOpen = false;
     this.session?.close();
     this.session = null;
     await this.mic.stop();

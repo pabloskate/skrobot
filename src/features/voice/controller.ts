@@ -48,10 +48,15 @@ export class VoiceGameController {
   /** Fired for every robot trick attempt (including retries) so the UI can animate it. */
   onRobotAttempt?: (trick: Trick, landed: boolean) => void;
 
-  constructor(robot: Robot, pool: Trick[]) {
+  /** `resume` continues a game handed over from the on-screen mode. */
+  constructor(robot: Robot, pool: Trick[], resume?: GameState) {
     this.robot = robot;
     this.pool = pool;
     this.bag = buildBag(robot, pool);
+    if (resume) {
+      this.state = resume;
+      this.recorded = resume.phase === 'over';
+    }
   }
 
   private dispatch(a: GameAction) {

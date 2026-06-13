@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { TbMicrophone } from 'react-icons/tb';
 import { recordResult } from '@/features/records';
 import type { Robot } from '@/features/robots';
 import { buildBag, RobotAvatar } from '@/features/robots';
@@ -21,8 +22,11 @@ import TrickAnimation from './TrickAnimation';
 interface Props {
   robot: Robot;
   pool: Trick[];
+  /** Game state carried over when the player switches modes mid-game. */
+  resume?: GameState;
   onExit: () => void;
-  onVoice?: () => void;
+  /** Hand the live game state over to voice mode. */
+  onVoice?: (state: GameState) => void;
 }
 
 // ---------- Rock Paper Scissors ----------
@@ -120,11 +124,12 @@ function Scoreboard({ state, robot }: { state: GameState; robot: Robot }) {
 
 // ---------- Main screen ----------
 
-export default function GameScreen({ robot, pool, onExit, onVoice }: Props) {
-  const [state, dispatch] = useReducer(gameReducer, initialGameState);
+export default function GameScreen({ robot, pool, resume, onExit, onVoice }: Props) {
+  const [state, dispatch] = useReducer(gameReducer, resume ?? initialGameState);
   const [pickerOpen, setPickerOpen] = useState(false);
   const bag = useMemo(() => buildBag(robot, pool), [robot, pool]);
-  const recorded = useRef(false);
+  // A resumed finished game was already recorded by the other mode.
+  const recorded = useRef(resume?.phase === 'over');
 
   const say = (template: string) => template.replaceAll('{R}', robot.name);
 
@@ -157,17 +162,10 @@ export default function GameScreen({ robot, pool, onExit, onVoice }: Props) {
 
   return (
     <div className="container game">
-      <Scoreboard state={state} robot={robot} />
+      {state.phase !== 'rps' && <Scoreboard state={state} robot={robot} />}
 
       {state.phase === 'rps' && (
-        <>
-          <RpsPanel robot={robot} onDone={(playerFirst) => dispatch({ type: 'START', playerFirst })} />
-          {onVoice && (
-            <button className="btn-ghost voice-entry" onClick={onVoice}>
-              🎙 Play this game by voice
-            </button>
-          )}
-        </>
+        <RpsPanel robot={robot} onDone={(playerFirst) => dispatch({ type: 'START', playerFirst })} />
       )}
 
       {state.phase === 'playerSet' && (
@@ -250,6 +248,24 @@ export default function GameScreen({ robot, pool, onExit, onVoice }: Props) {
             Back to robots
           </button>
         </div>
+      )}
+
+      {/* Mode switch is only offered while the game waits on the player —
+          robot turns resolve through animations that can't be handed over mid-flight. */}
+      {onVoice && (state.phase === 'rps' || state.phase === 'playerSet' || state.phase === 'playerCopy') && (
+        <button className="voice-entry" onClick={() => onVoice(state)}>
+          <span className="voice-entry-icon">
+            <TbMicrophone aria-hidden />
+          </span>
+          <span className="voice-entry-text">
+            <strong>{state.phase === 'rps' ? 'Play this game by voice' : 'Switch to voice'}</strong>
+            <small>
+              {state.phase === 'rps'
+                ? 'Hands-free with earbuds — just talk while you skate'
+                : 'Keep this game going hands-free with earbuds'}
+            </small>
+          </span>
+        </button>
       )}
 
       {pickerOpen && (

@@ -13,7 +13,11 @@ export async function mintLiveToken(apiKey: string): Promise<string> {
       uses: 1,
       expireTime: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
       newSessionExpireTime: new Date(Date.now() + 60 * 1000).toISOString(),
+      // Pin the token to our Live model. lockAdditionalFields: [] means only
+      // the fields set here are locked — the browser still supplies its dynamic
+      // game prompt/tools at connect time (omitting it would lock everything).
       liveConnectConstraints: { model: LIVE_MODEL },
+      lockAdditionalFields: [],
     },
   });
   if (!token.name) throw new Error('Live API returned a token without a name');

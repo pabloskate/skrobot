@@ -220,7 +220,18 @@ main {
 }
 
 .mode-icon {
-  font-size: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  color: var(--purple);
+  margin-bottom: 4px;
+}
+
+.mode-icon svg {
+  width: 100%;
+  height: 100%;
 }
 
 .mode-title {
@@ -346,6 +357,8 @@ main {
 }
 
 .rps-btn {
+  display: grid;
+  place-items: center;
   font-size: 42px;
   background: var(--bg);
   border: 3px solid transparent;
@@ -375,7 +388,13 @@ main {
 }
 
 .rps-icon {
-  font-size: 44px;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  font-size: 34px;
+  border-radius: 18px;
+  background: var(--purple-soft);
 }
 
 .rps-who {
@@ -686,8 +705,60 @@ main {
 /* ---------- Voice mode ---------- */
 
 .voice-entry {
-  display: block;
-  margin: 14px auto 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  margin-top: 16px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, var(--purple), var(--purple-dark));
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  box-shadow: 0 4px 14px rgba(100, 49, 216, 0.4);
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.voice-entry:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(100, 49, 216, 0.5);
+}
+
+.voice-entry:active {
+  transform: scale(0.98);
+}
+
+.voice-entry-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.voice-entry-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.voice-entry-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.voice-entry-text strong {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.voice-entry-text small {
+  font-size: 13px;
+  opacity: 0.85;
 }
 
 .voice-panel {

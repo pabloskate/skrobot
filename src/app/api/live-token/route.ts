@@ -4,19 +4,38 @@
  *
  * GEMINI_API_KEY comes from (in order): the Cloudflare worker env (production
  * secret / .dev.vars in `npm run preview`) or process.env (.env.local in `next dev`).
+ *
+ * Abuse guards (the token itself can't be origin-restricted, so the mint is):
+ * - same-origin check: browsers always send Origin on cross-site POSTs, so this
+ *   stops other sites burning our quota. curl can spoof it, hence also:
+ * - per-IP rate limit via the LIVE_TOKEN_RATE_LIMIT binding (wrangler.jsonc).
+ *   Absent outside the Cloudflare runtime, so plain `next dev` skips it.
  */
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { mintLiveToken } from '@/features/voice/server/live-token';
 
-export async function POST() {
-  let apiKey: string | undefined;
+export async function POST(request: Request) {
+  const origin = request.headers.get('origin');
+  if (origin && origin !== new URL(request.url).origin) {
+    return Response.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  let env: CloudflareEnv | undefined;
   try {
-    const { env } = await getCloudflareContext({ async: true });
-    apiKey = env.GEMINI_API_KEY;
+    ({ env } = await getCloudflareContext({ async: true }));
   } catch {
     /* not running under the Cloudflare adapter (e.g. plain next dev) */
   }
-  apiKey ??= process.env.GEMINI_API_KEY;
+
+  if (env?.LIVE_TOKEN_RATE_LIMIT) {
+    const ip = request.headers.get('cf-connecting-ip') ?? 'unknown';
+    const { success } = await env.LIVE_TOKEN_RATE_LIMIT.limit({ key: ip });
+    if (!success) {
+      return Response.json({ error: 'Too many requests' }, { status: 429 });
+    }
+  }
+
+  const apiKey = env?.GEMINI_API_KEY ?? process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return Response.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 });
   }

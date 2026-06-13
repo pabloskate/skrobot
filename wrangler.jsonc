@@ -7,6 +7,20 @@
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
+  },
+
+  // Per-IP throttle for /api/live-token (Workers rate limiting binding).
+  // Best-effort and per-colo, which is fine for abuse damping. A legit voice
+  // session mints 1 token plus up to 4 reconnect retries, so 10/min is roomy.
+  "unsafe": {
+    "bindings": [
+      {
+        "name": "LIVE_TOKEN_RATE_LIMIT",
+        "type": "ratelimit",
+        "namespace_id": "1001",
+        "simple": { "limit": 10, "period": 60 }
+      }
+    ]
   }
 
   // Secrets:

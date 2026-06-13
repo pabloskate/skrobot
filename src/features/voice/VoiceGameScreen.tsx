@@ -12,7 +12,11 @@ import { VoiceSession } from './liveSession';
 interface Props {
   robot: Robot;
   pool: Trick[];
+  /** Game state carried over when the player switches modes mid-game. */
+  resume?: GameState;
   onExit: () => void;
+  /** Hand the live game state back to the on-screen mode. */
+  onScreenMode?: (state: GameState) => void;
 }
 
 type Status = 'idle' | 'connecting' | 'live' | 'reconnecting' | 'ended' | 'error';
@@ -42,10 +46,10 @@ function Letters({ count }: { count: number }) {
   );
 }
 
-export default function VoiceGameScreen({ robot, pool, onExit }: Props) {
+export default function VoiceGameScreen({ robot, pool, resume, onExit, onScreenMode }: Props) {
   const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState<string | null>(null);
-  const [game, setGame] = useState<GameState>(initialGameState);
+  const [game, setGame] = useState<GameState>(resume ?? initialGameState);
   const [captions, setCaptions] = useState<Caption[]>([]);
   const [muted, setMuted] = useState(false);
   const [pocket, setPocket] = useState(false);
@@ -59,7 +63,9 @@ export default function VoiceGameScreen({ robot, pool, onExit }: Props) {
 
   const start = async () => {
     setError(null);
-    const controller = new VoiceGameController(robot, pool);
+    // Seed from the current scoreboard state so a carried-over game (or a
+    // stopped-and-restarted session) picks up where it left off.
+    const controller = new VoiceGameController(robot, pool, game);
     controller.onChange = (s) => {
       setGame({ ...s });
       // A rematch resets to the toss — drop any leftover attempt animations.
@@ -153,28 +159,37 @@ export default function VoiceGameScreen({ robot, pool, onExit }: Props) {
 
   return (
     <div className="container game voice">
-      <div className="scoreboard">
-        <div className="score-row">
-          <span className="score-name">{robot.name}</span>
-          <Letters count={game.letters.robot} />
+      {game.phase !== 'rps' && (
+        <div className="scoreboard">
+          <div className="score-row">
+            <span className="score-name">{robot.name}</span>
+            <Letters count={game.letters.robot} />
+          </div>
+          <div className="score-row">
+            <span className="score-name">You</span>
+            <Letters count={game.letters.player} />
+          </div>
         </div>
-        <div className="score-row">
-          <span className="score-name">You</span>
-          <Letters count={game.letters.player} />
-        </div>
-      </div>
+      )}
 
       {status === 'idle' || status === 'ended' ? (
         <div className="panel center">
           <RobotAvatar robot={robot} size={120} pose="idle" />
           <h2 className="panel-title">Voice game vs {robot.name}</h2>
           <p className="muted">
-            Pop in your earbuds. You'll play the whole game by talking — the toss, your tricks, everything.
+            {game.phase !== 'rps'
+              ? 'Pop in your earbuds — your game continues right where you left off.'
+              : "Pop in your earbuds. You'll play the whole game by talking — the toss, your tricks, everything."}
           </p>
           {error && <p className="note">{error}</p>}
           <button className="btn-primary" onClick={start}>
             🎙 Start voice session
           </button>
+          {onScreenMode && (
+            <button className="btn-ghost" onClick={() => onScreenMode(game)}>
+              📱 Play on screen instead
+            </button>
+          )}
           <button className="btn-ghost" onClick={onExit}>
             Back
           </button>
@@ -233,6 +248,17 @@ export default function VoiceGameScreen({ robot, pool, onExit }: Props) {
             <button className="btn-ghost" onClick={togglePocket}>
               🌙 Pocket mode
             </button>
+            {onScreenMode && (
+              <button
+                className="btn-ghost"
+                onClick={async () => {
+                  await stop();
+                  onScreenMode(game);
+                }}
+              >
+                📱 Screen mode
+              </button>
+            )}
             <button
               className="btn-danger"
               onClick={async () => {
