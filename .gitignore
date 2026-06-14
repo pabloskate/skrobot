@@ -5,6 +5,7 @@ node_modules
 .next
 .open-next
 next-env.d.ts
+tsconfig.tsbuildinfo
 
 # Cloudflare
 .wrangler

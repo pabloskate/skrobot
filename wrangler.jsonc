@@ -21,19 +21,25 @@
         "simple": { "limit": 10, "period": 60 }
       }
     ]
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "skrobot",
+      "database_id": "995891c7-f3bd-4c4b-837d-ff61d70c9874",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  "send_email": [{ "name": "EMAIL" }],
+
+  "vars": {
+    "MAGIC_LINK_FROM": "skaterobot@customrouter.ai"
   }
 
   // Secrets:
   //   production →  npx wrangler secret put GEMINI_API_KEY
   //   local preview (`npm run preview`) → put GEMINI_API_KEY=... in .dev.vars
-
-  // ---- Future D1 backend (see src/shared/db.ts for the enable steps) ----
-  // "d1_databases": [
-  //   {
-  //     "binding": "DB",
-  //     "database_name": "skrobot",
-  //     "database_id": "<from: npx wrangler d1 create skrobot>",
-  //     "migrations_dir": "migrations"
-  //   }
-  // ]
+  // Billing is intentionally disabled for beta. See docs/BILLING_ENABLEMENT.md.
 }

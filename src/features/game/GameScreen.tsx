@@ -15,8 +15,7 @@ import {
   rollAttempt,
 } from './engine';
 import type { GameState, Side } from './engine';
-import type { Rps } from './rps';
-import { RPS_CHOICES as RPS, robotThrow, rpsOutcome } from './rps';
+import RpsPanel from './RpsPanel';
 import TrickAnimation from './TrickAnimation';
 
 interface Props {
@@ -27,57 +26,6 @@ interface Props {
   onExit: () => void;
   /** Hand the live game state over to voice mode. */
   onVoice?: (state: GameState) => void;
-}
-
-// ---------- Rock Paper Scissors ----------
-
-function RpsPanel({ robot, onDone }: { robot: Robot; onDone: (playerFirst: boolean) => void }) {
-  const [result, setResult] = useState<{ mine: Rps; theirs: Rps } | null>(null);
-
-  const pick = (mine: Rps) => {
-    setResult({ mine, theirs: robotThrow() });
-  };
-
-  const outcome = result ? rpsOutcome(result.mine, result.theirs) : null;
-
-  return (
-    <div className="panel center">
-      <h2 className="panel-title">Rock, Paper, Scissors?</h2>
-      <p className="muted">Winner sets first</p>
-      {!result ? (
-        <div className="rps-row">
-          {RPS.map((c) => (
-            <button key={c.id} className="rps-btn" onClick={() => pick(c.id)} aria-label={c.label}>
-              {c.icon}
-            </button>
-          ))}
-        </div>
-      ) : (
-        <>
-          <div className="rps-reveal">
-            <div>
-              <span className="rps-icon">{RPS.find((c) => c.id === result.mine)!.icon}</span>
-              <span className="rps-who">You</span>
-            </div>
-            <span className="rps-vs">vs</span>
-            <div>
-              <span className="rps-icon">{RPS.find((c) => c.id === result.theirs)!.icon}</span>
-              <span className="rps-who">{robot.name}</span>
-            </div>
-          </div>
-          {outcome === 'tie' ? (
-            <button className="btn-primary" onClick={() => setResult(null)}>
-              Tie — throw again
-            </button>
-          ) : (
-            <button className="btn-primary" onClick={() => onDone(outcome === 'win')}>
-              {outcome === 'win' ? 'You set first — start!' : `${robot.name} sets first — start!`}
-            </button>
-          )}
-        </>
-      )}
-    </div>
-  );
 }
 
 // ---------- Scoreboard ----------

@@ -1,13 +1,15 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { SignInScreen } from '@/features/auth';
+import { UpgradeScreen } from '@/features/billing';
 import type { GameState } from '@/features/game';
 import { LETTERS, TrickAnimation, initialGameState } from '@/features/game';
 import type { Robot } from '@/features/robots';
 import { RobotAvatar } from '@/features/robots';
 import type { Trick } from '@/features/tricks';
 import { VoiceGameController } from './controller';
-import { VoiceSession } from './liveSession';
+import { VoiceSession, VoiceStartError, type VoiceStartErrorCode } from './liveSession';
 
 interface Props {
   robot: Robot;
@@ -49,6 +51,7 @@ function Letters({ count }: { count: number }) {
 export default function VoiceGameScreen({ robot, pool, resume, onExit, onScreenMode }: Props) {
   const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [gate, setGate] = useState<VoiceStartErrorCode | null>(null);
   const [game, setGame] = useState<GameState>(resume ?? initialGameState);
   const [captions, setCaptions] = useState<Caption[]>([]);
   const [muted, setMuted] = useState(false);
@@ -63,6 +66,7 @@ export default function VoiceGameScreen({ robot, pool, resume, onExit, onScreenM
 
   const start = async () => {
     setError(null);
+    setGate(null);
     // Seed from the current scoreboard state so a carried-over game (or a
     // stopped-and-restarted session) picks up where it left off.
     const controller = new VoiceGameController(robot, pool, game);
@@ -101,7 +105,12 @@ export default function VoiceGameScreen({ robot, pool, resume, onExit, onScreenM
     } catch (e) {
       // Failed before going live — back to the start panel with the error shown.
       setStatus('idle');
-      setError(e instanceof Error ? e.message : 'Could not start voice session');
+      if (e instanceof VoiceStartError) {
+        setGate(e.code);
+        setError(null);
+      } else {
+        setError(e instanceof Error ? e.message : 'Could not start voice session');
+      }
       sessionRef.current = null;
     }
   };
@@ -155,6 +164,14 @@ export default function VoiceGameScreen({ robot, pool, resume, onExit, onScreenM
         <p className="pocket-hint">Voice game live — double-tap to wake</p>
       </div>
     );
+  }
+
+  if (gate === 'auth_required') {
+    return <SignInScreen onDone={() => setGate(null)} onCancel={() => setGate(null)} />;
+  }
+
+  if (gate === 'quota_exceeded') {
+    return <UpgradeScreen onCancel={() => setGate(null)} />;
   }
 
   return (
@@ -233,7 +250,7 @@ export default function VoiceGameScreen({ robot, pool, resume, onExit, onScreenM
                 <strong>{c.who === 'you' ? 'You' : robot.name}:</strong> {c.text}
               </p>
             ))}
-            {captions.length === 0 && <p className="muted">Say hi to get things rolling.</p>}
+            {captions.length === 0 && <p className="muted">{robot.name} is starting things off…</p>}
           </div>
           <div className="voice-controls">
             <button

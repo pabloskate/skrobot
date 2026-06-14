@@ -10,6 +10,26 @@
   --green: #2da866;
   --radius: 16px;
   --shadow: 0 2px 8px rgba(34, 26, 78, 0.08), 0 8px 24px rgba(34, 26, 78, 0.06);
+  /* Outline/ink color for the robot avatar + trick animation SVGs (currentColor). */
+  --robot-ink: #23232e;
+  --anim-ink: #1e2235;
+}
+
+[data-theme="dark"] {
+  --purple: #7b5ce5;
+  --purple-dark: #5a2bc4;
+  --purple-soft: #2a2348;
+  --ink: #f3f2f6;
+  --muted: #918da8;
+  --bg: #12101c;
+  --card: #1c1a2e;
+  --danger: #f05f75;
+  --green: #3ec582;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.45);
+  /* Avatars keep their dark ink in dark mode too — they sit on a light plate
+     (see .robot-avatar below) so every body color reads with crisp features. */
+  --robot-ink: #23232e;
+  --anim-ink: #d9d7ea;
 }
 
 * {
@@ -26,6 +46,7 @@ body {
 
 button {
   font-family: inherit;
+  color: inherit;
 }
 
 body {
@@ -118,6 +139,10 @@ main {
   margin: 0;
 }
 
+.center {
+  text-align: center;
+}
+
 .small {
   font-size: 13px;
 }
@@ -184,6 +209,31 @@ main {
 
 .btn-ghost:hover {
   color: var(--ink);
+}
+
+/* ---------- Auth & billing ---------- */
+
+.auth-screen .panel,
+.upgrade-screen .panel {
+  margin-top: 28px;
+}
+
+.auth-form {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.auth-form .search {
+  margin-bottom: 0;
+}
+
+.dev-link {
+  color: var(--purple-dark);
+  font-weight: 800;
 }
 
 /* ---------- Home ---------- */
@@ -292,6 +342,240 @@ main {
   margin-top: 4px;
 }
 
+/* ---------- Robot profile ---------- */
+
+.robot-profile {
+  gap: 10px;
+}
+
+.profile-badges {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.profile-badges .robot-record {
+  margin-top: 0;
+}
+
+.tier-pill {
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 4px 12px;
+  border-radius: 999px;
+}
+
+/* Tinted by hue so the pills read on both light cards and the dark theme. */
+.tier-beginner {
+  background: rgba(45, 168, 102, 0.16);
+  color: var(--green);
+}
+
+.tier-intermediate {
+  background: rgba(224, 150, 40, 0.18);
+  color: #d08a23;
+}
+
+.tier-advanced {
+  background: rgba(224, 69, 92, 0.16);
+  color: var(--danger);
+}
+
+.profile-tagline {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--purple);
+}
+
+.profile-summary {
+  max-width: 440px;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.profile-faves {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0;
+}
+
+.profile-faves-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+}
+
+.profile-faves-chips {
+  justify-content: center;
+}
+
+.fave-chip {
+  background: var(--purple-soft);
+  color: var(--purple-dark);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 999px;
+}
+
+.robot-tricks {
+  margin-top: 12px;
+}
+
+.profile-tricks-title {
+  margin: 0 0 2px;
+}
+
+.profile-tricks-sub {
+  margin: 0 0 8px;
+}
+
+.repertoire-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.repertoire-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 2px;
+  border-bottom: 1px solid rgba(124, 118, 156, 0.22);
+}
+
+.repertoire-row:last-child {
+  border-bottom: none;
+}
+
+.repertoire-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+}
+
+.repertoire-stances {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.stance-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1.4;
+  background: var(--purple-soft);
+}
+
+.stance-pill-label {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.stance-pill-pct {
+  font-weight: 800;
+}
+
+.stance-pill-high .stance-pill-pct {
+  color: var(--green);
+}
+
+.stance-pill-mid .stance-pill-pct {
+  color: #d08a23;
+}
+
+.stance-pill-low .stance-pill-pct {
+  color: var(--danger);
+}
+
+.repertoire-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.repertoire-star {
+  color: #e8a13c;
+  font-size: 14px;
+}
+
+.repertoire-desc {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.consistency {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+  width: 70px;
+  margin-top: 2px;
+}
+
+.consistency-pct {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.consistency-bar {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--purple-soft);
+  overflow: hidden;
+}
+
+.consistency-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
+
+.consistency-high .consistency-pct {
+  color: var(--green);
+}
+
+.consistency-high .consistency-fill {
+  background: var(--green);
+}
+
+.consistency-mid .consistency-pct {
+  color: #d08a23;
+}
+
+.consistency-mid .consistency-fill {
+  background: #e8a13c;
+}
+
+.consistency-low .consistency-pct {
+  color: var(--danger);
+}
+
+.consistency-low .consistency-fill {
+  background: var(--danger);
+}
+
 /* ---------- Scoreboard ---------- */
 
 .scoreboard {
@@ -353,31 +637,124 @@ main {
 
 .rps-row {
   display: flex;
-  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
 }
 
 .rps-btn {
-  display: grid;
-  place-items: center;
-  font-size: 42px;
-  background: var(--bg);
-  border: 3px solid transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 92px;
+  padding: 16px 8px;
+  font-size: 36px;
+  line-height: 1;
+  background: var(--card);
+  border: 2px solid #e8e5ef;
   border-radius: 18px;
-  width: 84px;
-  height: 84px;
   cursor: pointer;
-  transition: transform 0.1s ease, border-color 0.1s ease;
+  transition: transform 0.1s ease, border-color 0.12s ease, background 0.12s ease;
 }
 
 .rps-btn:hover {
-  transform: translateY(-3px);
+  transform: translateY(-2px);
   border-color: var(--purple);
+  background: var(--purple-soft);
+}
+
+.rps-btn:focus-visible {
+  outline: 2px solid var(--purple);
+  outline-offset: 2px;
+}
+
+.rps-btn-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.rps-subtitle {
+  margin: 0 0 4px;
+  text-align: center;
+}
+
+.rps-taunt-bubble {
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+  max-width: 280px;
+  margin: 0;
+  animation: rps-fade-in 0.2s ease;
+}
+
+.rps-countdown {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.rps-countdown-word {
+  font-size: 32px;
+  font-weight: 900;
+  color: var(--purple);
+  min-height: 44px;
+  animation: rps-pop 0.28s ease;
+}
+
+.rps-duel {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+
+.rps-duel-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.rps-fist {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  font-size: 36px;
+  border-radius: 18px;
+  background: var(--purple-soft);
+}
+
+.rps-robot-fist {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  background: var(--purple-soft);
+  overflow: hidden;
+}
+
+.rps-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  animation: rps-fade-in 0.2s ease;
+  outline: none;
+}
+
+.rps-result.rps-tie .rps-reveal {
+  animation: rps-shake 0.4s ease;
 }
 
 .rps-reveal {
   display: flex;
   align-items: center;
-  gap: 22px;
+  gap: 28px;
 }
 
 .rps-reveal > div {
@@ -390,11 +767,25 @@ main {
 .rps-icon {
   display: grid;
   place-items: center;
-  width: 64px;
-  height: 64px;
-  font-size: 34px;
-  border-radius: 18px;
-  background: var(--purple-soft);
+  width: 56px;
+  height: 56px;
+  font-size: 32px;
+  border-radius: 16px;
+  background: var(--card);
+  border: 2px solid var(--purple-soft);
+}
+
+.rps-reveal-pop {
+  animation: rps-reveal-pop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.rps-winner .rps-icon {
+  background: #ecf9f1;
+  border-color: var(--green);
+}
+
+.rps-loser .rps-icon {
+  opacity: 0.65;
 }
 
 .rps-who {
@@ -404,8 +795,66 @@ main {
 }
 
 .rps-vs {
+  font-size: 14px;
   font-weight: 800;
   color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.rps-outcome-text {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  text-align: center;
+  max-width: 280px;
+}
+
+@keyframes rps-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.rps-bounce {
+  animation: rps-bounce 0.9s ease infinite;
+}
+
+@keyframes rps-pop {
+  0% { transform: scale(0.8); opacity: 0.6; }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes rps-reveal-pop {
+  0% { transform: scale(0.3) rotate(-10deg); opacity: 0; }
+  70% { transform: scale(1.15) rotate(2deg); }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+
+@keyframes rps-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-8px); }
+  40% { transform: translateX(8px); }
+  60% { transform: translateX(-6px); }
+  80% { transform: translateX(6px); }
+}
+
+@keyframes rps-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rps-bounce,
+  .rps-countdown-word,
+  .rps-reveal-pop,
+  .rps-result.rps-tie .rps-reveal,
+  .rps-winner .rps-icon,
+  .rps-taunt-bubble {
+    animation: none;
+    transition: none;
+  }
 }
 
 /* ---------- Game ---------- */
@@ -436,6 +885,21 @@ main {
   display: block;
   width: 100%;
   height: auto;
+  /* currentColor source for the animation's ink (ground, legs, outlines). */
+  color: var(--anim-ink);
+}
+
+/* currentColor source for the robot avatar's outline/face ink. */
+.robot-avatar {
+  color: var(--robot-ink);
+}
+
+/* In dark mode the bots stay dark-inked + bright-bodied; a light plate behind
+   them gives every body color (even dark ones like Sacker) something to pop
+   against, instead of vanishing into the dark card. */
+[data-theme='dark'] .robot-avatar {
+  background: #eeebf6;
+  border-radius: 20%;
 }
 
 .anim-wobble {
@@ -877,4 +1341,87 @@ main {
 .pocket-hint {
   font-size: 13px;
   opacity: 0.6;
+}
+
+/* ---------- Theme toggle ---------- */
+
+.theme-toggle {
+  margin-left: auto;
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  border-radius: 12px;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  flex-shrink: 0;
+}
+
+.theme-toggle:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.theme-toggle:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.theme-toggle svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* ---------- Dark mode component tweaks ---------- */
+/* These target colors that are hardcoded (not var-driven) and would otherwise
+   stay light-mode in the dark palette. */
+
+[data-theme="dark"] .btn-primary:disabled {
+  background: #4a4660;
+}
+
+[data-theme="dark"] .btn-danger {
+  background: #3d1f26;
+}
+
+[data-theme="dark"] .btn-danger:hover {
+  background: #4f2a32;
+}
+
+[data-theme="dark"] .letter {
+  background: #25233a;
+  color: #5c5970;
+}
+
+[data-theme="dark"] .rps-btn {
+  border-color: #2e2c3f;
+}
+
+[data-theme="dark"] .rps-winner .rps-icon {
+  background: #163526;
+}
+
+[data-theme="dark"] .search,
+[data-theme="dark"] .chip {
+  border-color: #2e2c3f;
+}
+
+[data-theme="dark"] .trick-row,
+[data-theme="dark"] .check-row {
+  border-bottom-color: #2e2c3f;
+}
+
+[data-theme="dark"] .trick-row:disabled {
+  color: #5c5a70;
+}
+
+[data-theme="dark"] .dots-empty {
+  color: #3a384d;
+}
+
+[data-theme="dark"] .mode-card:hover,
+[data-theme="dark"] .robot-card:hover {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35), 0 12px 32px rgba(0, 0, 0, 0.45);
 }

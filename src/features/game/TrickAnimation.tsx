@@ -382,7 +382,7 @@ export default function TrickAnimation({ robot, trick, landed, onDone }: Props) 
     <div className="trick-anim" aria-label={`${robot.name} attempts ${trick.name}`} role="img">
       <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg">
         {/* Ground + speed lines */}
-        <line x1="0" y1={GROUND + 9} x2={W} y2={GROUND + 9} stroke="#1e2235" strokeWidth="3" strokeLinecap="round" />
+        <line x1="0" y1={GROUND + 9} x2={W} y2={GROUND + 9} stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
         {moving &&
           [0, 1, 2, 3].map((i) => {
             const x = ((((i * 140 - spec.dir * f.t * 300) % W) + W) % W);
@@ -393,7 +393,7 @@ export default function TrickAnimation({ robot, trick, landed, onDone }: Props) 
                 y1={GROUND + 24}
                 x2={x + 28 + i * 8}
                 y2={GROUND + 24}
-                stroke="#1e2235"
+                stroke="currentColor"
                 strokeWidth="3"
                 strokeLinecap="round"
                 opacity="0.2"
@@ -409,10 +409,10 @@ export default function TrickAnimation({ robot, trick, landed, onDone }: Props) 
             width="80"
             height="8"
             rx="4"
-            fill={f.board.griptape ? '#1e2235' : colors.accent}
+            fill={f.board.griptape ? 'currentColor' : colors.accent}
           />
-          <circle cx="25" cy="8" r="6" fill="#fff" stroke="#1e2235" strokeWidth="2" />
-          <circle cx="-25" cy="8" r="6" fill="#fff" stroke="#1e2235" strokeWidth="2" />
+          <circle cx="25" cy="8" r="6" fill="#fff" stroke="currentColor" strokeWidth="2" />
+          <circle cx="-25" cy="8" r="6" fill="#fff" stroke="currentColor" strokeWidth="2" />
         </g>
 
         {/* Skater */}
@@ -424,8 +424,8 @@ export default function TrickAnimation({ robot, trick, landed, onDone }: Props) 
           {/* head */}
           <line x1="7" y1="-76" x2="7" y2="-86" stroke={colors.accent} strokeWidth="3" />
           <circle cx="7" cy="-88" r="3.5" fill={colors.accent} />
-          <rect x="-6" y="-76" width="26" height="22" rx="7" fill={colors.body} stroke="#1e2235" strokeWidth="2.5" />
-          <circle cx="13" cy="-67" r="3.5" fill="#1e2235" />
+          <rect x="-6" y="-76" width="26" height="22" rx="7" fill={colors.body} stroke="currentColor" strokeWidth="2.5" />
+          <circle cx="13" cy="-67" r="3.5" fill="currentColor" />
           {/* arm */}
           <line
             x1={shoulder.x}
@@ -438,7 +438,7 @@ export default function TrickAnimation({ robot, trick, landed, onDone }: Props) 
           />
           <circle cx={shoulder.x + Math.sin(f.arm) * 30} cy={shoulder.y + Math.cos(f.arm) * 30} r="4" fill={colors.accent} />
           {/* legs */}
-          <g stroke="#1e2235" strokeWidth="5" strokeLinecap="round">
+          <g stroke="currentColor" strokeWidth="5" strokeLinecap="round">
             <line x1="0" y1="0" x2={kneeL.x} y2={kneeL.y} />
             <line x1={kneeL.x} y1={kneeL.y} x2={f.footL.x} y2={f.footL.y} />
             <line x1="0" y1="0" x2={kneeR.x} y2={kneeR.y} />

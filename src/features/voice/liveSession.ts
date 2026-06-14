@@ -12,18 +12,38 @@ export interface SessionEvents {
   onError: (message: string) => void;
 }
 
+export type VoiceStartErrorCode = 'auth_required' | 'quota_exceeded';
+
+export class VoiceStartError extends Error {
+  code: VoiceStartErrorCode;
+
+  constructor(code: VoiceStartErrorCode) {
+    super(code === 'auth_required' ? 'Sign in to start voice mode.' : "You've used 15 beta voice games this week.");
+    this.name = 'VoiceStartError';
+    this.code = code;
+  }
+}
+
 /**
  * Auth: prefer an ephemeral token from /api/live-token (production); fall back to
  * NEXT_PUBLIC_GEMINI_API_KEY (dev only — never ship a real key in client code).
  */
-async function getAuthKey(): Promise<string> {
+async function getAuthKey(gameId: string): Promise<string> {
   try {
-    const res = await fetch('/api/live-token', { method: 'POST' });
+    const res = await fetch('/api/live-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ gameId }),
+    });
     if (res.ok) {
       const { token } = await res.json();
       if (token) return token;
     }
-  } catch {
+    if (res.status === 401) throw new VoiceStartError('auth_required');
+    if (res.status === 402) throw new VoiceStartError('quota_exceeded');
+  } catch (error) {
+    if (error instanceof VoiceStartError) throw error;
     /* no token endpoint configured */
   }
   const devKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
@@ -40,6 +60,8 @@ export class VoiceSession {
   private resumeHandle: string | null = null;
   private closedByUser = false;
   private isSessionOpen = false;
+  private starterTurnSent = false;
+  private gameId = crypto.randomUUID();
   private captionBuf = { you: '', robot: '' };
   private prevLetters = { player: 0, robot: 0 };
 
@@ -76,7 +98,7 @@ export class VoiceSession {
   }
 
   private async connect(): Promise<void> {
-    const key = await getAuthKey();
+    const key = await getAuthKey(this.gameId);
     const ai = new GoogleGenAI({ apiKey: key, httpOptions: { apiVersion: 'v1alpha' } });
 
     this.session = await ai.live.connect({
@@ -106,6 +128,7 @@ export class VoiceSession {
         onopen: () => {
           this.isSessionOpen = true;
           this.events.onStatus('live');
+          this.sendStarterTurn();
         },
         onmessage: (msg: LiveServerMessage) => this.handleMessage(msg),
         onerror: (e: ErrorEvent) => {
@@ -122,6 +145,16 @@ export class VoiceSession {
           if (!this.closedByUser) void this.reconnect();
         },
       },
+    });
+  }
+
+  private sendStarterTurn(): void {
+    const session = this.session;
+    if (!session || this.starterTurnSent || this.resumeHandle) return;
+    this.starterTurnSent = true;
+    session.sendClientContent({
+      turns: 'Start the voice game now. Greet me in character, then ask for the next thing you need from me.',
+      turnComplete: true,
     });
   }
 

@@ -8,9 +8,15 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
-    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
+    "db:migrate:local": "wrangler d1 migrations apply skrobot --local",
+    "db:migrate:remote": "wrangler d1 migrations apply skrobot --remote",
+    "db:migrations:list:local": "wrangler d1 migrations list skrobot --local",
+    "db:migrations:list:remote": "wrangler d1 migrations list skrobot --remote",
+    "cf-typegen": "wrangler types /private/tmp/skrobot-cloudflare-env.d.ts --env-interface CloudflareEnv --include-runtime false"
   },
   "dependencies": {
     "@google/genai": "^2.8.0",
@@ -31,6 +37,7 @@
     "globals": "^17.6.0",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.59.2",
+    "vitest": "^4.1.8",
     "wrangler": "^4.100.0"
   }
 }

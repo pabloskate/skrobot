@@ -2,15 +2,18 @@
 
 import dynamic from 'next/dynamic';
 import { useState } from 'react';
+import { SignInScreen, useAuth } from '@/features/auth';
+import { UpgradeScreen } from '@/features/billing';
 import { DiceScreen } from '@/features/dice';
 import type { GameState } from '@/features/game';
 import { GameScreen } from '@/features/game';
 import type { ModeChoice } from '@/features/home';
 import { HomeScreen } from '@/features/home';
 import type { Robot } from '@/features/robots';
-import { RobotSelect } from '@/features/robots';
+import { RobotProfile, RobotSelect } from '@/features/robots';
 import type { Category, Trick } from '@/features/tricks';
 import { CustomSetup, tricksFor } from '@/features/tricks';
+import { ThemeToggle } from '@/shared/theme';
 
 // Voice mode pulls in the Live SDK + audio worklets — load it only when entered.
 const VoiceGameScreen = dynamic(() => import('@/features/voice').then((m) => m.VoiceGameScreen), {
@@ -29,8 +32,11 @@ type Screen =
   | { id: 'dice' }
   | { id: 'custom' }
   | { id: 'robots'; pool: Trick[]; poolLabel: string }
+  | { id: 'profile'; pool: Trick[]; poolLabel: string; robot: Robot }
   | { id: 'game'; pool: Trick[]; poolLabel: string; robot: Robot; resume?: GameState }
-  | { id: 'voice'; pool: Trick[]; poolLabel: string; robot: Robot; resume?: GameState };
+  | { id: 'voice'; pool: Trick[]; poolLabel: string; robot: Robot; resume?: GameState }
+  | { id: 'signin'; next?: Screen; from?: Screen }
+  | { id: 'upgrade'; from?: Screen };
 
 const CATEGORY_LABELS: Record<Category, string> = {
   flatground: 'Flatground',
@@ -39,6 +45,7 @@ const CATEGORY_LABELS: Record<Category, string> = {
 };
 
 export default function AppShell() {
+  const auth = useAuth();
   const [screen, setScreen] = useState<Screen>({ id: 'home' });
 
   const onMode = (mode: ModeChoice) => {
@@ -53,9 +60,21 @@ export default function AppShell() {
   };
 
   const back = () => {
-    if (screen.id === 'game' || screen.id === 'voice')
+    if (screen.id === 'game' || screen.id === 'voice' || screen.id === 'profile')
       setScreen({ id: 'robots', pool: screen.pool, poolLabel: screen.poolLabel });
+    else if (screen.id === 'signin' || screen.id === 'upgrade') setScreen(screen.from ?? { id: 'home' });
     else setScreen({ id: 'home' });
+  };
+
+  const enterVoice = (next: Extract<Screen, { id: 'voice' }>, from: Screen) => {
+    if (!auth.loading && auth.user) setScreen(next);
+    else setScreen({ id: 'signin', next, from });
+  };
+
+  const continueAfterSignIn = async () => {
+    const data = await auth.refresh();
+    if (!data.user) return;
+    setScreen((current) => (current.id === 'signin' ? (current.next ?? current.from ?? { id: 'home' }) : current));
   };
 
   const title =
@@ -65,11 +84,15 @@ export default function AppShell() {
         ? 'Skate Dice'
         : screen.id === 'custom'
           ? 'Custom Game'
-          : screen.id === 'game'
+          : screen.id === 'profile' || screen.id === 'game'
             ? screen.robot.name
             : screen.id === 'voice'
               ? `🎙 ${screen.robot.name}`
-              : `${screen.poolLabel} · Pick a robot`;
+              : screen.id === 'signin'
+                ? 'Sign in'
+                : screen.id === 'upgrade'
+                  ? 'Upgrade'
+                  : `${screen.poolLabel} · Pick a robot`;
 
   return (
     <>
@@ -80,6 +103,7 @@ export default function AppShell() {
           </button>
         )}
         <h1>{title}</h1>
+        <ThemeToggle />
       </header>
       <main>
         {screen.id === 'home' && <HomeScreen onPick={onMode} />}
@@ -90,7 +114,16 @@ export default function AppShell() {
         {screen.id === 'robots' && (
           <RobotSelect
             onPick={(robot) =>
-              setScreen({ id: 'game', pool: screen.pool, poolLabel: screen.poolLabel, robot })
+              setScreen({ id: 'profile', pool: screen.pool, poolLabel: screen.poolLabel, robot })
+            }
+          />
+        )}
+        {screen.id === 'profile' && (
+          <RobotProfile
+            robot={screen.robot}
+            pool={screen.pool}
+            onStart={() =>
+              setScreen({ id: 'game', pool: screen.pool, poolLabel: screen.poolLabel, robot: screen.robot })
             }
           />
         )}
@@ -101,7 +134,12 @@ export default function AppShell() {
             pool={screen.pool}
             resume={screen.resume}
             onExit={back}
-            onVoice={(state) => setScreen({ ...screen, id: 'voice', resume: state })}
+            onVoice={(state) =>
+              enterVoice(
+                { id: 'voice', pool: screen.pool, poolLabel: screen.poolLabel, robot: screen.robot, resume: state },
+                screen,
+              )
+            }
           />
         )}
         {screen.id === 'voice' && (
@@ -114,6 +152,8 @@ export default function AppShell() {
             onScreenMode={(state) => setScreen({ ...screen, id: 'game', resume: state })}
           />
         )}
+        {screen.id === 'signin' && <SignInScreen onDone={continueAfterSignIn} onCancel={back} />}
+        {screen.id === 'upgrade' && <UpgradeScreen onCancel={back} />}
       </main>
     </>
   );
