@@ -2,11 +2,12 @@
  * Tricks feature — the trick catalog (data) plus UI for browsing/selecting tricks.
  * Other features import tricks only through this barrel.
  */
-export type { Stance, Category, Discipline, Family, Trick } from './tricks';
+export type { Stance, Category, Discipline, Family, Trick, TrickPool } from './tricks';
 export {
   TRICKS,
   TRICK_BY_ID,
   tricksFor,
+  defaultRoutedTrickPool,
   grade,
   trickDescription,
   trickFamily,

@@ -10,8 +10,8 @@ import { GameScreen } from '@/features/game';
 import { HomeScreen } from '@/features/home';
 import type { Robot } from '@/features/robots';
 import { RobotProfile } from '@/features/robots';
-import type { Trick } from '@/features/tricks';
-import { tricksFor } from '@/features/tricks';
+import type { TrickPool } from '@/features/tricks';
+import { defaultRoutedTrickPool } from '@/features/tricks';
 
 // Voice mode pulls in the Live SDK + audio worklets — load it only when entered.
 const VoiceGameScreen = dynamic(() => import('@/features/voice').then((m) => m.VoiceGameScreen), {
@@ -27,15 +27,13 @@ const VoiceGameScreen = dynamic(() => import('@/features/voice').then((m) => m.V
  */
 type Screen =
   | { id: 'home' }
-  | { id: 'profile'; pool: Trick[]; poolLabel: string; robot: Robot }
-  | { id: 'game'; pool: Trick[]; poolLabel: string; robot: Robot; resume?: GameState }
-  | { id: 'voice'; pool: Trick[]; poolLabel: string; robot: Robot; resume?: GameState }
+  | ({ id: 'profile'; robot: Robot } & TrickPool)
+  | ({ id: 'game'; robot: Robot; resume?: GameState } & TrickPool)
+  | ({ id: 'voice'; robot: Robot; resume?: GameState } & TrickPool)
   | { id: 'signin'; next?: Screen; from?: Screen }
   | { id: 'upgrade'; from?: Screen };
 
-const FLATGROUND = () => ({ pool: tricksFor('flatground'), poolLabel: 'Flatground' });
-
-/** The app opens to the home screen — a dynamic hero above the robot roster. */
+/** The app opens to the home screen — a dynamic hero above the flatground roster. */
 const rootScreen = (): Screen => ({ id: 'home' });
 
 export default function AppShell() {
@@ -106,9 +104,9 @@ export default function AppShell() {
         <div className="screen" key={screen.id}>
           {screen.id === 'home' && (
             <HomeScreen
-              onPickRobot={(robot) => go({ id: 'profile', ...FLATGROUND(), robot })}
+              onPickRobot={(robot) => go({ id: 'profile', ...defaultRoutedTrickPool(), robot })}
               onPlayVoice={(robot) =>
-                enterVoice({ id: 'voice', ...FLATGROUND(), robot }, { id: 'home' })
+                enterVoice({ id: 'voice', ...defaultRoutedTrickPool(), robot }, { id: 'home' })
               }
             />
           )}

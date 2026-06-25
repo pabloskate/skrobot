@@ -40,6 +40,11 @@ export interface Trick {
   minSkill?: number;
 }
 
+export interface TrickPool {
+  pool: Trick[];
+  poolLabel: string;
+}
+
 const slug = (s: string) =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
@@ -284,6 +289,14 @@ export const TRICK_BY_ID = new Map(TRICKS.map((t) => [t.id, t]));
 
 export function tricksFor(category: Category): Trick[] {
   return TRICKS.filter((t) => t.category === category);
+}
+
+/**
+ * The routed app currently plays flatground-only games. Keep that product choice
+ * next to the catalog so app routes can stay focused on screen transitions.
+ */
+export function defaultRoutedTrickPool(): TrickPool {
+  return { pool: tricksFor('flatground'), poolLabel: 'Flatground' };
 }
 
 /** 1-3 difficulty grade for display (easy / medium / hard). */
