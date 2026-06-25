@@ -1,29 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { fetchMe, logoutSession, SIGNED_OUT, type MeResponse } from './api';
 
-export type AuthTier = 'free' | 'paid';
-
-export interface AuthUser {
-  email: string;
-  tier: AuthTier;
-}
-
-export interface VoiceQuota {
-  used: number;
-  limit: number;
-  unlimited: boolean;
-}
-
-interface MeResponse {
-  user: AuthUser | null;
-  voiceQuota: VoiceQuota;
-}
-
-const SIGNED_OUT: MeResponse = {
-  user: null,
-  voiceQuota: { used: 0, limit: 15, unlimited: false },
-};
+export type { AuthTier, AuthUser, VoiceQuota } from './api';
 
 export function useAuth() {
   const [data, setData] = useState<MeResponse>(SIGNED_OUT);
@@ -32,9 +12,7 @@ export function useAuth() {
   const refresh = useCallback(async (): Promise<MeResponse> => {
     setLoading(true);
     try {
-      const res = await fetch('/api/me', { credentials: 'same-origin' });
-      if (!res.ok) throw new Error('Could not load account');
-      const next = (await res.json()) as MeResponse;
+      const next = await fetchMe();
       setData(next);
       return next;
     } catch {
@@ -46,7 +24,7 @@ export function useAuth() {
   }, []);
 
   const logout = useCallback(async () => {
-    await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+    await logoutSession();
     await refresh();
   }, [refresh]);
 

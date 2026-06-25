@@ -1,14 +1,10 @@
-import { getCloudflareContext } from '@opennextjs/cloudflare';
+import { getOptionalCloudflareEnv } from '@/platform/server/cloudflare';
 import { getCurrentUser } from '@/features/auth/server/sessions';
 import { createCheckoutSession } from '@/features/billing/server/stripe';
 
 async function billingEnabled(): Promise<boolean> {
-  try {
-    const { env } = await getCloudflareContext({ async: true });
-    return env.ENABLE_BILLING === 'true';
-  } catch {
-    return process.env.ENABLE_BILLING === 'true';
-  }
+  const env = await getOptionalCloudflareEnv();
+  return (env?.ENABLE_BILLING ?? process.env.ENABLE_BILLING) === 'true';
 }
 
 export async function POST(request: Request) {

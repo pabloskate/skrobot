@@ -11,7 +11,7 @@
  * - per-IP rate limit via the LIVE_TOKEN_RATE_LIMIT binding (wrangler.jsonc).
  *   Absent outside the Cloudflare runtime, so plain `next dev` skips it.
  */
-import { getCloudflareContext } from '@opennextjs/cloudflare';
+import { getOptionalCloudflareEnv } from '@/platform/server/cloudflare';
 import { claimVoiceGame, getCurrentUser } from '@/features/auth/server/sessions';
 import { mintLiveToken } from '@/features/voice/server/live-token';
 
@@ -21,12 +21,7 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  let env: CloudflareEnv | undefined;
-  try {
-    ({ env } = await getCloudflareContext({ async: true }));
-  } catch {
-    /* not running under the Cloudflare adapter (e.g. plain next dev) */
-  }
+  const env = await getOptionalCloudflareEnv();
 
   if (env?.LIVE_TOKEN_RATE_LIMIT) {
     const ip = request.headers.get('cf-connecting-ip') ?? 'unknown';

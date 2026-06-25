@@ -484,6 +484,9 @@ export function robotConsistency(robot: Robot, trick: Trick): number | null {
   if (!robot.disciplines.includes(discipline)) return null;
   if (robot.excludes?.includes(trick.base)) return null;
   if (robot.allowedStances && !robot.allowedStances.includes(trick.stance)) return null;
+  // Tier-locked tricks (e.g. late shuvits) impose a hard skill floor no boost can
+  // beat — below it the robot simply can't do the trick, regardless of focus.
+  if (trick.minSkill !== undefined && robot.skill < trick.minSkill) return null;
 
   const comfort = trick.stance === 'regular' ? 1 : stanceComfortFor(robot, trick.stance);
   const effDifficulty = trick.baseDifficulty + stanceLoad(trick) * (1 - comfort);
@@ -521,4 +524,36 @@ const GENERIC_TAUNTS: RpsTaunts = {
 export function getRpsTaunt(robot: Robot, moment: keyof RpsTaunts): string {
   const lines = robot.rpsTaunts[moment] ?? GENERIC_TAUNTS[moment];
   return lines[Math.floor(Math.random() * lines.length)];
+}
+
+const FOCUS_VIBE: Record<Discipline, string> = {
+  grind: 'Grinder',
+  slide: 'Slider',
+  transition: 'Transition',
+  rotation: 'Spinner',
+  flip: 'Flip-tech',
+  oldschool: 'Old-school',
+  shuvit: 'Shuvit-spec',
+  roll: 'Pop-machine',
+  manual: 'Balancer',
+};
+
+/** A short "vibe" label derived from the robot's skill model — for roster cards. */
+export function robotVibe(robot: Robot): string {
+  if (robot.signatureStance === 'switch') return 'Switch-wizard';
+  if (robot.signatureStance === 'nollie') return 'Nose-tech';
+
+  const c = robot.stanceComfort;
+  if (c && (c.fakie ?? 0) >= 0.9 && (c.switch ?? 0) >= 0.9) return 'Switch-wizard';
+
+  if (robot.focus) {
+    const key = Object.keys(robot.focus)[0] as Discipline;
+    return FOCUS_VIBE[key] ?? 'Technician';
+  }
+
+  if (robot.favorites.some((f) => /flip/i.test(f))) return 'Flip-tech';
+  if (robot.disciplines.length >= 7) return 'All-rounder';
+  if (robot.skill <= 3) return 'Send-it';
+
+  return 'Technician';
 }

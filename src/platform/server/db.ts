@@ -1,5 +1,5 @@
 /**
- * Cloudflare D1 access for server code (API routes, server components).
+ * Cloudflare D1 access for server code (API routes, server feature modules).
  *
  * D1 is enabled in wrangler.jsonc. Schema changes belong in `migrations/` and
  * should be applied with the `db:migrate:*` npm scripts. `npm run cf-typegen`
@@ -9,10 +9,10 @@
  * Local dev: `next dev` (via initOpenNextCloudflareForDev) and
  * `npm run preview` both serve the binding from a local D1 simulator.
  */
-import { getCloudflareContext } from '@opennextjs/cloudflare';
+import { getCloudflareEnv } from './cloudflare';
 
 export async function getDb() {
-  const { env } = await getCloudflareContext({ async: true });
-  if (!env.DB) throw new Error('D1 binding "DB" is not configured — set d1_databases.database_id in wrangler.jsonc');
+  const env = await getCloudflareEnv();
+  if (!env.DB) throw new Error('D1 binding "DB" is not configured - set d1_databases.database_id in wrangler.jsonc');
   return env.DB;
 }

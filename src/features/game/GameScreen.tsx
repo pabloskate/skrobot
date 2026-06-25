@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { TbMicrophone } from 'react-icons/tb';
 import { recordResult } from '@/features/records';
 import type { Robot } from '@/features/robots';
 import { buildBag, RobotAvatar } from '@/features/robots';
@@ -24,8 +23,8 @@ interface Props {
   /** Game state carried over when the player switches modes mid-game. */
   resume?: GameState;
   onExit: () => void;
-  /** Hand the live game state over to voice mode. */
-  onVoice?: (state: GameState) => void;
+  /** Report when the current game state can be handed to voice mode. */
+  onVoiceState?: (state: GameState | undefined) => void;
 }
 
 // ---------- Scoreboard ----------
@@ -72,7 +71,7 @@ function Scoreboard({ state, robot }: { state: GameState; robot: Robot }) {
 
 // ---------- Main screen ----------
 
-export default function GameScreen({ robot, pool, resume, onExit, onVoice }: Props) {
+export default function GameScreen({ robot, pool, resume, onExit, onVoiceState }: Props) {
   const [state, dispatch] = useReducer(gameReducer, resume ?? initialGameState);
   const [pickerOpen, setPickerOpen] = useState(false);
   const bag = useMemo(() => buildBag(robot, pool), [robot, pool]);
@@ -101,6 +100,13 @@ export default function GameScreen({ robot, pool, resume, onExit, onVoice }: Pro
     }
     if (state.phase === 'rps') recorded.current = false;
   }, [state.phase, state.winner, robot.id]);
+
+  // Tell the shell when voice mode can take over (only on player turns).
+  const canHandToVoice =
+    onVoiceState != null && (state.phase === 'rps' || state.phase === 'playerSet' || state.phase === 'playerCopy');
+  useEffect(() => {
+    onVoiceState?.(canHandToVoice ? state : undefined);
+  }, [canHandToVoice, state, onVoiceState]);
 
   const usedIds = useMemo(() => new Set(state.used), [state.used]);
 
@@ -196,24 +202,6 @@ export default function GameScreen({ robot, pool, resume, onExit, onVoice }: Pro
             Back to robots
           </button>
         </div>
-      )}
-
-      {/* Mode switch is only offered while the game waits on the player —
-          robot turns resolve through animations that can't be handed over mid-flight. */}
-      {onVoice && (state.phase === 'rps' || state.phase === 'playerSet' || state.phase === 'playerCopy') && (
-        <button className="voice-entry" onClick={() => onVoice(state)}>
-          <span className="voice-entry-icon">
-            <TbMicrophone aria-hidden />
-          </span>
-          <span className="voice-entry-text">
-            <strong>{state.phase === 'rps' ? 'Play this game by voice' : 'Switch to voice'}</strong>
-            <small>
-              {state.phase === 'rps'
-                ? 'Hands-free with earbuds — just talk while you skate'
-                : 'Keep this game going hands-free with earbuds'}
-            </small>
-          </span>
-        </button>
       )}
 
       {pickerOpen && (

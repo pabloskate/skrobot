@@ -8,8 +8,9 @@ import { LETTERS, TrickAnimation, initialGameState } from '@/features/game';
 import type { Robot } from '@/features/robots';
 import { RobotAvatar } from '@/features/robots';
 import type { Trick } from '@/features/tricks';
+import { VoiceStartError, type VoiceStartErrorCode } from './api';
 import { VoiceGameController } from './controller';
-import { VoiceSession, VoiceStartError, type VoiceStartErrorCode } from './liveSession';
+import { VoiceSession } from './liveSession';
 
 interface Props {
   robot: Robot;

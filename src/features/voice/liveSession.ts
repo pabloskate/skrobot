@@ -1,5 +1,6 @@
 import type { LiveServerMessage, Session } from '@google/genai';
 import { EndSensitivity, GoogleGenAI, Modality, StartSensitivity } from '@google/genai';
+import { getVoiceAuthKey } from './api';
 import { MicCapture, SpeakerQueue } from './audio';
 import type { VoiceGameController } from './controller';
 import { LIVE_MODEL } from './live-model';
@@ -10,45 +11,6 @@ export interface SessionEvents {
   onStatus: (status: 'connecting' | 'live' | 'reconnecting' | 'ended' | 'error') => void;
   onCaption: (who: 'you' | 'robot', text: string, final: boolean) => void;
   onError: (message: string) => void;
-}
-
-export type VoiceStartErrorCode = 'auth_required' | 'quota_exceeded';
-
-export class VoiceStartError extends Error {
-  code: VoiceStartErrorCode;
-
-  constructor(code: VoiceStartErrorCode) {
-    super(code === 'auth_required' ? 'Sign in to start voice mode.' : "You've used 15 beta voice games this week.");
-    this.name = 'VoiceStartError';
-    this.code = code;
-  }
-}
-
-/**
- * Auth: prefer an ephemeral token from /api/live-token (production); fall back to
- * NEXT_PUBLIC_GEMINI_API_KEY (dev only — never ship a real key in client code).
- */
-async function getAuthKey(gameId: string): Promise<string> {
-  try {
-    const res = await fetch('/api/live-token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'same-origin',
-      body: JSON.stringify({ gameId }),
-    });
-    if (res.ok) {
-      const { token } = await res.json();
-      if (token) return token;
-    }
-    if (res.status === 401) throw new VoiceStartError('auth_required');
-    if (res.status === 402) throw new VoiceStartError('quota_exceeded');
-  } catch (error) {
-    if (error instanceof VoiceStartError) throw error;
-    /* no token endpoint configured */
-  }
-  const devKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-  if (devKey) return devKey;
-  throw new Error('No auth available: set GEMINI_API_KEY for /api/live-token, or NEXT_PUBLIC_GEMINI_API_KEY for dev.');
 }
 
 export class VoiceSession {
@@ -98,7 +60,7 @@ export class VoiceSession {
   }
 
   private async connect(): Promise<void> {
-    const key = await getAuthKey(this.gameId);
+    const key = await getVoiceAuthKey(this.gameId);
     const ai = new GoogleGenAI({ apiKey: key, httpOptions: { apiVersion: 'v1alpha' } });
 
     this.session = await ai.live.connect({

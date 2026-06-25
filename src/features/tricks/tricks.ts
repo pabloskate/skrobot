@@ -31,6 +31,13 @@ export interface Trick {
   difficulty: number;
   /** The base difficulty of the trick (difficulty without the stance load). */
   baseDifficulty: number;
+  /**
+   * Hard floor on the robot skill needed to land this trick at all — a tier lock
+   * that no focus/favorite boost can bypass. Undefined means no floor (the usual
+   * difficulty curve decides). Late shuvits set this so only intermediate-and-up
+   * robots get a shot. See `MIN_SKILL`.
+   */
+  minSkill?: number;
 }
 
 const slug = (s: string) =>
@@ -52,6 +59,8 @@ const FLATGROUND: [string, number][] = [
   ['Bigspin', 5],
   ['Varial Kickflip', 5],
   ['360 Shuvit', 5],
+  ['Late Backside Shuvit', 5],
+  ['Late Frontside Shuvit', 5],
   ['Varial Heelflip', 6],
   ['FS Bigspin', 6],
   ['Backside Heelflip', 6],
@@ -129,6 +138,8 @@ const FLATGROUND_FAMILY: Record<string, Family> = {
   'Frontside Shuvit': 'shuvit',
   '360 Shuvit': 'shuvit',
   'Frontside 360 Shuvit': 'shuvit',
+  'Late Backside Shuvit': 'shuvit',
+  'Late Frontside Shuvit': 'shuvit',
   'Frontside 180': 'rotation',
   'Backside 180': 'rotation',
   'Backside 360': 'rotation',
@@ -136,6 +147,19 @@ const FLATGROUND_FAMILY: Record<string, Family> = {
   Bigspin: 'rotation',
   'FS Bigspin': 'rotation',
   // everything else flatground (kickflip & derivatives, varials, combos) is `flip`
+};
+
+/**
+ * Hard skill floor for "tier-locked" tricks, keyed by base name. Unlike difficulty
+ * (which a high-skill robot can overcome via the consistency curve, focus, and
+ * favorites), this is an absolute gate: a robot below the floor never gets the
+ * trick. Late shuvits are intermediate-and-up only — the lowest intermediate robot
+ * sits at skill 5 and beginners top out around 3.2, so 4.5 cleanly splits the
+ * tiers. Bases not listed have no floor.
+ */
+const MIN_SKILL: Record<string, number> = {
+  'Late Backside Shuvit': 4.5,
+  'Late Frontside Shuvit': 4.5,
 };
 
 /** Discipline for each grind/other base (flatground disciplines come from FAMILY). */
@@ -241,14 +265,15 @@ function build(): Trick[] {
         category: 'flatground',
         difficulty: Math.min(10, Math.round((difficulty + load) * 10) / 10),
         baseDifficulty: difficulty,
+        minSkill: MIN_SKILL[base],
       });
     }
   }
   for (const [base, difficulty] of GRINDS) {
-    tricks.push({ id: slug(base), name: base, base, stance: 'regular', category: 'grinds', difficulty, baseDifficulty: difficulty });
+    tricks.push({ id: slug(base), name: base, base, stance: 'regular', category: 'grinds', difficulty, baseDifficulty: difficulty, minSkill: MIN_SKILL[base] });
   }
   for (const [base, difficulty] of OTHER) {
-    tricks.push({ id: slug(base), name: base, base, stance: 'regular', category: 'other', difficulty, baseDifficulty: difficulty });
+    tricks.push({ id: slug(base), name: base, base, stance: 'regular', category: 'other', difficulty, baseDifficulty: difficulty, minSkill: MIN_SKILL[base] });
   }
   return tricks;
 }
@@ -278,6 +303,8 @@ const DESCRIPTIONS: Record<string, string> = {
   'Backside 180': 'An ollie with a 180° turn, spinning with your back leading the way.',
   'Pop Shuvit': 'Scoop the tail so the board spins a flat 180° under your feet while you hop.',
   'Frontside Shuvit': 'A shuvit scooped the other way, the board spinning toward your toes.',
+  'Late Backside Shuvit': 'A pop shuvit held late — the board pops up flat, hangs, then scoops its 180° at the last instant before the catch.',
+  'Late Frontside Shuvit': 'A frontside shuvit with the scoop delayed — pop, float, then whip the board around toes-side right before you land.',
   Kickflip: 'Flick your front foot off the corner so the board does a full barrel-roll flip.',
   Heelflip: 'A kickflip flicked off the heel side, spinning the board the opposite direction.',
   'Backside 360': 'A full 360° ollie spun backside — double the rotation, double the nerve.',

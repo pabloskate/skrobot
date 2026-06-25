@@ -7,8 +7,8 @@ interface Props {
   pose?: 'idle' | 'stoked' | 'bailed';
 }
 
-/** Chunky friendly-bot outline shared by every robot. `currentColor` lets the
- * outline follow the theme (dark ink on light, light ink on dark) via CSS. */
+/** Chunky friendly-bot outline shared by every robot. `currentColor` keeps the
+ * SVG outline tied to the app's palette via CSS. */
 const STROKE = 'currentColor';
 const SW = 4;
 

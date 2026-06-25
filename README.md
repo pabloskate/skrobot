@@ -1,11 +1,13 @@
-# Skate Robot 🛹🤖
+# Skate Robot
 
 Play S.K.A.T.E. against a robot. You skate for real — the robot rolls the dice.
 Includes a hands-free **voice mode** (Gemini Live) so you can play a whole game
 through earbuds with the phone in your pocket.
+The routed game flow is currently flatground-only.
 
-Next.js App Router app deployed to **Cloudflare Workers via
-[OpenNext](https://opennext.js.org/cloudflare)**.
+Next.js App Router web app deployed to **Cloudflare Workers via
+[OpenNext](https://opennext.js.org/cloudflare)**. The Expo companion app in
+`apps/mobile` is a native WebView shell that loads the same web app for parity.
 
 ## Develop
 
@@ -29,7 +31,13 @@ npx wrangler secret put GEMINI_API_KEY   # one-time production secret
 
 ## Architecture
 
-Feature-first modular monolith — routes in `src/app/` are thin shells; all domain
-code lives in `src/features/<name>/` behind an `index.ts` barrel. **See
-[CLAUDE.md](CLAUDE.md) for the full map, conventions, and the D1 backend roadmap.**
+Feature-first web app: routes in `src/app/` are thin shells, and product code
+lives in `src/features/<name>/` behind an `index.ts` barrel. **See
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the dependency map and complexity
+guardrails, [docs/FEATURE_OWNERSHIP.md](docs/FEATURE_OWNERSHIP.md) for ownership,
+and [AGENTS.md](AGENTS.md) for contributor instructions.**
 Voice-mode design rationale: [docs/VOICE_MODE_PLAN.md](docs/VOICE_MODE_PLAN.md).
+
+```sh
+npm run check   # lint boundaries, tests, package typechecks, production build
+```

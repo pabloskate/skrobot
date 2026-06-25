@@ -1,4 +1,4 @@
-import { getDb } from '@/shared/db';
+import { getDb } from '@/platform/server/db';
 
 export type UserTier = 'free' | 'paid';
 

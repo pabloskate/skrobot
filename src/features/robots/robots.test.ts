@@ -154,3 +154,33 @@ describe('Skateboarding-soundness invariants', () => {
     expect(nollieKickflip!).toBeGreaterThan(regularKickflip!);
   });
 });
+
+describe('Tier-locked tricks: late shuvits are intermediate-and-up only', () => {
+  const lateFs = TRICK_BY_ID.get('regular-late-frontside-shuvit')!;
+  const lateBs = TRICK_BY_ID.get('regular-late-backside-shuvit')!;
+
+  it('are in the catalog as shuvit-discipline tricks with a skill floor above the beginner tier', () => {
+    expect(lateFs).toBeDefined();
+    expect(lateBs).toBeDefined();
+    expect(trickDiscipline(lateFs)).toBe('shuvit');
+    expect(trickDiscipline(lateBs)).toBe('shuvit');
+    // Floor must sit above the strongest beginner (Flipster/Flipper at skill 3.2).
+    expect(lateFs.minSkill).toBeGreaterThan(3.2);
+  });
+
+  it('no beginner can land them — not even Shifty, whose shuvit focus would otherwise sneak it in', () => {
+    for (const robot of ROBOTS.filter((r) => r.tier === 'beginner')) {
+      expect(robotConsistency(robot, lateFs), `${robot.name} should not have the late FS shuvit`).toBeNull();
+      expect(robotConsistency(robot, lateBs), `${robot.name} should not have the late BS shuvit`).toBeNull();
+    }
+    // Concretely: the hard floor (not difficulty) is what keeps it out of Shifty's bag.
+    expect(buildBag(ROBOTS.find((r) => r.id === 'shifty')!, TRICKS).has('regular-late-frontside-shuvit')).toBe(false);
+  });
+
+  it('every intermediate-and-up robot gets a chance at them', () => {
+    for (const robot of ROBOTS.filter((r) => r.tier !== 'beginner')) {
+      expect(robotConsistency(robot, lateFs), `${robot.name} should have a shot at the late FS shuvit`).not.toBeNull();
+      expect(robotConsistency(robot, lateBs), `${robot.name} should have a shot at the late BS shuvit`).not.toBeNull();
+    }
+  });
+});

@@ -1,5 +1,5 @@
-import { getCloudflareContext } from '@opennextjs/cloudflare';
-import { getDb } from '@/shared/db';
+import { getCloudflareEnv } from '@/platform/server/cloudflare';
+import { getDb } from '@/platform/server/db';
 
 interface CheckoutUser {
   id: string;
@@ -21,8 +21,7 @@ interface StripeSubscription {
 }
 
 async function getEnv(): Promise<CloudflareEnv> {
-  const { env } = await getCloudflareContext({ async: true });
-  return env;
+  return getCloudflareEnv();
 }
 
 function requireEnv(env: CloudflareEnv, key: keyof CloudflareEnv): string {

@@ -1,11 +1,10 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { getRecords } from '@/features/records';
 import type { Stance, Trick } from '@/features/tricks';
 import { trickDescription } from '@/features/tricks';
 import type { Robot } from './robots';
-import { buildBag, TIERS } from './robots';
+import { buildBag } from './robots';
 import RobotAvatar from './RobotAvatar';
 
 interface Props {
@@ -84,37 +83,13 @@ export default function RobotProfile({ robot, pool, onStart }: Props) {
     });
   }, [bag, pool, robot.favorites]);
 
-  const record = getRecords()[robot.id];
-  const tierLabel = TIERS.find((t) => t.tier === robot.tier)?.label ?? robot.tier;
-
   return (
     <div className="container">
       <div className="panel center robot-profile">
         <RobotAvatar robot={robot} size={150} />
         <h2 className="panel-title">{robot.name}</h2>
-        <div className="profile-badges">
-          <span className={`tier-pill tier-${robot.tier}`}>{tierLabel}</span>
-          {record && (
-            <span className="robot-record">
-              {record.w}W – {record.l}L
-            </span>
-          )}
-        </div>
         <p className="profile-tagline">{robot.tagline}</p>
         <p className="muted profile-summary">{robot.summary}</p>
-
-        {robot.favorites.length > 0 && (
-          <div className="profile-faves">
-            <span className="profile-faves-label">Signature tricks</span>
-            <div className="chip-row profile-faves-chips">
-              {robot.favorites.map((fav) => (
-                <span key={fav} className="fave-chip">
-                  {fav}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
 
         <button className="btn-primary" onClick={onStart}>
           Play {robot.name}

@@ -3,12 +3,22 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "workspaces": [
+    "apps/mobile"
+  ],
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run",
+    "typecheck:mobile": "npm --workspace mobile run typecheck",
+    "typecheck:animations": "npm --prefix skrobot-animations run typecheck",
+    "check": "npm run lint && npm test && npm run typecheck:mobile && npm run typecheck:animations && npm run build",
+    "mobile:start": "npm --workspace mobile run start",
+    "mobile:ios": "npm --workspace mobile run ios",
+    "mobile:android": "npm --workspace mobile run android",
+    "native:parity-status": "node scripts/native-parity-status.mjs",
     "test:watch": "vitest",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",

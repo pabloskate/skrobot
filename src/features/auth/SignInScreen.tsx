@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
+import { requestSignInLink } from './api';
 
 interface Props {
   onDone?: () => void | Promise<void>;
@@ -20,14 +21,7 @@ export default function SignInScreen({ onDone, onCancel }: Props) {
     setDevLink(null);
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/request-link', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify({ email }),
-      });
-      const body = (await res.json().catch(() => ({}))) as { error?: string; devLink?: string };
-      if (!res.ok) throw new Error(body.error ?? 'Could not send sign-in link');
+      const body = await requestSignInLink(email);
       setSentTo(email.trim());
       if (body.devLink) setDevLink(body.devLink);
     } catch (err) {

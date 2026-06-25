@@ -4,20 +4,22 @@ Goal: a full game of S.K.A.T.E. playable entirely by voice — RPS toss, setting
 reporting lands/misses, robot turns narrated aloud, scores logged — so you can keep the
 phone in your pocket and play through AirPods between actual skate attempts.
 
-> **Note (2026-06-11):** paths in this doc predate the feature-first restructure —
-> game engine: `src/features/game/`, voice code: `src/features/voice/`, token mint:
+> **Note (2026-06-24):** paths in this doc reflect the feature-first web app:
+> game rules, trick data, robot data, and voice resolver/prompts live under
+> `src/features/*`; token mint logic is in
 > `src/features/voice/server/live-token.ts` behind `src/app/api/live-token/route.ts`.
 
 ## 1. Core architecture principle
 
 **The reducer stays the source of truth. The LLM is only the interface.**
 
-`src/features/game/engine.ts` (formerly `src/game/engine.ts`) already models the entire game as a pure reducer. Voice mode wraps it
-in a `VoiceGameController` and exposes a small set of *tools* (function calls) to the live
-model. The model never tracks letters, used tricks, or phase itself — every tool response
-returns the authoritative state, and the model just narrates it with personality. This
-prevents hallucinated scores, keeps game logic testable, and (critically, see §5) makes
-the voice session disposable: any reconnect can rebuild the model's context from a state
+`src/features/game/engine.ts` models the entire game as a pure reducer. Voice
+mode wraps that reducer in a `VoiceGameController` and exposes a small set of
+*tools* (function calls) to the live model. The model never tracks letters, used
+tricks, or phase itself — every tool response returns the authoritative state,
+and the model just narrates it with personality. This prevents hallucinated
+scores, keeps game logic testable, and (critically, see §5) makes the voice
+session disposable: any reconnect can rebuild the model's context from a state
 snapshot.
 
 ## 2. Provider choice
@@ -57,17 +59,22 @@ Alternatives considered:
   voice, no conversational repair ("wait, did you mean nollie or fakie?"). Could become a
   degraded offline "lite mode" later; not the v1.
 
-### Auth: ephemeral tokens (small backend required)
+### Auth: ephemeral tokens
 
-The app is currently a static Vite site with no backend. Shipping a Gemini API key in
-client JS is not acceptable, so add one tiny endpoint:
+Shipping a Gemini API key in client JS is not acceptable, so voice mode uses the
+Next API route at `src/app/api/live-token/route.ts` as a thin shell around
+`src/features/voice/server/live-token.ts`. Browser code reaches that route through
+the feature-owned client helper in `src/features/voice/api.ts`.
 
-- `POST /api/live-token` → mints an **ephemeral token** (`client.authTokens.create`,
-  v1alpha) constrained to: the live model, 1 connection, ~1 min new-session window,
-  ~30 min lifetime. Host as a Vercel/Netlify function or Cloudflare Worker.
-- Dev mode: `VITE_GEMINI_API_KEY` used directly from the client, behind an obvious
-  "dev only" flag.
-- Later (if abuse appears): rate-limit by IP, or gate behind a lightweight login.
+- `POST /api/live-token` mints an **ephemeral token** (`client.authTokens.create`,
+  v1alpha) constrained to the pinned Live model, 1 connection, ~1 min
+  new-session window, and ~30 min lifetime.
+- The route is auth-gated through `src/features/auth/server/sessions.ts` and claims
+  a per-user voice quota slot before minting.
+- Production and preview read `GEMINI_API_KEY` from Cloudflare Worker secrets /
+  `.dev.vars`; `next dev` reads `.env.local`.
+- `NEXT_PUBLIC_GEMINI_API_KEY` is a dev-only browser fallback and must not be used
+  as the production auth path.
 
 ## 3. Tool surface
 
@@ -113,8 +120,7 @@ Every response includes a compact `say`-ready summary plus `nextExpected:
 `VoiceGameController` responsibilities:
 - Holds `gameReducer` state + the robot's `bag` (reuse `buildBag`, `chooseRobotTrick`,
   `rollAttempt` as-is).
-- RPS logic — extract from `GameScreen.tsx`'s `RpsPanel` into `src/game/rps.ts` so both
-  screens share it.
+- RPS logic lives in `src/features/game/rps.ts`.
 - Keeps a pre-dispatch snapshot for `undo_last_report`.
 - Calls `recordResult(robotId, won)` exactly once when a winner is set (same as today).
 
@@ -122,8 +128,8 @@ Every response includes a compact `say`-ready summary plus `nextExpected:
 
 AirPods outdoors + wind + skate noise means "fakie bigspin" will arrive mangled. Plan:
 
-- `src/voice/trickResolver.ts`: normalize → alias table → fuzzy match against the active
-  pool minus used tricks.
+- `src/features/voice/trickResolver.ts`: normalize → alias table → fuzzy
+  match against the active pool minus used tricks.
 - Alias table for skate vocabulary the ASR won't produce verbatim:
   `"tre flip"/"tre"/"three flip" → 360 Flip`, `"shove it"/"shuv" → Pop Shuvit`,
   `"front 180"/"frontside one eighty" → Frontside 180`, `"fifty fifty" → 50-50 Grind`,
@@ -200,19 +206,23 @@ in defeat"). Trash talk on letters, respect on bangers. One template, per-robot 
 ## 8. File plan
 
 ```
-src/voice/
-  liveSession.ts     — connect/auth, send/receive loop, resumption, GoAway handling
-  audio.ts           — AudioWorklet mic capture (→16kHz PCM), playback queue (24kHz),
-                       earcons
-  controller.ts      — VoiceGameController: reducer + bag + RPS + undo + recordResult
-  tools.ts           — function declarations + dispatch into controller
-  trickResolver.ts   — aliases + fuzzy matching + clarification candidates
-  prompts.ts         — system instruction builder (robot persona, rules, pool,
-                       state snapshot for reconnects)
-src/game/rps.ts      — RPS logic extracted from GameScreen
-src/components/VoiceGameScreen.tsx  — captions, letters, mute, Pocket Mode
-api/live-token.ts    — serverless ephemeral-token mint (deploy target TBD)
-src/records.ts       — add game-history log
+src/features/voice/
+  liveSession.ts       — connect/auth, send/receive loop, resumption, GoAway handling
+  audio.ts             — AudioWorklet mic capture (16kHz PCM), playback queue (24kHz),
+                         earcons
+  controller.ts        — VoiceGameController: reducer + bag + RPS + undo + recordResult
+  tools.ts             — function declarations + dispatch into controller
+  trickResolver.ts     — aliases + fuzzy matching + clarification candidates
+  prompts.ts           — pure system instruction builder
+  VoiceGameScreen.tsx  — captions, letters, mute, Pocket Mode
+  api.ts               — browser calls for /api/live-token + dev fallback
+  server/live-token.ts — Gemini ephemeral-token mint
+src/features/game/engine.ts — pure reducer, robot trick choice, landing rolls
+src/features/game/rps.ts
+src/features/tricks/tricks.ts
+src/features/robots/robots.ts
+src/features/records/records.ts
+src/app/api/live-token/route.ts
 ```
 
 ## 9. Build order

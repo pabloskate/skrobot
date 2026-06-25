@@ -1,5 +1,5 @@
-import { getCloudflareContext } from '@opennextjs/cloudflare';
-import { getDb } from '@/shared/db';
+import { getDb } from '@/platform/server/db';
+import { getOptionalCloudflareEnv } from '@/platform/server/cloudflare';
 import { createSessionCookie, randomToken, sha256Hex, type UserRow } from './sessions';
 
 const TOKEN_TTL_MINUTES = 15;
@@ -7,6 +7,10 @@ const TOKEN_TTL_MINUTES = 15;
 export interface RequestLinkResult {
   ok: true;
   devLink?: string;
+}
+
+export interface RequestLinkOptions {
+  nativeApp?: boolean;
 }
 
 function normalizeEmail(email: unknown): string | null {
@@ -18,15 +22,6 @@ function normalizeEmail(email: unknown): string | null {
 
 function addMinutes(minutes: number): string {
   return new Date(Date.now() + minutes * 60 * 1000).toISOString();
-}
-
-async function getEnv(): Promise<CloudflareEnv | undefined> {
-  try {
-    const { env } = await getCloudflareContext({ async: true });
-    return env;
-  } catch {
-    return undefined;
-  }
 }
 
 async function ensureUser(email: string): Promise<UserRow> {
@@ -53,7 +48,11 @@ function escapeHtml(value: string): string {
   return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
 }
 
-export async function requestLink(request: Request, emailInput: unknown): Promise<RequestLinkResult> {
+export async function requestLink(
+  request: Request,
+  emailInput: unknown,
+  options: RequestLinkOptions = {},
+): Promise<RequestLinkResult> {
   const email = normalizeEmail(emailInput);
   if (!email) throw new Error('invalid_email');
 
@@ -70,8 +69,10 @@ export async function requestLink(request: Request, emailInput: unknown): Promis
     .run();
 
   const origin = new URL(request.url).origin;
-  const link = `${origin}/api/auth/callback?token=${encodeURIComponent(token)}`;
-  const env = await getEnv();
+  const link = options.nativeApp
+    ? `skrobot://auth/callback?token=${encodeURIComponent(token)}`
+    : `${origin}/api/auth/callback?token=${encodeURIComponent(token)}`;
+  const env = await getOptionalCloudflareEnv();
 
   if (env?.EMAIL) {
     if (!env.MAGIC_LINK_FROM) throw new Error('missing_magic_link_from');

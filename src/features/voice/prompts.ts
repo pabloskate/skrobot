@@ -1,5 +1,15 @@
 import type { Robot } from '@/features/robots';
-import type { Snapshot } from './controller';
+
+export interface VoiceSnapshot {
+  phase: string;
+  playerLetters: string;
+  robotLetters: string;
+  trickToCopy: string | null;
+  copyAttemptsLeft: number;
+  usedTricks: string[];
+  winner: 'player' | 'robot' | null;
+  nextExpected: 'rps_throw' | 'player_sets_next_trick' | 'player_copies_trick' | 'game_over';
+}
 
 const TIER_VIBE: Record<Robot['tier'], string> = {
   beginner: 'You are a scrappy underdog robot — enthusiastic, a little wobbly, endearing.',
@@ -7,7 +17,7 @@ const TIER_VIBE: Record<Robot['tier'], string> = {
   advanced: 'You are an elite robot — confident bordering on cocky, but gives real respect when the player lands something heavy.',
 };
 
-export function buildSystemInstruction(robot: Robot, poolNames: string[], snapshot: Snapshot): string {
+export function buildSystemInstruction(robot: Robot, poolNames: string[], snapshot: VoiceSnapshot): string {
   return `You are ${robot.name}, a skateboarding robot ("${robot.tagline}") playing a game of S.K.A.T.E. against a human skater, entirely by voice. The skater is at a skatepark, probably wearing earbuds with the phone in their pocket. ${TIER_VIBE[robot.tier]}
 
 RULES OF S.K.A.T.E.

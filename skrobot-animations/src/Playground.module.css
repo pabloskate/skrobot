@@ -1,0 +1,344 @@
+.wrap {
+  min-height: 100vh;
+  padding: 24px 16px 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.header {
+  text-align: center;
+}
+
+.header h1 {
+  margin: 0 0 4px;
+  font-size: 28px;
+  font-weight: 900;
+  color: var(--purple-dark);
+}
+
+.header p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.card {
+  width: 100%;
+  max-width: 520px;
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sectionTitle {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--muted);
+}
+
+.robotRow {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.robotOption {
+  flex: 1;
+  min-width: 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px;
+  background: var(--bg);
+  border: 2px solid transparent;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.robotOption:hover {
+  background: var(--purple-soft);
+}
+
+.robotOptionActive {
+  border-color: var(--purple);
+  background: var(--purple-soft);
+}
+
+.robotName {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.stanceRow {
+  display: flex;
+  gap: 8px;
+}
+
+.stanceBtn {
+  flex: 1;
+  padding: 10px 8px;
+  font-size: 13px;
+  font-weight: 700;
+  background: var(--bg);
+  border: 2px solid transparent;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.stanceBtn:hover {
+  background: var(--purple-soft);
+}
+
+.stanceBtnActive {
+  border-color: var(--purple);
+  background: var(--purple-soft);
+  color: var(--purple-dark);
+}
+
+.trickSelect {
+  width: 100%;
+  padding: 12px 10px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--bg);
+  border: 2px solid transparent;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.trickSelect:focus {
+  outline: 2px solid var(--purple);
+  outline-offset: 2px;
+}
+
+.actionRow {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+
+.actionBtn {
+  flex: 1;
+  padding: 14px 12px;
+  font-size: 15px;
+  font-weight: 800;
+  border: none;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.15s ease;
+}
+
+.actionBtn:active {
+  transform: scale(0.97);
+}
+
+.land {
+  background: var(--green);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(45, 168, 102, 0.28);
+}
+
+.land:hover {
+  box-shadow: 0 6px 16px rgba(45, 168, 102, 0.38);
+}
+
+.fall {
+  background: var(--danger);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(224, 69, 92, 0.28);
+}
+
+.fall:hover {
+  box-shadow: 0 6px 16px rgba(224, 69, 92, 0.38);
+}
+
+.replay {
+  background: var(--purple);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(100, 49, 216, 0.28);
+}
+
+.replay:hover {
+  box-shadow: 0 6px 16px rgba(100, 49, 216, 0.38);
+}
+
+.replay:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pause {
+  background: #1f2937;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(31, 41, 55, 0.28);
+}
+
+.pause:hover {
+  box-shadow: 0 6px 16px rgba(31, 41, 55, 0.38);
+}
+
+.pause:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pause[aria-pressed='true'] {
+  background: var(--amber, #d9863a);
+}
+
+.speedRow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.speedBtn {
+  min-height: 44px;
+  padding: 10px 8px;
+  font-size: 13px;
+  font-weight: 800;
+  background: var(--bg);
+  border: 2px solid transparent;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.speedBtn:hover {
+  background: var(--purple-soft);
+}
+
+.speedBtnActive {
+  border-color: var(--purple);
+  background: var(--purple-soft);
+  color: var(--purple-dark);
+}
+
+.optionGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  gap: 8px;
+}
+
+.optionBtn {
+  min-height: 42px;
+  padding: 9px 8px;
+  font-size: 13px;
+  font-weight: 800;
+  background: var(--bg);
+  border: 2px solid transparent;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.optionBtn:hover {
+  background: var(--purple-soft);
+}
+
+.optionBtnActive {
+  border-color: var(--purple);
+  background: var(--purple-soft);
+  color: var(--purple-dark);
+}
+
+.stage {
+  width: 100%;
+  max-width: 520px;
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 24px 18px;
+  text-align: center;
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.status {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.status strong {
+  color: var(--ink);
+}
+
+.placeholder {
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.paramsPanel {
+  width: 100%;
+  max-width: 520px;
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 18px;
+  text-align: left;
+}
+
+.paramsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.paramsTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--ink);
+}
+
+.copyBtn {
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 9px 12px;
+  font-size: 12px;
+  font-weight: 900;
+  color: #fff;
+  background: var(--purple);
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(100, 49, 216, 0.22);
+}
+
+.paramsCode {
+  margin: 0;
+  max-height: 280px;
+  overflow: auto;
+  padding: 12px;
+  color: #242132;
+  background: #f8f7fb;
+  border: 1px solid #ded9ed;
+  border-radius: 12px;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

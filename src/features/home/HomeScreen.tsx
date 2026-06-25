@@ -1,67 +1,91 @@
 'use client';
 
-import { TbSkateboard } from 'react-icons/tb';
-import type { Category } from '@/features/tricks';
-
-export type ModeChoice = { kind: 'category'; category: Category } | { kind: 'dice' } | { kind: 'custom' };
+import { TbMicrophone } from 'react-icons/tb';
+import { getGameLog, getRecords } from '@/features/records';
+import type { GameLogEntry, Record_ } from '@/features/records';
+import { ROBOT_BY_ID, RobotAvatar, RobotSelect } from '@/features/robots';
+import type { Robot } from '@/features/robots';
 
 interface Props {
-  onPick: (mode: ModeChoice) => void;
+  onPickRobot: (robot: Robot) => void;
+  onPlayVoice: (robot: Robot) => void;
 }
 
-/** Board sliding down a handrail — Tabler has no grind-rail, so this matches its stroke style. */
-const GrindRailIcon = () => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
-    {/* Sloped rail with legs */}
-    <path d="M3 9l18 7" />
-    <path d="M7 10.5V19" />
-    <path d="M17 14.5V19" />
-    {/* Board grinding the rail, parallel to it */}
-    <g transform="rotate(21 11 6)">
-      <path d="M5.5 6h11" />
-      <circle cx="8" cy="8" r="1" fill="currentColor" />
-      <circle cx="14" cy="8" r="1" fill="currentColor" />
-    </g>
-  </svg>
-);
+type HeroState =
+  | { kind: 'welcome'; robot: Robot }
+  | { kind: 'rematch'; robot: Robot; record: Record_ | undefined }
+  | { kind: 'victory'; robot: Robot };
 
-const CARDS: { mode: ModeChoice; title: string; blurb: string; icon: React.ReactNode }[] = [
-  {
-    mode: { kind: 'category', category: 'flatground' },
-    title: 'Flatground',
-    blurb: 'Flip tricks, shuvits & spins',
-    icon: <TbSkateboard aria-hidden />,
-  },
-  {
-    mode: { kind: 'category', category: 'grinds' },
-    title: 'Grinds',
-    blurb: 'Rails, ledges & slides',
-    icon: <GrindRailIcon />,
-  },
-];
+const SHIFTY = ROBOT_BY_ID.get('shifty')!;
 
-export default function HomeScreen({ onPick }: Props) {
+function computeHero(log: GameLogEntry[], records: Record<string, Record_>): HeroState {
+  if (log.length === 0) return { kind: 'welcome', robot: SHIFTY };
+
+  const last = log[log.length - 1];
+  const robot = ROBOT_BY_ID.get(last.robotId) ?? SHIFTY;
+  if (!last.won) return { kind: 'rematch', robot, record: records[last.robotId] };
+  return { kind: 'victory', robot };
+}
+
+export default function HomeScreen({ onPickRobot, onPlayVoice }: Props) {
+  const hero = computeHero(getGameLog(), getRecords());
+
   return (
     <div className="container">
-      <p className="home-intro">
-        Play S.K.A.T.E. against a robot. You skate for real — the robot rolls the dice.
-      </p>
-      <div className="mode-grid">
-        {CARDS.map((c) => (
-          <button key={c.title} className="mode-card" onClick={() => onPick(c.mode)}>
-            <span className="mode-icon">{c.icon}</span>
-            <span className="mode-title">{c.title}</span>
-            <span className="mode-blurb">{c.blurb}</span>
-          </button>
-        ))}
+      <HeroCard hero={hero} onPickRobot={onPickRobot} onPlayVoice={onPlayVoice} />
+      <div className="hero-divider">
+        <span>or pick your opponent</span>
+      </div>
+      <RobotSelect onPick={onPickRobot} />
+    </div>
+  );
+}
+
+function HeroCard({
+  hero,
+  onPickRobot,
+  onPlayVoice,
+}: {
+  hero: HeroState;
+  onPickRobot: (robot: Robot) => void;
+  onPlayVoice: (robot: Robot) => void;
+}) {
+  const { robot } = hero;
+
+  let headline: string;
+  let subtext: string;
+
+  if (hero.kind === 'welcome') {
+    headline = 'New here?';
+    subtext = "Shifty's the friendly one — start there. Pick a robot, skate for real, report your tricks.";
+  } else if (hero.kind === 'rematch') {
+    headline = `Run it back vs ${robot.name}?`;
+    subtext =
+      hero.record && hero.record.l > hero.record.w
+        ? `You're ${hero.record.w}W–${hero.record.l}L against them. Time to change that.`
+        : `${robot.name} got you last time.`;
+  } else {
+    headline = `You beat ${robot.name}! 🏆`;
+    subtext = 'Run it back, or find a new opponent below.';
+  }
+
+  return (
+    <div className={`hero-card hero-card--${hero.kind}`}>
+      <div className="hero-avatar anim-idle">
+        <RobotAvatar robot={robot} size={100} pose={hero.kind === 'victory' ? 'stoked' : 'idle'} />
+      </div>
+      <div className="hero-copy">
+        <p className="hero-eyebrow">{robot.name}</p>
+        <h2 className="hero-headline">{headline}</h2>
+        <p className="hero-subtext">{subtext}</p>
+      </div>
+      <div className="hero-actions">
+        <button className="btn-hero" onClick={() => onPickRobot(robot)}>
+          Play {robot.name}
+        </button>
+        <button className="btn-voice" onClick={() => onPlayVoice(robot)}>
+          <TbMicrophone aria-hidden /> Play by voice
+        </button>
       </div>
     </div>
   );
