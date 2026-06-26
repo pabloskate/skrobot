@@ -2,29 +2,13 @@
 
 import { TbMicrophone } from 'react-icons/tb';
 import { getGameLog, getRecords } from '@/features/records';
-import type { GameLogEntry, Record_ } from '@/features/records';
-import { ROBOT_BY_ID, RobotAvatar, RobotSelect } from '@/features/robots';
+import { RobotAvatar, RobotSelect } from '@/features/robots';
 import type { Robot } from '@/features/robots';
+import { computeHero, type HeroState } from './homeHero';
 
 interface Props {
   onPickRobot: (robot: Robot) => void;
   onPlayVoice: (robot: Robot) => void;
-}
-
-type HeroState =
-  | { kind: 'welcome'; robot: Robot }
-  | { kind: 'rematch'; robot: Robot; record: Record_ | undefined }
-  | { kind: 'victory'; robot: Robot };
-
-const SHIFTY = ROBOT_BY_ID.get('shifty')!;
-
-function computeHero(log: GameLogEntry[], records: Record<string, Record_>): HeroState {
-  if (log.length === 0) return { kind: 'welcome', robot: SHIFTY };
-
-  const last = log[log.length - 1];
-  const robot = ROBOT_BY_ID.get(last.robotId) ?? SHIFTY;
-  if (!last.won) return { kind: 'rematch', robot, record: records[last.robotId] };
-  return { kind: 'victory', robot };
 }
 
 export default function HomeScreen({ onPickRobot, onPlayVoice }: Props) {
@@ -64,15 +48,18 @@ function HeroCard({
       hero.record && hero.record.l > hero.record.w
         ? `You're ${hero.record.w}W–${hero.record.l}L against them. Time to change that.`
         : `${robot.name} got you last time.`;
+  } else if (hero.kind === 'next') {
+    headline = `Next up: ${robot.name}`;
+    subtext = `You beat ${hero.beatenRobot.name}. Keep climbing the flatground ladder.`;
   } else {
-    headline = `You beat ${robot.name}! 🏆`;
-    subtext = 'Run it back, or find a new opponent below.';
+    headline = 'Flatground cleared!';
+    subtext = 'You have a win over every flatground robot. Run it back, or pick a new opponent below.';
   }
 
   return (
-    <div className={`hero-card hero-card--${hero.kind}`}>
+    <div className={`hero-card hero-card--${hero.kind === 'complete' ? 'victory' : hero.kind}`}>
       <div className="hero-avatar anim-idle">
-        <RobotAvatar robot={robot} size={88} pose={hero.kind === 'victory' ? 'stoked' : 'idle'} />
+        <RobotAvatar robot={robot} size={88} pose={hero.kind === 'complete' ? 'stoked' : 'idle'} />
       </div>
       <div className="hero-copy">
         <p className="hero-eyebrow">{robot.name}</p>
