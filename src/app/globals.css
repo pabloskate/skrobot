@@ -1356,13 +1356,16 @@ main {
 
 .hero-card {
   --hero-accent: var(--purple);
-  padding: 8px 0 4px;
+  padding: 28px 24px 24px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
+  gap: 18px;
   text-align: center;
   color: var(--ink);
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
 }
 
 .hero-card--victory {
@@ -1370,10 +1373,12 @@ main {
 }
 
 .hero-avatar {
-  width: 120px;
-  height: 120px;
+  width: 96px;
+  height: 96px;
   display: grid;
   place-items: center;
+  border-radius: 50%;
+  background: var(--purple-soft);
 }
 
 .hero-avatar .robot-avatar {
@@ -1383,41 +1388,41 @@ main {
 .hero-copy {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  max-width: 420px;
+  gap: 4px;
+  max-width: 380px;
 }
 
 .hero-eyebrow {
   margin: 0;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--hero-accent);
 }
 
 .hero-headline {
   margin: 0;
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 800;
-  line-height: 1.15;
+  line-height: 1.2;
   letter-spacing: -0.02em;
 }
 
 .hero-subtext {
-  margin: 0;
-  font-size: 15px;
+  margin: 2px auto 0;
+  font-size: 14px;
   color: var(--muted);
   line-height: 1.5;
+  max-width: 340px;
 }
 
 .hero-actions {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
-  max-width: 300px;
-  margin-top: 2px;
+  max-width: 280px;
 }
 
 .btn-hero {
@@ -1425,12 +1430,12 @@ main {
   color: #fff;
   border: none;
   border-radius: 999px;
-  padding: 14px 28px;
+  padding: 13px 28px;
   font-size: 16px;
   font-weight: 800;
   cursor: pointer;
   transition: transform 0.08s ease, background 0.15s ease, box-shadow 0.15s ease;
-  box-shadow: 0 4px 14px rgba(100, 49, 216, 0.35);
+  box-shadow: 0 4px 14px rgba(100, 49, 216, 0.3);
 }
 
 .btn-hero:hover {
@@ -1443,23 +1448,23 @@ main {
 }
 
 .btn-voice {
-  background: var(--purple-soft);
+  background: transparent;
   color: var(--purple-dark);
-  border: 1.5px solid color-mix(in srgb, var(--purple) 35%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--purple) 30%, transparent);
   border-radius: 999px;
-  padding: 12px 24px;
-  font-size: 15px;
+  padding: 10px 24px;
+  font-size: 14px;
   font-weight: 700;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.08s ease;
+  gap: 7px;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.08s ease;
 }
 
 .btn-voice:hover {
-  background: #e4daf8;
+  background: var(--purple-soft);
   border-color: var(--purple);
 }
 
@@ -1468,15 +1473,15 @@ main {
 }
 
 .btn-voice svg {
-  width: 18px;
-  height: 18px;
+  width: 17px;
+  height: 17px;
 }
 
 .hero-divider {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin: 14px 0 2px;
+  margin: 20px 0 2px;
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;

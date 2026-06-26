@@ -21,6 +21,7 @@ If the answer is unclear, tighten the feature boundary before adding more code.
 | Auth/session/quota | `src/features/auth/` | Client auth state in the barrel; server code under `server/`. |
 | Billing | `src/features/billing/` | Beta quota UI plus dormant Stripe server helpers. |
 | Tricks | `src/features/tricks/` | Catalog, difficulty, metadata, picker/setup UI, and the default routed trick pool. Routed games currently use flatground only. |
+| Gallery | `src/features/gallery/` | Flatground trick gallery: browse the catalog with stance filters and optional curated video tips. |
 | Robots | `src/features/robots/` | Roster, skill model, profile/select/avatar UI. Routed home currently exposes flatground robots only. |
 | Records | `src/features/records/` | LocalStorage W/L and game log until the D1 port. |
 | Runtime infrastructure | `src/platform/server/` | Cloudflare env and bindings, D1, future logging/HTTP adapters. |
@@ -41,6 +42,7 @@ route is importing server-only feature code. This map is enforced by
 | `auth` | `platform/server` from server files | Gameplay, screens, other features |
 | `billing` | `platform/server` from server files | Auth UI, gameplay, screens, other features |
 | `tricks` | none | Other features |
+| `gallery` | `tricks` | Other features |
 | `records` | none | Other features |
 | `robots` | `tricks`, `records` | Screens, game, voice, auth, billing |
 | `home` | `robots`, `records` | Game/voice flow internals; non-flatground roster setup |

@@ -72,7 +72,7 @@ function HeroCard({
   return (
     <div className={`hero-card hero-card--${hero.kind}`}>
       <div className="hero-avatar anim-idle">
-        <RobotAvatar robot={robot} size={100} pose={hero.kind === 'victory' ? 'stoked' : 'idle'} />
+        <RobotAvatar robot={robot} size={88} pose={hero.kind === 'victory' ? 'stoked' : 'idle'} />
       </div>
       <div className="hero-copy">
         <p className="hero-eyebrow">{robot.name}</p>

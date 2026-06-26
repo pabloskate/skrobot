@@ -439,7 +439,7 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
     // A "late" shuvit holds the board flat off the pop, then whips the rotation
     // through in the back half of the flight (the late scoop). Its yaw runs on a
     // delayed clock; everything else (pop arc, catch) stays on catchP.
-    const spinP = spec.late ? clamp01((p - 0.4) / 0.45) : catchP;
+    const spinP = spec.late ? clamp01((p - 0.38) / 0.30) : catchP;
 
     boardY = GROUND - 4 * JUMP * p * (1 - p);
     // Lateral drift mid-spin: the board arcs toward the toes (frontside, -1)
@@ -462,6 +462,14 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
     if (spec.roll) {
       boardRot = popAngle * (1 - Math.pow(Math.min(1, p / 0.3), 2));
       boardRot += spec.roll * Math.pow(catchP, 2.2);
+    } else if (spec.late) {
+      // Late shuvit: board stays flat after the pop (no wobble), then dips
+      // as the back foot scoops the tail around mid-flight.
+      boardRot = p < 0.3 ? popAngle * (1 - Math.pow(p / 0.3, 2)) : 0;
+      const scoopPhase = clamp01((p - 0.38) / 0.30);
+      const dipEase = Math.sin(clamp01(scoopPhase / 0.2) * Math.PI);
+      const dipDir = spec.nollie ? 1 : -1; // tail dips down regardless of stance
+      boardRot += dipEase * dipDir * -14;
     } else {
       boardRot = p < 0.3 ? popAngle * (1 - Math.pow(p / 0.3, 2)) : Math.sin(catchP * Math.PI * 2) * 4;
     }
@@ -501,9 +509,36 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
       armBack += Math.sin(p * Math.PI * 2) * 0.8 * flail * spinSign;
     }
     
-    const feet = feetForFlip(spec, catchP, bodyYOffset, boardRot);
-    footL = feet.footL;
-    footR = feet.footR;
+    if (spec.late) {
+      // Late shuvit: back foot stays near the board during the hold phase,
+      // then scoops backward/around to whip the board rotation mid-flight.
+      const scoopP = clamp01((p - 0.38) / 0.30);
+      // Quick pop-and-return scoop arc: peaks early, tapers back toward the
+      // board as the rotation comes around so the foot doesn't hang out.
+      const scoopArc = Math.sin(scoopP * Math.PI) * (1 - scoopP * 0.5);
+      const th = rad(boardRot);
+      const holdR = { x: 10 * Math.cos(th), y: FOOT_Y - 6 + 10 * Math.sin(th) - bodyYOffset };
+      const holdL = { x: -25 * Math.cos(th), y: FOOT_Y - 6 - 25 * Math.sin(th) - bodyYOffset };
+      // Scoop: subtle reach-back, front foot lifts out of the way briefly.
+      footR = {
+        x: holdR.x - scoopArc * 8,
+        y: holdR.y - scoopArc * 10,
+      };
+      footL = {
+        x: holdL.x - scoopArc * 22,
+        y: holdL.y - scoopArc * 16,
+      };
+      if (spec.nollie) {
+        // Nollie: front foot (footR) is the scooping foot.
+        const tmp = footR;
+        footR = { x: -footL.x, y: footL.y };
+        footL = { x: -tmp.x, y: tmp.y };
+      }
+    } else {
+      const feet = feetForFlip(spec, catchP, bodyYOffset, boardRot);
+      footL = feet.footL;
+      footR = feet.footR;
+    }
   } else if (landed) {
     // Compress on the catch, then ride away. After a 180/bigspin the skater
     // stays turned around (rides away switch).
@@ -653,33 +688,36 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
       armFront = Math.sin(cycle) * 1.3 * runVigor + 0.4 * settle;
       armBack = -Math.sin(cycle) * 1.3 * runVigor - 0.3 * settle;
     } else { // tumble
-      // Ragdoll roll: hips sink toward the ground as the body tucks and rolls,
-      // then settle so the curled form rests on the ground.
-      if (u < 0.35) {
-        const q = easeInOutCubic(clamp01(u / 0.35));
-        bodyRot = 150 * q;
-        fx = 36 * q;
-        fy = FALL_START_Y + (FEET_PLANT_Y + 8 - FALL_START_Y) * q;
-      } else if (u < 0.8) {
-        const q = clamp01((u - 0.35) / 0.45);
-        bodyRot = 150 + 95 * (1 - Math.exp(-4 * q));
-        fx = 36 + 46 * q;
-        fy = FEET_PLANT_Y + 8 - 14 * Math.sin(q * Math.PI) * Math.exp(-2 * q); // bounce up mid-roll
-      } else {
-        const q = u - 0.8;
-        bodyRot = 245 + 15 * (1 - Math.exp(-2 * q));
-        fx = 82 + 18 * (1 - Math.exp(-2 * q));
-        fy = FEET_PLANT_Y + 4 + 4 * (1 - Math.exp(-3 * q));
-      }
+      // Physics-improved tumble: rolling momentum, rotational kinetic roll, and dynamic hip height.
+      const ROT_MAX = 425;
+      const GAMMA = 2.0;
+      bodyRot = ROT_MAX * (1 - Math.exp(-GAMMA * u));
 
-      // Tuck in limbs during the roll (body-frame x, not dir-mirrored — the
-      // group rotation handles fakie direction).
-      const tuck = clamp01(Math.sin(clamp01(u / 1.1) * Math.PI));
-      footR = { x: 14 - 14 * tuck, y: FOOT_Y - 2 - 35 * tuck };
-      footL = { x: 4 - 18 * tuck, y: FOOT_Y - 2 - 30 * tuck };
+      const SLIDE_MAX = 120;
+      const BETA = 1.8;
+      fx = SLIDE_MAX * (1 - Math.exp(-BETA * u));
 
-      armFront = -0.5 - 2.5 * tuck;
-      armBack = 0.5 - 2.5 * tuck;
+      const r = rad(Math.abs(bodyRot));
+      const H_hips = 11 + 54 * Math.pow(Math.max(0, Math.cos(r)), 2) + 22 * Math.pow(Math.max(0, -Math.cos(r)), 2);
+      const rollY = LIFT - H_hips;
+
+      const blend = easeInOutCubic(clamp01(u / 0.35));
+      const bounce = 18 * Math.sin(u * 12) * Math.exp(-2.5 * u);
+      fy = FALL_START_Y * (1 - blend) + rollY * blend + bounce;
+
+      const tVal = clamp01(u / 0.65);
+      const sVal = easeInOutCubic(clamp01((u - 0.45) / 0.95));
+
+      const fRx = 14 * (1 - tVal) * (1 - sVal) + 4 * tVal * (1 - sVal) + 38 * sVal;
+      const fRy = (FOOT_Y - 2) * (1 - tVal) * (1 - sVal) + (FOOT_Y - 38) * tVal * (1 - sVal) + (FOOT_Y - 6) * sVal;
+      footR = { x: fRx, y: fRy };
+
+      const fLx = 4 * (1 - tVal) * (1 - sVal) + (-8) * tVal * (1 - sVal) + (-24) * sVal;
+      const fLy = (FOOT_Y - 2) * (1 - tVal) * (1 - sVal) + (FOOT_Y - 32) * tVal * (1 - sVal) + (FOOT_Y - 22) * sVal;
+      footL = { x: fLx, y: fLy };
+
+      armFront = -0.5 * (1 - tVal) * (1 - sVal) + (-2.8) * tVal * (1 - sVal) + (-2.2) * sVal;
+      armBack = 0.5 * (1 - tVal) * (1 - sVal) + 2.8 * tVal * (1 - sVal) + 1.6 * sVal;
     }
     bodyX = X0 + spec.dir * fx;
     bodyRot *= spec.dir;

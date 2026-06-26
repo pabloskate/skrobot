@@ -1,10 +1,11 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useState } from 'react';
-import { TbMicrophone } from 'react-icons/tb';
-import { SignInScreen, useAuth } from '@/features/auth';
+import { useState, useSyncExternalStore } from 'react';
+import { TbClipboardList, TbMicrophone, TbUser, TbSkateboard } from 'react-icons/tb';
+import { SignInScreen, AccountScreen, useAuth } from '@/features/auth';
 import { UpgradeScreen } from '@/features/billing';
+import { GalleryScreen } from '@/features/gallery';
 import type { GameState } from '@/features/game';
 import { GameScreen } from '@/features/game';
 import { HomeScreen } from '@/features/home';
@@ -19,6 +20,9 @@ const VoiceGameScreen = dynamic(() => import('@/features/voice').then((m) => m.V
   loading: () => <p className="muted center">Loading voice mode…</p>,
 });
 
+/** Top-level tabs shown in the bottom navigation bar. */
+type Tab = 'skate' | 'tricks' | 'account';
+
 /**
  * Client-side screen state machine. The whole game is a single page by design:
  * trick pools and the chosen robot are in-memory state passed between screens,
@@ -30,18 +34,71 @@ type Screen =
   | ({ id: 'profile'; robot: Robot } & TrickPool)
   | ({ id: 'game'; robot: Robot; resume?: GameState } & TrickPool)
   | ({ id: 'voice'; robot: Robot; resume?: GameState } & TrickPool)
+  | { id: 'gallery' }
+  | { id: 'account' }
   | { id: 'signin'; next?: Screen; from?: Screen }
   | { id: 'upgrade'; from?: Screen };
 
-/** The app opens to the home screen — a dynamic hero above the flatground roster. */
+type ScreenId = Screen['id'];
+
+const ROOT_SCREEN_IDS = new Set<ScreenId>(['home', 'gallery', 'account']);
+
+const TAB_ROOT_SCREEN: Record<Tab, Extract<Screen, { id: 'home' | 'gallery' | 'account' }>> = {
+  skate: { id: 'home' },
+  tricks: { id: 'gallery' },
+  account: { id: 'account' },
+};
+
+const ROOT_TAB_LABELS: Record<Tab, string> = {
+  skate: 'S.K.A.T.E.',
+  tricks: 'Tricks',
+  account: 'Account',
+};
+
+function betaTabsEnabledFromLocation(): boolean {
+  if (typeof window === 'undefined') return false;
+  return new URLSearchParams(window.location.search).get('beta') === 'true';
+}
+
+function subscribeToUrlChanges(onStoreChange: () => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+  window.addEventListener('popstate', onStoreChange);
+  return () => window.removeEventListener('popstate', onStoreChange);
+}
+
+function isRootScreen(screen: Screen): boolean {
+  return ROOT_SCREEN_IDS.has(screen.id);
+}
+
+/** Maps a screen to the tab that owns it (for the bottom nav highlight). */
+function tabForScreen(screen: Screen): Tab {
+  if (screen.id === 'gallery') return 'tricks';
+  if (screen.id === 'account' || screen.id === 'signin' || screen.id === 'upgrade') return 'account';
+  return 'skate';
+}
+
+function titleForScreen(screen: Screen): string {
+  if (screen.id === 'home') return 'Skate Robot';
+  if (screen.id === 'profile' || screen.id === 'game') return screen.robot.name;
+  if (screen.id === 'voice') return `🎙 ${screen.robot.name}`;
+  if (screen.id === 'gallery') return 'Trick Gallery';
+  if (screen.id === 'account') return 'Account';
+  if (screen.id === 'signin') return 'Sign in';
+  return 'Upgrade';
+}
+
 const rootScreen = (): Screen => ({ id: 'home' });
 
 export default function AppShell() {
   const auth = useAuth();
   const [screen, setScreen] = useState<Screen>(rootScreen);
   const [voiceState, setVoiceState] = useState<GameState | undefined>(undefined);
+  const betaTabsEnabled = useSyncExternalStore(
+    subscribeToUrlChanges,
+    betaTabsEnabledFromLocation,
+    () => false,
+  );
 
-  const isRoot = screen.id === 'home';
   const go = (next: Screen | ((current: Screen) => Screen)) => {
     setVoiceState(undefined);
     setScreen(next);
@@ -50,7 +107,8 @@ export default function AppShell() {
   const back = () => {
     if (screen.id === 'game' || screen.id === 'voice' || screen.id === 'profile')
       go({ id: 'home' });
-    else if (screen.id === 'signin' || screen.id === 'upgrade') go(screen.from ?? rootScreen());
+    else if (screen.id === 'signin' || screen.id === 'upgrade')
+      go(screen.from ?? { id: 'account' });
     else go(rootScreen());
   };
 
@@ -65,20 +123,16 @@ export default function AppShell() {
     go((current) => (current.id === 'signin' ? (current.next ?? current.from ?? rootScreen()) : current));
   };
 
-  const title =
-    screen.id === 'home'
-      ? 'Skate Robot'
-      : screen.id === 'profile' || screen.id === 'game'
-        ? screen.robot.name
-        : screen.id === 'voice'
-          ? `🎙 ${screen.robot.name}`
-          : screen.id === 'signin'
-            ? 'Sign in'
-            : 'Upgrade';
+  const switchTab = (tab: Tab) => go(TAB_ROOT_SCREEN[tab]);
+
+  const activeTab = tabForScreen(screen);
+  const root = isRootScreen(screen);
+  const showTabbar = root && betaTabsEnabled;
+  const title = titleForScreen(screen);
 
   return (
-    <>
-      {!isRoot && (
+    <div className={showTabbar ? 'has-tabbar' : ''}>
+      {!root && (
         <header className="topbar">
           <button className="back-btn" onClick={back} aria-label="Back">
             ←
@@ -100,6 +154,7 @@ export default function AppShell() {
           )}
         </header>
       )}
+      {root && <div className="safe-area-spacer" />}
       <main>
         <div className="screen" key={screen.id}>
           {screen.id === 'home' && (
@@ -109,6 +164,10 @@ export default function AppShell() {
                 enterVoice({ id: 'voice', ...defaultRoutedTrickPool(), robot }, { id: 'home' })
               }
             />
+          )}
+          {screen.id === 'gallery' && <GalleryScreen />}
+          {screen.id === 'account' && (
+            <AccountScreen onSignIn={() => go({ id: 'signin', from: { id: 'account' } })} />
           )}
           {screen.id === 'profile' && (
             <RobotProfile
@@ -143,6 +202,32 @@ export default function AppShell() {
           {screen.id === 'upgrade' && <UpgradeScreen onCancel={back} />}
         </div>
       </main>
-    </>
+
+      {showTabbar && (
+        <nav className="tabbar">
+          <button
+            className={`tabbar-btn ${activeTab === 'skate' ? 'active' : ''}`}
+            onClick={() => switchTab('skate')}
+          >
+            <TbSkateboard aria-hidden />
+            <span className="tabbar-label">{ROOT_TAB_LABELS.skate}</span>
+          </button>
+          <button
+            className={`tabbar-btn ${activeTab === 'tricks' ? 'active' : ''}`}
+            onClick={() => switchTab('tricks')}
+          >
+            <TbClipboardList aria-hidden />
+            <span className="tabbar-label">{ROOT_TAB_LABELS.tricks}</span>
+          </button>
+          <button
+            className={`tabbar-btn ${activeTab === 'account' ? 'active' : ''}`}
+            onClick={() => switchTab('account')}
+          >
+            <TbUser aria-hidden />
+            <span className="tabbar-label">{ROOT_TAB_LABELS.account}</span>
+          </button>
+        </nav>
+      )}
+    </div>
   );
 }

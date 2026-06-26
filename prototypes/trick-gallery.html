@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Trick Gallery — Skate Robot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --purple: #6431d8;
+    --purple-dark: #4f23b0;
+    --purple-soft: #ece5fb;
+    --ink: #221a4e;
+    --muted: #6b6786;
+    --bg: #f3f2f6;
+    --card: #ffffff;
+    --danger: #e0455c;
+    --green: #2da866;
+    --amber: #d08a23;
+    --radius: 16px;
+    --shadow: 0 2px 8px rgba(34, 26, 78, 0.08), 0 8px 24px rgba(34, 26, 78, 0.06);
+    --shadow-lg: 0 6px 16px rgba(34, 26, 78, 0.12), 0 12px 32px rgba(34, 26, 78, 0.1);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: 'Montserrat', system-ui, -apple-system, sans-serif;
+    background: var(--bg); color: var(--ink); min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font-family: inherit; color: inherit; }
+
+  /* ---------- Topbar ---------- */
+  .topbar {
+    background: var(--purple); color: #fff; display: flex; align-items: center; gap: 12px;
+    padding: calc(16px + env(safe-area-inset-top)) 20px 16px;
+    position: sticky; top: 0; z-index: 10; box-shadow: 0 2px 12px rgba(34, 26, 78, 0.25);
+  }
+  .topbar h1 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: 0.3px; flex: 1; }
+  .back-btn {
+    background: none; border: none; color: #fff; font-size: 26px; line-height: 1;
+    cursor: pointer; padding: 2px 6px; border-radius: 8px;
+  }
+  .back-btn:hover { background: rgba(255,255,255,0.15); }
+
+  /* ---------- Layout ---------- */
+  .container { max-width: 680px; margin: 0 auto; padding: 14px 16px 56px; }
+  .screen { animation: screen-in .26s cubic-bezier(.22,.61,.36,1); }
+  @keyframes screen-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* ---------- Sticky filter bar ---------- */
+  .filter-bar {
+    position: sticky; top: calc(56px + env(safe-area-inset-top)); z-index: 5;
+    background: var(--bg); padding: 8px 0 10px; margin: 0 -16px; padding-left: 16px; padding-right: 16px;
+  }
+  .search-wrap { position: relative; margin-bottom: 10px; }
+  .search {
+    width: 100%; padding: 12px 16px 12px 42px; border: 2px solid #ddd9ea; border-radius: 12px;
+    font-size: 16px; font-family: inherit; background: var(--card); color: var(--ink);
+  }
+  .search:focus { outline: none; border-color: var(--purple); }
+  .search-icon {
+    position: absolute; left: 13px; top: 50%; transform: translateY(-50%);
+    width: 20px; height: 20px; color: var(--muted); pointer-events: none;
+  }
+
+  .tabs { display: flex; gap: 4px; margin-bottom: 8px; overflow-x: auto; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab {
+    background: none; border: none; font-size: 15px; font-weight: 700; color: var(--muted);
+    padding: 6px 10px; border-bottom: 3px solid transparent; cursor: pointer; white-space: nowrap;
+  }
+  .tab-active { color: var(--ink); border-bottom-color: var(--purple); }
+
+  .chip-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip {
+    border: 2px solid #ddd9ea; background: var(--card); color: var(--muted);
+    border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 700;
+    cursor: pointer; transition: all .12s ease; display: inline-flex; align-items: center; gap: 5px;
+  }
+  .chip:hover { border-color: var(--purple); color: var(--purple-dark); }
+  .chip-on { background: var(--purple); border-color: var(--purple); color: #fff; }
+
+  /* ---------- Result count ---------- */
+  .result-count { font-size: 13px; color: var(--muted); margin: 14px 2px 8px; font-weight: 600; }
+
+  /* ---------- Trick gallery rows ---------- */
+  .gallery { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  .trick-card {
+    width: 100%; background: var(--card); border: none; border-radius: var(--radius);
+    box-shadow: var(--shadow); display: flex; overflow: hidden; cursor: pointer; text-align: left;
+    transition: transform .1s ease, box-shadow .12s ease; padding: 0;
+  }
+  .trick-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+  .trick-card:active { transform: scale(0.99); }
+
+  /* Compact thumbnail */
+  .tc-thumb {
+    position: relative; width: 120px; min-height: 90px; flex-shrink: 0;
+    display: grid; place-items: center;
+  }
+  .tc-thumb .thumb-bg { position: absolute; inset: 0; }
+  .tc-play {
+    position: relative; z-index: 1; width: 36px; height: 36px; border-radius: 50%;
+    background: rgba(0,0,0,0.5); display: grid; place-items: center; border: none;
+    transition: background .15s ease, transform .12s ease;
+  }
+  .trick-card:hover .tc-play { background: var(--purple); transform: scale(1.08); }
+  .tc-play svg { width: 16px; height: 16px; color: #fff; margin-left: 2px; }
+  .tc-duration {
+    position: absolute; bottom: 5px; right: 5px; z-index: 1;
+    background: rgba(0,0,0,0.78); color: #fff; font-size: 10px; font-weight: 700;
+    padding: 1px 5px; border-radius: 4px;
+  }
+
+  .tc-body { flex: 1; padding: 12px 14px; display: flex; flex-direction: column; justify-content: center; gap: 4px; min-width: 0; }
+  .tc-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .tc-name { font-size: 16px; font-weight: 800; line-height: 1.2; }
+  .tc-fam { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: capitalize; }
+  .tc-desc {
+    font-size: 13px; color: var(--muted); line-height: 1.4; margin: 0;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .tc-foot { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+
+  /* ---------- Difficulty dots ---------- */
+  .dots { font-size: 11px; letter-spacing: 2px; line-height: 1; white-space: nowrap; }
+  .dots-1 { color: var(--green); } .dots-2 { color: var(--amber); } .dots-3 { color: var(--danger); }
+  .dots-empty { color: rgba(124,118,156,0.3); }
+
+  /* ---------- Pills ---------- */
+  .pill { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; padding: 2px 8px; border-radius: 999px; }
+  .pill-cat { background: var(--purple-soft); color: var(--purple-dark); }
+
+  /* ---------- Empty state ---------- */
+  .empty { text-align: center; color: var(--muted); padding: 48px 20px; font-size: 15px; }
+
+  /* ---------- Footer ---------- */
+  .foot-note { text-align: center; font-size: 12px; color: var(--muted); margin-top: 28px; line-height: 1.6; }
+
+  /* ---------- Modal player ---------- */
+  .modal {
+    position: fixed; inset: 0; z-index: 100; display: none; background: rgba(15,12,40,0.85);
+    backdrop-filter: blur(4px); align-items: center; justify-content: center; padding: 16px;
+  }
+  .modal.open { display: flex; animation: fade .2s ease; }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+  .modal-inner { width: 100%; max-width: 720px; }
+  .modal-frame { position: relative; aspect-ratio: 16/9; border-radius: 14px; overflow: hidden; background: #000; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+  .modal-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  .modal-close {
+    position: absolute; top: -14px; right: -8px; z-index: 2; width: 36px; height: 36px; border-radius: 50%;
+    border: none; background: #fff; color: var(--ink); font-size: 20px; cursor: pointer; box-shadow: var(--shadow);
+    display: grid; place-items: center;
+  }
+  .modal-title { color: #fff; font-size: 16px; font-weight: 700; margin: 14px 0 0; text-align: center; }
+  .modal-desc { color: rgba(255,255,255,0.7); font-size: 13px; margin: 6px 0 0; text-align: center; line-height: 1.4; }
+
+  @media (prefers-reduced-motion: reduce) { .screen, .trick-card, .modal { animation: none; transition: none; } }
+</style>
+</head>
+<body>
+  <div class="screen">
+    <header class="topbar">
+      <button class="back-btn" aria-label="Back">‹</button>
+      <h1>Trick Gallery</h1>
+    </header>
+
+    <main class="container">
+      <!-- Sticky filters -->
+      <div class="filter-bar">
+        <div class="search-wrap">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+          <input id="search" class="search" type="search" placeholder="Search tricks" />
+        </div>
+        <div class="tabs" role="tablist" id="cat-tabs">
+          <button class="tab tab-active" data-cat="all">All</button>
+          <button class="tab" data-cat="flatground">Flatground</button>
+          <button class="tab" data-cat="grinds">Grinds &amp; Slides</button>
+          <button class="tab" data-cat="other">Transition &amp; Other</button>
+        </div>
+        <div class="chip-row" id="stance-chips">
+          <button class="chip chip-on" data-stance="all">All stances</button>
+          <button class="chip" data-stance="regular">Regular</button>
+          <button class="chip" data-stance="fakie">Fakie</button>
+          <button class="chip" data-stance="switch">Switch</button>
+          <button class="chip" data-stance="nollie">Nollie</button>
+        </div>
+      </div>
+
+      <p class="result-count" id="result-count">Showing all tricks</p>
+      <ul class="gallery" id="gallery"></ul>
+
+      <p class="foot-note">Tip videos curated from the skate community.<br/>Tap any trick to watch the tutorial.</p>
+    </main>
+  </div>
+
+  <!-- Modal player -->
+  <div class="modal" id="modal">
+    <div class="modal-inner">
+      <div class="modal-frame">
+        <button class="modal-close" id="modal-close" aria-label="Close">×</button>
+        <iframe id="modal-iframe" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+      </div>
+      <p class="modal-title" id="modal-title"></p>
+      <p class="modal-desc" id="modal-desc"></p>
+    </div>
+  </div>
+
+<script>
+  // ---- Trick data (mirrors src/features/tricks build()) ----
+  // Stance load mirrors the real stanceLoad(): base cost × family sensitivity.
+  const STANCES = ['regular','fakie','switch','nollie'];
+  const STANCE_COST = { regular:0, fakie:1.0, switch:2.5, nollie:2.0 };
+  const FAM_SENS = { shuvit:0.25, roll:0.5, rotation:0.6, flip:1.0 };
+
+  // [name, difficulty, family, channel, description]
+  const FLATGROUND = [
+    ['Ollie',1,'roll','SkateParkLessons','Snap the tail and slide your front foot up to pop the whole board into the air — the move everything else is built on.'],
+    ['Frontside 180',2,'rotation','BrailleSkate','An ollie with a 180° turn, rotating your chest to face the way you came.'],
+    ['Backside 180',2,'rotation','BrailleSkate','An ollie with a 180° turn, spinning with your back leading the way.'],
+    ['Pop Shuvit',2,'shuvit','SkateParkLessons','Scoop the tail so the board spins a flat 180° under your feet while you hop.'],
+    ['Frontside Shuvit',2,'shuvit','SkateParkLessons','A shuvit scooped the other way, the board spinning toward your toes.'],
+    ['Kickflip',3,'flip','VLSkate','Flick your front foot off the corner so the board does a full barrel-roll flip.'],
+    ['Heelflip',4,'flip','VLSkate','A kickflip flicked off the heel side, spinning the board the opposite direction.'],
+    ['Backside 360',5,'rotation','BrailleSkate','A full 360° ollie spun backside — double the rotation, double the nerve.'],
+    ['Frontside 360',5,'rotation','BrailleSkate','A full 360° ollie spun frontside, unwinding your shoulders all the way around.'],
+    ['Bigspin',5,'rotation','SkateParkLessons','A 360° shuvit paired with a 180° body turn, board and rider spinning together.'],
+    ['Varial Kickflip',5,'flip','BrailleSkate','A kickflip blended with a pop shuvit so the board flips and spins 180° at once.'],
+    ['360 Shuvit',5,'shuvit','SkateParkLessons','A shuvit spun a full 360° beneath you — all rotation, no flip.'],
+    ['Pressure Flip',6,'flip','VLSkate','Pop off the back foot to flip and spin the board in a tight, low rotation.'],
+    ['Hardflip',7,'flip','VLSkate','A kickflip and frontside shuvit fused so the board flips vertically between your legs.'],
+    ['Inward Heelflip',7,'flip','VLSkate','A heelflip combined with a backside shuvit, spinning in toward you.'],
+    ['360 Flip',7,'flip','VLSkate','The tre flip — a 360 shuvit and a kickflip together in one spinning, flipping motion.'],
+    ['Double Kickflip',7,'flip','VLSkate','A kickflip flicked hard enough to roll the board over twice before you land.'],
+    ['Impossible',8,'flip','VLSkate','Wrap the board vertically around your back foot in a full end-over-end loop.'],
+    ['Laser Flip',9,'flip','VLSkate','A 360 shuvit and a heelflip together — the gnarliest spinning flip there is.'],
+  ];
+
+  const GRINDS = [
+    ['50-50 Grind',2,'grind','ParkSkateCo','Grind along an edge on both trucks at once — the first grind everyone learns.'],
+    ['Boardslide',2,'slide','ParkSkateCo','Slide across an obstacle with the deck centered on it, board perpendicular.'],
+    ['Noseslide',3,'slide','ParkSkateCo','Slide along the edge on the underside of the nose.'],
+    ['5-0 Grind',4,'grind','ParkSkateCo','Grind on the back truck only, holding a manual along the edge.'],
+    ['Crooked Grind',5,'grind','ParkSkateCo','A nosegrind ridden at an angle, the board cocked across the edge.'],
+    ['Tailslide',5,'slide','ParkSkateCo','Slide along the edge on the tail, the back of the board leading.'],
+    ['Smith Grind',6,'grind','ParkSkateCo','A 5-0 with the back truck grinding and the front dipped below the edge.'],
+    ['Feeble Grind',6,'grind','ParkSkateCo','A smith on the opposite side — front truck over the edge, back truck grinding.'],
+    ['Nosegrind',6,'grind','ParkSkateCo','Grind on the front truck alone with your weight over the nose.'],
+    ['Bluntslide',8,'slide','ParkSkateCo','Slide on the tail in a blunt position with the wheels above the edge.'],
+  ];
+
+  const OTHER = [
+    ['Hippie Jump',1,'oldschool','OldSchoolSkate','Jump straight up and land back on the board as it rolls under an obstacle.'],
+    ['Caveman',1,'oldschool','OldSchoolSkate','Start with the board in your hands, drop it down and jump on to roll away.'],
+    ['Manual',2,'manual','OldSchoolSkate','Balance and roll on just the back two wheels — a wheelie on your board.'],
+    ['Boneless',2,'oldschool','OldSchoolSkate','Plant your front foot, grab the board, and leap, pulling it back under you.'],
+    ['No Comply 180',2,'oldschool','OldSchoolSkate','Step the front foot down, pop the tail, and spin the board 180° with the back foot.'],
+    ['Drop In',2,'transition','TransitionTribe','Set the tail on the coping and lean in to roll down the transition.'],
+    ['Rock to Fakie',2,'transition','TransitionTribe','Rock the front trucks over the coping, then roll back down fakie.'],
+    ['Nose Manual',3,'manual','OldSchoolSkate','A manual balanced on the front two wheels instead of the back.'],
+    ['Disaster',5,'transition','TransitionTribe','Ollie onto the coping so the board rests across it, then roll back in.'],
+  ];
+
+  const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'');
+  function stanceName(stance, base) {
+    if (stance === 'regular') return base;
+    if (base === 'Ollie') return stance === 'nollie' ? 'Nollie' : stance[0].toUpperCase()+stance.slice(1)+' Ollie';
+    return stance[0].toUpperCase()+stance.slice(1)+' '+base;
+  }
+
+  function buildTricks() {
+    const out = [];
+    for (const [base,diff,fam,ch,desc] of FLATGROUND) {
+      for (const stance of STANCES) {
+        const load = STANCE_COST[stance] * FAM_SENS[fam];
+        out.push({
+          id: slug(`${stance}-${base}`),
+          name: stanceName(stance, base),
+          base, stance, fam, cat:'flatground', ch,
+          diff: Math.min(10, Math.round((diff+load)*10)/10),
+          baseDiff: diff,
+          vid:'X1w0MjD9e8c', dur:['3:57','5:03','9:14'][Math.min(2,Math.floor((diff+load)/4))],
+          desc,
+        });
+      }
+    }
+    for (const [base,diff,fam,ch,desc] of GRINDS) {
+      out.push({ id:slug(base), name:base, base, stance:'regular', fam, cat:'grinds', ch, diff, baseDiff:diff, vid:'X1w0MjD9e8c', dur:'5:02', desc });
+    }
+    for (const [base,diff,fam,ch,desc] of OTHER) {
+      out.push({ id:slug(base), name:base, base, stance:'regular', fam, cat:'other', ch, diff, baseDiff:diff, vid:'X1w0MjD9e8c', dur:'4:12', desc });
+    }
+    return out;
+  }
+  const TRICKS = buildTricks();
+
+  const FAM_LABEL = { shuvit:'Shuvit', roll:'Roll', rotation:'Rotation', flip:'Flip', grind:'Grind', slide:'Slide', manual:'Manual', transition:'Transition', oldschool:'Old School' };
+  const STANCE_LABEL = { regular:'Regular', fakie:'Fakie', switch:'Switch', nollie:'Nollie' };
+  const GRAD = { flatground:['#6431d8','#4f23b0'], grinds:['#d08a23','#a8651a'], other:['#2da866','#1f7a4a'] };
+  const CAT_LABEL = { flatground:'Flatground', grinds:'Grinds & Slides', other:'Transition & Other' };
+
+  function gradeOf(diff){ return diff <= 3 ? 1 : diff <= 6 ? 2 : 3; }
+  function dotsHtml(g){ return `<span class="dots dots-${g}">${'●'.repeat(g)}<span class="dots-empty">${'●'.repeat(3-g)}</span></span>`; }
+
+  // ---- State ----
+  let cat = 'all', stance = 'all', query = '';
+  const gallery = document.getElementById('gallery');
+  const countEl = document.getElementById('result-count');
+
+  function render(){
+    const q = query.trim().toLowerCase();
+    let list = TRICKS.filter(t => {
+      if (cat !== 'all' && t.cat !== cat) return false;
+      if (stance !== 'all' && t.stance !== stance) return false;
+      if (q && !(t.name.toLowerCase().includes(q) || t.desc.toLowerCase().includes(q) || t.fam.includes(q))) return false;
+      return true;
+    });
+    list.sort((a,b) => a.diff - b.diff || a.name.localeCompare(b.name));
+
+    const total = list.length;
+    if (cat === 'all' && stance === 'all' && !q) {
+      countEl.textContent = `Showing all ${total} tricks`;
+    } else {
+      const parts = [];
+      if (cat !== 'all') parts.push(CAT_LABEL[cat]);
+      if (stance !== 'all') parts.push(STANCE_LABEL[stance]);
+      if (q) parts.push(`"${q}"`);
+      countEl.textContent = `${total} trick${total===1?'':'s'} · ${parts.join(' · ')}`;
+    }
+
+    gallery.innerHTML = list.map(t => {
+      const g = gradeOf(t.diff);
+      const [g1,g2] = GRAD[t.cat];
+      return `
+      <li>
+        <button class="trick-card" data-vid="${t.vid}" data-name="${t.name}" data-desc="${t.desc.replace(/"/g,'&quot;')}">
+          <div class="tc-thumb">
+            <div class="thumb-bg" style="background:linear-gradient(135deg,${g1},${g2})"></div>
+            <span class="tc-play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span>
+            <span class="tc-duration">${t.dur}</span>
+          </div>
+          <div class="tc-body">
+            <div class="tc-head">
+              <span class="tc-name">${t.name}</span>
+              ${dotsHtml(g)}
+            </div>
+            <span class="tc-fam">${FAM_LABEL[t.fam]} · ${t.ch}</span>
+            <p class="tc-desc">${t.desc}</p>
+          </div>
+        </button>
+      </li>`;
+    }).join('');
+
+    if (list.length === 0) {
+      gallery.innerHTML = '<div class="empty">No tricks match your filters.<br>Try clearing the search or switching tabs.</div>';
+    }
+  }
+
+  // ---- Interactions ----
+  document.getElementById('cat-tabs').addEventListener('click', e => {
+    const b = e.target.closest('.tab'); if (!b) return;
+    document.querySelectorAll('#cat-tabs .tab').forEach(t => t.classList.remove('tab-active'));
+    b.classList.add('tab-active'); cat = b.dataset.cat; render();
+  });
+  document.getElementById('stance-chips').addEventListener('click', e => {
+    const b = e.target.closest('.chip'); if (!b) return;
+    document.querySelectorAll('#stance-chips .chip').forEach(c => c.classList.remove('chip-on'));
+    b.classList.add('chip-on'); stance = b.dataset.stance; render();
+  });
+  document.getElementById('search').addEventListener('input', e => { query = e.target.value; render(); });
+
+  // ---- Modal player ----
+  const modal = document.getElementById('modal');
+  const iframe = document.getElementById('modal-iframe');
+  const modalTitle = document.getElementById('modal-title');
+  const modalDesc = document.getElementById('modal-desc');
+
+  function openPlayer(vid, name, desc){
+    iframe.src = `https://www.youtube-nocookie.com/embed/${vid}?autoplay=1&rel=0`;
+    modalTitle.textContent = name;
+    modalDesc.textContent = desc;
+    modal.classList.add('open');
+  }
+  function closePlayer(){ modal.classList.remove('open'); iframe.src = ''; }
+
+  gallery.addEventListener('click', e => {
+    const card = e.target.closest('[data-vid]');
+    if (card) openPlayer(card.dataset.vid, card.dataset.name, card.dataset.desc);
+  });
+  document.getElementById('modal-close').addEventListener('click', closePlayer);
+  modal.addEventListener('click', e => { if (e.target === modal) closePlayer(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closePlayer(); });
+
+  render();
+</script>
+</body>
+</html>

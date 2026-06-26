@@ -1,9 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { RobotAvatar, type Robot } from '@/features/robots';
-import { LETTERS } from './engine';
-
 interface Props {
   robot: Robot;
   playerFirst: boolean;
@@ -11,39 +9,23 @@ interface Props {
 }
 
 /**
- * "DROP IN" game-start cinematic: the S.K.A.T.E. letters slam down one by one,
- * the robot skates across with speed lines, "LET'S SKATE!" pops in, then a
- * wipe sweeps the overlay away and hands control to the game. The player who
- * won RPS gets called out before the title.
+ * "DROP IN" game-start cinematic: the robot skates across with speed lines,
+ * "LET'S SKATE!" pops in, and the player who won RPS gets called out. After a
+ * short hold the overlay is unmounted and the game begins.
  */
-const LETTER_DROP_STAGGER = 140;
-const ROBOT_IN_MS = 1400;
+const ROBOT_IN_MS = 1200;
 const TITLE_MS = 500;
 const HOLD_MS = 700;
-const WIPE_MS = 600;
-export const GAME_START_TOTAL_MS = ROBOT_IN_MS + TITLE_MS + HOLD_MS + WIPE_MS;
 
 export default function GameStartAnimation({ robot, playerFirst, onComplete }: Props) {
-  const [phase, setPhase] = useState<'letters' | 'wiping' | 'done'>('letters');
-  const [wipeStyle, setWipeStyle] = useState<'in' | 'out'>('in');
-
   const setter = playerFirst ? 'You' : robot.name;
 
   useEffect(() => {
-    const wipeTimer = setTimeout(() => {
-      setPhase('wiping');
-      setWipeStyle('out');
+    const doneTimer = setTimeout(() => {
+      onComplete();
     }, ROBOT_IN_MS + TITLE_MS + HOLD_MS);
 
-    const doneTimer = setTimeout(() => {
-      setPhase('done');
-      onComplete();
-    }, GAME_START_TOTAL_MS);
-
-    return () => {
-      clearTimeout(wipeTimer);
-      clearTimeout(doneTimer);
-    };
+    return () => clearTimeout(doneTimer);
   }, [onComplete]);
 
   const speedLines = useMemo(
@@ -56,13 +38,8 @@ export default function GameStartAnimation({ robot, playerFirst, onComplete }: P
     [],
   );
 
-  if (phase === 'done') return null;
-
   return (
     <div className="game-start-overlay" aria-hidden>
-      {/* Wipe panel that sweeps across to reveal, then sweeps out */}
-      <div className={`game-start-wipe game-start-wipe-${wipeStyle}`} />
-
       <div className="game-start-content">
         {/* Speed lines behind the robot */}
         <div className="game-start-speedlines">
@@ -76,20 +53,7 @@ export default function GameStartAnimation({ robot, playerFirst, onComplete }: P
           <RobotAvatar robot={robot} size={120} pose="stoked" />
         </div>
 
-        {/* S.K.A.T.E. letters slam down */}
-        <div className="game-start-letters">
-          {LETTERS.map((ch, i) => (
-            <span
-              key={ch}
-              className="game-start-letter"
-              style={{ animationDelay: `${i * LETTER_DROP_STAGGER}ms` }}
-            >
-              {ch}
-            </span>
-          ))}
-        </div>
-
-        {/* Title pops in after letters */}
+        {/* Title pops in after the robot rolls in */}
         <div className="game-start-title" style={{ animationDelay: `${ROBOT_IN_MS}ms` }}>
           <span className="game-start-title-main">LET&apos;S SKATE!</span>
           <span className="game-start-title-sub">

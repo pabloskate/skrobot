@@ -154,11 +154,12 @@ describe('mobile parity shell', () => {
     };
 
     expect(appJson.expo?.scheme).toBe('skrobot');
-    expect(appJson.expo?.ios?.bundleIdentifier).toBe('com.skaterobot.mobile');
+    expect(appJson.expo?.ios?.bundleIdentifier).toBe('com.mycompany.skaterobot');
     expect(appJson.expo?.android?.package).toBe('com.skaterobot.mobile');
     expect(easJson.build?.development).toBeDefined();
     expect(easJson.build?.preview).toBeDefined();
     expect(easJson.build?.production).toBeDefined();
+    expect(JSON.stringify(easJson.build?.production)).toContain('https://skrobot.me-d6a.workers.dev');
     expect(JSON.stringify(easJson)).not.toContain('localhost');
     expect(JSON.stringify(easJson)).not.toContain('127.0.0.1');
     expect(JSON.stringify(easJson)).not.toContain('10.0.2.2');
@@ -176,7 +177,7 @@ describe('mobile parity shell', () => {
     };
 
     expect(expoConfig.scheme).toBe('skrobot');
-    expect(expoConfig.ios?.bundleIdentifier).toBe('com.skaterobot.mobile');
+    expect(expoConfig.ios?.bundleIdentifier).toBe('com.mycompany.skaterobot');
     expect(expoConfig.android?.package).toBe('com.skaterobot.mobile');
     expect(expoConfig.android?.permissions).toContain('RECORD_AUDIO');
   });

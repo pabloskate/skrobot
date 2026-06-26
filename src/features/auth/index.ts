@@ -7,3 +7,4 @@ export type { AuthTier, AuthUser, VoiceQuota } from './useAuth';
 export { useAuth } from './useAuth';
 export { default as AuthGate } from './AuthGate';
 export { default as SignInScreen } from './SignInScreen';
+export { default as AccountScreen } from './AccountScreen';

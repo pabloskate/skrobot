@@ -3,7 +3,7 @@ import type { Robot, Stance, Trick } from './types';
 export const ROBOTS: Robot[] = [
   { id: 'shifty', name: 'Shifty', avatar: { body: '#7ec8e3', accent: '#e05c7a', variant: 0 } },
   { id: 'baily', name: 'Baily', avatar: { body: '#5b8def', accent: '#f2a541', variant: 1 } },
-  { id: 'sacker', name: 'Sacker', avatar: { body: '#3d5a6c', accent: '#e0455c', variant: 2 } },
+  { id: 'sacker', name: 'Sacker', avatar: { body: '#7ea0b5', accent: '#e0455c', variant: 2 } },
   { id: 'nolly', name: 'Nolly', avatar: { body: '#9b59b6', accent: '#f1c40f', variant: 3 } },
 ];
 

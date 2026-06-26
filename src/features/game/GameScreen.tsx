@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { recordResult } from '@/features/records';
+import { appendGameLog, recordResult } from '@/features/records';
 import type { Robot } from '@/features/robots';
 import { buildBag, RobotAvatar } from '@/features/robots';
 import type { Trick } from '@/features/tricks';
@@ -77,6 +77,7 @@ export default function GameScreen({ robot, pool, resume, onExit, onVoiceState }
   const bag = useMemo(() => buildBag(robot, pool), [robot, pool]);
   // A resumed finished game was already recorded by the other mode.
   const recorded = useRef(resume?.phase === 'over');
+  const tricksLanded = useRef<string[]>([]);
 
   const say = (template: string) => template.replaceAll('{R}', robot.name);
 
@@ -96,10 +97,23 @@ export default function GameScreen({ robot, pool, resume, onExit, onVoiceState }
   useEffect(() => {
     if (state.phase === 'over' && state.winner && !recorded.current) {
       recorded.current = true;
-      recordResult(robot.id, state.winner === 'player');
+      const won = state.winner === 'player';
+      recordResult(robot.id, won);
+      appendGameLog({
+        date: new Date().toISOString(),
+        robotId: robot.id,
+        mode: 'screen',
+        won,
+        playerLetters: state.letters.player,
+        robotLetters: state.letters.robot,
+        tricksLanded: tricksLanded.current,
+      });
     }
-    if (state.phase === 'rps') recorded.current = false;
-  }, [state.phase, state.winner, robot.id]);
+    if (state.phase === 'rps') {
+      recorded.current = false;
+      tricksLanded.current = [];
+    }
+  }, [state.phase, state.winner, state.letters.player, state.letters.robot, robot.id]);
 
   // Tell the shell when voice mode can take over (only on player turns).
   const canHandToVoice =
@@ -137,7 +151,7 @@ export default function GameScreen({ robot, pool, resume, onExit, onVoiceState }
       )}
 
       {(state.phase === 'robotCopy' || state.phase === 'robotSet') && (
-        <div className="panel center">
+        <div className="panel center attempt-panel">
           {state.current && state.stage !== 'thinking' ? (
             <RobotAttempt
               // Remount per attempt: a retry decrements attemptsLeft, which
@@ -212,6 +226,7 @@ export default function GameScreen({ robot, pool, resume, onExit, onVoiceState }
           onClose={() => setPickerOpen(false)}
           onPick={(trick) => {
             setPickerOpen(false);
+            tricksLanded.current.push(trick.name);
             dispatch({ type: 'PLAYER_SET_LANDED', trick });
           }}
         />

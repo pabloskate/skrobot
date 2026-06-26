@@ -3,15 +3,9 @@
 import { useEffect, useState } from 'react';
 import { getRecords } from '@/features/records';
 import type { Robot } from './robots';
-import { ROBOTS, TIERS } from './robots';
+import { isFlatgroundRobot, ROBOTS, TIERS } from './robots';
 import RobotAvatar from './RobotAvatar';
 import type { Record_ } from '@/features/records';
-
-const FLATGROUND_DISCIPLINES = new Set(['roll', 'shuvit', 'rotation', 'flip']);
-
-function isFlatgroundRobot(robot: Robot): boolean {
-  return robot.disciplines.every((discipline) => FLATGROUND_DISCIPLINES.has(discipline));
-}
 
 interface Props {
   onPick: (robot: Robot) => void;

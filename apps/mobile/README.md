@@ -9,9 +9,10 @@ The tracked completion checklist is
 
 The shell marks the WebView as the native app before the web bundle loads. When
 the same sign-in screen requests a magic link from inside the shell, the server
-sends a `skrobot://auth/callback?...` link. Opening that link routes back into
-the WebView and consumes `/api/auth/callback` there, so the session cookie lives
-in the native app instead of a separate browser.
+sends an HTTPS callback with `native=1` so mail clients render a normal clickable
+link. That callback hands off to `skrobot://auth/callback?...`, which routes back
+into the WebView and consumes `/api/auth/callback` there, so the session cookie
+lives in the native app instead of a separate browser.
 
 `plugins/withSkrobotNativeParity.js` enables local HTTP loading for native dev
 builds. Internal and production builds should point
@@ -56,7 +57,7 @@ Use `http://10.0.2.2:3000` for Android emulator when overriding manually.
 
 The app uses stable native identifiers:
 
-- iOS: `com.skaterobot.mobile`
+- iOS: `com.mycompany.skaterobot`
 - Android: `com.skaterobot.mobile`
 
 For local simulator/emulator testing, Expo start is enough. For physical-device

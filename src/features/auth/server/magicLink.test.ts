@@ -32,14 +32,21 @@ describe('magic link requests', () => {
     expect(result.devLink).not.toContain('skrobot://');
   });
 
-  it('returns a native callback link for WebView sign-in', async () => {
+  it('returns an HTTPS handoff link for WebView sign-in emails', async () => {
     const { requestLink } = await import('./magicLink');
 
     const result = await requestLink(new Request('https://skaterobot.example/api/auth/request-link'), 'pablo@example.com', {
       nativeApp: true,
     });
 
-    expect(result.devLink).toMatch(/^skrobot:\/\/auth\/callback\?token=/);
-    expect(result.devLink).not.toContain('/api/auth/callback');
+    expect(result.devLink).toMatch(/^https:\/\/skaterobot\.example\/api\/auth\/callback\?token=/);
+    expect(result.devLink).toContain('&native=1');
+    expect(result.devLink).not.toContain('skrobot://');
+  });
+
+  it('builds native callback links for the HTTPS handoff route', async () => {
+    const { nativeCallbackLink } = await import('./magicLink');
+
+    expect(nativeCallbackLink('a+b/c=')).toBe('skrobot://auth/callback?token=a%2Bb%2Fc%3D');
   });
 });

@@ -105,7 +105,7 @@ export const ROBOTS: Robot[] = [
     skill: 2.6,
     disciplines: ['roll', 'shuvit', 'rotation'],
     favorites: ['Backside 180'],
-    avatar: { body: '#3d5a6c', accent: '#e0455c', variant: 2 },
+    avatar: { body: '#7ea0b5', accent: '#e0455c', variant: 2 },
     rpsTaunts: {
       countdown: ["I'm feeling lucky.", 'Brave throw, human.'],
       win: ['Sacker sets!', 'Bravery pays off.'],
@@ -440,6 +440,12 @@ export const ROBOTS: Robot[] = [
 ];
 
 export const ROBOT_BY_ID = new Map(ROBOTS.map((r) => [r.id, r]));
+
+const FLATGROUND_DISCIPLINES = new Set<Discipline>(['roll', 'shuvit', 'rotation', 'flip']);
+
+export function isFlatgroundRobot(robot: Robot): boolean {
+  return robot.disciplines.every((discipline) => FLATGROUND_DISCIPLINES.has(discipline));
+}
 
 export const TIERS: { tier: Tier; label: string }[] = [
   { tier: 'beginner', label: 'Beginner' },

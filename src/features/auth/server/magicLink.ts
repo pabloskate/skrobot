@@ -13,6 +13,10 @@ export interface RequestLinkOptions {
   nativeApp?: boolean;
 }
 
+export function nativeCallbackLink(token: string): string {
+  return `skrobot://auth/callback?token=${encodeURIComponent(token)}`;
+}
+
 function normalizeEmail(email: unknown): string | null {
   if (typeof email !== 'string') return null;
   const normalized = email.trim().toLowerCase();
@@ -70,7 +74,7 @@ export async function requestLink(
 
   const origin = new URL(request.url).origin;
   const link = options.nativeApp
-    ? `skrobot://auth/callback?token=${encodeURIComponent(token)}`
+    ? `${origin}/api/auth/callback?token=${encodeURIComponent(token)}&native=1`
     : `${origin}/api/auth/callback?token=${encodeURIComponent(token)}`;
   const env = await getOptionalCloudflareEnv();
 
@@ -80,7 +84,7 @@ export async function requestLink(
       to: email,
       from: { email: env.MAGIC_LINK_FROM, name: 'Skate Robot' },
       subject: 'Your Skate Robot sign-in link',
-      html: `<h1>Sign in to Skate Robot</h1><p>Use this secure link to start voice mode:</p><p><a href="${escapeHtml(link)}">Sign in</a></p><p>This link expires in ${TOKEN_TTL_MINUTES} minutes.</p>`,
+      html: `<h1>Sign in to Skate Robot</h1><p>Use this secure link to start voice mode:</p><p><a href="${escapeHtml(link)}">Sign in</a></p><p>If the button does not work, copy and paste this link:</p><p><a href="${escapeHtml(link)}">${escapeHtml(link)}</a></p><p>This link expires in ${TOKEN_TTL_MINUTES} minutes.</p>`,
       text: `Sign in to Skate Robot: ${link}\n\nThis link expires in ${TOKEN_TTL_MINUTES} minutes.`,
     });
     return { ok: true };

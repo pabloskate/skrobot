@@ -25,6 +25,7 @@ the loaded web app or explicitly noted as not routed yet:
 - `billing` — quota/upgrade screen and dormant Stripe API behavior.
 - `dice` — standalone random-trick roller; not currently routed by `AppShell`.
 - `game` — S.K.A.T.E. rules and on-screen game mode.
+- `gallery` — flatground trick gallery with stance filters and optional curated video tips.
 - `home` — landing hero and flatground robot roster entry point.
 - `records` — localStorage records and game log.
 - `robots` — roster data, avatars, profile, and trick repertoire.
@@ -39,6 +40,8 @@ The native shell must load the same web app states defined by `AppShell`:
 - `profile`
 - `game`
 - `voice`
+- `gallery`
+- `account`
 - `signin`
 - `upgrade`
 
@@ -99,7 +102,18 @@ Native WebView requests must hit the same first-party API surface as web:
    - Quota exceeded routes to the same upgrade screen.
    - Billing endpoints remain disabled/enabled according to the same server flags as web.
 
-9. Shell behavior
+9. Trick gallery
+   - With `?beta=true`, the bottom nav bar appears with S.K.A.T.E., Tricks, and Account tabs.
+   - Gallery shows flatground trick cards with difficulty dots, stance filters, and search.
+   - Stance chips filter the list.
+   - Tapping a trick with a curated video opens the video modal; tricks without tips are disabled.
+
+10. Account
+    - Account tab shows sign-in prompt when signed out.
+    - Signed-in account shows email and voice quota bar.
+    - Sign-out clears the session.
+
+11. Shell behavior
    - iOS simulator/local shell loads `http://localhost:3000`.
    - Android emulator/local shell loads `http://10.0.2.2:3000`.
    - Physical devices load `EXPO_PUBLIC_SKROBOT_WEB_URL`.

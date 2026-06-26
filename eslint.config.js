@@ -143,6 +143,17 @@ export default defineConfig([
   },
 
   {
+    files: ['src/features/gallery/**/*.{ts,tsx}'],
+    ignores: ['src/features/*/server/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': restrictedImports(noClientServerImports, noClientPlatformServerImports, {
+        group: ['@/features/auth', '@/features/billing', '@/features/dice', '@/features/game', '@/features/home', '@/features/records', '@/features/robots', '@/features/voice'],
+        message: 'Gallery may depend on tricks only. It browses the catalog and owns video tip curation. See docs/ARCHITECTURE.md.',
+      }),
+    },
+  },
+
+  {
     files: ['src/features/robots/**/*.{ts,tsx}'],
     ignores: ['src/features/*/server/**/*.{ts,tsx}'],
     rules: {
