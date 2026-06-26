@@ -1,5 +1,6 @@
 'use client';
 
+import { useSyncExternalStore } from 'react';
 import { TbMicrophone } from 'react-icons/tb';
 import { getGameLog, getRecords } from '@/features/records';
 import { RobotAvatar, RobotSelect } from '@/features/robots';
@@ -11,8 +12,33 @@ interface Props {
   onPlayVoice: (robot: Robot) => void;
 }
 
+const INITIAL_HERO = computeHero([], {});
+let heroCacheKey = '';
+let heroCache = INITIAL_HERO;
+
+function serverHeroSnapshot(): HeroState {
+  return INITIAL_HERO;
+}
+
+function browserHeroSnapshot(): HeroState {
+  const log = getGameLog();
+  const records = getRecords();
+  const key = JSON.stringify({ log, records });
+  if (key !== heroCacheKey) {
+    heroCacheKey = key;
+    heroCache = computeHero(log, records);
+  }
+  return heroCache;
+}
+
+function subscribeToRecordChanges(onStoreChange: () => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+  window.addEventListener('storage', onStoreChange);
+  return () => window.removeEventListener('storage', onStoreChange);
+}
+
 export default function HomeScreen({ onPickRobot, onPlayVoice }: Props) {
-  const hero = computeHero(getGameLog(), getRecords());
+  const hero = useSyncExternalStore(subscribeToRecordChanges, browserHeroSnapshot, serverHeroSnapshot);
 
   return (
     <div className="container">
