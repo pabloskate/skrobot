@@ -168,6 +168,14 @@ const easeInOutCubic = (p: number) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2
 const rad = (d: number) => (d * Math.PI) / 180;
 /** Signed yaw squash: passes through a thin edge instead of vanishing. */
 const signedSquash = (c: number) => (Math.abs(c) < 0.01 ? 0.15 : Math.sign(c) * (0.15 + 0.85 * Math.abs(c)));
+/** Darken a hex color by a factor (0–1) to shade the bot's back side. */
+const darken = (hex: string, amount = 0.18): string => {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.max(0, Math.floor(((n >> 16) & 0xff) * (1 - amount)));
+  const g = Math.max(0, Math.floor(((n >> 8) & 0xff) * (1 - amount)));
+  const b = Math.max(0, Math.floor((n & 0xff) * (1 - amount)));
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
+};
 
 export type FallVariant = 'slam' | 'slip' | 'bail' | 'tumble';
 export type BackgroundSceneId = 'sunset' | 'skyline' | 'park' | 'palms' | 'hills';
@@ -808,6 +816,14 @@ export default function TrickAnimation({
 
   const colors = robot.avatar;
   const f = frame;
+  // Which side of the bot faces the camera: switch/fakie start on the back
+  // (dark) side; body rotation (bodySX sign) flips the facing. Combining the
+  // stance sign with bodySX gives the currently visible side.
+  //   regular/nollie → starts front (light), 180 lands on back (dark)
+  //   switch/fakie   → starts back (dark), 180 lands on front (light)
+  const stanceSign = spec.stance === 'switch' || spec.stance === 'fakie' ? -1 : 1;
+  const showBack = stanceSign * f.body.sx < 0;
+  const bodyFill = showBack ? darken(colors.body) : colors.body;
   const kneeL = knee(f.footL);
   const kneeR = knee(f.footR);
   const shoulder: Pt = { x: 5, y: -38 };
@@ -833,6 +849,15 @@ export default function TrickAnimation({
   const boardTransform = isImpossible
     ? `translate(${pX} ${pY}) rotate(${f.board.rot}) scale(${f.board.sx} ${f.board.sy}) translate(${f.board.x - pX} ${f.board.y - pY})`
     : `translate(${f.board.x} ${f.board.y}) rotate(${f.board.rot}) scale(${f.board.sx} ${f.board.sy})`;
+
+  // Kickflip vs heelflip z-order: the flicking foot (footR, the front foot)
+  // flicks behind the board for kickflips (regular/nollie) and in front for
+  // heelflips. Switch/fakie inverts the relationship. Only active during the
+  // flip phase so the layering doesn't affect roll-in or landing poses.
+  const skaterTransform = `translate(${f.body.x} ${f.body.y}) scale(${f.body.sx} 1) translate(0 ${pivot}) rotate(${f.body.rot}) translate(0 ${-pivot})`;
+  const hasFlick = spec.flipDir !== 0;
+  const inFlipPhase = f.t >= ROLL_IN && f.t < ROLL_IN + FLIP_T;
+  const flickBehind = hasFlick && inFlipPhase && (spec.flipDir === 1) === (spec.stance === 'regular' || spec.stance === 'nollie');
 
   return (
     <div className="trick-anim" aria-label={`${robot.name} attempts ${trick.name}`} role="img">
@@ -868,6 +893,20 @@ export default function TrickAnimation({
             );
           })}
 
+        {/* Flicking foot + leg rendered behind the board for kickflips
+            (regular/nollie) and heelflips (switch/fakie), so the foot reads
+            as flicking off the far side of the deck. */}
+        {flickBehind && (
+          <g transform={skaterTransform}>
+            <g stroke="currentColor" strokeWidth="6.5" strokeLinecap="round" fill="none">
+              <line x1="0" y1="0" x2={kneeR.x} y2={kneeR.y} />
+              <line x1={kneeR.x} y1={kneeR.y} x2={f.footR.x} y2={f.footR.y} />
+            </g>
+            <circle cx={kneeR.x} cy={kneeR.y} r="3.6" fill={colors.accent} stroke="currentColor" strokeWidth="1.2" />
+            <rect x={f.footR.x - 3} y={f.footR.y - 3.5} width="13" height="7" rx="3.5" fill={colors.accent} stroke="currentColor" strokeWidth="2" />
+          </g>
+        )}
+
         {/* Board */}
         <g transform={boardTransform}>
           {/* Symmetric deck with kicked nose and tail, rounded bottom corners, and concave belly. */}
@@ -885,9 +924,7 @@ export default function TrickAnimation({
         </g>
 
         {/* Skater */}
-        <g
-          transform={`translate(${f.body.x} ${f.body.y}) scale(${f.body.sx} 1) translate(0 ${pivot}) rotate(${f.body.rot}) translate(0 ${-pivot})`}
-        >
+        <g transform={skaterTransform}>
           {/* back arm (behind body) */}
           <line
             x1={shoulder.x}
@@ -905,17 +942,21 @@ export default function TrickAnimation({
           <g stroke="currentColor" strokeWidth="6.5" strokeLinecap="round" fill="none">
             <line x1="0" y1="0" x2={kneeL.x} y2={kneeL.y} />
             <line x1={kneeL.x} y1={kneeL.y} x2={f.footL.x} y2={f.footL.y} />
-            <line x1="0" y1="0" x2={kneeR.x} y2={kneeR.y} />
-            <line x1={kneeR.x} y1={kneeR.y} x2={f.footR.x} y2={f.footR.y} />
+            {!flickBehind && (
+              <>
+                <line x1="0" y1="0" x2={kneeR.x} y2={kneeR.y} />
+                <line x1={kneeR.x} y1={kneeR.y} x2={f.footR.x} y2={f.footR.y} />
+              </>
+            )}
           </g>
 
           {/* torso */}
-          <rect x="-10" y="-50" width="22" height="50" rx="11" fill={colors.body} stroke="currentColor" strokeWidth="2.5" />
+          <rect x="-10" y="-50" width="22" height="50" rx="11" fill={bodyFill} stroke="currentColor" strokeWidth="2.5" />
 
           {/* neck */}
           <line x1="7" y1="-50" x2="7" y2="-56" stroke={colors.accent} strokeWidth="3" strokeLinecap="round" />
           {/* head */}
-          <rect x="-6" y="-76" width="26" height="22" rx="8" fill={colors.body} stroke="currentColor" strokeWidth="2.5" />
+          <rect x="-6" y="-76" width="26" height="22" rx="8" fill={bodyFill} stroke="currentColor" strokeWidth="2.5" />
           {/* visor + eye */}
           <rect x="-2" y="-70" width="18" height="9" rx="4.5" fill="currentColor" opacity="0.85" />
           <circle cx="12" cy="-65.5" r="2.4" fill={colors.accent} />
@@ -927,7 +968,7 @@ export default function TrickAnimation({
           <circle cx="0" cy="0" r="4.5" fill={colors.accent} stroke="currentColor" strokeWidth="1.5" />
           <circle cx={shoulder.x} cy={shoulder.y} r="4.5" fill={colors.accent} stroke="currentColor" strokeWidth="1.5" />
           <circle cx={kneeL.x} cy={kneeL.y} r="3.6" fill={colors.accent} stroke="currentColor" strokeWidth="1.2" />
-          <circle cx={kneeR.x} cy={kneeR.y} r="3.6" fill={colors.accent} stroke="currentColor" strokeWidth="1.2" />
+          {!flickBehind && <circle cx={kneeR.x} cy={kneeR.y} r="3.6" fill={colors.accent} stroke="currentColor" strokeWidth="1.2" />}
 
           {/* front arm */}
           <line
@@ -943,7 +984,7 @@ export default function TrickAnimation({
 
           {/* boots */}
           <rect x={f.footL.x - 3} y={f.footL.y - 3.5} width="13" height="7" rx="3.5" fill={colors.accent} stroke="currentColor" strokeWidth="2" />
-          <rect x={f.footR.x - 3} y={f.footR.y - 3.5} width="13" height="7" rx="3.5" fill={colors.accent} stroke="currentColor" strokeWidth="2" />
+          {!flickBehind && <rect x={f.footR.x - 3} y={f.footR.y - 3.5} width="13" height="7" rx="3.5" fill={colors.accent} stroke="currentColor" strokeWidth="2" />}
         </g>
       </svg>
     </div>
