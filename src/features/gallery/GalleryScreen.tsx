@@ -17,8 +17,9 @@ function DifficultyDots({ trick }: { trick: Trick }) {
   const g = grade(trick);
   return (
     <span className={`dots dots-${g}`} title={['Easy', 'Medium', 'Hard'][g - 1]}>
-      {'●'.repeat(g)}
-      <span className="dots-empty">{'●'.repeat(3 - g)}</span>
+      {[1, 2, 3].map((dot) => (
+        <span key={dot} className={dot <= g ? 'dot dot-on' : 'dot'} />
+      ))}
     </span>
   );
 }

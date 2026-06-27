@@ -154,7 +154,6 @@ export default function AppShell() {
           )}
         </header>
       )}
-      {root && <div className="safe-area-spacer" />}
       <main>
         <div className="screen" key={screen.id}>
           {screen.id === 'home' && (
