@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type ReactElement } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react';
 import type { Robot } from '@/features/robots';
 import type { Trick } from '@/features/tricks';
 
@@ -161,6 +161,8 @@ const FLIP_T = 0.75 * Math.sqrt(JUMP / 130);
 const LAND_T = 0.95;
 const FALL_T = 1.7;
 const HOLD = 0.35; // freeze on the final frame before onDone
+const STREET_DASH_PERIOD = 210;
+const STREET_DASH_SECONDS = 0.7;
 export const SLOW_MOTION_PLAYBACK_RATE = 0.38;
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
@@ -191,10 +193,6 @@ export const FALL_VARIANT_OPTIONS: ReadonlyArray<{ id: FallVariant; label: strin
 // Little skate-spot silhouettes behind the action. One is picked per attempt
 // (the component remounts each attempt, so the useState initializer re-rolls).
 // Motifs parallax-drift slower than the speed lines for a sense of depth.
-
-const SKY_TOP = '#ece5fb';
-const SKY_HORIZON = '#f6e6d6';
-const GROUND_FILL = '#e6e2f1';
 
 type Scene = (px: number) => ReactElement;
 
@@ -784,6 +782,8 @@ export default function TrickAnimation({
   const resolvedBackgroundSceneId = backgroundSceneId ?? randomizedBackgroundSceneId;
   const scene = SCENE_RENDERERS[resolvedBackgroundSceneId];
   const [frame, setFrame] = useState(() => computeFrame(0, spec, landed, resolvedFallVariant));
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [replayNonce, setReplayNonce] = useState(0);
   const doneRef = useRef(false);
   const onDoneRef = useRef(onDone);
   const pausedRef = useRef(paused);
@@ -803,6 +803,7 @@ export default function TrickAnimation({
     const end = ROLL_IN + FLIP_T + (landed ? LAND_T : FALL_T);
     const durationMs = ((end + HOLD) / effectivePlaybackRate) * 1000;
     const finish = () => {
+      setIsPlaying(false);
       if (!doneRef.current) {
         doneRef.current = true;
         onDoneRef.current();
@@ -846,7 +847,13 @@ export default function TrickAnimation({
       cancelAnimationFrame(raf);
       clearTimeout(failSafe);
     };
-  }, [spec, landed, resolvedFallVariant, effectivePlaybackRate]);
+  }, [spec, landed, resolvedFallVariant, effectivePlaybackRate, replayNonce]);
+
+  const replay = () => {
+    setIsPlaying(true);
+    setFrame(computeFrame(0, spec, landed, resolvedFallVariant));
+    setReplayNonce((current) => current + 1);
+  };
 
   const colors = robot.avatar;
   const f = frame;
@@ -862,8 +869,6 @@ export default function TrickAnimation({
   const kneeR = knee(f.footR);
   const shoulder: Pt = { x: 5, y: -38 };
   const pivot = FOOT_Y - 2;
-  const moving = f.t > 0;
-  const bgPx = -spec.dir * f.t * 70;
   // Board cosmetics — pure render, no physics. Deck fill flips with the board
   // so the dark griptape reads on the top side and the accent graphic on the
   // underside while it flips mid-air.
@@ -892,40 +897,28 @@ export default function TrickAnimation({
   const hasFlick = spec.flipDir !== 0;
   const inFlipPhase = f.t >= ROLL_IN && f.t < ROLL_IN + FLIP_T;
   const flickBehind = hasFlick && inFlipPhase && (spec.flipDir === 1) === (spec.stance === 'regular' || spec.stance === 'nollie');
+  const streetTranslate =
+    -(((f.t / STREET_DASH_SECONDS) * STREET_DASH_PERIOD * spec.dir) % STREET_DASH_PERIOD);
+  const streetStyle = { '--street-translate': `${streetTranslate}px` } as CSSProperties;
 
   return (
-    <div className="trick-anim" aria-label={`${robot.name} attempts ${trick.name}`} role="img">
+    <div
+      className={`trick-anim ${isPlaying ? 'trick-anim--moving' : ''}`}
+      style={streetStyle}
+      aria-label={`Replay ${robot.name} attempting ${trick.name}`}
+      aria-roledescription="trick animation"
+      role="button"
+      tabIndex={0}
+      onClick={replay}
+      onKeyDown={(event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        replay();
+      }}
+    >
       <svg viewBox={`0 ${-SKY_PAD} ${W} ${H + SKY_PAD}`} xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="trick-sky" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={SKY_TOP} />
-            <stop offset="100%" stopColor={SKY_HORIZON} />
-          </linearGradient>
-        </defs>
-        {/* Background scene (sky + ground fill, then parallax silhouette motif) */}
-        <rect x="0" y={-SKY_PAD} width={W} height={GROUND + SKY_PAD} fill="url(#trick-sky)" />
-        <rect x="0" y={GROUND} width={W} height={H - GROUND} fill={GROUND_FILL} />
-        <g aria-hidden="true">{scene(bgPx)}</g>
-
-        {/* Ground + speed lines */}
-        <line x1="0" y1={GROUND + 9} x2={W} y2={GROUND + 9} stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-        {moving &&
-          [0, 1, 2, 3].map((i) => {
-            const x = ((((i * 140 - spec.dir * f.t * 300) % W) + W) % W);
-            return (
-              <line
-                key={i}
-                x1={x}
-                y1={GROUND + 24}
-                x2={x + 28 + i * 8}
-                y2={GROUND + 24}
-                stroke="currentColor"
-                strokeWidth="3"
-                strokeLinecap="round"
-                opacity="0.2"
-              />
-            );
-          })}
+        {/* Background scene motif; the full-width moving street layer lives in CSS. */}
+        <g aria-hidden="true">{scene(0)}</g>
 
         {/* Flicking foot + leg rendered behind the board for kickflips
             (regular/nollie) and heelflips (switch/fakie), so the foot reads

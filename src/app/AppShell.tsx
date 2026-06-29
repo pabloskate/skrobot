@@ -131,7 +131,7 @@ export default function AppShell() {
   const title = titleForScreen(screen);
 
   return (
-    <div className={showTabbar ? 'has-tabbar' : ''}>
+    <div className={`${showTabbar ? 'has-tabbar ' : ''}${root ? 'is-root-screen' : 'is-detail-screen'}`}>
       {!root && (
         <header className="topbar">
           <button className="back-btn" onClick={back} aria-label="Back">

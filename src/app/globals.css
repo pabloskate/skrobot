@@ -70,7 +70,7 @@ main {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 16px 20px;
+  padding: calc(16px + env(safe-area-inset-top)) 20px 16px;
   position: sticky;
   top: 0;
   z-index: 10;
@@ -186,6 +186,10 @@ main {
   max-width: 680px;
   margin: 0 auto;
   padding: 20px 16px 40px;
+}
+
+.is-root-screen .container {
+  padding-top: calc(20px + env(safe-area-inset-top));
 }
 
 .section-title {
@@ -981,7 +985,8 @@ main {
   .rps-countdown-word,
   .rps-reveal-pop,
   .rps-result.rps-tie .rps-reveal,
-  .rps-winner .rps-icon {
+  .rps-winner .rps-icon,
+  .attempt-panel .trick-anim--moving::after {
     animation: none;
     transition: none;
   }
@@ -1009,6 +1014,16 @@ main {
   width: 100%;
   max-width: 360px;
   margin: 0 auto;
+}
+
+.trick-anim[role='button'] {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.trick-anim[role='button']:focus-visible {
+  outline: 3px solid rgba(100, 49, 216, 0.45);
+  outline-offset: 4px;
 }
 
 .trick-anim svg {
@@ -1059,21 +1074,27 @@ main {
   position: absolute;
   z-index: 0;
   top: 90.6%;
-  right: 8%;
-  left: 8%;
+  left: calc(8% - 210px);
+  width: calc(84% + 420px);
   height: 3px;
-  background:
-    linear-gradient(var(--anim-ink), var(--anim-ink)) 0 0 / 40px 3px no-repeat,
-    linear-gradient(var(--anim-ink), var(--anim-ink)) 34% 0 / 46px 3px no-repeat,
-    linear-gradient(var(--anim-ink), var(--anim-ink)) 56% 0 / 28px 3px no-repeat,
-    linear-gradient(var(--anim-ink), var(--anim-ink)) 82% 0 / 42px 3px no-repeat;
+  background-image: linear-gradient(
+    90deg,
+    transparent 0 72px,
+    var(--anim-ink) 72px 118px,
+    transparent 118px 210px
+  );
+  background-repeat: repeat-x;
+  background-size: 210px 3px;
   opacity: 0.2;
+  transform: translate3d(var(--street-translate, 0px), 0, 0);
+  will-change: transform;
 }
 
 .attempt-panel .trick-anim svg {
   position: relative;
   z-index: 1;
   width: min(100%, 360px);
+  overflow: visible;
 }
 
 .attempt-panel .panel-title {
@@ -1087,6 +1108,12 @@ main {
 
 .attempt-panel .btn-primary {
   margin: 0 0 24px;
+}
+
+.attempt-panel .anim-wobble {
+  margin: 30px auto 10px;
+  padding: 10px;
+  line-height: 0;
 }
 
 /* currentColor source for the robot avatar's outline/face ink. */
