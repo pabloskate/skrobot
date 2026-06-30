@@ -24,6 +24,7 @@ const FLATGROUND_BASES = [
   '360 Shuvit',
   'Late Backside Shuvit',
   'Late Frontside Shuvit',
+  'Late Kickflip',
   'Varial Heelflip',
   'FS Bigspin',
   'Backside Heelflip',

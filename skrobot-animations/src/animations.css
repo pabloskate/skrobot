@@ -183,15 +183,73 @@ button {
 /* ---------- Trick animation + avatar ---------- */
 
 .trick-anim {
+  position: relative;
+  display: grid;
   width: 100%;
   max-width: 360px;
   margin: 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: linear-gradient(
+    to bottom,
+    #ece5fb 0%,
+    #f6e6d6 85.4%,
+    #e6e2f1 85.4%,
+    #e6e2f1 100%
+  );
+}
+
+.trick-anim[role='button'] {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.trick-anim[role='button']:focus-visible {
+  outline: 3px solid rgba(100, 49, 216, 0.45);
+  outline-offset: 4px;
+}
+
+.trick-anim::before {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  top: 85.4%;
+  right: 0;
+  left: 0;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--anim-ink);
+}
+
+.trick-anim::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  top: 90.6%;
+  left: calc(8% - 210px);
+  width: calc(84% + 420px);
+  height: 3px;
+  background-image: linear-gradient(
+    90deg,
+    transparent 0 72px,
+    var(--anim-ink) 72px 118px,
+    transparent 118px 210px
+  );
+  background-repeat: repeat-x;
+  background-size: 210px 3px;
+  opacity: 0.2;
+  transform: translate3d(var(--street-translate, 0px), 0, 0);
+  will-change: transform;
 }
 
 .trick-anim svg {
+  position: relative;
+  z-index: 1;
   display: block;
   width: 100%;
   height: auto;
+  overflow: visible;
   color: var(--anim-ink);
 }
 
@@ -302,7 +360,8 @@ button {
   .rps-countdown-word,
   .rps-reveal-pop,
   .rps-result.rps-tie .rps-reveal,
-  .rps-winner .rps-icon {
+  .rps-winner .rps-icon,
+  .trick-anim--moving::after {
     animation: none;
     transition: none;
   }

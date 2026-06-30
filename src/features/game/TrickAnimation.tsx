@@ -151,18 +151,22 @@ const SHIN = 35;
 // Extra sky above the viewBox so the taller pop doesn't clip the skater's head.
 const SKY_PAD = 64;
 
-const ROLL_IN = 0.5;
+// Global speed trim: stretch every animation phase by this factor so pops,
+// spins, and falls all read ~20% slower (physics-wise: lower effective gravity
+// + lower angular velocity, preserving the relative shape of each motion).
+const SPEED_SCALE = 1.25;
+const ROLL_IN = 0.5 * SPEED_SCALE;
 // Flight time obeys projectile motion: under constant gravity the air time
 // scales with sqrt(height), so FLIP_T is derived from JUMP rather than tuned
 // independently. Raising JUMP therefore slows every spin by the same physical
 // law (more hang time = the 360 has longer to come around). Baseline: a 130px
 // pop flew for 0.75s.
-const FLIP_T = 0.75 * Math.sqrt(JUMP / 130);
-const LAND_T = 0.95;
-const FALL_T = 1.7;
-const HOLD = 0.35; // freeze on the final frame before onDone
+const FLIP_T = 0.75 * Math.sqrt(JUMP / 130) * SPEED_SCALE;
+const LAND_T = 0.95 * SPEED_SCALE;
+const FALL_T = 1.7 * SPEED_SCALE;
+const HOLD = 0.35 * SPEED_SCALE; // freeze on the final frame before onDone
 const STREET_DASH_PERIOD = 210;
-const STREET_DASH_SECONDS = 0.7;
+const STREET_DASH_SECONDS = 0.7 * SPEED_SCALE;
 export const SLOW_MOTION_PLAYBACK_RATE = 0.38;
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
@@ -278,6 +282,7 @@ interface Frame {
   footR: Pt;
   armFront: number;
   armBack: number;
+  streetDist: number;
 }
 
 interface Feet {
@@ -541,7 +546,17 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
     const landingCompression = (20 + (complexity * 10)) * stanceLoad;
     
     const p = clamp01((t - ROLL_IN - FLIP_T) / LAND_T);
-    bodyYOffset = p < 0.55 ? landingCompression * Math.sin((p / 0.55) * Math.PI) : Math.sin(t * 12) * 2;
+    // Seed from the flight-end tuck (~30) so the knees stay bent through the
+    // catch instead of snapping straight then re-bending (jitter).
+    const FLIGHT_END_OFFSET = 30;
+    const RIDE_AWAY_OFFSET = 6;
+    if (p < 0.55) {
+      const q = p / 0.55;
+      const settle = easeInOutCubic(q);
+      bodyYOffset = FLIGHT_END_OFFSET * (1 - settle) + RIDE_AWAY_OFFSET * settle + landingCompression * Math.sin(q * Math.PI);
+    } else {
+      bodyYOffset = RIDE_AWAY_OFFSET + Math.sin(t * 12) * 2;
+    }
     bodySX = Math.sign(Math.cos(rad(spec.bodyYaw))) || 1;
     
     // Arms come down to balance on landing
@@ -682,36 +697,48 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
       armFront = Math.sin(cycle) * 1.3 * runVigor + 0.4 * settle;
       armBack = -Math.sin(cycle) * 1.3 * runVigor - 0.3 * settle;
     } else { // tumble
-      // Physics-improved tumble: rolling momentum, rotational kinetic roll, and dynamic hip height.
-      const ROT_MAX = 425;
-      const GAMMA = 2.0;
+      // Tumble: forward roll over the nose.
+      // Compensate for the foot-pivot so the rotation happens around the torso.
+      const ROT_MAX = 410;
+      const GAMMA = 1.8;
       bodyRot = ROT_MAX * (1 - Math.exp(-GAMMA * u));
 
-      const SLIDE_MAX = 120;
-      const BETA = 1.8;
-      fx = SLIDE_MAX * (1 - Math.exp(-BETA * u));
+      const SLIDE_MAX = 140;
+      const BETA = 1.6;
+      const torsoX = SLIDE_MAX * (1 - Math.exp(-BETA * u));
 
-      const r = rad(Math.abs(bodyRot));
-      const H_hips = 11 + 54 * Math.pow(Math.max(0, Math.cos(r)), 2) + 22 * Math.pow(Math.max(0, -Math.cos(r)), 2);
-      const rollY = LIFT - H_hips;
+      const P1 = FOOT_Y - 2; // 63
+      const P0 = -20; // Torso center
+      const P_diff = P1 - P0; // 83
 
-      const blend = easeInOutCubic(clamp01(u / 0.35));
-      const bounce = 18 * Math.sin(u * 12) * Math.exp(-2.5 * u);
-      fy = FALL_START_Y * (1 - blend) + rollY * blend + bounce;
+      const blend = easeInOutCubic(clamp01(u / 0.4));
+      const bounce = 25 * Math.sin(u * 6) * Math.exp(-2.0 * u);
+      
+      const torsoY_start = FALL_START_Y + P0;
+      const torsoY_end = 50; 
+      const torsoY = torsoY_start * (1 - blend) + torsoY_end * blend + bounce;
 
-      const tVal = clamp01(u / 0.65);
-      const sVal = easeInOutCubic(clamp01((u - 0.45) / 0.95));
+      const r_base = rad(bodyRot);
 
-      const fRx = 14 * (1 - tVal) * (1 - sVal) + 4 * tVal * (1 - sVal) + 38 * sVal;
-      const fRy = (FOOT_Y - 2) * (1 - tVal) * (1 - sVal) + (FOOT_Y - 38) * tVal * (1 - sVal) + (FOOT_Y - 6) * sVal;
+      // Offset fx, fy so the visual pivot is P0
+      fx = torsoX - P_diff * Math.sin(r_base);
+      fy = torsoY - P0 - P_diff * (1 - Math.cos(r_base));
+
+      // Flail/tuck limbs
+      const tVal = clamp01(u / 0.4);
+      const sVal = easeInOutCubic(clamp01((u - 0.4) / 0.8));
+
+      // Tuck legs during the roll, then extend slightly at the end
+      const fRx = 14 * (1 - tVal) + 15 * tVal * (1 - sVal) + 35 * sVal;
+      const fRy = (FOOT_Y - 2) * (1 - tVal) + (FOOT_Y - 45) * tVal * (1 - sVal) + (FOOT_Y - 15) * sVal;
       footR = { x: fRx, y: fRy };
 
-      const fLx = 4 * (1 - tVal) * (1 - sVal) + (-8) * tVal * (1 - sVal) + (-24) * sVal;
-      const fLy = (FOOT_Y - 2) * (1 - tVal) * (1 - sVal) + (FOOT_Y - 32) * tVal * (1 - sVal) + (FOOT_Y - 22) * sVal;
+      const fLx = 4 * (1 - tVal) + 5 * tVal * (1 - sVal) + 20 * sVal;
+      const fLy = (FOOT_Y - 2) * (1 - tVal) + (FOOT_Y - 40) * tVal * (1 - sVal) + (FOOT_Y - 10) * sVal;
       footL = { x: fLx, y: fLy };
 
-      armFront = -0.5 * (1 - tVal) * (1 - sVal) + (-2.8) * tVal * (1 - sVal) + (-2.2) * sVal;
-      armBack = 0.5 * (1 - tVal) * (1 - sVal) + 2.8 * tVal * (1 - sVal) + 1.6 * sVal;
+      armFront = -1.0 * (1 - tVal) + Math.sin(u * 10) * 1.5 * Math.exp(-1.5 * u);
+      armBack = 1.0 * (1 - tVal) + Math.cos(u * 10) * 1.5 * Math.exp(-1.5 * u);
     }
     bodyX = X0 + spec.dir * fx;
     bodyRot *= spec.dir;
@@ -732,6 +759,17 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
 
   const bodyY = falling ? GROUND - LIFT + bodyFallY : boardY - LIFT + bodyYOffset;
 
+  // Street distance: full speed during roll-in, flight, and ride-away;
+  // decelerates exponentially during falls so the ground slows as the
+  // skater loses momentum. Each fall variant has its own decay rate.
+  let streetDist = t;
+  if (falling) {
+    const u = t - ROLL_IN - FLIP_T;
+    const FULL_SPEED_TIME = ROLL_IN + FLIP_T;
+    const decayK = fall === 'slam' ? 2.2 : fall === 'slip' ? 1.5 : fall === 'bail' ? 1.0 : 1.3;
+    streetDist = FULL_SPEED_TIME + (1 - Math.exp(-decayK * u)) / decayK;
+  }
+
   return {
     t,
     board: { x: boardX, y: boardY, rot: boardRot, sx, sy, griptape: sy >= 0 },
@@ -740,6 +778,7 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
     footR,
     armFront,
     armBack,
+    streetDist,
   };
 }
 
@@ -898,7 +937,7 @@ export default function TrickAnimation({
   const inFlipPhase = f.t >= ROLL_IN && f.t < ROLL_IN + FLIP_T;
   const flickBehind = hasFlick && inFlipPhase && (spec.flipDir === 1) === (spec.stance === 'regular' || spec.stance === 'nollie');
   const streetTranslate =
-    -(((f.t / STREET_DASH_SECONDS) * STREET_DASH_PERIOD * spec.dir) % STREET_DASH_PERIOD);
+    -(((f.streetDist / STREET_DASH_SECONDS) * STREET_DASH_PERIOD * spec.dir) % STREET_DASH_PERIOD);
   const streetStyle = { '--street-translate': `${streetTranslate}px` } as CSSProperties;
 
   return (
@@ -936,18 +975,27 @@ export default function TrickAnimation({
 
         {/* Board */}
         <g transform={boardTransform}>
-          {/* Symmetric deck with kicked nose and tail, rounded bottom corners, and concave belly. */}
+          {/* Deck with curved kicks, concave belly, and rounded rails */}
           <path
-            d="M -42 -7 L -30 -4 L 30 -4 L 42 -7 L 42 -2 Q 42 0 40 0.5 L 30 3 Q 0 5 -30 3 L -40 0.5 Q -42 0 -42 -2 Z"
+            d="M -44 -5 Q -38 -3.5 -31 -2.5 L -28 -2 Q 0 -1 28 -2 L 31 -2.5 Q 38 -3.5 44 -5 L 43 -3 Q 42.5 -1 40 0 L 30 2 Q 0 4 -30 2 L -40 0 Q -42.5 -1 -43 -3 Z"
             fill={deckFill}
             stroke="currentColor"
             strokeWidth="2"
             strokeLinejoin="round"
           />
-          <circle cx={-WHEEL_X} cy="7" r="5" fill="#fbfbf3" stroke="currentColor" strokeWidth="2" />
-          <circle cx={WHEEL_X} cy="7" r="5" fill="#fbfbf3" stroke="currentColor" strokeWidth="2" />
-          <circle cx={-WHEEL_X} cy="7" r="1.8" fill={colors.accent} />
-          <circle cx={WHEEL_X} cy="7" r="1.8" fill={colors.accent} />
+          {/* Mount bolts */}
+          <circle cx={-WHEEL_X - 8} cy="-1" r="1.2" fill="currentColor" opacity="0.4" />
+          <circle cx={-WHEEL_X + 8} cy="-1" r="1.2" fill="currentColor" opacity="0.4" />
+          <circle cx={WHEEL_X - 8} cy="-1" r="1.2" fill="currentColor" opacity="0.4" />
+          <circle cx={WHEEL_X + 8} cy="-1" r="1.2" fill="currentColor" opacity="0.4" />
+          {/* Trucks */}
+          <rect x={-WHEEL_X - 5} y="2" width="10" height="4" rx="1.5" fill="currentColor" opacity="0.45" />
+          <rect x={WHEEL_X - 5} y="2" width="10" height="4" rx="1.5" fill="currentColor" opacity="0.45" />
+          {/* Wheels */}
+          <circle cx={-WHEEL_X} cy="8" r="5" fill="#fbfbf3" stroke="currentColor" strokeWidth="2" />
+          <circle cx={WHEEL_X} cy="8" r="5" fill="#fbfbf3" stroke="currentColor" strokeWidth="2" />
+          <circle cx={-WHEEL_X} cy="8" r="1.8" fill={colors.accent} />
+          <circle cx={WHEEL_X} cy="8" r="1.8" fill={colors.accent} />
         </g>
 
         {/* Skater */}
