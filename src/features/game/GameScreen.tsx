@@ -252,7 +252,7 @@ function RobotAttempt({
   onResult: (r: { landed: boolean; knewIt: boolean }) => void;
 }) {
   const [roll] = useState(() => rollAttempt(bag, trick.id));
-  return <TrickAnimation robot={robot} trick={trick} landed={roll.landed} onDone={() => onResult(roll)} />;
+  return <TrickAnimation robot={robot} trick={trick} landed={roll.landed} knewIt={roll.knewIt} onDone={() => onResult(roll)} />;
 }
 
 function RobotStatus({ state, say }: { state: GameState; say: (s: string) => string }) {

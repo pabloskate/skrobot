@@ -25,6 +25,9 @@ interface Props {
   fallVariant?: FallVariant;
   /** Freeze the animation on the current frame (e.g. to grab a screenshot). */
   paused?: boolean;
+  /** Whether the robot knew the trick (in its bag). When false and not landed,
+   *  forces the "shank" fall (trick didn't even rotate). */
+  knewIt?: boolean;
 }
 
 // ---------- Trick → animation family ----------
@@ -152,9 +155,9 @@ const SHIN = 35;
 const SKY_PAD = 64;
 
 // Global speed trim: stretch every animation phase by this factor so pops,
-// spins, and falls all read ~20% slower (physics-wise: lower effective gravity
+// spins, and falls read a touch slower than baseline (physics-wise: lower effective gravity
 // + lower angular velocity, preserving the relative shape of each motion).
-const SPEED_SCALE = 1.25;
+const SPEED_SCALE = 1.12;
 const ROLL_IN = 0.5 * SPEED_SCALE;
 // Flight time obeys projectile motion: under constant gravity the air time
 // scales with sqrt(height), so FLIP_T is derived from JUMP rather than tuned
@@ -183,7 +186,7 @@ const darken = (hex: string, amount = 0.18): string => {
   return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
 };
 
-export type FallVariant = 'slam' | 'slip' | 'bail' | 'tumble';
+export type FallVariant = 'slam' | 'slip' | 'bail' | 'tumble' | 'shank';
 export type BackgroundSceneId = 'sunset' | 'skyline' | 'park' | 'palms' | 'hills';
 
 export const FALL_VARIANT_OPTIONS: ReadonlyArray<{ id: FallVariant; label: string }> = [
@@ -191,6 +194,7 @@ export const FALL_VARIANT_OPTIONS: ReadonlyArray<{ id: FallVariant; label: strin
   { id: 'slip', label: 'Slip' },
   { id: 'bail', label: 'Bail' },
   { id: 'tumble', label: 'Tumble' },
+  { id: 'shank', label: 'Shank' },
 ];
 
 // ---------- Background scenes ----------
@@ -265,7 +269,11 @@ const SCENE_RENDERERS: Record<BackgroundSceneId, Scene> = {
   hills: SceneHills,
 };
 
-const randomFallVariant = () => FALL_VARIANT_OPTIONS[Math.floor(Math.random() * FALL_VARIANT_OPTIONS.length)].id;
+const FALL_VARIANTS_KNEW_IT = FALL_VARIANT_OPTIONS.filter((v) => v.id !== 'shank');
+const randomFallVariant = (knewIt?: boolean) => {
+  const pool = knewIt === false ? FALL_VARIANT_OPTIONS : knewIt === true ? FALL_VARIANTS_KNEW_IT : FALL_VARIANT_OPTIONS;
+  return pool[Math.floor(Math.random() * pool.length)].id;
+};
 const randomBackgroundSceneId = () =>
   BACKGROUND_SCENE_OPTIONS[Math.floor(Math.random() * BACKGROUND_SCENE_OPTIONS.length)].id;
 
@@ -440,6 +448,16 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
     // delayed clock; everything else (pop arc, catch) stays on catchP.
     const spinP = spec.late ? clamp01((p - 0.38) / 0.30) : catchP;
     
+    // Shank: the trick doesn't complete. Flips land upside-down (half
+    // rotation reads fine in 2D). Spins don't happen at all — the board
+    // pops but never rotates, avoiding the thin edge-on look that any
+    // partial yaw produces in a side view. Crookedness comes from boardRot
+    // tilt in the fall phase, not from partial yaw squash.
+    const shankFlipScale = (!landed && fall === 'shank') ? 0.55 : 1;
+    const shankYawScale = (!landed && fall === 'shank') ? 0 : 1;
+    const shankBodyScale = (!landed && fall === 'shank') ? 0 : 1;
+    const shankRollScale = (!landed && fall === 'shank') ? 0.55 : 1;
+    
     boardY = GROUND - 4 * JUMP * p * (1 - p);
     // Lateral drift mid-spin: the board arcs toward the toes (frontside, -1)
     // or heels (backside, +1) so the spin reads with a direction. The drift
@@ -448,19 +466,19 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
       const driftAmp = spec.yaw >= 360 ? 18 : 12;
       boardX += spec.spinDir * spec.dir * driftAmp * Math.sin(p * Math.PI);
     }
-    sy = spec.flips ? Math.cos(rad(catchP * spec.flips * 360)) : 1;
+    sy = spec.flips ? Math.cos(rad(catchP * spec.flips * 360 * shankFlipScale)) : 1;
     if (spec.yaw) {
-      const c = Math.cos(rad(spinP * spec.yaw));
+      const c = Math.cos(rad(spinP * spec.yaw * shankYawScale));
       // A clean spin (no flip) reads better passing through the signed thin
       // edge; combined with a flip the scaleY rotation already carries it.
       sx = spec.flips ? 0.2 + 0.8 * Math.abs(c) : signedSquash(c);
     }
-    if (spec.bodyYaw) bodySX = signedSquash(Math.cos(rad(catchP * spec.bodyYaw)));
+    if (spec.bodyYaw) bodySX = signedSquash(Math.cos(rad(catchP * spec.bodyYaw * shankBodyScale)));
     // Impossible: one continuous ease-in curve — pop angle tapers off,
     // roll picks up smoothly, no wobble or direction reversal.
     if (spec.roll) {
       boardRot = popAngle * (1 - Math.pow(Math.min(1, p / 0.3), 2));
-      boardRot += spec.roll * Math.pow(catchP, 2.2);
+      boardRot += spec.roll * Math.pow(catchP, 2.2) * shankRollScale;
     } else if (spec.late) {
       // Late shuvit: board stays flat after the pop (no wobble), then dips
       // as the back foot scoops the tail around mid-flight.
@@ -581,6 +599,7 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
     else if (fall === 'slip') boardShootOut = 250; // classic banana peel
     else if (fall === 'slam') boardShootOut = 100;
     else if (fall === 'tumble') boardShootOut = -120; // caught on nose
+    else if (fall === 'shank') boardShootOut = 35; // lands crooked right next to skater
 
     boardX = X0 + spec.dir * boardShootOut * (1 - Math.exp(-2.5 * u));
 
@@ -696,7 +715,7 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
 
       armFront = Math.sin(cycle) * 1.3 * runVigor + 0.4 * settle;
       armBack = -Math.sin(cycle) * 1.3 * runVigor - 0.3 * settle;
-    } else { // tumble
+    } else if (fall === 'tumble') { // tumble
       // Tumble: forward roll over the nose.
       // Compensate for the foot-pivot so the rotation happens around the torso.
       const ROT_MAX = 410;
@@ -739,6 +758,41 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
 
       armFront = -1.0 * (1 - tVal) + Math.sin(u * 10) * 1.5 * Math.exp(-1.5 * u);
       armBack = 1.0 * (1 - tVal) + Math.cos(u * 10) * 1.5 * Math.exp(-1.5 * u);
+    } else if (fall === 'shank') {
+      // Under-rotated trick: board landed crooked nearby. Bot stumbles
+      // forward off the sideways deck, arms flailing for balance.
+      // Flips land upside-down; spins didn't happen so the board sits
+      // flat but tilted (crooked), not edge-on. Both the tilt and the
+      // half-flip settle to flat (parallel to ground) as the fall ends.
+      const SHANK_FLIP = 0.55;
+      const SHANK_ROLL = 0.55;
+      const settleRot = Math.exp(-2.5 * u); // 1→0: crooked→flat
+      boardRot = (spec.roll ? spec.roll * SHANK_ROLL : 35) * settleRot;
+      const shankSy = spec.flips ? Math.cos(rad(spec.flips * 360 * SHANK_FLIP)) : 1;
+      sy = shankSy * settleRot + 1 * (1 - settleRot); // flip→flat
+      // sx and bodySX stay at 1 — no yaw squash since the spin never happened
+
+      const slow = 1 - Math.exp(-2.8 * u);
+      fx = 55 * slow;
+      fy = FALL_START_Y * (1 - slow) + FEET_PLANT_Y * slow + 6 * slow * Math.exp(-3 * u) * (1 - Math.exp(-4 * u));
+      bodyRot = 18 * Math.sin(u * 6) * Math.exp(-1.5 * u); // forward wobble
+
+      const cycle = u * 11;
+      const vigor = Math.exp(-2.2 * u);
+      const settle = 1 - vigor;
+      footR = {
+        x: 12 + settle * 4 + Math.sin(cycle) * 14 * vigor,
+        y: FOOT_Y - 2 - Math.max(0, Math.cos(cycle)) * 10 * vigor + settle * 2,
+      };
+      footL = {
+        x: -10 - settle * 4 + Math.sin(cycle + Math.PI) * 14 * vigor,
+        y: FOOT_Y - 2 - Math.max(0, -Math.cos(cycle)) * 10 * vigor + settle * 2,
+      };
+
+      armFront = Math.sin(cycle) * 1.6 * vigor + 0.3 * settle;
+      armBack = -Math.sin(cycle) * 1.6 * vigor - 0.2 * settle;
+    } else {
+      fx = 0; fy = FALL_START_Y;
     }
     bodyX = X0 + spec.dir * fx;
     bodyRot *= spec.dir;
@@ -766,7 +820,7 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
   if (falling) {
     const u = t - ROLL_IN - FLIP_T;
     const FULL_SPEED_TIME = ROLL_IN + FLIP_T;
-    const decayK = fall === 'slam' ? 2.2 : fall === 'slip' ? 1.5 : fall === 'bail' ? 1.0 : 1.3;
+    const decayK = fall === 'slam' ? 2.2 : fall === 'slip' ? 1.5 : fall === 'bail' ? 1.0 : fall === 'shank' ? 1.6 : 1.3;
     streetDist = FULL_SPEED_TIME + (1 - Math.exp(-decayK * u)) / decayK;
   }
 
@@ -813,11 +867,15 @@ export default function TrickAnimation({
   backgroundSceneId,
   fallVariant,
   paused = false,
+  knewIt,
 }: Props) {
-  const [randomizedFallVariant] = useState<FallVariant>(randomFallVariant);
+  // Shank is forced when the robot doesn't know the trick; excluded from
+  // the random pool when it does. undefined (playground) keeps the full pool.
+  const forcedFall = !landed && knewIt === false ? 'shank' as FallVariant : undefined;
+  const [randomizedFallVariant] = useState<FallVariant>(() => randomFallVariant(knewIt));
   const [spec] = useState(() => specFor(trick));
   const [randomizedBackgroundSceneId] = useState<BackgroundSceneId>(randomBackgroundSceneId);
-  const resolvedFallVariant = fallVariant ?? randomizedFallVariant;
+  const resolvedFallVariant = forcedFall ?? fallVariant ?? randomizedFallVariant;
   const resolvedBackgroundSceneId = backgroundSceneId ?? randomizedBackgroundSceneId;
   const scene = SCENE_RENDERERS[resolvedBackgroundSceneId];
   const [frame, setFrame] = useState(() => computeFrame(0, spec, landed, resolvedFallVariant));
