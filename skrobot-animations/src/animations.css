@@ -191,11 +191,13 @@ button {
   place-items: center;
   overflow: hidden;
   border-radius: var(--radius);
+  /* Ground line must match the SVG scene: (GROUND + SKY_PAD) / (H + SKY_PAD)
+     = (272 + 64) / 404 = 83.17%. Keep the ::before/::after offsets in sync. */
   background: linear-gradient(
     to bottom,
     #ece5fb 0%,
-    #f6e6d6 85.4%,
-    #e6e2f1 85.4%,
+    #f6e6d6 83.17%,
+    #e6e2f1 83.17%,
     #e6e2f1 100%
   );
 }
@@ -214,7 +216,7 @@ button {
   content: '';
   position: absolute;
   z-index: 0;
-  top: 85.4%;
+  top: 83.17%;
   right: 0;
   left: 0;
   height: 3px;
@@ -226,7 +228,7 @@ button {
   content: '';
   position: absolute;
   z-index: 0;
-  top: 90.6%;
+  top: 88.4%;
   left: calc(8% - 210px);
   width: calc(84% + 420px);
   height: 3px;

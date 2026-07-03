@@ -26,6 +26,17 @@ If the WebView cannot load the app URL, the shell shows only a connection
 recovery screen with Retry/Open URL actions. It must not grow Skate Robot
 feature screens of its own.
 
+## Offline Behavior
+
+The native app gets offline on-screen play from the web app's production service
+worker. After the WebView has loaded the deployed app once while online, the
+cached app shell can start again without connectivity and the on-screen S.K.A.T.E.
+flow keeps using the reducer plus localStorage records.
+
+First launch still needs network because the shell points at a remote HTTPS app
+URL. Voice mode, auth, billing, and any `/api/*` work stay network-required; if
+the device is offline, players should use screen mode until connectivity returns.
+
 ## Run
 
 Start the web app first:

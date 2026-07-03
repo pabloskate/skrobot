@@ -97,6 +97,35 @@ describe('mobile parity shell', () => {
     expect(appWebSource).not.toContain('<WebView');
   });
 
+  it('keeps the web app installable and cacheable for native offline screen play', () => {
+    const layoutSource = readFileSync(resolve(process.cwd(), 'src/app/layout.tsx'), 'utf8');
+    const registrationSource = readFileSync(resolve(process.cwd(), 'src/app/ServiceWorkerRegistration.tsx'), 'utf8');
+    const serviceWorkerSource = readFileSync(resolve(process.cwd(), 'public/sw.js'), 'utf8');
+    const manifest = JSON.parse(readFileSync(resolve(process.cwd(), 'public/manifest.webmanifest'), 'utf8')) as {
+      name?: string;
+      start_url?: string;
+      scope?: string;
+      display?: string;
+      icons?: Array<{ src?: string; sizes?: string; purpose?: string }>;
+    };
+
+    expect(layoutSource).toContain("manifest: '/manifest.webmanifest'");
+    expect(layoutSource).toContain('<ServiceWorkerRegistration />');
+    expect(registrationSource).toContain("navigator.serviceWorker.register('/sw.js')");
+    expect(registrationSource).toContain("process.env.NODE_ENV !== 'production'");
+    expect(manifest.name).toBe('Skate Robot');
+    expect(manifest.start_url).toBe('/');
+    expect(manifest.scope).toBe('/');
+    expect(manifest.display).toBe('standalone');
+    expect(manifest.icons?.some((icon) => icon.sizes === '512x512')).toBe(true);
+    expect(manifest.icons?.some((icon) => icon.purpose === 'maskable')).toBe(true);
+    expect(serviceWorkerSource).toContain("request.mode === 'navigate'");
+    expect(serviceWorkerSource).toContain("url.pathname.startsWith('/api/')");
+    expect(serviceWorkerSource).toContain("url.pathname.startsWith('/_next/static/')");
+    expect(serviceWorkerSource).toContain('cacheDiscoveredShellAssets');
+    expect(serviceWorkerSource).toContain("return (await cache.match('/')) || Response.error()");
+  });
+
   it('does not depend on game or domain packages directly', () => {
     const packageJson = JSON.parse(readFileSync(mobilePath('package.json'), 'utf8')) as {
       dependencies?: Record<string, string>;

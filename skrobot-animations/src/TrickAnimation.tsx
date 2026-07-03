@@ -213,12 +213,16 @@ const SceneSunset: Scene = (px) => (
   </>
 );
 
+// Silhouettes overshoot the ground by a few px so they merge into the street
+// line instead of floating on a hairline gap.
+const GROUND_SINK = 4;
+
 const SceneSkyline: Scene = (px) => (
   <g fill="currentColor" opacity="0.12">
     {[-80, -10, 60, 150, 220, 300, 380, 470, 560].map((bx, i) => {
       const h = 36 + ((i * 41) % 64);
       const w = 34 + ((i * 17) % 24);
-      return <rect key={i} x={bx + px} y={GROUND - h} width={w} height={h} />;
+      return <rect key={i} x={bx + px} y={GROUND - h} width={w} height={h + GROUND_SINK} />;
     })}
   </g>
 );
@@ -226,23 +230,60 @@ const SceneSkyline: Scene = (px) => (
 const ScenePark: Scene = (px) => (
   <g fill="currentColor" opacity="0.1">
     {/* quarter-pipe on the right */}
-    <path d={`M ${430 + px} ${GROUND} L ${430 + px} ${GROUND - 60} Q ${430 + px} ${GROUND - 100} ${490 + px} ${GROUND - 100} L ${490 + px} ${GROUND} Z`} />
+    <path d={`M ${430 + px} ${GROUND + GROUND_SINK} L ${430 + px} ${GROUND - 60} Q ${430 + px} ${GROUND - 100} ${490 + px} ${GROUND - 100} L ${490 + px} ${GROUND + GROUND_SINK} Z`} />
     {/* flat rail on the left */}
     <rect x={50 + px} y={GROUND - 22} width="78" height="5" opacity="0.5" />
-    <rect x={54 + px} y={GROUND - 17} width="4" height="17" opacity="0.5" />
-    <rect x={120 + px} y={GROUND - 17} width="4" height="17" opacity="0.5" />
+    <rect x={54 + px} y={GROUND - 17} width="4" height={17 + GROUND_SINK} opacity="0.5" />
+    <rect x={120 + px} y={GROUND - 17} width="4" height={17 + GROUND_SINK} opacity="0.5" />
   </g>
 );
 
+const PALM_LAYOUT = [
+  { cx: 60, h: 84, lean: 3, fScale: 1 },
+  { cx: 280, h: 96, lean: -4, fScale: 1.1 },
+  { cx: 520, h: 76, lean: 5, fScale: 0.92 },
+];
+
+/** A frond blade: starts at the crown (0,0), arcs out to (tipX, tipY), and
+ *  tapers back. The two quadratic control points sit on opposite sides of the
+ *  blade axis, giving the leaf thickness in the middle. */
+const frondBlade = (tipX: number, tipY: number, width: number): string => {
+  const len = Math.hypot(tipX, tipY) || 1;
+  const nx = -tipY / len;
+  const ny = tipX / len;
+  const c1x = tipX * 0.35 + nx * width;
+  const c1y = tipY * 0.35 + ny * width;
+  const c2x = tipX * 0.65 - nx * width;
+  const c2y = tipY * 0.65 - ny * width;
+  return `M 0 0 Q ${c1x.toFixed(1)} ${c1y.toFixed(1)} ${tipX.toFixed(1)} ${tipY.toFixed(1)} Q ${c2x.toFixed(1)} ${c2y.toFixed(1)} 0 0 Z`;
+};
+
 const ScenePalms: Scene = (px) => (
-  <g fill="currentColor" opacity="0.12">
-    {[60, 280, 520].map((tx, i) => (
-      <g key={i} transform={`translate(${tx + px} ${GROUND})`}>
-        <path d="M -3 0 L -3 -86 L 3 -86 L 3 0 Z" />
-        <path d="M 0 -86 q -30 -6 -44 8 q 26 -12 44 -2 Z" />
-        <path d="M 0 -86 q 30 -6 44 8 q -26 -12 -44 -2 Z" />
-        <path d="M 0 -86 q -22 -20 -6 -40 q -2 24 14 28 Z" />
-        <path d="M 0 -86 q 22 -20 6 -40 q 2 24 -14 28 Z" />
+  <g fill="currentColor" opacity="0.13">
+    {PALM_LAYOUT.map((p, i) => (
+      <g key={i} transform={`translate(${p.cx + px} ${GROUND})`}>
+        {/* Tapered trunk with a slight natural curve, heel at the base */}
+        <path
+          d={`M -4 ${GROUND_SINK}
+              C -4 ${-p.h * 0.3} ${-4 + p.lean * 0.7} ${-p.h * 0.72} ${-3 + p.lean} ${-p.h}
+              L ${3 + p.lean} ${-p.h}
+              C ${4 + p.lean * 0.7} ${-p.h * 0.72} 4 ${-p.h * 0.3} 4 ${GROUND_SINK} Z`}
+        />
+        {/* Collar where fronds meet the trunk */}
+        <ellipse cx={p.lean} cy={-p.h} rx="6" ry="3" opacity="0.7" />
+        {/* Seven fronds fan out from the crown: outer pair droops lowest,
+            mid pair sweeps up, and a near-vertical spear in the center. */}
+        <g transform={`translate(${p.lean} ${-p.h}) scale(${p.fScale})`}>
+          <path d={frondBlade(-38, 22, 6)} />
+          <path d={frondBlade(-30, 2, 6)} />
+          <path d={frondBlade(-22, -22, 5)} />
+          <path d={frondBlade(2, -44, 4)} />
+          <path d={frondBlade(24, -22, 5)} />
+          <path d={frondBlade(34, 2, 6)} />
+          <path d={frondBlade(40, 22, 6)} />
+          {/* Newest unfurled spear in the center */}
+          <rect x="-1" y="-12" width="2" height="14" rx="1" />
+        </g>
       </g>
     ))}
   </g>
@@ -250,8 +291,8 @@ const ScenePalms: Scene = (px) => (
 
 const SceneHills: Scene = (px) => (
   <>
-    <path d={`M -80 ${GROUND} Q ${80 + px} ${GROUND - 70} ${240 + px} ${GROUND} Z`} fill="currentColor" opacity="0.09" />
-    <path d={`M 160 ${GROUND} Q ${320 + px} ${GROUND - 48} ${520 + px} ${GROUND} Z`} fill="currentColor" opacity="0.06" />
+    <path d={`M -80 ${GROUND + GROUND_SINK} L -80 ${GROUND} Q ${80 + px} ${GROUND - 70} ${240 + px} ${GROUND} L ${240 + px} ${GROUND + GROUND_SINK} Z`} fill="currentColor" opacity="0.09" />
+    <path d={`M 160 ${GROUND + GROUND_SINK} L 160 ${GROUND} Q ${320 + px} ${GROUND - 48} ${520 + px} ${GROUND} L ${520 + px} ${GROUND + GROUND_SINK} Z`} fill="currentColor" opacity="0.06" />
   </>
 );
 

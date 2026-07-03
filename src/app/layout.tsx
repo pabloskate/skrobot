@@ -1,9 +1,19 @@
 import type { Metadata, Viewport } from 'next';
+import ServiceWorkerRegistration from './ServiceWorkerRegistration';
 import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Skate Robot',
   description: 'Play S.K.A.T.E. against a robot. You skate for real — the robot rolls the dice.',
+  manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Skate Robot',
+  },
+  formatDetection: {
+    telephone: false,
+  },
   icons: {
     icon: [
       { url: '/favicon.png', sizes: '32x32', type: 'image/png' },
@@ -32,7 +42,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        <ServiceWorkerRegistration />
+        {children}
+      </body>
     </html>
   );
 }

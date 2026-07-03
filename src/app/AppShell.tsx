@@ -13,6 +13,7 @@ import type { Robot } from '@/features/robots';
 import { RobotProfile } from '@/features/robots';
 import type { TrickPool } from '@/features/tricks';
 import { defaultRoutedTrickPool } from '@/features/tricks';
+import { useOnlineStatus } from '@/shared/useOnlineStatus';
 
 // Voice mode pulls in the Live SDK + audio worklets — load it only when entered.
 const VoiceGameScreen = dynamic(() => import('@/features/voice').then((m) => m.VoiceGameScreen), {
@@ -91,6 +92,7 @@ const rootScreen = (): Screen => ({ id: 'home' });
 
 export default function AppShell() {
   const auth = useAuth();
+  const online = useOnlineStatus();
   const [screen, setScreen] = useState<Screen>(rootScreen);
   const [voiceState, setVoiceState] = useState<GameState | undefined>(undefined);
   const betaTabsEnabled = useSyncExternalStore(
@@ -113,6 +115,7 @@ export default function AppShell() {
   };
 
   const enterVoice = (next: Extract<Screen, { id: 'voice' }>, from: Screen) => {
+    if (!online) return;
     if (!auth.loading && auth.user) go(next);
     else go({ id: 'signin', next, from });
   };
@@ -141,13 +144,15 @@ export default function AppShell() {
           {screen.id === 'game' && voiceState && (
             <button
               className="voice-nav-btn"
+              disabled={!online}
               onClick={() =>
                 enterVoice(
                   { id: 'voice', pool: screen.pool, poolLabel: screen.poolLabel, robot: screen.robot, resume: voiceState },
                   screen,
                 )
               }
-              aria-label="Play by voice"
+              aria-label={online ? 'Play by voice' : 'Voice needs internet'}
+              title={online ? 'Play by voice' : 'Voice needs internet'}
             >
               <TbMicrophone aria-hidden />
             </button>
@@ -159,6 +164,7 @@ export default function AppShell() {
           {screen.id === 'home' && (
             <HomeScreen
               onPickRobot={(robot) => go({ id: 'profile', ...defaultRoutedTrickPool(), robot })}
+              voiceEnabled={online}
               onPlayVoice={(robot) =>
                 enterVoice({ id: 'voice', ...defaultRoutedTrickPool(), robot }, { id: 'home' })
               }

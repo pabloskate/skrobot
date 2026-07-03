@@ -8,6 +8,7 @@ import { LETTERS, TrickAnimation, initialGameState } from '@/features/game';
 import type { Robot } from '@/features/robots';
 import { RobotAvatar } from '@/features/robots';
 import type { Trick } from '@/features/tricks';
+import { useOnlineStatus } from '@/shared/useOnlineStatus';
 import { VoiceStartError, type VoiceStartErrorCode } from './api';
 import { VoiceGameController } from './controller';
 import { VoiceSession } from './liveSession';
@@ -50,6 +51,7 @@ function Letters({ count }: { count: number }) {
 }
 
 export default function VoiceGameScreen({ robot, pool, resume, onExit, onScreenMode }: Props) {
+  const online = useOnlineStatus();
   const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState<string | null>(null);
   const [gate, setGate] = useState<VoiceStartErrorCode | null>(null);
@@ -68,6 +70,10 @@ export default function VoiceGameScreen({ robot, pool, resume, onExit, onScreenM
   const start = async () => {
     setError(null);
     setGate(null);
+    if (!online) {
+      setError('Voice mode needs internet. You can keep this game going on screen while offline.');
+      return;
+    }
     // Seed from the current scoreboard state so a carried-over game (or a
     // stopped-and-restarted session) picks up where it left off.
     const controller = new VoiceGameController(robot, pool, game);
@@ -200,7 +206,8 @@ export default function VoiceGameScreen({ robot, pool, resume, onExit, onScreenM
               : "Pop in your earbuds. You'll play the whole game by talking — the toss, your tricks, everything."}
           </p>
           {error && <p className="note">{error}</p>}
-          <button className="btn-primary" onClick={start}>
+          {!online && !error && <p className="note">Voice mode needs internet. Screen mode works offline.</p>}
+          <button className="btn-primary" onClick={start} disabled={!online}>
             🎙 Start voice session
           </button>
           {onScreenMode && (

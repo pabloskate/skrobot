@@ -122,6 +122,11 @@ main {
   transform: scale(0.94);
 }
 
+.voice-nav-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .voice-nav-btn svg {
   width: 22px;
   height: 22px;
@@ -258,6 +263,18 @@ main {
   cursor: pointer;
   transition: transform 0.08s ease, box-shadow 0.15s ease, background 0.15s ease;
   min-width: 220px;
+}
+
+.btn-primary:disabled,
+.btn-danger:disabled,
+.btn-ghost:disabled,
+.btn-hero:disabled,
+.btn-voice:disabled,
+.btn-voice-outline:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+  transform: none;
+  box-shadow: none;
 }
 
 .btn-primary {
@@ -1308,14 +1325,14 @@ main {
 /* ---------- Trick gallery ---------- */
 
 .gallery-screen {
-  max-width: 980px;
-  padding: 56px 32px 128px;
+  max-width: 680px;
+  padding: 24px 16px 104px;
 }
 
 .gallery-screen .filter-bar {
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 18px;
 }
 
 .gallery-screen .search-wrap {
@@ -1324,24 +1341,24 @@ main {
 
 .gallery-screen .search-icon {
   position: absolute;
-  left: 28px;
+  left: 20px;
   top: 50%;
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
   color: #6f6a88;
   transform: translateY(-50%);
   pointer-events: none;
 }
 
 .gallery-screen .search {
-  min-height: 94px;
+  min-height: 60px;
   margin: 0;
-  padding: 0 28px 0 86px;
-  border: 4px solid #ddd8ea;
-  border-radius: 24px;
+  padding: 0 20px 0 58px;
+  border: 3px solid #ddd8ea;
+  border-radius: 18px;
   background: #fff;
   color: var(--ink);
-  font-size: 32px;
+  font-size: 20px;
   font-weight: 500;
   box-shadow: none;
 }
@@ -1357,7 +1374,7 @@ main {
 }
 
 .gallery-screen .tabs {
-  gap: 32px;
+  gap: 12px;
   margin: 0;
   overflow-x: auto;
   scrollbar-width: none;
@@ -1369,10 +1386,10 @@ main {
 
 .gallery-screen .tab {
   min-width: max-content;
-  padding: 8px 24px 18px;
+  padding: 7px 10px 12px;
   color: #70698b;
-  border-bottom-width: 6px;
-  font-size: 30px;
+  border-bottom-width: 4px;
+  font-size: 18px;
   font-weight: 900;
 }
 
@@ -1382,16 +1399,16 @@ main {
 }
 
 .gallery-screen .result-count {
-  margin: 62px 4px 16px;
+  margin: 34px 4px 16px;
   color: #70698b;
-  font-size: 27px;
+  font-size: 17px;
   font-weight: 900;
 }
 
 .gallery-list {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 12px;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -1403,34 +1420,36 @@ main {
 
 .trick-card {
   width: 100%;
-  min-height: 212px;
+  min-height: 132px;
   display: grid;
-  grid-template-columns: minmax(180px, 26%) 1fr;
+  grid-template-columns: 36% 1fr;
   overflow: hidden;
   border: none;
-  border-radius: 30px;
+  border-radius: 18px;
   background: #fff;
   color: var(--ink);
   box-shadow: 0 18px 42px rgba(34, 26, 78, 0.08);
-  cursor: pointer;
   text-align: left;
-}
-
-.trick-card:disabled {
-  cursor: default;
 }
 
 .tc-thumb {
   position: relative;
   display: grid;
-  min-height: 212px;
+  min-height: 132px;
   place-items: center;
+  border: none;
+  padding: 0;
   background: #9978dc;
+  cursor: pointer;
+}
+
+.tc-thumb:disabled {
+  cursor: default;
 }
 
 .tc-play {
-  width: 72px;
-  height: 72px;
+  width: 48px;
+  height: 48px;
   display: grid;
   place-items: center;
   border-radius: 50%;
@@ -1439,8 +1458,8 @@ main {
 }
 
 .tc-play svg {
-  width: 34px;
-  height: 34px;
+  width: 24px;
+  height: 24px;
   transform: translateX(2px);
 }
 
@@ -1458,7 +1477,7 @@ main {
 
 .tc-body {
   min-width: 0;
-  padding: 24px 28px 22px;
+  padding: 16px;
 }
 
 .tc-head {
@@ -1470,15 +1489,15 @@ main {
 
 .tc-name {
   color: #726d8f;
-  font-size: 31px;
+  font-size: 19px;
   font-weight: 950;
   line-height: 1.15;
 }
 
 .tc-desc {
-  margin: 12px 0 0;
+  margin: 8px 0 0;
   color: #9b97ad;
-  font-size: 27px;
+  font-size: 16px;
   font-weight: 500;
   line-height: 1.35;
 }
@@ -1500,8 +1519,8 @@ main {
 }
 
 .trick-card .dot {
-  width: 18px;
-  height: 18px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   background: #e8e6f1;
 }
@@ -1516,84 +1535,231 @@ main {
   box-shadow: var(--shadow);
 }
 
-@media (max-width: 680px) {
-  .gallery-screen {
-    padding: 24px 16px 104px;
+/* ---------- Trick book (personal state over the gallery) ---------- */
+
+.book-ribbon {
+  margin-bottom: 20px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: var(--purple-soft);
+  color: var(--ink);
+}
+
+.book-ribbon-copy {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.book-ribbon-copy strong {
+  font-weight: 900;
+}
+
+.book-nextup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.book-nextup-label {
+  font-size: 13px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--purple-dark);
+}
+
+.book-nextup-chip {
+  border: none;
+  border-radius: 999px;
+  padding: 7px 14px;
+  background: #fff;
+  color: var(--purple-dark);
+  font-size: 15px;
+  font-weight: 800;
+  box-shadow: 0 2px 6px rgba(34, 26, 78, 0.1);
+  cursor: pointer;
+}
+
+.book-chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.book-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.book-chip {
+  min-width: max-content;
+  border: 2px solid #ddd8ea;
+  border-radius: 999px;
+  padding: 7px 14px;
+  background: #fff;
+  color: #70698b;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.book-chip-active {
+  border-color: var(--purple);
+  background: var(--purple);
+  color: #fff;
+}
+
+.trick-card-bagged {
+  box-shadow: 0 18px 42px rgba(34, 26, 78, 0.08), inset 0 0 0 3px rgba(45, 168, 102, 0.25);
+}
+
+.tc-status-row {
+  margin-top: 12px;
+}
+
+.tc-status {
+  display: inline-block;
+  border: 2px solid #ddd8ea;
+  border-radius: 999px;
+  padding: 5px 12px;
+  background: #fff;
+  color: #70698b;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+button.tc-status {
+  cursor: pointer;
+}
+
+.tc-status-learning {
+  border-color: #e8a13c;
+  color: #b06f14;
+  background: #fdf3e3;
+}
+
+.tc-status-claimed {
+  border-color: var(--green);
+  color: var(--green);
+  background: #e7f6ee;
+}
+
+.tc-status-proven {
+  border-color: var(--green);
+  background: var(--green);
+  color: #fff;
+}
+
+@media (min-width: 768px) {
+  .book-ribbon {
+    margin-bottom: 32px;
+    padding: 26px 30px;
+    border-radius: 24px;
   }
 
-  .gallery-screen .filter-bar {
-    gap: 18px;
+  .book-ribbon-copy {
+    font-size: 24px;
   }
 
-  .gallery-screen .search {
-    min-height: 60px;
-    padding-left: 58px;
-    border-width: 3px;
-    border-radius: 18px;
-    font-size: 20px;
-  }
-
-  .gallery-screen .search-icon {
-    left: 20px;
-    width: 24px;
-    height: 24px;
-  }
-
-  .gallery-screen .tabs {
-    gap: 12px;
-  }
-
-  .gallery-screen .tab {
-    padding: 7px 10px 12px;
-    border-bottom-width: 4px;
-    font-size: 18px;
-  }
-
-  .gallery-screen .result-count {
-    margin-top: 34px;
+  .book-nextup-label {
     font-size: 17px;
   }
 
+  .book-nextup-chip,
+  .book-chip {
+    padding: 10px 20px;
+    font-size: 21px;
+  }
+
+  .tc-status {
+    padding: 8px 18px;
+    font-size: 20px;
+  }
+}
+
+@media (min-width: 768px) {
+  .gallery-screen {
+    max-width: 980px;
+    padding: 56px 32px 128px;
+  }
+
+  .gallery-screen .filter-bar {
+    gap: 28px;
+  }
+
+  .gallery-screen .search {
+    min-height: 94px;
+    padding: 0 28px 0 86px;
+    border-width: 4px;
+    border-radius: 24px;
+    font-size: 32px;
+  }
+
+  .gallery-screen .search-icon {
+    left: 28px;
+    width: 32px;
+    height: 32px;
+  }
+
+  .gallery-screen .tabs {
+    gap: 32px;
+  }
+
+  .gallery-screen .tab {
+    padding: 8px 24px 18px;
+    border-bottom-width: 6px;
+    font-size: 30px;
+  }
+
+  .gallery-screen .result-count {
+    margin-top: 62px;
+    font-size: 27px;
+  }
+
   .gallery-list {
-    gap: 12px;
+    gap: 20px;
   }
 
   .trick-card {
-    min-height: 132px;
-    grid-template-columns: 36% 1fr;
-    border-radius: 18px;
+    min-height: 212px;
+    grid-template-columns: minmax(180px, 26%) 1fr;
+    border-radius: 30px;
   }
 
   .tc-thumb {
-    min-height: 132px;
+    min-height: 212px;
   }
 
   .tc-play {
-    width: 48px;
-    height: 48px;
+    width: 72px;
+    height: 72px;
   }
 
   .tc-play svg {
-    width: 24px;
-    height: 24px;
+    width: 34px;
+    height: 34px;
   }
 
   .tc-body {
-    padding: 16px;
+    padding: 24px 28px 22px;
   }
 
   .tc-name {
-    font-size: 19px;
+    font-size: 31px;
   }
 
   .tc-desc {
-    margin-top: 8px;
-    font-size: 16px;
+    margin-top: 12px;
+    font-size: 27px;
   }
 
   .trick-card .dot {
-    width: 10px;
-    height: 10px;
+    width: 18px;
+    height: 18px;
   }
 }
 
@@ -1920,6 +2086,14 @@ main {
 .btn-voice svg {
   width: 17px;
   height: 17px;
+}
+
+.offline-hint {
+  margin: -2px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
 }
 
 .hero-divider {

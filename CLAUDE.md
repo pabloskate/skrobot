@@ -59,12 +59,12 @@ src/
 │   ├── robots/           # Robot UI, roster, and skill model (home exposes flatground robots today)
 │   ├── game/             # On-screen game UI, reducer, RPS, and attempt logic
 │   ├── voice/            # Voice mode: Gemini Live session, tools, audio; server/ = token mint
-│   ├── records/          # Player W/L + game log (localStorage today, D1 candidate)
+│   ├── records/          # Player W/L + game log + trick marks (localStorage today, D1 candidate)
 │   ├── home/             # Landing screen / flatground robot choice
-│   ├── gallery/          # Flatground trick gallery (stance filters, optional video tips)
+│   ├── gallery/          # Flatground trick gallery + player trick book (stance filters, video tips, proven/claimed/learning)
 │   └── dice/             # Standalone random-trick roller
 ├── platform/             # Runtime infrastructure (Cloudflare env, D1 bindings)
-└── shared/               # Primitive domain-neutral helpers only (currently empty)
+└── shared/               # Primitive domain-neutral helpers (online status, etc.)
 ```
 
 Full dependency map and complexity budget: `docs/ARCHITECTURE.md`.

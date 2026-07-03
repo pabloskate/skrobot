@@ -10,6 +10,7 @@ import { computeHero, type HeroState } from './homeHero';
 interface Props {
   onPickRobot: (robot: Robot) => void;
   onPlayVoice: (robot: Robot) => void;
+  voiceEnabled?: boolean;
 }
 
 const INITIAL_HERO = computeHero([], {});
@@ -37,12 +38,12 @@ function subscribeToRecordChanges(onStoreChange: () => void): () => void {
   return () => window.removeEventListener('storage', onStoreChange);
 }
 
-export default function HomeScreen({ onPickRobot, onPlayVoice }: Props) {
+export default function HomeScreen({ onPickRobot, onPlayVoice, voiceEnabled = true }: Props) {
   const hero = useSyncExternalStore(subscribeToRecordChanges, browserHeroSnapshot, serverHeroSnapshot);
 
   return (
     <div className="container">
-      <HeroCard hero={hero} onPickRobot={onPickRobot} onPlayVoice={onPlayVoice} />
+      <HeroCard hero={hero} onPickRobot={onPickRobot} onPlayVoice={onPlayVoice} voiceEnabled={voiceEnabled} />
       <div className="hero-divider">
         <span>or pick your opponent</span>
       </div>
@@ -55,10 +56,12 @@ function HeroCard({
   hero,
   onPickRobot,
   onPlayVoice,
+  voiceEnabled,
 }: {
   hero: HeroState;
   onPickRobot: (robot: Robot) => void;
   onPlayVoice: (robot: Robot) => void;
+  voiceEnabled: boolean;
 }) {
   const { robot } = hero;
 
@@ -96,9 +99,10 @@ function HeroCard({
         <button className="btn-hero" onClick={() => onPickRobot(robot)}>
           Play {robot.name}
         </button>
-        <button className="btn-voice" onClick={() => onPlayVoice(robot)}>
+        <button className="btn-voice" onClick={() => onPlayVoice(robot)} disabled={!voiceEnabled}>
           <TbMicrophone aria-hidden /> Play by voice
         </button>
+        {!voiceEnabled && <p className="offline-hint">Voice needs internet. Screen mode is ready offline.</p>}
       </div>
     </div>
   );
