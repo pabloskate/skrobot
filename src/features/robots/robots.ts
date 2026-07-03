@@ -1,7 +1,7 @@
 import type { Discipline, Stance, Trick } from '@/features/tricks';
 import { stanceLoad, trickDiscipline } from '@/features/tricks';
 
-export type Tier = 'beginner' | 'intermediate' | 'advanced';
+export type Tier = 'beginner' | 'intermediate' | 'advanced' | 'pro';
 
 type OffStance = Exclude<Stance, 'regular'>;
 
@@ -45,13 +45,15 @@ export interface Robot {
 
 /**
  * Default per-stance comfort by tier. Beginners are nearly lost off-stance,
- * advanced robots are close to ambidextrous. Individual robots override this
- * (a switch sorcerer, a nollie specialist) via `stanceComfort`.
+ * advanced robots are comfortable in most stances, and pros are near-ambidextrous.
+ * Individual robots override this (a switch sorcerer, a nollie specialist) via
+ * `stanceComfort`.
  */
 const TIER_STANCE_COMFORT: Record<Tier, Record<OffStance, number>> = {
   beginner: { fakie: 0.4, nollie: 0.15, switch: 0.1 },
   intermediate: { fakie: 0.6, nollie: 0.4, switch: 0.35 },
-  advanced: { fakie: 0.85, nollie: 0.7, switch: 0.65 },
+  advanced: { fakie: 0.75, nollie: 0.55, switch: 0.5 },
+  pro: { fakie: 0.9, nollie: 0.8, switch: 0.75 },
 };
 
 const TIE = ['Tie. Again.', 'Dead heat. Throw once more.', 'One more time.'];
@@ -307,11 +309,11 @@ export const ROBOTS: Robot[] = [
   {
     id: 'jupiter',
     name: 'Jupiter',
-    tier: 'intermediate',
+    tier: 'advanced',
     tagline: 'Spins like a planet',
     summary:
-      'Jupiter loves rotation — bigspins and 360 shuvits orbit out of its feet effortlessly. The more spin a trick has, the happier it gets.',
-    skill: 6,
+      'Jupiter lives and breathes rotation — bigspins, 360 shuvits, and tre-flip combos orbit out of its feet with confidence. The more spin a trick has, the happier it gets.',
+    skill: 6.75,
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     focus: { rotation: 0.2, shuvit: 0.1 },
     favorites: ['Bigspin', '360 Shuvit', 'FS Bigspin', 'Frontside 360 Shuvit'],
@@ -323,11 +325,11 @@ export const ROBOTS: Robot[] = [
       tie: ['Planetary alignment.', 'Spin it again.'],
     },
   },
-  // Advanced
+  // Pro
   {
     id: 'freely',
     name: 'Freely',
-    tier: 'advanced',
+    tier: 'pro',
     tagline: 'Switch sorcerer',
     summary:
       'Freely is fluent in every stance — switch, nollie, fakie, it is all the same. There is no off-foot to exploit here; it skates a flawless mirror of itself.',
@@ -350,7 +352,7 @@ export const ROBOTS: Robot[] = [
     tagline: 'Pop for days',
     summary:
       'Olly has pop for days and uses every inch of it — towering ollies, 180s, and 360s. If it gets off the ground, it is landing it. Just do not ask it to flip the board.',
-    skill: 8,
+    skill: 7.5,
     disciplines: ['roll', 'shuvit', 'rotation'],
     focus: { roll: 0.15, rotation: 0.15 },
     favorites: ['Ollie', 'Frontside 180', 'Backside 180', 'Backside 360', 'Frontside 360'],
@@ -363,9 +365,29 @@ export const ROBOTS: Robot[] = [
     },
   },
   {
+    id: 'hesh',
+    name: 'Hesh',
+    tier: 'advanced',
+    tagline: 'Tre flip gatekeeper',
+    summary:
+      'Hesh sits right at the tre-flip threshold — 360 flips are a coin flip, hardflips are sketchy, and laser flips are still out of reach. The textbook advanced skater: dangerous, but beatable.',
+    skill: 7,
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    focus: { flip: 0.1 },
+    favorites: ['360 Flip', 'Hardflip'],
+    avatar: { body: '#e07a5f', accent: '#3d405b', variant: 0 },
+    rpsTaunts: {
+      countdown: ['Tre flip or die.', 'Gate is open.'],
+      win: ['Hesh sets. Good luck.', 'Gatekeeper goes first.'],
+      lose: ['You got past the gate.', 'Respect. Next time.'],
+      tie: ['Even at the gate.', 'Flip it again.'],
+    },
+  },
+  // Pro
+  {
     id: 'smitty',
     name: 'Smitty',
-    tier: 'advanced',
+    tier: 'pro',
     tagline: 'Smith grind royalty',
     summary:
       'Smitty is grind royalty, ruling the rails with smiths, feebles, and overcrookeds. Bow down — its lock-ins are very nearly flawless.',
@@ -384,7 +406,7 @@ export const ROBOTS: Robot[] = [
   {
     id: 'c360po',
     name: 'C360PO',
-    tier: 'advanced',
+    tier: 'pro',
     tagline: 'Fluent in 360s',
     summary:
       'C360PO computes rotation like a machine — tre flips, laser flips, and every big-spinning variant in between. Calculated, precise, and very hard to copy.',
@@ -403,7 +425,7 @@ export const ROBOTS: Robot[] = [
   {
     id: 'drone',
     name: 'Drone',
-    tier: 'advanced',
+    tier: 'pro',
     tagline: 'Cold, calculated, consistent',
     summary:
       'Drone has no favorites and no flair — just cold, relentless consistency across the entire trick list. It will not dazzle you; it will simply never miss.',
@@ -421,7 +443,7 @@ export const ROBOTS: Robot[] = [
   {
     id: 'tre',
     name: 'Tre',
-    tier: 'advanced',
+    tier: 'pro',
     tagline: 'Tre flips on demand',
     summary:
       'Tre throws 360 flips like they are ollies and only gets fancier from there. Elite-level flip tech — matching its sets is a very tall order.',
@@ -451,6 +473,7 @@ export const TIERS: { tier: Tier; label: string }[] = [
   { tier: 'beginner', label: 'Beginner' },
   { tier: 'intermediate', label: 'Intermediate' },
   { tier: 'advanced', label: 'Advanced' },
+  { tier: 'pro', label: 'Pro' },
 ];
 
 /** Deterministic per-robot-per-trick jitter in [0,1) so every bag feels hand-tuned. */

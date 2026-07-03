@@ -184,3 +184,58 @@ describe('Tier-locked tricks: late shuvits are intermediate-and-up only', () => 
     }
   });
 });
+
+describe('Tier skill bands do not overlap', () => {
+  const maxSkill = (tier: string) =>
+    Math.max(...ROBOTS.filter((r) => r.tier === tier).map((r) => r.skill));
+  const minSkill = (tier: string) =>
+    Math.min(...ROBOTS.filter((r) => r.tier === tier).map((r) => r.skill));
+
+  it('beginner max is below intermediate min', () => {
+    expect(maxSkill('beginner')).toBeLessThan(minSkill('intermediate'));
+  });
+
+  it('intermediate max is below advanced min', () => {
+    expect(maxSkill('intermediate')).toBeLessThan(minSkill('advanced'));
+  });
+
+  it('advanced max is below pro min', () => {
+    expect(maxSkill('advanced')).toBeLessThan(minSkill('pro'));
+  });
+
+  it('pro tier exists and has at least one robot', () => {
+    expect(ROBOTS.filter((r) => r.tier === 'pro').length).toBeGreaterThan(0);
+  });
+});
+
+describe('Advanced vs pro consistency gap on tre flip', () => {
+  const treFlip = TRICK_BY_ID.get('regular-360-flip')!;
+
+  it('advanced bots land tre flips as a coin flip at best (<= 0.8)', () => {
+    for (const robot of ROBOTS.filter((r) => r.tier === 'advanced')) {
+      const c = robotConsistency(robot, treFlip);
+      if (c !== null) {
+        expect(c, `${robot.name} (advanced) tre flip consistency too high`).toBeLessThanOrEqual(0.8);
+      }
+    }
+  });
+
+  it('the best pro tre-flip consistency exceeds the best advanced tre-flip consistency', () => {
+    const proConsistencies = ROBOTS.filter((r) => r.tier === 'pro')
+      .map((r) => robotConsistency(r, treFlip))
+      .filter((c): c is number => c !== null);
+    const advConsistencies = ROBOTS.filter((r) => r.tier === 'advanced')
+      .map((r) => robotConsistency(r, treFlip))
+      .filter((c): c is number => c !== null);
+    expect(Math.max(...proConsistencies)).toBeGreaterThan(Math.max(...advConsistencies));
+  });
+
+  it('flip-focused pro bots (C360PO, Tre) land tre flips at >= 0.8', () => {
+    for (const id of ['c360po', 'tre']) {
+      const robot = ROBOTS.find((r) => r.id === id)!;
+      const c = robotConsistency(robot, treFlip);
+      expect(c, `${robot.name} should have the tre flip`).not.toBeNull();
+      expect(c!, `${robot.name} tre flip consistency too low`).toBeGreaterThanOrEqual(0.8);
+    }
+  });
+});

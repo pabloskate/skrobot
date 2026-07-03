@@ -14,7 +14,8 @@ export interface VoiceSnapshot {
 const TIER_VIBE: Record<Robot['tier'], string> = {
   beginner: 'You are a scrappy underdog robot — enthusiastic, a little wobbly, endearing.',
   intermediate: 'You are a solid park-rat robot — relaxed, playful banter, respects good tricks.',
-  advanced: 'You are an elite robot — confident bordering on cocky, but gives real respect when the player lands something heavy.',
+  advanced: 'You are a seasoned park killer — tre flips on tap, confident but not arrogant. You respect solid tech when you see it.',
+  pro: 'You are an elite robot — confident bordering on cocky, but gives real respect when the player lands something heavy.',
 };
 
 export function buildSystemInstruction(robot: Robot, poolNames: string[], snapshot: VoiceSnapshot): string {

@@ -490,6 +490,11 @@ main {
   color: var(--danger);
 }
 
+.tier-pro {
+  background: rgba(123, 108, 246, 0.18);
+  color: #7b6cf6;
+}
+
 .profile-tagline {
   margin: 0;
   font-size: 16px;
@@ -1656,68 +1661,68 @@ button.tc-status {
 
 @media (min-width: 768px) {
   .book-ribbon {
-    margin-bottom: 32px;
-    padding: 26px 30px;
-    border-radius: 24px;
+    margin-bottom: 24px;
+    padding: 18px 22px;
+    border-radius: 20px;
   }
 
   .book-ribbon-copy {
-    font-size: 24px;
+    font-size: 17px;
   }
 
   .book-nextup-label {
-    font-size: 17px;
+    font-size: 13px;
   }
 
   .book-nextup-chip,
   .book-chip {
-    padding: 10px 20px;
-    font-size: 21px;
+    padding: 8px 16px;
+    font-size: 15px;
   }
 
   .tc-status {
-    padding: 8px 18px;
-    font-size: 20px;
+    padding: 6px 14px;
+    font-size: 14px;
   }
 }
 
 @media (min-width: 768px) {
   .gallery-screen {
     max-width: 980px;
-    padding: 56px 32px 128px;
+    padding: 40px 32px 128px;
   }
 
   .gallery-screen .filter-bar {
-    gap: 28px;
+    gap: 20px;
   }
 
   .gallery-screen .search {
-    min-height: 94px;
-    padding: 0 28px 0 86px;
-    border-width: 4px;
-    border-radius: 24px;
-    font-size: 32px;
+    min-height: 64px;
+    padding: 0 22px 0 62px;
+    border-width: 3px;
+    border-radius: 20px;
+    font-size: 20px;
   }
 
   .gallery-screen .search-icon {
-    left: 28px;
-    width: 32px;
-    height: 32px;
+    left: 22px;
+    width: 24px;
+    height: 24px;
   }
 
   .gallery-screen .tabs {
-    gap: 32px;
+    gap: 16px;
   }
 
   .gallery-screen .tab {
-    padding: 8px 24px 18px;
-    border-bottom-width: 6px;
-    font-size: 30px;
+    padding: 8px 12px 12px;
+    border-bottom-width: 4px;
+    font-size: 18px;
   }
 
   .gallery-screen .result-count {
-    margin-top: 62px;
-    font-size: 27px;
+    margin-top: 36px;
+    font-size: 17px;
   }
 
   .gallery-list {
@@ -1725,41 +1730,41 @@ button.tc-status {
   }
 
   .trick-card {
-    min-height: 212px;
+    min-height: 156px;
     grid-template-columns: minmax(180px, 26%) 1fr;
-    border-radius: 30px;
+    border-radius: 20px;
   }
 
   .tc-thumb {
-    min-height: 212px;
+    min-height: 156px;
   }
 
   .tc-play {
-    width: 72px;
-    height: 72px;
+    width: 54px;
+    height: 54px;
   }
 
   .tc-play svg {
-    width: 34px;
-    height: 34px;
+    width: 26px;
+    height: 26px;
   }
 
   .tc-body {
-    padding: 24px 28px 22px;
+    padding: 18px 22px 20px;
   }
 
   .tc-name {
-    font-size: 31px;
+    font-size: 21px;
   }
 
   .tc-desc {
-    margin-top: 12px;
-    font-size: 27px;
+    margin-top: 10px;
+    font-size: 16px;
   }
 
   .trick-card .dot {
-    width: 18px;
-    height: 18px;
+    width: 11px;
+    height: 11px;
   }
 }
 
