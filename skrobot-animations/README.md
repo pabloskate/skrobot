@@ -4,11 +4,12 @@ A standalone, interactive dev environment for the Skrobot animation assets.
 
 ## What's inside
 
-- `TrickAnimation` — side-view SVG animation of a robot attempting a skate trick.
+- `TrickAnimation` — side-view SVG animation of a robot attempting a skate trick, imported from `@skrobot/animations`.
+- `TrickAnimation3D` — perspective SVG renderer sharing the same animation model.
 - `SlowMotionTrickAnimation` — a ready-made slow-motion version of `TrickAnimation`.
 - `BACKGROUND_SCENE_OPTIONS` / `FALL_VARIANT_OPTIONS` — named scene and bail presets for reproducible demos.
-- `RobotAvatar` — parameterized robot avatar SVG.
-- `rpsFeedback` — sound + vibration helpers for RPS.
+- `RobotAvatar` — parameterized robot avatar SVG from the shared animation package.
+- `rpsFeedback` — sound + vibration helpers for RPS from the shared animation package.
 - A Vite-powered playground UI for iterating on animations.
 
 ## Get started
@@ -52,13 +53,11 @@ npm run check
 
 ## Notes
 
-- This package is an **intentional clone** of the animation code in the main app
-  (`src/features/game/TrickAnimation.tsx`, `src/features/robots/RobotAvatar.tsx`,
-  `src/features/game/rpsFeedback.ts`).
-- It does not import from the main app, so animation ideas can be iterated on
-  independently.
-- Changes here are **not** automatically synced back to the main app. When an
-  animation change is meant to ship, port the selected change back to the matching
-  `src/features/*` file in the same PR and run the root check.
+- Reusable animation code lives in `../packages/animations` and is consumed by
+  both this playground and the production web app.
+- This package does not import from the main app, so animation ideas can be
+  iterated on without touching feature code.
+- Playground-only changes stay here. Animation behavior changes should land in
+  `packages/animations` so the game and playground remain in lockstep.
 - Do not commit `dist/` output unless there is an explicit reason to publish a
   static demo artifact.

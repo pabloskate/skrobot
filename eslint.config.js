@@ -110,6 +110,30 @@ export default defineConfig([
     },
   },
 
+  // Shared animation package is reusable UI/animation source. It must stay free
+  // of app/feature/platform imports so both the game and playground can consume it.
+  {
+    files: ['packages/animations/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': restrictedImports({
+        group: ['@/*', 'src', 'src/**', '../src/**', '../../src/**', 'skrobot-animations', 'skrobot-animations/**', '../skrobot-animations/**'],
+        message: 'Shared animations must not import app, feature, platform, or playground code. Pass structural data in instead.',
+      }),
+    },
+  },
+
+  // The playground is a preview shell. Reusable behavior belongs in the shared
+  // package, and production feature code stays out of the playground.
+  {
+    files: ['skrobot-animations/src/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': restrictedImports({
+        group: ['@/*', 'src', 'src/**', '../src/**', '../../src/**'],
+        message: 'The animation playground must not import the web app src tree. Use @skrobot/animations for shared animation behavior.',
+      }),
+    },
+  },
+
   // Sanctioned exception (rule 1): API routes are the one place allowed to reach
   // into a feature's server-only code, which is deliberately kept out of barrels.
   {

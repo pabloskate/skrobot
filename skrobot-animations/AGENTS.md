@@ -1,7 +1,8 @@
 # Skrobot Animation Playground
 
 Standalone Vite playground for iterating on robot/avatar/trick animations.
-This package is intentionally isolated from the web app.
+Reusable animation behavior lives in `../packages/animations`; this package owns
+preview controls, fixture data, and the demo shell.
 
 ## Commands
 
@@ -20,9 +21,9 @@ npm run typecheck:animations
 
 ## Rules
 
-- Treat `src/` in this package as a sandbox clone, not the production web app.
-- Production animation changes must be ported back to the matching files under
-  `/src/features/*` before they affect the game.
+- Treat `src/` in this package as playground-only UI and fixtures.
+- Production animation changes belong in `../packages/animations`, which is
+  consumed by both the web game and this playground.
 - Do not import from the web app's `src/` tree.
 - Do not commit generated `dist/` output unless a review explicitly needs a
   static demo artifact.

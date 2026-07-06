@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "workspaces": [
+    "packages/animations",
     "apps/mobile"
   ],
   "scripts": {
@@ -13,7 +14,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "typecheck:mobile": "npm --workspace mobile run typecheck",
-    "typecheck:animations": "npm --prefix skrobot-animations run typecheck",
+    "typecheck:animations": "npm --workspace @skrobot/animations run typecheck && npm --prefix skrobot-animations run typecheck",
     "check": "npm run lint && npm test && npm run typecheck:mobile && npm run typecheck:animations && npm run build",
     "mobile:start": "npm --workspace mobile run start",
     "mobile:ios": "npm --workspace mobile run ios",

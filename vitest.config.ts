@@ -11,6 +11,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
+      '@skrobot/animations': fileURLToPath(new URL('./packages/animations/src/index.ts', import.meta.url)),
     },
   },
 })

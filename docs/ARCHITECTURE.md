@@ -27,7 +27,8 @@ If the answer is unclear, tighten the feature boundary before adding more code.
 | Runtime infrastructure | `src/platform/server/` | Cloudflare env and bindings, D1, future logging/HTTP adapters. |
 | Shared primitives | `src/shared/` | Reserved for domain-neutral primitives only, such as online status. |
 | Expo companion app | `apps/mobile/` | Native WebView shell that loads the same web app; no alternate game implementation. |
-| Animation playground | `skrobot-animations/` | Standalone Vite package with cloned UI animation code; sync manually by design. |
+| Shared animations | `packages/animations/` | Reusable robot/avatar/trick animation components, physics model, and browser feedback helpers. |
+| Animation playground | `skrobot-animations/` | Standalone Vite playground for animation iteration; consumes `@skrobot/animations` and owns only preview controls/fixtures. |
 
 ## Dependency Map
 
@@ -38,16 +39,17 @@ route is importing server-only feature code. This map is enforced by
 | Feature | May depend on | Must not depend on |
 |---|---|---|
 | `apps/mobile` | React Native/Expo, WebView, linking helpers | `src/*`, Cloudflare platform, web feature internals, game/domain packages |
-| `skrobot-animations` | package-local files only | `src/*`; changes do not sync automatically |
+| `packages/animations` | React, package-local files | `src/*`, `skrobot-animations/*`, app/platform code |
+| `skrobot-animations` | package-local files, `@skrobot/animations` | `src/*`; reusable animation behavior belongs in `packages/animations` |
 | `auth` | `platform/server` from server files | Gameplay, screens, other features |
 | `billing` | `platform/server` from server files | Auth UI, gameplay, screens, other features |
 | `tricks` | none | Other features |
 | `gallery` | `tricks`, `records`, `robots` | Other features |
 | `records` | none | Other features |
-| `robots` | `tricks`, `records` | Screens, game, voice, auth, billing |
+| `robots` | `tricks`, `records`, `@skrobot/animations` | Screens, game, voice, auth, billing |
 | `home` | `robots`, `records` | Game/voice flow internals; non-flatground roster setup |
 | `dice` | `tricks` | Robot/game/record/auth concerns |
-| `game` | `tricks`, `robots`, `records` | Voice, home, dice, auth, billing |
+| `game` | `tricks`, `robots`, `records`, `@skrobot/animations` | Voice, home, dice, auth, billing |
 | `voice` | `game`, `tricks`, `robots`, `records`, `auth`, `billing` | Home and dice screens |
 | `platform/server` | platform-local modules only | Features, app UI, domain logic |
 | `shared` | shared-local modules only | Features, app, platform, domain logic |

@@ -1,0 +1,99 @@
+/* Sidecar for the 3D renderer only. The 3D stage is a purpose-built mini
+   skate spot; it deliberately does not reuse the 2D background scenes. */
+
+.trick-anim.trick-anim--3d {
+  --anim-ink: #25354b;
+  --spot-sky: #eef5f8;
+  --spot-wall: #d9e4eb;
+  --spot-floor: #c4d0d8;
+  --spot-edge: rgba(37, 53, 75, 0.2);
+  --spot-shadow: rgba(37, 53, 75, 0.22);
+  isolation: isolate;
+  overflow: hidden;
+  border: 1px solid rgba(37, 53, 75, 0.14);
+  border-radius: 14px;
+  background:
+    radial-gradient(ellipse at 48% 60%, rgba(255, 255, 255, 0.42) 0 17%, transparent 48%),
+    linear-gradient(180deg, var(--spot-sky) 0%, #f6f9fa 55%, #dce7ed 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -24px 42px rgba(37, 53, 75, 0.08),
+    0 14px 30px rgba(37, 53, 75, 0.1);
+}
+
+.trick-anim--3d::before,
+.trick-anim--3d::after {
+  pointer-events: none;
+}
+
+.trick-anim--3d::before {
+  inset: 0;
+  top: 0;
+  z-index: 0;
+  display: block;
+  height: auto;
+  border-radius: inherit;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.2), transparent 58%);
+  opacity: 0.62;
+}
+
+.trick-anim--3d::after {
+  display: none;
+}
+
+.trick-anim-3d__back-wall {
+  fill: color-mix(in srgb, var(--spot-wall) 88%, white);
+}
+
+.trick-anim-3d__floor-plane {
+  fill: var(--spot-floor);
+}
+
+.trick-anim-3d__back-edge {
+  fill: none;
+  stroke: var(--spot-edge);
+  stroke-linecap: round;
+  stroke-width: 1.35;
+}
+
+.trick-anim-3d__deck-shadow {
+  fill: var(--spot-shadow);
+}
+
+.trick-anim--3d svg {
+  filter: drop-shadow(0 7px 6px rgba(37, 53, 75, 0.09));
+}
+
+.trick-anim--3d[role='button']:focus-visible {
+  outline-color: rgba(25, 128, 246, 0.62);
+}
+
+@media (hover: hover) {
+  .trick-anim--3d[role='button']:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.9),
+      inset 0 -24px 42px rgba(37, 53, 75, 0.08),
+      0 16px 34px rgba(37, 53, 75, 0.13);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trick-anim--3d,
+  .trick-anim--3d svg {
+    transition: none;
+    filter: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .trick-anim--3d {
+    border: 1px solid CanvasText;
+    background: Canvas;
+    box-shadow: none;
+  }
+
+  .trick-anim--3d::before,
+  .trick-anim--3d::after {
+    display: none;
+  }
+}

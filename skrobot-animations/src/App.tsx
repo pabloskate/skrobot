@@ -1,14 +1,16 @@
 import { useMemo, useState } from 'react';
-import TrickAnimation, {
+import {
   BACKGROUND_SCENE_OPTIONS,
   FALL_VARIANT_OPTIONS,
+  RobotAvatar,
   SLOW_MOTION_PLAYBACK_RATE,
+  TrickAnimation,
+  TrickAnimation3D,
   type BackgroundSceneId,
   type FallVariant,
-} from './TrickAnimation';
-import RobotAvatar from './RobotAvatar';
+} from '@skrobot/animations';
 import { ROBOTS, robotById, tricksForStance } from './data';
-import type { Stance } from './types';
+import type { Stance } from '@skrobot/animations';
 import styles from './Playground.module.css';
 
 const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
@@ -18,6 +20,13 @@ const PLAYBACK_OPTIONS = [
 ] as const;
 
 type PlaybackMode = (typeof PLAYBACK_OPTIONS)[number]['id'];
+
+const VIEW_OPTIONS = [
+  { id: 'side', label: 'Side (2D)' },
+  { id: '3d', label: '3D' },
+] as const;
+
+type ViewMode = (typeof VIEW_OPTIONS)[number]['id'];
 
 async function writeClipboardText(text: string): Promise<boolean> {
   if (navigator.clipboard?.writeText) {
@@ -54,6 +63,7 @@ export default function App() {
   const [playKey, setPlayKey] = useState(0);
   const [paused, setPaused] = useState(false);
   const [playbackMode, setPlaybackMode] = useState<PlaybackMode>('normal');
+  const [viewMode, setViewMode] = useState<ViewMode>('side');
   const [backgroundSceneId, setBackgroundSceneId] = useState<BackgroundSceneId>(BACKGROUND_SCENE_OPTIONS[0].id);
   const [fallVariant, setFallVariant] = useState<FallVariant>(FALL_VARIANT_OPTIONS[0].id);
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
@@ -73,6 +83,7 @@ export default function App() {
     currentTrick?.id ?? selectedBase,
     landed === null ? 'idle' : landed ? 'landed' : 'bailed',
     playbackMode,
+    viewMode,
     backgroundSceneId,
     fallVariant,
   ].join(':');
@@ -88,6 +99,7 @@ export default function App() {
       outcome: landed === null ? 'not-started' : landed ? 'landed' : 'bailed',
       playbackMode,
       playbackRate,
+      view: viewMode,
       backgroundSceneId,
       fallVariant,
     }),
@@ -102,6 +114,7 @@ export default function App() {
       robot.name,
       selectedBase,
       selectedStance,
+      viewMode,
     ]
   );
   const paramsText = useMemo(() => JSON.stringify(animationParams, null, 2), [animationParams]);
@@ -195,6 +208,22 @@ export default function App() {
         </div>
 
         <div>
+          <h2 className={styles.sectionTitle}>View</h2>
+          <div className={styles.speedRow}>
+            {VIEW_OPTIONS.map((option) => (
+              <button
+                key={option.id}
+                className={`${styles.speedBtn} ${viewMode === option.id ? styles.speedBtnActive : ''}`}
+                onClick={() => setViewMode(option.id)}
+                aria-pressed={viewMode === option.id}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
           <h2 className={styles.sectionTitle}>Playback</h2>
           <div className={styles.speedRow}>
             {PLAYBACK_OPTIONS.map((option) => (
@@ -253,17 +282,31 @@ export default function App() {
               <strong>{currentTrick?.name ?? selectedBase}</strong> —{' '}
               {landed ? 'Landed' : 'Bailed'}
             </p>
-            <TrickAnimation
-              key={animationKey}
-              robot={robot}
-              trick={currentTrick ?? { id: 'kickflip-regular', name: 'Kickflip', base: 'Kickflip', stance: 'regular' }}
-              landed={landed}
-              playbackRate={playbackRate}
-              backgroundSceneId={backgroundSceneId}
-              fallVariant={fallVariant}
-              paused={paused}
-              onDone={() => {}}
-            />
+            {viewMode === '3d' ? (
+              <TrickAnimation3D
+                key={animationKey}
+                robot={robot}
+                trick={currentTrick ?? { id: 'kickflip-regular', name: 'Kickflip', base: 'Kickflip', stance: 'regular' }}
+                landed={landed}
+                playbackRate={playbackRate}
+                backgroundSceneId={backgroundSceneId}
+                fallVariant={fallVariant}
+                paused={paused}
+                onDone={() => {}}
+              />
+            ) : (
+              <TrickAnimation
+                key={animationKey}
+                robot={robot}
+                trick={currentTrick ?? { id: 'kickflip-regular', name: 'Kickflip', base: 'Kickflip', stance: 'regular' }}
+                landed={landed}
+                playbackRate={playbackRate}
+                backgroundSceneId={backgroundSceneId}
+                fallVariant={fallVariant}
+                paused={paused}
+                onDone={() => {}}
+              />
+            )}
           </>
         )}
 

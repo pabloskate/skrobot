@@ -1,4 +1,4 @@
-import type { Robot, Stance, Trick } from './types';
+import type { Robot, Stance, Trick } from '@skrobot/animations';
 
 export const ROBOTS: Robot[] = [
   { id: 'shifty', name: 'Shifty', avatar: { body: '#7ec8e3', accent: '#e05c7a', variant: 0 } },

@@ -25,6 +25,12 @@
       }
     ],
     "paths": {
+      "@skrobot/animations": [
+        "./packages/animations/src/index.ts"
+      ],
+      "@skrobot/animations/*": [
+        "./packages/animations/src/*"
+      ],
       "@/*": [
         "./src/*"
       ]

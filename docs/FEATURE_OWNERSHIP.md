@@ -6,7 +6,8 @@ update it when a feature, route, data source, or ownership boundary changes.
 | Area | Kind | Owns | Public surface | Routes / APIs | Data and I/O | Verification |
 |---|---|---|---|---|---|---|
 | `apps/mobile` | Expo app | Native parity shell for the web app | `apps/mobile/App.tsx`, `apps/mobile/linking.ts` | native deep links only | WebView loads the same web app; no direct game/domain imports | `npm run typecheck:mobile`, native parity checklist |
-| `skrobot-animations` | standalone playground | Animation iteration for robot/avatar/trick visuals | package-local exports and demo | Vite dev server only | Cloned UI animation code; manual sync to web app | `npm run typecheck:animations` |
+| `packages/animations` | workspace package | Shared robot/avatar/trick animation components, animation timing/physics, and browser feedback helpers | `@skrobot/animations` | none | Structural `Robot`/`Trick` inputs from feature-owned data | `npm run typecheck:animations` |
+| `skrobot-animations` | standalone playground | Animation iteration controls, local fixture data, and Vite preview shell | package-local demo plus `@skrobot/animations` re-exports | Vite dev server only | Imports shared animation source; no production behavior clone | `npm run typecheck:animations` |
 | `app` | route shell | URLs, layout, one-page screen state | `src/app/*` | `/`, `/api/*` | Delegates to features and platform | `npm run lint` |
 | `auth` | full-stack feature | Magic-link sign-in, client auth state, sessions, voice quota | `@/features/auth`, `features/auth/api.ts`, `features/auth/server/*` | `/api/auth/*`, `/api/me` | D1 via platform, Cloudflare Email via platform env | `npm run lint`, auth route smoke test |
 | `billing` | server-backed feature | Beta quota screen and dormant Stripe billing | `@/features/billing`, `features/billing/server/*` | `/api/billing/*` | Stripe API, D1 via platform | `npm run build`, billing enablement checklist |

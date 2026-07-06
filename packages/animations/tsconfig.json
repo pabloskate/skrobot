@@ -14,11 +14,7 @@
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true,
-    "paths": {
-      "@skrobot/animations": ["../packages/animations/src/index.ts"],
-      "@skrobot/animations/*": ["../packages/animations/src/*"]
-    }
+    "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", "../packages/animations/src"]
+  "include": ["src"]
 }

@@ -12,8 +12,8 @@ Live API) for playing with earbuds at the skatepark.
 - Backend: **Cloudflare D1** via the `DB` binding for auth/session/quota data.
   Gameplay records still persist in localStorage until `features/records` is ported.
 - Workspaces: `apps/mobile` is an Expo native shell that loads the production web
-  app in a WebView for one-to-one parity. `skrobot-animations` is a standalone
-  animation playground, not a workspace.
+  app in a WebView for one-to-one parity. `packages/animations` is the shared
+  animation source consumed by the web app and the standalone playground.
 
 ## Commands
 
@@ -24,7 +24,7 @@ Live API) for playing with earbuds at the skatepark.
 | `npm test` | Vitest unit tests — the behavioral check for the rules engine, RPS, and trick resolver |
 | `npm run lint` | ESLint (flat config) — also enforces the architecture import boundaries below |
 | `npm run typecheck:mobile` | Typecheck the Expo companion app |
-| `npm run typecheck:animations` | Typecheck the standalone animation playground |
+| `npm run typecheck:animations` | Typecheck the shared animation package and standalone playground |
 | `npm run check` | Full local confidence pass: lint boundaries, tests, package typechecks, then production build |
 | `npm run mobile:start` | Start the Expo native shell from the repo root |
 | `npm run mobile:ios` | Start the Expo native shell on iOS simulator/device |
@@ -42,7 +42,9 @@ Secrets: `GEMINI_API_KEY` lives in `.env.local` (next dev), `.dev.vars` (preview
 ```
 apps/
 └── mobile/              # Expo WebView shell; no alternate game implementation
-skrobot-animations/      # Standalone playground; cloned animation code, manually synced
+packages/
+└── animations/          # Shared robot/avatar/trick animation source
+skrobot-animations/      # Standalone playground; imports packages/animations
 src/
 ├── app/                  # Routes ONLY — thin shells, no domain logic
 │   ├── page.tsx          #   / → renders AppShell
@@ -107,6 +109,9 @@ break one and `npm run lint` fails with a message pointing back here.
   doc comment. Add a row to the tree above and to the dependency map in
   `docs/ARCHITECTURE.md` and `docs/FEATURE_OWNERSHIP.md`, then update
   `eslint.config.js` to enforce it.
+- **Animation changes:** edit reusable robot/avatar/trick animation code in
+  `packages/animations`; keep playground-only controls and fixture data in
+  `skrobot-animations`.
 - **Rules/catalog/robot/voice resolver changes:** edit the owning feature under
   `src/features/*` and update tests that exercise the behavior through the web
   feature API.

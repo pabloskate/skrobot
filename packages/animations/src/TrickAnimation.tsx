@@ -43,6 +43,8 @@ interface Spec {
   bodyYaw: number;
   /** In-plane end-over-end degrees (impossible). */
   roll: number;
+  /** Dolphin/forward flip: front foot drives the nose down through a forward pitch. */
+  forwardFlip: boolean;
   /** Nollie pops the nose, so the feet mirror (front foot pops, back foot flicks). */
   nollie: boolean;
   /** Direction of travel: fakie rides backwards (-1). */
@@ -62,6 +64,7 @@ function specFor(trick: Trick): Spec {
     yaw: 0,
     bodyYaw: 0,
     roll: 0,
+    forwardFlip: false,
     nollie: trick.stance === 'nollie',
     dir: trick.stance === 'fakie' ? -1 : 1,
     stance: trick.stance,
@@ -78,15 +81,18 @@ function specFor(trick: Trick): Spec {
     case 'Double Heelflip':
       return { ...base, flips: 2, flipDir: -1 };
     case 'Varial Kickflip':
-    case 'Hardflip':
-    case 'Dolphin Flip':
     case 'Hospital Flip':
     case 'Casper Flip':
       return { ...base, flips: 1, yaw: 180, flipDir: 1, spinDir: 1 };
-    case 'Varial Heelflip':
-    case 'Inward Heelflip':
+    case 'Hardflip':
+      return { ...base, flips: 1, yaw: 180, flipDir: 1, spinDir: -1 };
+    case 'Dolphin Flip':
+      return { ...base, flips: 1, yaw: 180, flipDir: 1, spinDir: 1, forwardFlip: true };
     case 'Pressure Flip':
+    case 'Varial Heelflip':
       return { ...base, flips: 1, yaw: 180, flipDir: -1, spinDir: -1 };
+    case 'Inward Heelflip':
+      return { ...base, flips: 1, yaw: 180, flipDir: -1, spinDir: 1 };
     case '360 Flip':
       return { ...base, flips: 1, yaw: 360, flipDir: 1, spinDir: 1 };
     case 'Laser Flip':
@@ -153,6 +159,7 @@ const LIFT = 65; // hip height above the board
 const FOOT_Y = 65; // feet below the hip
 const THIGH = 35;
 const SHIN = 35;
+const KNEE_BEND_SCALE = 0.82;
 // Extra sky above the viewBox so the taller pop doesn't clip the skater's head.
 const SKY_PAD = 64;
 
@@ -329,6 +336,12 @@ interface Frame {
   t: number;
   board: { x: number; y: number; rot: number; sx: number; sy: number; griptape: boolean };
   body: { x: number; y: number; sx: number; rot: number };
+  /** Raw signed rotation angles (deg). The 2D renderer keeps using the baked
+   *  sx/sy squash factors; a renderer that can rotate for real (3D) uses
+   *  these instead. flipDeg = around the board's long axis, yawDeg = board
+   *  around the vertical axis, forwardPitchDeg = Dolphin/Forward-flip nose
+   *  dive, bodyYawDeg = skater around the vertical axis. */
+  spin3d: { flipDeg: number; yawDeg: number; forwardPitchDeg: number; bodyYawDeg: number };
   footL: Pt;
   footR: Pt;
   armFront: number;
@@ -440,6 +453,10 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
   let armFront = Math.sin(t * 3) * 0.3;
   let armBack = Math.sin(t * 3 + Math.PI) * 0.3;
   let falling = false;
+  let flipDeg = 0;
+  let yawDeg = 0;
+  let forwardPitchDeg = 0;
+  let bodyYawDeg = 0;
 
   const popAngle = spec.nollie ? 60 : -60;
 
@@ -519,11 +536,21 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
       sx = spec.flips ? 0.2 + 0.8 * Math.abs(c) : signedSquash(c);
     }
     if (spec.bodyYaw) bodySX = signedSquash(Math.cos(rad(catchP * spec.bodyYaw * shankBodyScale)));
-    // Impossible: one continuous ease-in curve — pop angle tapers off,
-    // roll picks up smoothly, no wobble or direction reversal.
+    // Raw angles for the 3D renderer — same clocks (spinP/catchP) as the
+    // squash factors above, so late tricks and shanks carry over for free.
+    flipDeg = spec.flipDir * spinP * spec.flips * 360 * shankFlipScale;
+    yawDeg = (spec.spinDir || 1) * spinP * spec.yaw * shankYawScale;
+    forwardPitchDeg = spec.forwardFlip ? spec.dir * spinP * 180 * shankYawScale : 0;
+    bodyYawDeg = (spec.spinDir || 1) * catchP * spec.bodyYaw * shankBodyScale;
+    // Impossible: the pop and the wrap are ONE continuous motion — the board
+    // launches off the pop and immediately starts rolling, with no flat
+    // pause between them. The roll runs on a linear clock starting at t=0
+    // (overlapping the pop taper) so the wrap reads from the very first
+    // frame of flight. At p=0 the board sits at popAngle; by p=0.85 the
+    // pop taper has fully decayed and the roll has completed a clean 360.
     if (spec.roll) {
       boardRot = popAngle * (1 - Math.pow(Math.min(1, p / 0.3), 2));
-      boardRot += spec.roll * Math.pow(catchP, 2.2) * shankRollScale;
+      boardRot += spec.roll * Math.min(1, p / 0.85) * shankRollScale;
     } else if (spec.late) {
       // Late tricks: board stays flat after the pop (no wobble). Shuvits
       // add a scoop dip as the back foot whips the tail around mid-flight;
@@ -620,8 +647,8 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
     // Compress on the catch, then ride away. After a 180/bigspin the skater
     // stays turned around (rides away switch).
     const complexity = (spec.flips * 0.5) + (spec.yaw / 180 * 0.3) + (spec.roll ? 0.5 : 0);
-    const stanceLoad = (spec.stance === 'switch' || spec.stance === 'nollie') ? 1.4 : 1;
-    const landingCompression = (20 + (complexity * 10)) * stanceLoad;
+    const stanceLoad = (spec.stance === 'switch' || spec.stance === 'nollie') ? 1.2 : 1;
+    const landingCompression = (12 + (complexity * 6)) * stanceLoad;
     
     const p = clamp01((t - ROLL_IN - FLIP_T) / LAND_T);
     // Seed from the flight-end tuck (~30) so the knees stay bent through the
@@ -635,7 +662,22 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
     } else {
       bodyYOffset = RIDE_AWAY_OFFSET + Math.sin(t * 12) * 2;
     }
+    // Narrow stance during compression so the back knee doesn't protrude
+    // below the board, then smoothly widen back to the ride-away stance across
+    // the settle phase so the foot doesn't jump at p=0.55.
+    const narrowR = spec.nollie ? 18 : 10;
+    const narrowL = spec.nollie ? -8 : -15;
+    const wideR = spec.nollie ? 25 : 12;
+    const wideL = spec.nollie ? -10 : -25;
+    const wideBlend = p < 0.55 ? 0 : easeInOutCubic((p - 0.55) / 0.45);
+    footR = { x: narrowR + (wideR - narrowR) * wideBlend, y: FOOT_Y - bodyYOffset - 4 };
+    footL = { x: narrowL + (wideL - narrowL) * wideBlend, y: FOOT_Y - bodyYOffset - 4 };
     bodySX = Math.sign(Math.cos(rad(spec.bodyYaw))) || 1;
+    // Trick complete: hold the final rotations (rides away turned after 180s).
+    flipDeg = spec.flipDir * spec.flips * 360;
+    yawDeg = (spec.spinDir || 1) * spec.yaw;
+    forwardPitchDeg = spec.forwardFlip ? spec.dir * 180 : 0;
+    bodyYawDeg = (spec.spinDir || 1) * spec.bodyYaw;
     
     // Arms come down to balance on landing
     const landP = p < 0.55 ? Math.sin((p / 0.55) * Math.PI) : 0;
@@ -830,6 +872,7 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
       boardRot = (spec.roll ? spec.roll * SHANK_ROLL : 35) * settleRot;
       const shankSy = spec.flips ? Math.cos(rad(spec.flips * 360 * SHANK_FLIP)) : 1;
       sy = shankSy * settleRot + 1 * (1 - settleRot); // flip→flat
+      flipDeg = spec.flipDir * spec.flips * 360 * SHANK_FLIP * settleRot;
       // sx and bodySX stay at 1 — no yaw squash since the spin never happened
 
       const slow = 1 - Math.exp(-2.8 * u);
@@ -888,6 +931,7 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
     t,
     board: { x: boardX, y: boardY, rot: boardRot, sx, sy, griptape: sy >= 0 },
     body: { x: bodyX, y: bodyY, sx: bodySX, rot: bodyRot },
+    spin3d: { flipDeg, yawDeg, forwardPitchDeg, bodyYawDeg },
     footL,
     footR,
     armFront,
@@ -895,6 +939,33 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
     streetDist,
   };
 }
+
+// Shared internals for the 3D renderer (TrickAnimation3D): same physics and
+// stage constants, different projection.
+export {
+  specFor,
+  computeFrame,
+  knee,
+  darken,
+  SCENE_RENDERERS,
+  randomFallVariant,
+  randomBackgroundSceneId,
+  W,
+  H,
+  GROUND,
+  X0,
+  SKY_PAD,
+  FOOT_Y,
+  JUMP,
+  ROLL_IN,
+  FLIP_T,
+  LAND_T,
+  FALL_T,
+  HOLD,
+  STREET_DASH_PERIOD,
+  STREET_DASH_SECONDS,
+};
+export type { Frame, Spec, Pt };
 
 /** Two-bone IK: knee position for a hip-to-foot leg.
  *  Always returns the solution where the knee protrudes toward the front
@@ -913,7 +984,12 @@ function knee(foot: Pt): Pt {
   const baseAngle = Math.atan2(fy, fx);
   const k1 = { x: THIGH * Math.cos(baseAngle - angleB), y: THIGH * Math.sin(baseAngle - angleB) };
   const k2 = { x: THIGH * Math.cos(baseAngle + angleB), y: THIGH * Math.sin(baseAngle + angleB) };
-  return k1.x >= k2.x ? k1 : k2;
+  const bent = k1.x >= k2.x ? k1 : k2;
+  const straight = { x: fx / 2, y: fy / 2 };
+  return {
+    x: straight.x + (bent.x - straight.x) * KNEE_BEND_SCALE,
+    y: straight.y + (bent.y - straight.y) * KNEE_BEND_SCALE,
+  };
 }
 
 // ---------- Component ----------
@@ -933,7 +1009,18 @@ export default function TrickAnimation({
   // the random pool when it does. undefined (playground) keeps the full pool.
   const forcedFall = !landed && knewIt === false ? 'shank' as FallVariant : undefined;
   const [randomizedFallVariant] = useState<FallVariant>(() => randomFallVariant(knewIt));
-  const [spec] = useState(() => specFor(trick));
+  // Switch in 2D needs the same physical treatment as fakie/nollie rather
+  // than a pure scaleX mirror: reverse the street movement (dir=-1) and pop
+  // the nose (nollie=true) so the pop, spin, and travel all read in the
+  // correct direction. The 2D body.sx/stanceSign shading still distinguishes
+  // switch from fakie visually.
+  const [spec] = useState(() => {
+    const base = specFor(trick);
+    if (trick.stance === 'switch') {
+      return { ...base, dir: -1 as const, nollie: true };
+    }
+    return base;
+  });
   const [randomizedBackgroundSceneId] = useState<BackgroundSceneId>(randomBackgroundSceneId);
   const resolvedFallVariant = forcedFall ?? fallVariant ?? randomizedFallVariant;
   const resolvedBackgroundSceneId = backgroundSceneId ?? randomizedBackgroundSceneId;

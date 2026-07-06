@@ -3,6 +3,7 @@ import { initOpenNextCloudflareForDev } from '@opennextjs/cloudflare';
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: ['127.0.0.1'],
+  transpilePackages: ['@skrobot/animations'],
 };
 
 export default nextConfig;
