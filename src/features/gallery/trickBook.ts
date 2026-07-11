@@ -6,10 +6,11 @@ import type { Trick } from '@/features/tricks';
 /**
  * The player's trick book: the trick catalog overlaid with their personal state.
  * `proven` comes from the game log (landed in a real game — can't be unset from
- * the UI), `claimed`/`learning` are player-set marks. Proven or claimed counts
- * as "in the bag".
+ * the UI) and is the only way into the bag. `learning` is a player-set mark for
+ * tricks they're working on — it feeds "next up" suggestions but doesn't count
+ * as bagged.
  */
-export type BookState = 'proven' | 'claimed' | 'learning' | 'none';
+export type BookState = 'proven' | 'learning' | 'none';
 
 export interface BookEntry {
   state: BookState;
@@ -34,7 +35,7 @@ export function buildTrickBook(
 }
 
 export function inBag(entry: BookEntry | undefined): boolean {
-  return entry?.state === 'proven' || entry?.state === 'claimed';
+  return entry?.state === 'proven';
 }
 
 /**

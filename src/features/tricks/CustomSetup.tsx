@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import type { Trick } from './tricks';
-import { TRICKS } from './tricks';
+import { TRICKS, trickMatchesSearch } from './tricks';
 
 interface Props {
   onDone: (pool: Trick[]) => void;
@@ -24,9 +24,9 @@ export default function CustomSetup({ onDone }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState('');
 
-  const q = query.trim().toLowerCase();
+  const q = query.trim();
   const matches = useMemo(
-    () => (q ? TRICKS.filter((t) => t.name.toLowerCase().includes(q)) : null),
+    () => (q ? TRICKS.filter((t) => trickMatchesSearch(t, q)) : null),
     [q],
   );
 

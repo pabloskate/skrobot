@@ -1,9 +1,10 @@
 import type { GameAction, GameState, Rps } from '@/features/game';
 import {
-  LETTERS,
+  createInitialGameState,
   chooseRobotTrick,
+  clearSavedGame,
   gameReducer,
-  initialGameState,
+  lettersForFormat,
   robotThrow,
   rollAttempt,
   rpsOutcome,
@@ -17,6 +18,8 @@ import { resolveTrick } from './trickResolver';
 
 export interface Snapshot {
   phase: GameState['phase'];
+  gameFormat: GameState['gameFormat'];
+  gameLetters: string;
   playerLetters: string;
   robotLetters: string;
   trickToCopy: string | null;
@@ -34,10 +37,11 @@ export interface RobotEvents {
   robotSet?: { trick: string | null; result: 'landed' | 'fell' | 'out_of_tricks' };
 }
 
-const spell = (n: number) => (n === 0 ? 'no letters' : LETTERS.slice(0, n).join('-'));
+const spell = (state: GameState, n: number) =>
+  n === 0 ? 'no letters' : lettersForFormat(state.gameFormat).slice(0, n).join('-');
 
 export class VoiceGameController {
-  state: GameState = initialGameState;
+  state: GameState = createInitialGameState();
   readonly robot: Robot;
   readonly pool: Trick[];
   private bag: Map<string, number>;
@@ -63,6 +67,7 @@ export class VoiceGameController {
     this.state = gameReducer(this.state, a);
     if (this.state.phase === 'over' && this.state.winner && !this.recorded) {
       this.recorded = true;
+      clearSavedGame();
       const won = this.state.winner === 'player';
       recordResult(this.robot.id, won);
       appendGameLog({
@@ -82,8 +87,10 @@ export class VoiceGameController {
     const s = this.state;
     return {
       phase: s.phase,
-      playerLetters: spell(s.letters.player),
-      robotLetters: spell(s.letters.robot),
+      gameFormat: s.gameFormat,
+      gameLetters: lettersForFormat(s.gameFormat).join('-'),
+      playerLetters: spell(s, s.letters.player),
+      robotLetters: spell(s, s.letters.robot),
       trickToCopy: s.phase === 'playerCopy' ? (s.current?.name ?? null) : null,
       copyAttemptsLeft: s.phase === 'playerCopy' ? s.attemptsLeft : 0,
       usedTricks: s.used.map((id) => TRICK_BY_ID.get(id)?.name ?? id),
@@ -105,7 +112,7 @@ export class VoiceGameController {
       case 'rps_throw':
         return 'Ask the player for their rock-paper-scissors throw.';
       case 'player_sets_next_trick':
-        return "It is the PLAYER's turn to set: ask what trick they are going for, then wait for them to report how it went.";
+        return "It is the PLAYER's turn to set. They may announce a trick before trying it, or report a completed result directly (for example, 'I landed a kickflip'). Do not require an announcement; prompt them to skate and report what happened.";
       case 'player_copies_trick':
         return `The player must now copy ${this.state.current!.name}${
           this.state.attemptsLeft === 2 ? ' — they get TWO tries (last-letter defense)' : ''
@@ -116,7 +123,7 @@ export class VoiceGameController {
   }
 
   private letterScore(): string {
-    return `Letters now: you (the robot) have ${spell(this.state.letters.robot)}, the player has ${spell(this.state.letters.player)}.`;
+    return `Letters now: you (the robot) have ${spell(this.state, this.state.letters.robot)}, the player has ${spell(this.state, this.state.letters.player)}.`;
   }
 
   /** Compose the `summary` ground-truth narration string for a tool response. */
@@ -310,7 +317,7 @@ export class VoiceGameController {
   }
 
   rematch() {
-    this.state = initialGameState;
+    this.state = createInitialGameState(this.state.gameFormat);
     this.prevState = null;
     this.recorded = false;
     this.tricksLanded = [];

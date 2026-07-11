@@ -41,7 +41,7 @@ The native shell must load the same web app states defined by `AppShell`:
 - `game`
 - `voice`
 - `gallery`
-- `account`
+- `settings`
 - `signin`
 - `upgrade`
 
@@ -103,14 +103,15 @@ Native WebView requests must hit the same first-party API surface as web:
    - Billing endpoints remain disabled/enabled according to the same server flags as web.
 
 9. Trick gallery
-   - With `?beta=true`, the bottom nav bar appears with S.K.A.T.E., Tricks, and Account tabs.
+   - With `?beta=true`, the bottom nav bar appears with the selected game format, Tricks, and Settings tabs.
    - Gallery shows flatground trick cards with difficulty dots, stance filters, and search.
    - Stance chips filter the list.
    - Tapping a trick with a curated video opens the video modal; tricks without tips are disabled.
 
-10. Account
-    - Account tab shows sign-in prompt when signed out.
-    - Signed-in account shows email and voice quota bar.
+10. Settings
+    - Settings is available without authentication and persists the S.K.A.T.E./SK8 preference locally.
+    - The account section shows a sign-in prompt when signed out.
+    - Signed-in account controls show email and voice quota bar.
     - Sign-out clears the session.
 
 11. Shell behavior

@@ -32,24 +32,23 @@ describe('buildTrickBook', () => {
     expect(book.get('regular-kickflip')?.proven?.count).toBe(1);
   });
 
-  it('applies claimed and learning marks by trick id', () => {
+  it('applies learning marks by trick id', () => {
     const marks: Record<string, TrickMark> = {
-      'regular-ollie': 'claimed',
+      'regular-ollie': 'learning',
       'regular-heelflip': 'learning',
     };
     const book = buildTrickBook(FLAT, marks, {});
-    expect(book.get('regular-ollie')?.state).toBe('claimed');
+    expect(book.get('regular-ollie')?.state).toBe('learning');
     expect(book.get('regular-heelflip')?.state).toBe('learning');
   });
 
-  it('counts proven and claimed as in the bag, learning as not', () => {
+  it('counts only proven as in the bag, learning as not', () => {
     const marks: Record<string, TrickMark> = {
-      'regular-ollie': 'claimed',
-      'regular-heelflip': 'learning',
+      'regular-ollie': 'learning',
     };
-    const book = buildTrickBook(FLAT, marks, proven(['Kickflip']));
+    const book = buildTrickBook(FLAT, marks, proven(['Kickflip', 'Ollie']));
     expect(inBag(book.get('regular-kickflip'))).toBe(true);
-    expect(inBag(book.get('regular-ollie'))).toBe(true);
+    expect(inBag(book.get('regular-ollie'))).toBe(true); // proven, not the learning mark
     expect(inBag(book.get('regular-heelflip'))).toBe(false);
     expect(inBag(book.get('regular-pop-shuvit'))).toBe(false);
   });
@@ -57,18 +56,12 @@ describe('buildTrickBook', () => {
 
 describe('bagSkill', () => {
   it('is null until the bag has 3 tricks', () => {
-    const book = buildTrickBook(FLAT, { 'regular-ollie': 'claimed', 'regular-kickflip': 'claimed' }, {});
+    const book = buildTrickBook(FLAT, {}, proven(['Ollie', 'Kickflip']));
     expect(bagSkill(FLAT, book)).toBeNull();
   });
 
   it('is the mean difficulty of the 3 hardest tricks in the bag', () => {
-    const marks: Record<string, TrickMark> = {
-      'regular-ollie': 'claimed', // 1
-      'regular-pop-shuvit': 'claimed', // 2
-      'regular-kickflip': 'claimed', // 3
-      'regular-heelflip': 'claimed', // 4
-    };
-    const book = buildTrickBook(FLAT, marks, {});
+    const book = buildTrickBook(FLAT, {}, proven(['Ollie', 'Pop Shuvit', 'Kickflip', 'Heelflip']));
     // top 3: heelflip 4, kickflip 3, pop shuvit 2
     expect(bagSkill(FLAT, book)).toBe(3);
   });
@@ -76,24 +69,13 @@ describe('bagSkill', () => {
   it('is a frontier: a pile of easy tricks does not outrank hard ones', () => {
     const easy = buildTrickBook(
       FLAT,
-      {
-        'regular-ollie': 'claimed',
-        'fakie-ollie': 'claimed',
-        'regular-pop-shuvit': 'claimed',
-        'regular-frontside-shuvit': 'claimed',
-        'regular-frontside-180': 'claimed',
-        'regular-backside-180': 'claimed',
-      },
       {},
+      proven(['Ollie', 'Fakie Ollie', 'Pop Shuvit', 'Frontside Shuvit', 'Frontside 180', 'Backside 180']),
     );
     const hard = buildTrickBook(
       FLAT,
-      {
-        'regular-kickflip': 'claimed',
-        'regular-heelflip': 'claimed',
-        'regular-360-flip': 'claimed',
-      },
       {},
+      proven(['Kickflip', 'Heelflip', '360 Flip']),
     );
     expect(bagSkill(FLAT, hard)!).toBeGreaterThan(bagSkill(FLAT, easy)!);
   });
@@ -131,7 +113,7 @@ describe('nextUp', () => {
   });
 
   it('never suggests a trick already in the bag', () => {
-    const book = buildTrickBook(FLAT, { 'regular-ollie': 'claimed' }, {});
+    const book = buildTrickBook(FLAT, {}, proven(['Ollie']));
     for (const t of nextUp(FLAT, book, 10)) expect(t.id).not.toBe('regular-ollie');
   });
 
@@ -141,7 +123,7 @@ describe('nextUp', () => {
   });
 
   it('prefers a new stance of a base already in the bag over easier new tricks', () => {
-    const book = buildTrickBook(FLAT, { 'regular-kickflip': 'claimed' }, {});
+    const book = buildTrickBook(FLAT, {}, proven(['Kickflip']));
     const picks = nextUp(FLAT, book);
     // fakie kickflip (difficulty 4) outranks the easier brand-new frontside 180 (2)
     expect(picks[0].id).toBe('fakie-kickflip');
@@ -152,12 +134,10 @@ describe('nextUp', () => {
 describe('computeBookView', () => {
   it('summarizes counts, skill, ladder spot, and suggestions in one pass', () => {
     const marks: Record<string, TrickMark> = {
-      'regular-ollie': 'claimed',
-      'regular-pop-shuvit': 'claimed',
       'regular-heelflip': 'learning',
     };
-    const view = computeBookView(FLAT, marks, proven(['Kickflip']));
-    expect(view.bagCount).toBe(3); // ollie + pop shuvit + proven kickflip
+    const view = computeBookView(FLAT, marks, proven(['Ollie', 'Pop Shuvit', 'Kickflip']));
+    expect(view.bagCount).toBe(3); // proven: ollie + pop shuvit + kickflip
     expect(view.learningCount).toBe(1);
     expect(view.skill).toBe(2); // (3 + 2 + 1) / 3
     expect(view.spot).not.toBeNull();

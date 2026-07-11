@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { GameLogEntry } from './records';
-import { deriveProvenTricks } from './records';
+import { deriveProvenTricks, getTrickMarks } from './records';
 
 function entry(overrides: Partial<GameLogEntry>): GameLogEntry {
   return {
@@ -14,6 +14,27 @@ function entry(overrides: Partial<GameLogEntry>): GameLogEntry {
     ...overrides,
   };
 }
+
+function installLocalStorage() {
+  const store = new Map<string, string>();
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: {
+      clear: () => store.clear(),
+      getItem: (key: string) => store.get(key) ?? null,
+      removeItem: (key: string) => store.delete(key),
+      setItem: (key: string, value: string) => store.set(key, value),
+    },
+  });
+}
+
+beforeEach(() => {
+  installLocalStorage();
+});
+
+afterEach(() => {
+  localStorage.clear();
+});
 
 describe('deriveProvenTricks', () => {
   it('returns an empty map for an empty log', () => {
@@ -42,5 +63,29 @@ describe('deriveProvenTricks', () => {
   it('counts a trick landed twice in one game twice', () => {
     const proven = deriveProvenTricks([entry({ tricksLanded: ['Kickflip', 'Kickflip'] })]);
     expect(proven['Kickflip'].count).toBe(2);
+  });
+});
+
+describe('getTrickMarks', () => {
+  it('keeps learning marks', () => {
+    localStorage.setItem('skaterobot-trickbook', JSON.stringify({ 'regular-kickflip': 'learning' }));
+    expect(getTrickMarks()).toEqual({ 'regular-kickflip': 'learning' });
+  });
+
+  it('drops legacy claimed marks and rewrites storage', () => {
+    localStorage.setItem(
+      'skaterobot-trickbook',
+      JSON.stringify({ 'regular-ollie': 'claimed', 'regular-kickflip': 'learning' }),
+    );
+
+    expect(getTrickMarks()).toEqual({ 'regular-kickflip': 'learning' });
+    expect(JSON.parse(localStorage.getItem('skaterobot-trickbook') ?? '{}')).toEqual({
+      'regular-kickflip': 'learning',
+    });
+  });
+
+  it('treats malformed mark storage as empty', () => {
+    localStorage.setItem('skaterobot-trickbook', JSON.stringify(['learning']));
+    expect(getTrickMarks()).toEqual({});
   });
 });

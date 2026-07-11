@@ -1,8 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useKeyboardInset } from '@/shared/useKeyboardInset';
 import type { Stance, Trick } from './tricks';
-import { grade } from './tricks';
+import { grade, trickMatchesSearch } from './tricks';
 
 interface Props {
   title: string;
@@ -33,13 +34,23 @@ function DifficultyDots({ trick }: { trick: Trick }) {
 export default function TrickPicker({ title, pool, usedIds, onPick, onClose }: Props) {
   const [query, setQuery] = useState('');
   const [stance, setStance] = useState<Stance>('regular');
+  const keyboardInset = useKeyboardInset();
 
   const hasStances = useMemo(() => pool.some((t) => t.stance !== 'regular'), [pool]);
 
+  // Keep iOS from panning the page behind the sheet when the keyboard opens.
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, []);
+
   const shown = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = query.trim();
     const list = q
-      ? pool.filter((t) => t.name.toLowerCase().includes(q))
+      ? pool.filter((t) => trickMatchesSearch(t, q))
       : hasStances
         ? pool.filter((t) => t.stance === stance)
         : pool;
@@ -47,8 +58,18 @@ export default function TrickPicker({ title, pool, usedIds, onPick, onClose }: P
   }, [pool, query, stance, hasStances]);
 
   return (
-    <div className="sheet-backdrop" onClick={onClose}>
-      <div className="sheet" role="dialog" aria-label={title} onClick={(e) => e.stopPropagation()}>
+    <div
+      className="sheet-backdrop"
+      style={keyboardInset ? { paddingBottom: keyboardInset } : undefined}
+      onClick={onClose}
+    >
+      <div
+        className="sheet"
+        role="dialog"
+        aria-label={title}
+        style={keyboardInset ? { maxHeight: `min(82vh, calc(100vh - ${keyboardInset + 12}px))` } : undefined}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="sheet-header">
           <h2>{title}</h2>
           <button className="btn-ghost" onClick={onClose}>Cancel</button>
@@ -59,7 +80,6 @@ export default function TrickPicker({ title, pool, usedIds, onPick, onClose }: P
           placeholder="Search all tricks"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          autoFocus
         />
         {hasStances && !query.trim() && (
           <div className="tabs" role="tablist">

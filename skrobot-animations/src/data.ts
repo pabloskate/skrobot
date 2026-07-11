@@ -42,9 +42,10 @@ const FLATGROUND_BASES = [
   'Impossible',
   'Double Heelflip',
   'FS Bigspin Flip',
-  'Bigspin Heelflip',
+  'BS Bigspin Heelflip',
   'FS Bigspin Heelflip',
   'Laser Flip',
+  '360 Double Kickflip',
 ];
 
 const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];

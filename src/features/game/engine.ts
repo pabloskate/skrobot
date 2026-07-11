@@ -14,9 +14,22 @@ export type Stage =
 
 export type Side = 'player' | 'robot';
 
-export const LETTERS = ['S', 'K', 'A', 'T', 'E'] as const;
+export type GameFormat = 'skate' | 'sk8';
+
+export const GAME_LETTERS = {
+  skate: ['S', 'K', 'A', 'T', 'E'],
+  sk8: ['S', 'K', '8'],
+} as const;
+
+/** Letters used by the classic format. Kept as a public alias for existing callers. */
+export const LETTERS = GAME_LETTERS.skate;
+
+export function lettersForFormat(format: GameFormat): readonly string[] {
+  return GAME_LETTERS[format];
+}
 
 export interface GameState {
+  gameFormat: GameFormat;
   phase: Phase;
   stage: Stage;
   letters: Record<Side, number>;
@@ -33,17 +46,22 @@ export interface GameState {
   winner: Side | null;
 }
 
-export const initialGameState: GameState = {
-  phase: 'rps',
-  stage: null,
-  letters: { player: 0, robot: 0 },
-  used: [],
-  current: null,
-  attemptsLeft: 1,
-  robotKnewIt: true,
-  note: '',
-  winner: null,
-};
+export function createInitialGameState(gameFormat: GameFormat = 'skate'): GameState {
+  return {
+    gameFormat,
+    phase: 'rps',
+    stage: null,
+    letters: { player: 0, robot: 0 },
+    used: [],
+    current: null,
+    attemptsLeft: 1,
+    robotKnewIt: true,
+    note: '',
+    winner: null,
+  };
+}
+
+export const initialGameState: GameState = createInitialGameState();
 
 export type GameAction =
   | { type: 'START'; playerFirst: boolean }
@@ -57,7 +75,8 @@ export type GameAction =
   | { type: 'CONTINUE' }
   | { type: 'REMATCH' };
 
-const copyAttempts = (letterCount: number) => (letterCount === LETTERS.length - 1 ? 2 : 1);
+const copyAttempts = (state: GameState, letterCount: number) =>
+  letterCount === lettersForFormat(state.gameFormat).length - 1 ? 2 : 1;
 
 export function gameReducer(s: GameState, a: GameAction): GameState {
   switch (a.type) {
@@ -73,7 +92,7 @@ export function gameReducer(s: GameState, a: GameAction): GameState {
         stage: 'attempting',
         current: a.trick,
         used: [...s.used, a.trick.id],
-        attemptsLeft: copyAttempts(s.letters.robot),
+        attemptsLeft: copyAttempts(s, s.letters.robot),
         note: '',
       };
 
@@ -91,7 +110,7 @@ export function gameReducer(s: GameState, a: GameAction): GameState {
         stage: 'missed',
         robotKnewIt: a.knewIt,
         letters: { ...s.letters, robot: robotLetters },
-        winner: robotLetters >= LETTERS.length ? 'player' : s.winner,
+        winner: robotLetters >= lettersForFormat(s.gameFormat).length ? 'player' : s.winner,
       };
     }
 
@@ -110,10 +129,15 @@ export function gameReducer(s: GameState, a: GameAction): GameState {
 
     case 'PLAYER_COPY_MISSED': {
       if (s.attemptsLeft > 1) {
-        return { ...s, attemptsLeft: s.attemptsLeft - 1, note: 'Last chance — land it or take the E!' };
+        const finalLetter = lettersForFormat(s.gameFormat).at(-1);
+        return {
+          ...s,
+          attemptsLeft: s.attemptsLeft - 1,
+          note: `Last chance — land it or take the ${finalLetter}!`,
+        };
       }
       const playerLetters = s.letters.player + 1;
-      const lost = playerLetters >= LETTERS.length;
+      const lost = playerLetters >= lettersForFormat(s.gameFormat).length;
       return {
         ...s,
         phase: lost ? 'over' : 'robotSet',
@@ -138,8 +162,11 @@ export function gameReducer(s: GameState, a: GameAction): GameState {
             ...s,
             phase: 'playerCopy',
             stage: null,
-            attemptsLeft: copyAttempts(s.letters.player),
-            note: s.letters.player === LETTERS.length - 1 ? 'Defend your last letter — you get two tries!' : '',
+            attemptsLeft: copyAttempts(s, s.letters.player),
+            note:
+              s.letters.player === lettersForFormat(s.gameFormat).length - 1
+                ? 'Defend your last letter — you get two tries!'
+                : '',
           };
         }
         const note = s.stage === 'cant' ? "{R} is out of tricks — you take over!" : "{R} didn't land it — your turn to set!";
@@ -149,7 +176,7 @@ export function gameReducer(s: GameState, a: GameAction): GameState {
     }
 
     case 'REMATCH':
-      return initialGameState;
+      return createInitialGameState(s.gameFormat);
 
     default:
       return s;

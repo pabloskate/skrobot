@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { SignInScreen } from '@/features/auth';
 import { UpgradeScreen } from '@/features/billing';
-import type { GameState } from '@/features/game';
-import { LETTERS, TrickAnimation, initialGameState } from '@/features/game';
+import type { GameFormat, GameState } from '@/features/game';
+import { TrickAnimation, createInitialGameState, lettersForFormat } from '@/features/game';
 import type { Robot } from '@/features/robots';
 import { RobotAvatar } from '@/features/robots';
 import type { Trick } from '@/features/tricks';
@@ -16,11 +16,14 @@ import { VoiceSession } from './liveSession';
 interface Props {
   robot: Robot;
   pool: Trick[];
+  gameFormat: GameFormat;
   /** Game state carried over when the player switches modes mid-game. */
   resume?: GameState;
   onExit: () => void;
   /** Hand the live game state back to the on-screen mode. */
   onScreenMode?: (state: GameState) => void;
+  /** Live game state for the shell's save-on-exit prompt. */
+  onGameState?: (state: GameState) => void;
 }
 
 type Status = 'idle' | 'connecting' | 'live' | 'reconnecting' | 'ended' | 'error';
@@ -38,10 +41,10 @@ interface AttemptAnim {
   landed: boolean;
 }
 
-function Letters({ count }: { count: number }) {
+function Letters({ count, format }: { count: number; format: GameFormat }) {
   return (
     <div className="letters">
-      {LETTERS.map((ch, i) => (
+      {lettersForFormat(format).map((ch, i) => (
         <span key={ch} className={`letter ${i < count ? 'letter-on' : ''}`}>
           {ch}
         </span>
@@ -50,12 +53,12 @@ function Letters({ count }: { count: number }) {
   );
 }
 
-export default function VoiceGameScreen({ robot, pool, resume, onExit, onScreenMode }: Props) {
+export default function VoiceGameScreen({ robot, pool, gameFormat, resume, onExit, onScreenMode, onGameState }: Props) {
   const online = useOnlineStatus();
   const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState<string | null>(null);
   const [gate, setGate] = useState<VoiceStartErrorCode | null>(null);
-  const [game, setGame] = useState<GameState>(resume ?? initialGameState);
+  const [game, setGame] = useState<GameState>(resume ?? createInitialGameState(gameFormat));
   const [captions, setCaptions] = useState<Caption[]>([]);
   const [muted, setMuted] = useState(false);
   const [pocket, setPocket] = useState(false);
@@ -159,14 +162,18 @@ export default function VoiceGameScreen({ robot, pool, resume, onExit, onScreenM
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
   }, [captions]);
 
+  useEffect(() => {
+    onGameState?.(game);
+  }, [game, onGameState]);
+
   if (pocket) {
     return (
       <div className="pocket-overlay" onDoubleClick={togglePocket}>
         <div className="pocket-letters">
           <span>{robot.name}</span>
-          <Letters count={game.letters.robot} />
+          <Letters count={game.letters.robot} format={game.gameFormat} />
           <span>You</span>
-          <Letters count={game.letters.player} />
+          <Letters count={game.letters.player} format={game.gameFormat} />
         </div>
         <p className="pocket-hint">Voice game live — double-tap to wake</p>
       </div>
@@ -187,11 +194,11 @@ export default function VoiceGameScreen({ robot, pool, resume, onExit, onScreenM
         <div className="scoreboard">
           <div className="score-row">
             <span className="score-name">{robot.name}</span>
-            <Letters count={game.letters.robot} />
+            <Letters count={game.letters.robot} format={game.gameFormat} />
           </div>
           <div className="score-row">
             <span className="score-name">You</span>
-            <Letters count={game.letters.player} />
+            <Letters count={game.letters.player} format={game.gameFormat} />
           </div>
         </div>
       )}

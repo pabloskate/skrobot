@@ -28,6 +28,9 @@
       "@skrobot/animations": [
         "./packages/animations/src/index.ts"
       ],
+      "@skrobot/animations/trick-animation-3d.css": [
+        "./packages/animations/src/TrickAnimation3D.css"
+      ],
       "@skrobot/animations/*": [
         "./packages/animations/src/*"
       ],

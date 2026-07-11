@@ -95,6 +95,8 @@ function specFor(trick: Trick): Spec {
       return { ...base, flips: 1, yaw: 180, flipDir: -1, spinDir: 1 };
     case '360 Flip':
       return { ...base, flips: 1, yaw: 360, flipDir: 1, spinDir: 1 };
+    case '360 Double Kickflip':
+      return { ...base, flips: 2, yaw: 360, flipDir: 1, spinDir: 1 };
     case 'Laser Flip':
       return { ...base, flips: 1, yaw: 360, flipDir: -1, spinDir: -1 };
     case 'Pop Shuvit':
@@ -119,6 +121,7 @@ function specFor(trick: Trick): Spec {
       return { ...base, flips: 1, yaw: 360, bodyYaw: 180, flipDir: 1, spinDir: 1 };
     case 'FS Bigspin Flip':
       return { ...base, flips: 1, yaw: 360, bodyYaw: 180, flipDir: 1, spinDir: -1 };
+    case 'BS Bigspin Heelflip':
     case 'Bigspin Heelflip':
       return { ...base, flips: 1, yaw: 360, bodyYaw: 180, flipDir: -1, spinDir: 1 };
     case 'FS Bigspin Heelflip':
@@ -364,8 +367,18 @@ function boardGlued(spec: Spec): boolean {
 function feetForFlip(spec: Spec, p: number, bodyYOffset: number, boardRot: number): Feet {
   const lift = Math.sin(p * Math.PI);
   let feet: Feet;
-  if (spec.flips && spec.yaw) {
-    // Tre-flip style: back-foot scoop, front foot out of the way.
+  if (spec.flips && spec.yaw && !spec.forwardFlip && spec.yaw < 360) {
+    // Varial / hardflip: kickflip-style flick + mild scoop. Dolphin keeps the
+    // tre-style path below (it still has forwardFlip), so we only change
+    // true 180-shuv flip combos here.
+    const scoop = p < 0.35 ? -12 * Math.sin((p / 0.35) * Math.PI) : 0;
+    const flickX = spec.flipDir === -1 ? 10 : -4;
+    feet = {
+      footL: { x: -25 + scoop + lift * flickX * 0.4, y: FOOT_Y - bodyYOffset - 4 - lift * 14 },
+      footR: { x: 22 + lift * 8, y: FOOT_Y - bodyYOffset - 4 - lift * 18 },
+    };
+  } else if (spec.flips && spec.yaw) {
+    // Tre-flip style (and dolphin): back-foot scoop, front foot out of the way.
     const scoop = p < 0.3 ? -20 * Math.sin((p / 0.3) * Math.PI) : 0;
     feet = {
       footL: { x: -25 + scoop, y: FOOT_Y - bodyYOffset - lift * 10 },
@@ -583,8 +596,11 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
     // Add board pitch for kickflips (rocket up) vs heelflips (dive down).
     // Late tricks delay the pitch onto spinP so the board holds flat during
     // the hold phase, then pitches as the flip fires.
+    // Varials stay flatter so the shuv+flip reads instead of a nose-dive;
+    // dolphin/forwardFlip keeps the full pitch (handled in 3D via forwardPitchDeg).
     if (spec.flipDir) {
-      boardRot += spec.flipDir * Math.sin(spinP * Math.PI) * 15;
+      const pitchAmp = spec.yaw && !spec.forwardFlip && spec.yaw < 360 ? 4 : 15;
+      boardRot += spec.flipDir * Math.sin(spinP * Math.PI) * pitchAmp;
     }
     // When the board stays under the feet, keep the hip low so the knees read
     // as tucked mid-air; flips get the full stretch so the feet clear the board.

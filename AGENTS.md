@@ -120,7 +120,7 @@ break one and `npm run lint` fails with a message pointing back here.
 - **New screen in the existing flow:** add a variant to `Screen` in
   `src/app/AppShell.tsx`. Screens are in-memory state by design (trick pools aren't
   URL-serializable); if a screen must be linkable, split it into a real route instead.
-  Top-level tabs (S.K.A.T.E., Tricks, Account) are beta root screens shown only
+  Top-level tabs (the selected game format, Tricks, Settings) are beta root screens shown only
   when the URL has `?beta=true`; sub-screens (profile, game, voice, signin,
   upgrade) show a back button and hide the tab bar.
 - **New API endpoint:** thin route under `src/app/api/`, logic in

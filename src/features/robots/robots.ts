@@ -413,7 +413,7 @@ export const ROBOTS: Robot[] = [
     skill: 8.5,
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     focus: { flip: 0.15, rotation: 0.1 },
-    favorites: ['360 Shuvit', '360 Flip', 'Laser Flip', 'Bigspin Flip', 'Bigspin Heelflip'],
+    favorites: ['360 Shuvit', '360 Flip', 'Laser Flip', 'Bigspin Flip'],
     avatar: { body: '#f4f4f6', accent: '#2b2d42', variant: 0 },
     rpsTaunts: {
       countdown: ['Calculating probability...', 'Rotational analysis...'],

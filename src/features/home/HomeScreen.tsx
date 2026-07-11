@@ -7,47 +7,104 @@ import { RobotAvatar, RobotSelect } from '@/features/robots';
 import type { Robot } from '@/features/robots';
 import { computeHero, type HeroState } from './homeHero';
 
+/** Minimal continue-card payload from AppShell (avoids home→game imports). */
+export interface ContinueMatch {
+  robot: Robot;
+  mode: 'screen' | 'voice';
+  playerLetters: number;
+  robotLetters: number;
+  gameLetters: readonly string[];
+}
+
 interface Props {
   onPickRobot: (robot: Robot) => void;
   onPlayVoice: (robot: Robot) => void;
   voiceEnabled?: boolean;
+  /** In-progress match to resume; when set, replaces the normal hero card. */
+  continueMatch?: ContinueMatch | null;
+  onContinueGame?: () => void;
+  onDiscardContinue?: () => void;
 }
 
-const INITIAL_HERO = computeHero([], {});
-let heroCacheKey = '';
-let heroCache = INITIAL_HERO;
-
-function serverHeroSnapshot(): HeroState {
-  return INITIAL_HERO;
-}
-
-function browserHeroSnapshot(): HeroState {
-  const log = getGameLog();
-  const records = getRecords();
-  const key = JSON.stringify({ log, records });
-  if (key !== heroCacheKey) {
-    heroCacheKey = key;
-    heroCache = computeHero(log, records);
-  }
-  return heroCache;
-}
-
-function subscribeToRecordChanges(onStoreChange: () => void): () => void {
-  if (typeof window === 'undefined') return () => {};
-  window.addEventListener('storage', onStoreChange);
-  return () => window.removeEventListener('storage', onStoreChange);
-}
-
-export default function HomeScreen({ onPickRobot, onPlayVoice, voiceEnabled = true }: Props) {
+export default function HomeScreen({
+  onPickRobot,
+  onPlayVoice,
+  voiceEnabled = true,
+  continueMatch = null,
+  onContinueGame,
+  onDiscardContinue,
+}: Props) {
   const hero = useSyncExternalStore(subscribeToRecordChanges, browserHeroSnapshot, serverHeroSnapshot);
 
   return (
     <div className="container">
-      <HeroCard hero={hero} onPickRobot={onPickRobot} onPlayVoice={onPlayVoice} voiceEnabled={voiceEnabled} />
+      {continueMatch && onContinueGame && onDiscardContinue ? (
+        <ContinueCard
+          match={continueMatch}
+          onContinue={onContinueGame}
+          onDiscard={onDiscardContinue}
+        />
+      ) : (
+        <HeroCard hero={hero} onPickRobot={onPickRobot} onPlayVoice={onPlayVoice} voiceEnabled={voiceEnabled} />
+      )}
       <div className="hero-divider">
         <span>or pick your opponent</span>
       </div>
       <RobotSelect onPick={onPickRobot} />
+    </div>
+  );
+}
+
+function LetterRow({ count, label, letters }: { count: number; label: string; letters: readonly string[] }) {
+  return (
+    <div className="continue-score-row">
+      <span className="continue-score-name">{label}</span>
+      <div className="letters">
+        {letters.map((ch, i) => (
+          <span key={ch} className={`letter ${i < count ? 'letter-on' : ''}`}>
+            {ch}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ContinueCard({
+  match,
+  onContinue,
+  onDiscard,
+}: {
+  match: ContinueMatch;
+  onContinue: () => void;
+  onDiscard: () => void;
+}) {
+  const { robot } = match;
+  return (
+    <div className="hero-card hero-card--continue">
+      <div className="hero-avatar anim-idle">
+        <RobotAvatar robot={robot} size={88} pose="idle" />
+      </div>
+      <div className="hero-copy">
+        <p className="hero-eyebrow">In progress</p>
+        <h2 className="hero-headline">Continue vs {robot.name}?</h2>
+        <p className="hero-subtext">
+          {match.mode === 'voice' ? 'Voice game' : 'On-screen game'} saved mid-match. Pick it back up
+          where you left off.
+        </p>
+      </div>
+      <div className="continue-scoreboard" aria-label="Saved score">
+        <LetterRow label={robot.name} count={match.robotLetters} letters={match.gameLetters} />
+        <LetterRow label="You" count={match.playerLetters} letters={match.gameLetters} />
+      </div>
+      <div className="hero-actions">
+        <button className="btn-hero" onClick={onContinue}>
+          Continue game
+        </button>
+        <button className="btn-ghost" onClick={onDiscard}>
+          Start fresh
+        </button>
+      </div>
     </div>
   );
 }
@@ -106,4 +163,29 @@ function HeroCard({
       </div>
     </div>
   );
+}
+
+const INITIAL_HERO = computeHero([], {});
+let heroCacheKey = '';
+let heroCache = INITIAL_HERO;
+
+function serverHeroSnapshot(): HeroState {
+  return INITIAL_HERO;
+}
+
+function browserHeroSnapshot(): HeroState {
+  const log = getGameLog();
+  const records = getRecords();
+  const key = JSON.stringify({ log, records });
+  if (key !== heroCacheKey) {
+    heroCacheKey = key;
+    heroCache = computeHero(log, records);
+  }
+  return heroCache;
+}
+
+function subscribeToRecordChanges(onStoreChange: () => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+  window.addEventListener('storage', onStoreChange);
+  return () => window.removeEventListener('storage', onStoreChange);
 }

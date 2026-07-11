@@ -1,10 +1,13 @@
-/* Sidecar for the 3D renderer only. The 3D stage is a purpose-built mini
-   skate spot; it deliberately does not reuse the 2D background scenes. */
+/* Sidecar for the 3D renderer only. Mini skate spot under a blue sky with
+   a fixed sun + soft clouds (no randomized 2D scene motifs). */
 
-.trick-anim.trick-anim--3d {
+.trick-anim.trick-anim--3d,
+.attempt-panel .trick-anim.trick-anim--3d {
   --anim-ink: #25354b;
-  --spot-sky: #eef5f8;
-  --spot-wall: #d9e4eb;
+  --spot-sky: #7ec8f0;
+  --spot-sky-mid: #a8daf5;
+  --spot-sky-horizon: #d6eefb;
+  --spot-wall: #8ecff2;
   --spot-floor: #c4d0d8;
   --spot-edge: rgba(37, 53, 75, 0.2);
   --spot-shadow: rgba(37, 53, 75, 0.22);
@@ -12,13 +15,23 @@
   overflow: hidden;
   border: 1px solid rgba(37, 53, 75, 0.14);
   border-radius: 14px;
+  /* Beat attempt-panel's 2D purple/cream gradient on wide layouts. */
   background:
-    radial-gradient(ellipse at 48% 60%, rgba(255, 255, 255, 0.42) 0 17%, transparent 48%),
-    linear-gradient(180deg, var(--spot-sky) 0%, #f6f9fa 55%, #dce7ed 100%);
+    radial-gradient(ellipse at 62% 28%, rgba(255, 220, 150, 0.35) 0 12%, transparent 42%),
+    linear-gradient(180deg, var(--spot-sky) 0%, var(--spot-sky-mid) 48%, var(--spot-sky-horizon) 78%, #dce7ed 100%);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.9),
     inset 0 -24px 42px rgba(37, 53, 75, 0.08),
     0 14px 30px rgba(37, 53, 75, 0.1);
+}
+
+/* attempt-panel is a full-width card header; drop the floating card chrome. */
+.attempt-panel .trick-anim.trick-anim--3d {
+  border: none;
+  border-radius: var(--radius) var(--radius) 0 0;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -24px 42px rgba(37, 53, 75, 0.08);
 }
 
 .trick-anim--3d::before,
@@ -26,23 +39,29 @@
   pointer-events: none;
 }
 
-.trick-anim--3d::before {
+/* Soft sky wash. Higher specificity so attempt-panel's 2D ground-line
+   ::before/::after (street dashes) do not win on the 3D stage. */
+.trick-anim.trick-anim--3d::before,
+.attempt-panel .trick-anim--3d::before {
+  content: '';
+  position: absolute;
   inset: 0;
   top: 0;
+  right: 0;
+  left: 0;
   z-index: 0;
   display: block;
+  width: auto;
   height: auto;
   border-radius: inherit;
   background: linear-gradient(to bottom, rgba(255, 255, 255, 0.2), transparent 58%);
   opacity: 0.62;
 }
 
-.trick-anim--3d::after {
+.trick-anim.trick-anim--3d::after,
+.attempt-panel .trick-anim--3d::after {
+  content: none;
   display: none;
-}
-
-.trick-anim-3d__back-wall {
-  fill: color-mix(in srgb, var(--spot-wall) 88%, white);
 }
 
 .trick-anim-3d__floor-plane {
@@ -53,15 +72,41 @@
   fill: none;
   stroke: var(--spot-edge);
   stroke-linecap: round;
-  stroke-width: 1.35;
+  stroke-width: 1.2;
+  opacity: 0.55;
 }
 
 .trick-anim-3d__deck-shadow {
   fill: var(--spot-shadow);
 }
 
-.trick-anim--3d svg {
-  filter: drop-shadow(0 7px 6px rgba(37, 53, 75, 0.09));
+.trick-anim-3d__street-dash {
+  fill: none;
+  stroke: var(--anim-ink);
+  stroke-linecap: round;
+}
+
+.trick-anim-3d__scenery-sun {
+  fill: #ffd27a;
+  stroke: none;
+}
+
+.trick-anim-3d__cloud {
+  fill: rgba(255, 255, 255, 0.92);
+  stroke: none;
+}
+
+/* Full-bleed stage. The 2D scene caps SVG at 360px and centers it; on wide
+   screens that letterboxed the 3D sky and made drop-shadow look like side
+   panels. 3D draws its own oversized floor, so stretch edge-to-edge. */
+.trick-anim.trick-anim--3d svg,
+.attempt-panel .trick-anim--3d svg,
+.voice-trick .trick-anim--3d svg {
+  width: 100%;
+  max-width: none;
+  height: auto;
+  overflow: hidden;
+  filter: none;
 }
 
 .trick-anim--3d[role='button']:focus-visible {

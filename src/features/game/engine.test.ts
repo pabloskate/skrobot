@@ -4,6 +4,7 @@ import {
   LETTERS,
   type GameState,
   chooseRobotTrick,
+  createInitialGameState,
   gameReducer,
   initialGameState,
   rollAttempt,
@@ -166,6 +167,24 @@ describe('gameReducer — misc', () => {
   it('CONTINUE short-circuits to game over once a winner exists', () => {
     const s = gameReducer({ ...initialGameState, phase: 'robotCopy', winner: 'player' }, { type: 'CONTINUE' })
     expect(s.phase).toBe('over')
+  })
+})
+
+describe('gameReducer — SK8 format', () => {
+  it('ends after the third letter and preserves the format for a rematch', () => {
+    const initial = createInitialGameState('sk8')
+    const copying: GameState = {
+      ...initial,
+      phase: 'playerCopy',
+      current: trick('kickflip'),
+      attemptsLeft: 1,
+      letters: { player: 2, robot: 0 },
+    }
+
+    const finished = gameReducer(copying, { type: 'PLAYER_COPY_MISSED' })
+    expect(finished.phase).toBe('over')
+    expect(finished.letters.player).toBe(3)
+    expect(gameReducer(finished, { type: 'REMATCH' })).toEqual(initial)
   })
 })
 

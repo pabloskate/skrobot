@@ -43,14 +43,31 @@ export function appendGameLog(entry: GameLogEntry): void {
   }
 }
 
-/** Player-declared relationship to a trick: "I can do this" / "I'm learning it". */
-export type TrickMark = 'claimed' | 'learning';
+/** Player-declared relationship to a trick: "I'm learning it". Bag membership is
+ * earned only by landing the trick in a game (see ProvenTrick / deriveProvenTricks). */
+export type TrickMark = 'learning';
 
 const MARKS_KEY = 'skaterobot-trickbook';
 
+function parseTrickMarks(value: unknown): { marks: Record<string, TrickMark>; changed: boolean } {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) return { marks: {}, changed: value != null };
+
+  const marks: Record<string, TrickMark> = {};
+  let changed = false;
+  for (const [trickId, mark] of Object.entries(value)) {
+    if (mark === 'learning') marks[trickId] = mark;
+    else changed = true;
+  }
+  return { marks, changed };
+}
+
 export function getTrickMarks(): Record<string, TrickMark> {
   try {
-    return JSON.parse(localStorage.getItem(MARKS_KEY) ?? '{}');
+    const raw = localStorage.getItem(MARKS_KEY);
+    const parsed = JSON.parse(raw ?? '{}');
+    const { marks, changed } = parseTrickMarks(parsed);
+    if (changed || raw == null) localStorage.setItem(MARKS_KEY, JSON.stringify(marks));
+    return marks;
   } catch {
     return {};
   }

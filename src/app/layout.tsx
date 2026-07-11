@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import ServiceWorkerRegistration from './ServiceWorkerRegistration';
 import './globals.css';
+import '@skrobot/animations/trick-animation-3d.css';
 
 export const metadata: Metadata = {
   title: 'Skate Robot',

@@ -78,14 +78,18 @@ const FLATGROUND: [string, number][] = [
   ['Inward Heelflip', 7],
   ['360 Flip', 7],
   ['Double Kickflip', 7],
+  ['Late Kickflip', 7],
   ['Bigspin Flip', 7],
   ['Dolphin Flip', 7],
   ['Impossible', 8],
   ['Double Heelflip', 8],
   ['FS Bigspin Flip', 8],
-  ['Bigspin Heelflip', 8],
+  // Harder than the display cap of 10 so even pros only scrape a low land rate.
+  ['BS Bigspin Heelflip', 12],
   ['FS Bigspin Heelflip', 8],
   ['Laser Flip', 9],
+  // Same elite tier as BS bigspin heelflip — only a couple pros scrape low odds.
+  ['360 Double Kickflip', 11.5],
 ];
 
 const GRINDS: [string, number][] = [
@@ -165,6 +169,10 @@ const FLATGROUND_FAMILY: Record<string, Family> = {
 const MIN_SKILL: Record<string, number> = {
   'Late Backside Shuvit': 4.5,
   'Late Frontside Shuvit': 4.5,
+  'Late Kickflip': 6,
+  // BS bigspin heelflip is elite tech — high-pro skill only, and still low odds.
+  'BS Bigspin Heelflip': 8.5,
+  '360 Double Kickflip': 8.4,
 };
 
 /** Discipline for each grind/other base (flatground disciplines come from FAMILY). */
@@ -250,6 +258,8 @@ const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
 
 function stanceName(stance: Stance, base: string): string {
   if (stance === 'regular') return base;
+  if (stance === 'fakie' && base === 'Backside 180') return 'Half Cab';
+  if (stance === 'fakie' && base === 'Backside 360') return 'Full Cab';
   if (base === 'Ollie') {
     if (stance === 'nollie') return 'Nollie';
     return `${stance[0].toUpperCase()}${stance.slice(1)} Ollie`;
@@ -286,6 +296,99 @@ function build(): Trick[] {
 export const TRICKS: Trick[] = build();
 
 export const TRICK_BY_ID = new Map(TRICKS.map((t) => [t.id, t]));
+
+/** Canonical common-name aliases shared by typed search and voice resolution. */
+export const TRICK_BASE_ALIASES: Readonly<Partial<Record<string, readonly string[]>>> = {
+  'Frontside 180': ['front 180', 'fs 180'],
+  'Backside 180': ['back 180', 'bs 180'],
+  'Pop Shuvit': ['pop shove it', 'shove it', 'shuv', 'shuvit'],
+  'Frontside Shuvit': ['front shuv', 'front shove it', 'frontside shove it'],
+  'Backside 360': ['back 360', 'bs 360'],
+  'Frontside 360': ['front 360', 'fs 360'],
+  'Backside Flip': ['backside kickflip', 'back flip', 'bs flip', 'bs kickflip'],
+  'Frontside Flip': [
+    'frontside 180 kickflip',
+    'frontside kickflip',
+    'front flip',
+    'fs flip',
+    'fs 180 kickflip',
+    'fs kickflip',
+  ],
+  Bigspin: ['big spin'],
+  'FS Bigspin': ['frontside bigspin', 'frontside big spin', 'front bigspin'],
+  'Varial Kickflip': ['varial flip'],
+  '360 Shuvit': ['360 shove it', '360 shuv'],
+  'Varial Heelflip': ['varial heel'],
+  'Backside Heelflip': ['backside heel', 'back heel', 'bs heel', 'bs heelflip'],
+  'Frontside Heelflip': ['frontside heel', 'front heel', 'fs heel', 'fs heelflip'],
+  'Frontside 360 Shuvit': ['frontside 360 shove it', 'frontside 360 shuv', 'fs 360 shuv'],
+  'Inward Heelflip': ['inward heel'],
+  '360 Flip': ['tre flip', 'treflip', 'tre', 'tray flip', '3 flip'],
+  'Double Kickflip': ['double flip'],
+  'Bigspin Flip': ['big flip', 'bigspin kickflip', 'bigkick'],
+  'Dolphin Flip': ['forward flip'],
+  'Double Heelflip': ['double heel'],
+  'FS Bigspin Flip': ['frontside bigspin flip', 'front bigspin flip', 'fs big flip'],
+  'BS Bigspin Heelflip': ['backside bigspin heelflip', 'bigspin heelflip', 'bigspin heel'],
+  'FS Bigspin Heelflip': ['frontside bigspin heelflip', 'front bigspin heelflip', 'fs bigspin heel'],
+  'Laser Flip': ['laser'],
+  '360 Double Kickflip': ['360 double flip', 'double tre', 'double tre flip', 'tre double'],
+  '50-50 Grind': ['50 50', 'fifty fifty'],
+  Boardslide: ['board slide'],
+  Noseslide: ['nose slide'],
+  '5-0 Grind': ['5 0', 'five o', 'five oh'],
+  'Willy Grind': ['willy', 'lazy grind'],
+  'Crooked Grind': ['crooked', 'crooks', 'k grind'],
+  Tailslide: ['tail slide'],
+  Lipslide: ['lip slide'],
+  'Smith Grind': ['smith'],
+  'Feeble Grind': ['feeble'],
+  Nosegrind: ['nose grind'],
+  'Overcrooked Grind': ['overcrooked', 'over crooks', 'overcrook'],
+  Bluntslide: ['blunt slide'],
+  'Noseblunt Slide': ['nose blunt', 'nose blunt slide'],
+  'Hippie Jump': ['hippy jump'],
+  Powerslide: ['power slide'],
+  Manual: ['manny'],
+  'Nose Manual': ['nose manny'],
+  'No Comply 180': ['no comply'],
+  'Rock n Roll': ['rock and roll'],
+  'Axle Stall': ['fifty stall'],
+  'Blunt to Rock': ['blunt rock'],
+  'Noseblunt Stall': ['nose blunt stall'],
+};
+
+function searchAliases(trick: Trick): string[] {
+  const aliases = [...(TRICK_BASE_ALIASES[trick.base] ?? [])];
+  if (trick.stance === 'fakie' && trick.base === 'Backside 180') {
+    aliases.push('fakie backside 180', 'fakie bs 180', 'half cab', 'half-cab');
+  }
+  if (trick.stance === 'fakie' && trick.base === 'Backside 360') {
+    aliases.push('fakie backside 360', 'fakie bs 360', 'caballerial', 'full cab', 'cab');
+  }
+  if (trick.stance === 'fakie' && trick.base === 'Frontside 180') {
+    aliases.push('frontside half cab', 'fakie frontside 180', 'fakie fs 180');
+  }
+  if (trick.stance === 'fakie' && trick.base === 'Backside Flip') {
+    aliases.push('half cab flip');
+  }
+  if (trick.stance !== 'regular') {
+    const prefix = trick.stance[0].toUpperCase() + trick.stance.slice(1);
+    aliases.push(...aliases.map((alias) => `${prefix} ${alias}`));
+  }
+  return aliases;
+}
+
+const normalizeSearch = (value: string) =>
+  value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+/** Match a trick's display name, base name, or common skateboarding aliases. */
+export function trickMatchesSearch(trick: Trick, query: string): boolean {
+  const normalizedQuery = normalizeSearch(query);
+  if (!normalizedQuery) return true;
+  return [trick.name, trick.base, ...searchAliases(trick)]
+    .some((term) => normalizeSearch(term).includes(normalizedQuery));
+}
 
 export function tricksFor(category: Category): Trick[] {
   return TRICKS.filter((t) => t.category === category);
@@ -339,14 +442,16 @@ const DESCRIPTIONS: Record<string, string> = {
   'Inward Heelflip': 'A heelflip combined with a backside shuvit, spinning in toward you.',
   '360 Flip': 'The tre flip — a 360 shuvit and a kickflip together in one spinning, flipping motion.',
   'Double Kickflip': 'A kickflip flicked hard enough to roll the board over twice before you land.',
+  'Late Kickflip': 'Pop the board and wait, then flick a kickflip late in the air just before the catch.',
   'Bigspin Flip': 'A bigspin with a kickflip mixed in — flipping while spinning a full 360°.',
   'Dolphin Flip': 'A front-foot flip that rolls the board end over end like a leaping dolphin.',
   Impossible: 'Wrap the board vertically around your back foot in a full end-over-end loop.',
   'Double Heelflip': 'A heelflip spun with enough flick to flip the board over twice.',
   'FS Bigspin Flip': 'A frontside bigspin with a kickflip folded in.',
-  'Bigspin Heelflip': 'A bigspin paired with a heelflip instead of a kickflip.',
+  'BS Bigspin Heelflip': 'A backside bigspin paired with a heelflip instead of a kickflip — elite tech.',
   'FS Bigspin Heelflip': 'A frontside bigspin combined with a heelflip.',
   'Laser Flip': 'A 360 shuvit and a heelflip together — the gnarliest spinning flip there is.',
+  '360 Double Kickflip': 'A 360 flip with two full kickflip rotations — pro-level hang-time tech.',
   // Grinds
   '50-50 Grind': 'Grind along an edge on both trucks at once — the first grind everyone learns.',
   Boardslide: 'Slide across an obstacle with the deck centered on it, board perpendicular.',

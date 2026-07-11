@@ -1,7 +1,8 @@
 'use client';
 
 export {
-  TrickAnimation as default,
+  TrickAnimation3D as default,
+  TrickAnimation,
   SlowMotionTrickAnimation,
   BACKGROUND_SCENE_OPTIONS,
   FALL_VARIANT_OPTIONS,

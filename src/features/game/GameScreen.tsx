@@ -7,32 +7,36 @@ import { buildBag, RobotAvatar } from '@/features/robots';
 import type { Trick } from '@/features/tricks';
 import { TRICK_BY_ID, TrickPicker } from '@/features/tricks';
 import {
-  LETTERS,
+  createInitialGameState,
+  lettersForFormat,
   chooseRobotTrick,
   gameReducer,
-  initialGameState,
   rollAttempt,
 } from './engine';
-import type { GameState, Side } from './engine';
+import type { GameFormat, GameState, Side } from './engine';
+import { clearSavedGame } from './savedGame';
 import RpsPanel from './RpsPanel';
 import TrickAnimation from './TrickAnimation';
 
 interface Props {
   robot: Robot;
   pool: Trick[];
+  gameFormat: GameFormat;
   /** Game state carried over when the player switches modes mid-game. */
   resume?: GameState;
   onExit: () => void;
   /** Report when the current game state can be handed to voice mode. */
   onVoiceState?: (state: GameState | undefined) => void;
+  /** Live game state for the shell's save-on-exit prompt. */
+  onGameState?: (state: GameState) => void;
 }
 
 // ---------- Scoreboard ----------
 
-function LetterRow({ count, flash }: { count: number; flash: boolean }) {
+function LetterRow({ count, flash, format }: { count: number; flash: boolean; format: GameFormat }) {
   return (
     <div className="letters">
-      {LETTERS.map((ch, i) => (
+      {lettersForFormat(format).map((ch, i) => (
         <span
           key={ch}
           className={`letter ${i < count ? 'letter-on' : ''} ${flash && i === count - 1 ? 'letter-pop' : ''}`}
@@ -59,11 +63,11 @@ function Scoreboard({ state, robot }: { state: GameState; robot: Robot }) {
     <div className="scoreboard">
       <div className="score-row">
         <span className="score-name">{robot.name}</span>
-        <LetterRow count={state.letters.robot} flash={flash === 'robot'} />
+        <LetterRow count={state.letters.robot} flash={flash === 'robot'} format={state.gameFormat} />
       </div>
       <div className="score-row">
         <span className="score-name">You</span>
-        <LetterRow count={state.letters.player} flash={flash === 'player'} />
+        <LetterRow count={state.letters.player} flash={flash === 'player'} format={state.gameFormat} />
       </div>
     </div>
   );
@@ -71,8 +75,8 @@ function Scoreboard({ state, robot }: { state: GameState; robot: Robot }) {
 
 // ---------- Main screen ----------
 
-export default function GameScreen({ robot, pool, resume, onExit, onVoiceState }: Props) {
-  const [state, dispatch] = useReducer(gameReducer, resume ?? initialGameState);
+export default function GameScreen({ robot, pool, gameFormat, resume, onExit, onVoiceState, onGameState }: Props) {
+  const [state, dispatch] = useReducer(gameReducer, resume ?? createInitialGameState(gameFormat));
   const [pickerOpen, setPickerOpen] = useState(false);
   const bag = useMemo(() => buildBag(robot, pool), [robot, pool]);
   // A resumed finished game was already recorded by the other mode.
@@ -97,6 +101,7 @@ export default function GameScreen({ robot, pool, resume, onExit, onVoiceState }
   useEffect(() => {
     if (state.phase === 'over' && state.winner && !recorded.current) {
       recorded.current = true;
+      clearSavedGame();
       const won = state.winner === 'player';
       recordResult(robot.id, won);
       appendGameLog({
@@ -121,6 +126,10 @@ export default function GameScreen({ robot, pool, resume, onExit, onVoiceState }
   useEffect(() => {
     onVoiceState?.(canHandToVoice ? state : undefined);
   }, [canHandToVoice, state, onVoiceState]);
+
+  useEffect(() => {
+    onGameState?.(state);
+  }, [state, onGameState]);
 
   const usedIds = useMemo(() => new Set(state.used), [state.used]);
 
@@ -206,7 +215,7 @@ export default function GameScreen({ robot, pool, resume, onExit, onVoiceState }
           </h2>
           <p className="muted">
             {state.winner === 'player'
-              ? `${robot.name} spelled S.K.A.T.E. — rust in pieces.`
+              ? `${robot.name} spelled ${lettersForFormat(state.gameFormat).join('.')} — rust in pieces.`
               : 'Run it back? Every robot has off days.'}
           </p>
           <button className="btn-primary" onClick={() => dispatch({ type: 'REMATCH' })}>

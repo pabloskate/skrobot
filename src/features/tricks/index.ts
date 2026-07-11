@@ -6,6 +6,7 @@ export type { Stance, Category, Discipline, Family, Trick, TrickPool } from './t
 export {
   TRICKS,
   TRICK_BY_ID,
+  TRICK_BASE_ALIASES,
   tricksFor,
   defaultRoutedTrickPool,
   grade,
@@ -13,6 +14,7 @@ export {
   trickFamily,
   trickDiscipline,
   stanceLoad,
+  trickMatchesSearch,
 } from './tricks';
 export { default as TrickPicker } from './TrickPicker';
 export { default as CustomSetup } from './CustomSetup';

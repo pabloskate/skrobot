@@ -1,3 +1,4 @@
+import { TRICK_BASE_ALIASES } from '@/features/tricks';
 import type { Trick } from '@/features/tricks';
 
 export type Resolution =
@@ -6,7 +7,7 @@ export type Resolution =
   | { kind: 'none' };
 
 /** Spoken-form aliases for base trick names the ASR is unlikely to emit verbatim. */
-const BASE_ALIASES: Record<string, string> = {
+const VOICE_ALIASES: Record<string, string> = {
   'tre flip': '360 Flip',
   'tre': '360 Flip',
   'three flip': '360 Flip',
@@ -31,6 +32,13 @@ const BASE_ALIASES: Record<string, string> = {
   'varial heel': 'Varial Heelflip',
   'inward heel': 'Inward Heelflip',
   'double flip': 'Double Kickflip',
+  '360 double kickflip': '360 Double Kickflip',
+  '360 double flip': '360 Double Kickflip',
+  'three sixty double kickflip': '360 Double Kickflip',
+  'three sixty double flip': '360 Double Kickflip',
+  'tre double': '360 Double Kickflip',
+  'double tre': '360 Double Kickflip',
+  'double tre flip': '360 Double Kickflip',
   'laser': 'Laser Flip',
   'front 180': 'Frontside 180',
   'frontside one eighty': 'Frontside 180',
@@ -123,10 +131,14 @@ const BASE_ALIASES: Record<string, string> = {
   'fs big flip': 'FS Bigspin Flip',
   'frontside big flip': 'FS Bigspin Flip',
   'front big flip': 'FS Bigspin Flip',
-  'bigspin heelflip': 'Bigspin Heelflip',
-  'bigspin heel': 'Bigspin Heelflip',
-  'big heel flip': 'Bigspin Heelflip',
-  'big heelflip': 'Bigspin Heelflip',
+  'bigspin heelflip': 'BS Bigspin Heelflip',
+  'bs bigspin heelflip': 'BS Bigspin Heelflip',
+  'backside bigspin heelflip': 'BS Bigspin Heelflip',
+  'bs bigspin heel': 'BS Bigspin Heelflip',
+  'backside bigspin heel': 'BS Bigspin Heelflip',
+  'bigspin heel': 'BS Bigspin Heelflip',
+  'big heel flip': 'BS Bigspin Heelflip',
+  'big heelflip': 'BS Bigspin Heelflip',
   'fs bigspin heelflip': 'FS Bigspin Heelflip',
   'frontside bigspin heelflip': 'FS Bigspin Heelflip',
   'front bigspin heelflip': 'FS Bigspin Heelflip',
@@ -170,12 +182,21 @@ const BASE_ALIASES: Record<string, string> = {
   'nose blunt stall': 'Noseblunt Stall',
 
   // --- Special Stance Shortcuts ---
-  'half cab': 'Fakie Backside 180',
-  'half-cab': 'Fakie Backside 180',
-  'caballerial': 'Fakie Backside 360',
-  'full cab': 'Fakie Backside 360',
-  'cab': 'Fakie Backside 360',
+  'half cab': 'Half Cab',
+  'half-cab': 'Half Cab',
+  'caballerial': 'Full Cab',
+  'full cab': 'Full Cab',
+  'cab': 'Full Cab',
   'half cab flip': 'Fakie Backside Flip',
+};
+
+const BASE_ALIASES: Record<string, string> = {
+  ...VOICE_ALIASES,
+  ...Object.fromEntries(
+    Object.entries(TRICK_BASE_ALIASES).flatMap(([base, aliases]) =>
+      (aliases ?? []).map((alias) => [alias, base]),
+    ),
+  ),
 };
 
 const STANCE_WORDS = ['fakie', 'switch', 'nollie'] as const;
