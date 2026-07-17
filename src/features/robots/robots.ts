@@ -38,6 +38,12 @@ export interface Robot {
   signatureStance?: Stance;
   /** Hard stance restriction (e.g. an old-school cruiser only rides regular/fakie). */
   allowedStances?: Stance[];
+  /** Per-trick stance restrictions, used when one trick is only attempted in select stances. */
+  trickAllowedStances?: Partial<Record<string, Stance[]>>;
+  /** Optional ceiling for named tricks, used for a deliberately shaky trick. */
+  consistencyCaps?: Partial<Record<string, number>>;
+  /** Exact consistency overrides for named stance variants, in the 0..1 range. */
+  consistencyOverrides?: Partial<Record<string, number>>;
   avatar: { body: string; accent: string; variant: 0 | 1 | 2 | 3 };
   /** Trash talk during the rock-paper-scissors toss. */
   rpsTaunts: RpsTaunts;
@@ -58,89 +64,107 @@ const TIER_STANCE_COMFORT: Record<Tier, Record<OffStance, number>> = {
 
 const TIE = ['Tie. Again.', 'Dead heat. Throw once more.', 'One more time.'];
 
-export const ROBOTS: Robot[] = [
+const ROBOTS_UNSORTED: Robot[] = [
   // Beginner
   {
     id: 'shifty',
-    name: 'Shifty',
+    name: 'Swivel',
     tier: 'beginner',
     tagline: 'Shuvit specialist',
     summary:
-      "Shifty only really trusts one move — the shuvit — and scoops it every chance it gets. Loose and a little sketchy, but it never stops popping the board around under its feet.",
+      "Swivel only really trusts one move — the shuvit — and scoops it every chance it gets. Loose and a little sketchy, but it never stops popping the board around under its feet.",
     skill: 3,
-    disciplines: ['roll', 'shuvit', 'rotation'],
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    trickAllowedStances: { Kickflip: ['regular', 'fakie'] },
+    consistencyCaps: { Kickflip: 0.5 },
     focus: { shuvit: 0.18 },
     favorites: ['Pop Shuvit', 'Frontside Shuvit'],
     avatar: { body: '#7ec8e3', accent: '#e05c7a', variant: 0 },
     rpsTaunts: {
       countdown: ['You sure about that throw?', 'Here we go...'],
-      win: ['Shifty takes first!', 'I set, you sweat.'],
+      win: ['Swivel takes first!', 'I set, you sweat.'],
       lose: ['You got it. This time.'],
       tie: TIE,
     },
   },
   {
     id: 'baily',
-    name: 'Baily',
+    name: 'Scuffy',
     tier: 'beginner',
     tagline: 'Falls with style',
     summary:
-      'Baily bails more than it lands, but always with flair. Expect ollies, hippie jumps, and the occasional faceplant — it is here for the good time, not the win.',
+      'Scuffy bails more than it lands, but always with flair. Expect ollies, hippie jumps, and the occasional faceplant — it is here for the good time, not the win.',
     skill: 2,
     disciplines: ['roll', 'shuvit', 'rotation', 'manual', 'oldschool'],
     favorites: ['Ollie', 'Hippie Jump', 'Caveman'],
     avatar: { body: '#5b8def', accent: '#f2a541', variant: 1 },
     rpsTaunts: {
       countdown: ['Here goes nothing!', 'Okay, no take-backs.'],
-      win: ["Baily's going first!", 'Style points for winning the toss.'],
+      win: ["Scuffy's going first!", 'Style points for winning the toss.'],
       lose: ['Ugh, figures.', 'I fell at the first hurdle.'],
       tie: ['Again! I was not ready.', 'Best two out of three?'],
     },
   },
   {
     id: 'sacker',
-    name: 'Sacker',
+    name: 'Gutsy',
     tier: 'beginner',
     tagline: 'Brave, mostly',
     summary:
-      'Sacker will try anything once — usually a backside 180, usually with its eyes half shut. More courage than control, but you have to respect the send.',
+      'Gutsy will try anything once — usually a backside 180, usually with its eyes half shut. More courage than control, but you have to respect the send.',
     skill: 2.6,
-    disciplines: ['roll', 'shuvit', 'rotation'],
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    trickAllowedStances: { Kickflip: ['regular', 'fakie'] },
+    consistencyCaps: { Kickflip: 0.5 },
+    consistencyOverrides: {
+      'regular-heelflip': 0.35,
+      'regular-pop-shuvit': 0.68,
+      'fakie-pop-shuvit': 0.68,
+      'switch-backside-180': 0.1,
+      'regular-ollie': 0.9,
+      'nollie-ollie': 0.75,
+      'switch-ollie': 0.75,
+    },
     favorites: ['Backside 180'],
     avatar: { body: '#7ea0b5', accent: '#e0455c', variant: 2 },
     rpsTaunts: {
       countdown: ["I'm feeling lucky.", 'Brave throw, human.'],
-      win: ['Sacker sets!', 'Bravery pays off.'],
+      win: ['Gutsy sets!', 'Bravery pays off.'],
       lose: ['Brave, mostly.', 'Next time.'],
       tie: ['One more time!', 'Tie? How brave.'],
     },
   },
   {
     id: 'flipster',
-    name: 'Flipster',
+    name: 'Sparky',
     tier: 'beginner',
     tagline: 'Kickflip kid',
     summary:
-      "Flipster learned the kickflip last week and hasn't stopped since. It's the only flip trick it really has — but it's got the ollies, shuvits and 180s underneath it, like anyone who can kickflip does.",
+      "Sparky learned the kickflip last week and hasn't stopped since. It's the only flip trick it really has — but it's got the ollies, shuvits and 180s underneath it, like anyone who can kickflip does.",
     skill: 3.2,
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     favorites: ['Kickflip'],
+    consistencyOverrides: {
+      'regular-kickflip': 0.75,
+      'switch-kickflip': 0.15,
+      'nollie-kickflip': 0.15,
+    },
     excludes: ['Heelflip'],
     avatar: { body: '#4f86f7', accent: '#f7c948', variant: 3 },
     rpsTaunts: {
       countdown: ['Kickflip of the coin.', 'Flip it.'],
-      win: ['Flipster flips first!', 'First flip is mine.'],
+      win: ['Sparky flips first!', 'First flip is mine.'],
       lose: ['No, I wanted to flip!', 'You flipped the toss.'],
       tie: ['Tie? Flip again!', 'Stale flip.'],
     },
   },
   {
     id: 'tictac',
-    name: 'Tictac',
+    name: 'Rusty',
     tier: 'beginner',
     tagline: 'Old school cruiser',
     summary:
-      'Tictac skates like it is 1985 — manuals, powerslides, bonelesses, and not a flip trick in sight. Pure cruising energy, low on tech, high on style.',
+      'Rusty skates like it is 1985 — manuals, powerslides, bonelesses, and not a flip trick in sight. Pure cruising energy, low on tech, high on style.',
     skill: 2.5,
     disciplines: ['roll', 'rotation', 'manual', 'oldschool', 'transition'],
     favorites: ['Manual', 'Powerslide', 'Boneless', 'Caveman'],
@@ -148,38 +172,101 @@ export const ROBOTS: Robot[] = [
     avatar: { body: '#7bb661', accent: '#c8e6b0', variant: 0 },
     rpsTaunts: {
       countdown: ['Old school rules.', 'Cruiser ready.'],
-      win: ["Tictac's turn!", 'Old school goes first.'],
+      win: ["Rusty's turn!", 'Old school goes first.'],
       lose: ['You got me.', 'Classic setup by you.'],
       tie: ['Honor system — again.', 'Cruise into a rematch.'],
     },
   },
   {
     id: 'flipper',
-    name: 'Flipper',
+    name: 'Lefty',
     tier: 'beginner',
     tagline: 'Heels over head',
     summary:
-      'Flipper is all about the heelflip and that satisfying flick of the heel. Kickflips? Never heard of them. It commits to the heel side and rarely strays.',
+      'Lefty is all about the heelflip and that satisfying flick of the heel. Kickflips? Never heard of them. It commits to the heel side and rarely strays.',
     skill: 3.2,
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    trickAllowedStances: { 'Varial Kickflip': ['regular'] },
+    consistencyOverrides: { 'regular-varial-kickflip': 0.4 },
     favorites: ['Heelflip'],
     excludes: ['Kickflip'],
     avatar: { body: '#41c9b4', accent: '#1d7a8c', variant: 1 },
     rpsTaunts: {
       countdown: ['Heels over head.', 'Heel flip the coin.'],
-      win: ['Flipper first!', 'Heel yeah.'],
+      win: ['Lefty first!', 'Heel yeah.'],
       lose: ['That did not heel.', 'Heads, you win.'],
       tie: ['Best two out of three?', 'Heel-to-heel tie.'],
+    },
+  },
+  {
+    id: 'cabby',
+    name: 'Boomerang',
+    tier: 'beginner',
+    tagline: 'Half cab forever',
+    summary:
+      'Boomerang learned the half cab before almost anything else and still rides out of fakie more than regular. Classic early-street progression: ollie, half cab, fakie shuv — switch can wait.',
+    skill: 3,
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    favorites: ['Backside 180', 'Pop Shuvit'],
+    signatureStance: 'fakie',
+    stanceComfort: { fakie: 0.85, nollie: 0.2, switch: 0.12 },
+    consistencyOverrides: { 'switch-pop-shuvit': 0.5 },
+    excludes: ['Dolphin Flip', 'Frontside Heelflip'],
+    // Kickflip is a shaky regular-only reach; fakie flip stays out at this skill.
+    trickAllowedStances: {
+      Kickflip: ['regular'],
+      Heelflip: ['regular'],
+      // Boomerang has no regular frontside 360 in its bag.
+      'Frontside 360': ['fakie', 'nollie', 'switch'],
+    },
+    consistencyCaps: { Kickflip: 0.45, Heelflip: 0.4 },
+    avatar: { body: '#6a8caf', accent: '#f0c987', variant: 2 },
+    rpsTaunts: {
+      countdown: ['Cab it.', 'Fakie first.'],
+      win: ['Boomerang half-cabs first!', 'Out of fakie, into first.'],
+      lose: ['Rolled the wrong way.', 'Half a cab short.'],
+      tie: ['Cab again.', 'Fakie rematch.'],
+    },
+  },
+  {
+    id: 'fronty',
+    name: 'Magnet',
+    tier: 'beginner',
+    tagline: 'Frontside everything',
+    summary:
+      'Magnet scoops everything frontside — FS shuvits, FS 180s, the occasional FS flip dream. Backside feels foreign; frontside is home. A very real early-street bias.',
+    skill: 3.1,
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    focus: { shuvit: 0.12 },
+    favorites: ['Frontside Shuvit', 'Frontside 180'],
+    // Still has pop shuvits (learning order), but refuses backside rotation/flip lines.
+    excludes: ['Backside 180', 'Backside Flip', 'Backside Heelflip', 'Backside 360'],
+    trickAllowedStances: {
+      Kickflip: ['regular', 'fakie'],
+      Heelflip: ['regular'],
+      'Frontside Flip': ['regular'],
+    },
+    consistencyCaps: { Kickflip: 0.48, Heelflip: 0.35 },
+    consistencyOverrides: {
+      'regular-frontside-flip': 0.28,
+      'regular-pop-shuvit': 0.45,
+    },
+    avatar: { body: '#ff9f1c', accent: '#2ec4b6', variant: 0 },
+    rpsTaunts: {
+      countdown: ['Frontside only.', 'Scoop it front.'],
+      win: ['Magnet goes first!', 'Frontside privilege.'],
+      lose: ['Backside beat me.', 'Wrong way around.'],
+      tie: ['Front again.', 'Spin it frontside.'],
     },
   },
   // Intermediate
   {
     id: 'spine',
-    name: 'Spine',
+    name: 'Pendulum',
     tier: 'intermediate',
     tagline: 'Transition machine',
     summary:
-      'Spine lives on the ramp — stalls, rock n rolls, and disasters are its bread and butter. Put it on transition and it will grind you down; flatground, less so.',
+      'Pendulum lives on the ramp — stalls, rock n rolls, and disasters are its bread and butter. Put it on transition and it will grind you down; flatground, less so.',
     skill: 5.5,
     disciplines: ['roll', 'shuvit', 'rotation', 'transition', 'slide'],
     focus: { transition: 0.2 },
@@ -187,18 +274,18 @@ export const ROBOTS: Robot[] = [
     avatar: { body: '#6fcf72', accent: '#2e7d32', variant: 2 },
     rpsTaunts: {
       countdown: ['Transition or nothing.', 'Drop in...'],
-      win: ['Spine sets the tone.', 'First drop is mine.'],
+      win: ['Pendulum sets the tone.', 'First drop is mine.'],
       lose: ['You got the drop.', 'Next transition is yours.'],
       tie: ['Round two.', 'Stall for a rematch.'],
     },
   },
   {
     id: 'lanky',
-    name: 'Lanky',
+    name: 'Noodle',
     tier: 'intermediate',
     tagline: 'Slides everything',
     summary:
-      "Lanky's long limbs lock into anything that slides — boardslides and noseslides for days. Its flatground game is nothing special, but on a rail it is a problem.",
+      "Noodle's long limbs lock into anything that slides — boardslides and noseslides for days. Its flatground game is nothing special, but on a rail it is a problem.",
     skill: 5,
     disciplines: ['roll', 'shuvit', 'rotation', 'slide'],
     focus: { slide: 0.2 },
@@ -206,18 +293,18 @@ export const ROBOTS: Robot[] = [
     avatar: { body: '#b0b7c3', accent: '#e0455c', variant: 3 },
     rpsTaunts: {
       countdown: ['Slide into it.', 'Long limbs, long odds.'],
-      win: ['Lanky goes first.', 'Slid into first.'],
+      win: ['Noodle goes first.', 'Slid into first.'],
       lose: ['Slim margin.', 'You slid by me.'],
       tie: ['Stalemate? How boring.', 'Slide it again.'],
     },
   },
   {
     id: 'droopy',
-    name: 'Droopy',
+    name: 'Clamp',
     tier: 'intermediate',
     tagline: 'Locked-in grinds',
     summary:
-      'Droopy finds the lock-in and never lets go. A grind specialist that will out-balance you on any rail, though it keeps both feet near the ground.',
+      'Clamp finds the lock-in and never lets go. A grind specialist that will out-balance you on any rail, though it keeps both feet near the ground.',
     skill: 5.5,
     disciplines: ['roll', 'shuvit', 'rotation', 'grind'],
     focus: { grind: 0.2 },
@@ -225,18 +312,18 @@ export const ROBOTS: Robot[] = [
     avatar: { body: '#d6457a', accent: '#9be564', variant: 0 },
     rpsTaunts: {
       countdown: ['Locked and loaded.', 'Stay locked.'],
-      win: ['Droopy sets.', 'Locked in first.'],
+      win: ['Clamp sets.', 'Locked in first.'],
       lose: ['Grind harder next time.', 'Lock slipped.'],
       tie: ['Again. Stay locked.', 'Grind to a tie.'],
     },
   },
   {
     id: 'wally',
-    name: 'Wally',
+    name: 'Hocus',
     tier: 'intermediate',
     tagline: 'No-comply wizard',
     summary:
-      'Wally pops no-complies and bonelesses out of nowhere — old-school wizardry with a modern twist. Tricky to read, and a lot of fun to watch.',
+      'Hocus pops no-complies and bonelesses out of nowhere — old-school wizardry with a modern twist. Tricky to read, and a lot of fun to watch.',
     skill: 5,
     disciplines: ['roll', 'shuvit', 'rotation', 'flip', 'oldschool', 'manual'],
     focus: { oldschool: 0.2 },
@@ -244,18 +331,18 @@ export const ROBOTS: Robot[] = [
     avatar: { body: '#c9a227', accent: '#8d99ae', variant: 1 },
     rpsTaunts: {
       countdown: ['No comply? No problem.', 'Wizard incoming.'],
-      win: ["Wally's up first!", 'No comply, first try.'],
+      win: ['Hocus is up first!', 'No comply, first try.'],
       lose: ['You complied.', 'Wizard needs a retry.'],
       tie: ['Comply with a rematch.', 'Magic fizzled.'],
     },
   },
   {
     id: 'nolly',
-    name: 'Nolly',
+    name: 'Nosy',
     tier: 'intermediate',
     tagline: 'Lives on the nose',
     summary:
-      "Nolly does everything off the nose. Its nollie flips come out cleaner than most skaters' regular ones — flip it the normal way and it suddenly looks human. Proof that stance and trick are two different skills.",
+      "Nosy does everything off the nose. Its nollie flips come out cleaner than most skaters' regular ones — flip it the normal way and it suddenly looks human. Proof that stance and trick are two different skills.",
     skill: 6,
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     favorites: [],
@@ -264,36 +351,36 @@ export const ROBOTS: Robot[] = [
     avatar: { body: '#f6a5c0', accent: '#3a2e4d', variant: 2 },
     rpsTaunts: {
       countdown: ['Off the nose...', 'Nollie or nothing.'],
-      win: ['Nolly noses ahead.', 'First, off the nose.'],
+      win: ['Nosy noses ahead.', 'First, off the nose.'],
       lose: ['Tail beat the nose.', 'You popped it better.'],
       tie: ['Nose to nose. Again.', 'Re-pop it.'],
     },
   },
   {
     id: 'skater',
-    name: 'Skater',
+    name: 'Jack',
     tier: 'intermediate',
     tagline: 'Jack of all tricks',
     summary:
-      'Skater has no specialty and no glaring weakness — a solid all-rounder that will match you trick for trick across the whole board. Master of none, dangerous everywhere.',
+      'Jack has no specialty and no glaring weakness — a solid all-rounder that will match you trick for trick across the whole board. Master of none, dangerous everywhere.',
     skill: 6,
     disciplines: ['roll', 'shuvit', 'rotation', 'flip', 'grind', 'slide', 'manual', 'transition', 'oldschool'],
     favorites: [],
     avatar: { body: '#8d99ae', accent: '#ffd166', variant: 2 },
     rpsTaunts: {
       countdown: ['Jack of all throws.', 'Well-rounded toss.'],
-      win: ['Skater sets.', 'Jack wins the toss.'],
+      win: ['Jack sets.', 'Jack wins the toss.'],
       lose: ['Fair toss.', 'Master of none today.'],
       tie: ['Evenly matched.', 'Jack of all ties.'],
     },
   },
   {
     id: 'wallride',
-    name: 'Wallride',
+    name: 'Gecko',
     tier: 'intermediate',
     tagline: 'Defies gravity',
     summary:
-      'Wallride treats walls like floors and gravity like a suggestion. Strong on lips and stalls, with a few spins up its sleeve when you least expect them.',
+      'Gecko treats walls like floors and gravity like a suggestion. Strong on lips and stalls, with a few spins up its sleeve when you least expect them.',
     skill: 5.5,
     disciplines: ['roll', 'shuvit', 'rotation', 'slide', 'transition'],
     focus: { transition: 0.15, rotation: 0.1 },
@@ -301,18 +388,133 @@ export const ROBOTS: Robot[] = [
     avatar: { body: '#9bd1f9', accent: '#4361ee', variant: 3 },
     rpsTaunts: {
       countdown: ['Defying gravity...', 'Ride the wall.'],
-      win: ['Wallride sets first.', 'Gravity loses.'],
+      win: ['Gecko sets first.', 'Gravity loses.'],
       lose: ['Gravity wins.', 'Fell off the wall.'],
       tie: ['Air mail — send it again.', 'Wall-to-wall tie.'],
     },
   },
   {
+    id: 'varial',
+    name: 'Zigzag',
+    tier: 'intermediate',
+    tagline: 'Diagonal flip kid',
+    summary:
+      'Zigzag is stuck in that classic mid-bag phase where varial flips and varial heels feel more natural than a clean tre. Diagonal flips first, 360 flips later — exactly how most street skaters actually progress.',
+    skill: 5.8,
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    focus: { flip: 0.12, shuvit: 0.08 },
+    favorites: ['Varial Kickflip', 'Varial Heelflip', 'Pop Shuvit'],
+    // Hardflips/inwards/tres are advanced-gate tricks for this bag.
+    excludes: ['360 Flip', 'Hardflip', 'Inward Heelflip', 'Laser Flip', 'Bigspin Flip'],
+    // Fakie varials are common; switch/nollie varials come much later.
+    trickAllowedStances: {
+      'Varial Kickflip': ['regular', 'fakie'],
+      'Varial Heelflip': ['regular', 'fakie'],
+      Kickflip: ['regular', 'fakie', 'nollie'],
+      Heelflip: ['regular', 'fakie'],
+    },
+    stanceComfort: { fakie: 0.7, nollie: 0.45, switch: 0.3 },
+    avatar: { body: '#7bdff2', accent: '#b388eb', variant: 1 },
+    rpsTaunts: {
+      countdown: ['Diagonal only.', 'Varial the toss.'],
+      win: ['Zigzag goes first.', 'Diagonal privilege.'],
+      lose: ['Straight beat diagonal.', 'No varial this time.'],
+      tie: ['Spin it diagonal.', 'Varial rematch.'],
+    },
+  },
+  {
+    id: 'biggy',
+    name: 'Cyclone',
+    tier: 'intermediate',
+    tagline: 'Bigspin merchant',
+    summary:
+      'Cyclone collects bigspins the way other skaters collect kickflips. BS bigspin, FS bigspin, 360 shuvs — rotation is the whole game. Flip tricks exist, but they are not the main event.',
+    skill: 6.2,
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    focus: { rotation: 0.18, shuvit: 0.12 },
+    favorites: ['Bigspin', 'FS Bigspin', '360 Shuvit', 'Frontside 360 Shuvit'],
+    excludes: ['Hardflip', 'Inward Heelflip', 'Laser Flip'],
+    // Bigspins show up in regular/fakie long before clean switch bigspins.
+    trickAllowedStances: {
+      Bigspin: ['regular', 'fakie', 'nollie'],
+      'FS Bigspin': ['regular', 'fakie'],
+      '360 Shuvit': ['regular', 'fakie', 'nollie', 'switch'],
+      Kickflip: ['regular', 'fakie'],
+      Heelflip: ['regular', 'fakie'],
+    },
+    stanceComfort: { fakie: 0.75, nollie: 0.5, switch: 0.35 },
+    avatar: { body: '#ff6b6b', accent: '#4ecdc4', variant: 0 },
+    rpsTaunts: {
+      countdown: ['Bigspin the coin.', 'Spin big.'],
+      win: ['Cyclone sets first.', 'Big spin, first set.'],
+      lose: ['Small spin today.', 'You spun bigger.'],
+      tie: ['Spin it again.', 'Equal bigspin.'],
+    },
+  },
+  {
+    id: 'heelzy',
+    name: 'Achilles',
+    tier: 'intermediate',
+    tagline: 'Heelflip path',
+    summary:
+      'Achilles took the heelflip path instead of the kickflip path. FS heels, BS heels, varial heels — if it flicks off the heel edge, it is in the bag. Kickflips exist, but they feel foreign.',
+    skill: 5.7,
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    focus: { flip: 0.1 },
+    favorites: ['Heelflip', 'Varial Heelflip', 'Frontside Heelflip', 'Backside Heelflip'],
+    excludes: ['360 Flip', 'Hardflip', 'Bigspin Flip', 'Laser Flip'],
+    // Heel tricks are most common regular/fakie; switch heels are rare at this level.
+    trickAllowedStances: {
+      Heelflip: ['regular', 'fakie', 'nollie'],
+      'Varial Heelflip': ['regular', 'fakie'],
+      'Frontside Heelflip': ['regular', 'fakie'],
+      'Backside Heelflip': ['regular'],
+      Kickflip: ['regular', 'fakie'],
+    },
+    consistencyCaps: { Kickflip: 0.55 },
+    stanceComfort: { fakie: 0.72, nollie: 0.48, switch: 0.32 },
+    avatar: { body: '#95d5b2', accent: '#1b4332', variant: 2 },
+    rpsTaunts: {
+      countdown: ['Heel side.', 'Flick the heel.'],
+      win: ['Achilles first.', 'Heel takes the toss.'],
+      lose: ['Toe edge beat me.', 'No heel this time.'],
+      tie: ['Heel to heel.', 'Flick again.'],
+    },
+  },
+  {
+    id: 'fakie',
+    name: 'Rewind',
+    tier: 'intermediate',
+    tagline: 'Rides out of fakie',
+    summary:
+      'Rewind lives rolling backward. Half cabs, full cabs, fakie flips, fakie bigspins — the bag is built the way street skaters actually learn stance: fakie first, switch much later.',
+    skill: 6.1,
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    favorites: ['Backside 180', 'Backside 360', 'Kickflip', 'Bigspin'],
+    signatureStance: 'fakie',
+    stanceComfort: { fakie: 0.95, nollie: 0.45, switch: 0.35 },
+    // Switch stays thin on purpose; nollie is secondary to fakie.
+    trickAllowedStances: {
+      '360 Flip': ['regular', 'fakie'],
+      Hardflip: ['regular'],
+      'Varial Kickflip': ['regular', 'fakie'],
+    },
+    avatar: { body: '#a8dadc', accent: '#e63946', variant: 3 },
+    rpsTaunts: {
+      countdown: ['Rolling fakie...', 'Backward first.'],
+      win: ['Rewind sets first.', 'Out of fakie, into first.'],
+      lose: ['Forward beat backward.', 'Rolled the wrong way.'],
+      tie: ['Fakie rematch.', 'Cab it again.'],
+    },
+  },
+  // Advanced
+  {
     id: 'jupiter',
-    name: 'Jupiter',
+    name: 'Orbit',
     tier: 'advanced',
     tagline: 'Spins like a planet',
     summary:
-      'Jupiter lives and breathes rotation — bigspins, 360 shuvits, and tre-flip combos orbit out of its feet with confidence. The more spin a trick has, the happier it gets.',
+      'Orbit lives and breathes rotation — bigspins, 360 shuvits, and tre-flip combos orbit out of its feet with confidence. The more spin a trick has, the happier it gets.',
     skill: 6.75,
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     focus: { rotation: 0.2, shuvit: 0.1 },
@@ -320,57 +522,18 @@ export const ROBOTS: Robot[] = [
     avatar: { body: '#cfd2d9', accent: '#7b6cf6', variant: 0 },
     rpsTaunts: {
       countdown: ['Spin the planets.', 'Planetary alignment...'],
-      win: ['Jupiter rotates first.', 'Planetary priority.'],
+      win: ['Orbit rotates first.', 'Planetary priority.'],
       lose: ['Orbit shifted.', 'You spun the toss.'],
       tie: ['Planetary alignment.', 'Spin it again.'],
     },
   },
-  // Pro
-  {
-    id: 'freely',
-    name: 'Freely',
-    tier: 'pro',
-    tagline: 'Switch sorcerer',
-    summary:
-      'Freely is fluent in every stance — switch, nollie, fakie, it is all the same. There is no off-foot to exploit here; it skates a flawless mirror of itself.',
-    skill: 8,
-    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
-    favorites: [],
-    stanceComfort: { fakie: 0.97, nollie: 0.95, switch: 0.92 },
-    avatar: { body: '#5fc9f3', accent: '#f9b234', variant: 1 },
-    rpsTaunts: {
-      countdown: ['Switch it up.', 'Freestyle toss.'],
-      win: ['Freely, first and switch.', 'Sorcery starts first.'],
-      lose: ['You switch better than me.', 'Spell broken.'],
-      tie: ['Switching gears — again.', 'Mirror spell.'],
-    },
-  },
-  {
-    id: 'olly',
-    name: 'Olly',
-    tier: 'advanced',
-    tagline: 'Pop for days',
-    summary:
-      'Olly has pop for days and uses every inch of it — towering ollies, 180s, and 360s. If it gets off the ground, it is landing it. Just do not ask it to flip the board.',
-    skill: 7.5,
-    disciplines: ['roll', 'shuvit', 'rotation'],
-    focus: { roll: 0.15, rotation: 0.15 },
-    favorites: ['Ollie', 'Frontside 180', 'Backside 180', 'Backside 360', 'Frontside 360'],
-    avatar: { body: '#e8e9ed', accent: '#f2a541', variant: 2 },
-    rpsTaunts: {
-      countdown: ['Pop for days.', 'Pop it high.'],
-      win: ['Olly pops first.', 'Pop goes first.'],
-      lose: ['You popped that.', 'Low pop.'],
-      tie: ['Pop it again.', 'Equal pop.'],
-    },
-  },
   {
     id: 'hesh',
-    name: 'Hesh',
+    name: 'Bouncer',
     tier: 'advanced',
     tagline: 'Tre flip gatekeeper',
     summary:
-      'Hesh sits right at the tre-flip threshold — 360 flips are a coin flip, hardflips are sketchy, and laser flips are still out of reach. The textbook advanced skater: dangerous, but beatable.',
+      'Bouncer sits right at the tre-flip threshold — 360 flips are a coin flip, hardflips are sketchy, and laser flips are still out of reach. The textbook advanced skater: dangerous, but beatable.',
     skill: 7,
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     focus: { flip: 0.1 },
@@ -378,19 +541,141 @@ export const ROBOTS: Robot[] = [
     avatar: { body: '#e07a5f', accent: '#3d405b', variant: 0 },
     rpsTaunts: {
       countdown: ['Tre flip or die.', 'Gate is open.'],
-      win: ['Hesh sets. Good luck.', 'Gatekeeper goes first.'],
+      win: ['Bouncer sets. Good luck.', 'Gatekeeper goes first.'],
       lose: ['You got past the gate.', 'Respect. Next time.'],
       tie: ['Even at the gate.', 'Flip it again.'],
     },
   },
+  {
+    id: 'hardy',
+    name: 'Diesel',
+    tier: 'advanced',
+    tagline: 'Hardflip specialist',
+    summary:
+      'Diesel is all about the hardflip and inward heel — the two tricks that separate advanced street from intermediate. Tre flips are there, lasers are not. Pop, scoop, and commit.',
+    skill: 7.2,
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    focus: { flip: 0.15 },
+    favorites: ['Hardflip', 'Inward Heelflip', 'Varial Kickflip'],
+    excludes: ['Laser Flip', 'BS Bigspin Heelflip', '360 Double Kickflip'],
+    // Hardflips are overwhelmingly regular/fakie in the wild; switch hardflips are rare.
+    trickAllowedStances: {
+      Hardflip: ['regular', 'fakie'],
+      'Inward Heelflip': ['regular', 'fakie'],
+      '360 Flip': ['regular', 'fakie', 'nollie'],
+    },
+    stanceComfort: { fakie: 0.78, nollie: 0.55, switch: 0.45 },
+    avatar: { body: '#e76f51', accent: '#264653', variant: 1 },
+    rpsTaunts: {
+      countdown: ['Hardflip energy.', 'Scoop and commit.'],
+      win: ['Diesel sets first.', 'Hard first.'],
+      lose: ['Soft toss.', 'You scooped better.'],
+      tie: ['Hard rematch.', 'Scoop again.'],
+    },
+  },
+  {
+    id: 'caball',
+    name: 'Carousel',
+    tier: 'advanced',
+    tagline: 'Full cab technician',
+    summary:
+      'Carousel is the full-cab technician — fakie 360s, cab flips, and every cab variation you can name. Street-video energy: if it comes out of fakie with spin, it is probably in the bag.',
+    skill: 7.1,
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    focus: { rotation: 0.15, flip: 0.08 },
+    favorites: ['Backside 360', 'Backside Flip', 'Bigspin', '360 Flip'],
+    signatureStance: 'fakie',
+    stanceComfort: { fakie: 0.95, nollie: 0.55, switch: 0.48 },
+    excludes: ['Laser Flip', 'BS Bigspin Heelflip'],
+    avatar: { body: '#90be6d', accent: '#577590', variant: 2 },
+    rpsTaunts: {
+      countdown: ['Full cab incoming.', 'Cab it all.'],
+      win: ['Carousel goes first.', 'Cab priority.'],
+      lose: ['Half cab short.', 'You spun past me.'],
+      tie: ['Cab again.', 'Full rematch.'],
+    },
+  },
+  {
+    id: 'switchy',
+    name: 'Echo',
+    tier: 'advanced',
+    tagline: 'Learning switch',
+    summary:
+      'Echo is deep into the switch chapter — switch flips and switch heels are online, switch bigspins are coming, and regular still feels safer. Not a full switch sorcerer yet, but the mirror is forming.',
+    skill: 7.3,
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    favorites: ['Kickflip', 'Heelflip', 'Varial Kickflip'],
+    signatureStance: 'switch',
+    stanceComfort: { fakie: 0.82, nollie: 0.6, switch: 0.78 },
+    // Elite tech still mostly regular/fakie at this stage.
+    excludes: ['Laser Flip', 'BS Bigspin Heelflip', '360 Double Kickflip'],
+    trickAllowedStances: {
+      Hardflip: ['regular', 'fakie', 'switch'],
+      '360 Flip': ['regular', 'fakie', 'switch', 'nollie'],
+    },
+    avatar: { body: '#cdb4db', accent: '#ffafcc', variant: 3 },
+    rpsTaunts: {
+      countdown: ['Switch it.', 'Mirror mode.'],
+      win: ['Echo first.', 'Switch takes the toss.'],
+      lose: ['Regular beat switch.', 'Mirror cracked.'],
+      tie: ['Switch rematch.', 'Mirror again.'],
+    },
+  },
+  {
+    id: 'latezy',
+    name: 'Snooze',
+    tier: 'advanced',
+    tagline: 'Late trick nerd',
+    summary:
+      'Snooze lives for late shuvits and late flips — the weird mid-air scoop chapter of advanced skating. Not the flashiest bag, but deeply annoying to match if you never learned lates.',
+    skill: 6.9,
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    focus: { shuvit: 0.15, flip: 0.08 },
+    favorites: ['Late Backside Shuvit', 'Late Frontside Shuvit', 'Late Kickflip', 'Pop Shuvit'],
+    excludes: ['Laser Flip', 'BS Bigspin Heelflip', '360 Double Kickflip'],
+    // Lates are almost always regular/fakie; switch lates are unicorn territory.
+    trickAllowedStances: {
+      'Late Backside Shuvit': ['regular', 'fakie'],
+      'Late Frontside Shuvit': ['regular', 'fakie'],
+      'Late Kickflip': ['regular', 'fakie'],
+      '360 Flip': ['regular', 'fakie'],
+    },
+    stanceComfort: { fakie: 0.8, nollie: 0.5, switch: 0.4 },
+    avatar: { body: '#f4a261', accent: '#2a9d8f', variant: 0 },
+    rpsTaunts: {
+      countdown: ['Late to the toss.', 'Scoop it late.'],
+      win: ['Snooze sets first.', 'Fashionably first.'],
+      lose: ['Early loss.', 'Too late this time.'],
+      tie: ['Late rematch.', 'Scoop again.'],
+    },
+  },
   // Pro
   {
+    id: 'freely',
+    name: 'Palindrome',
+    tier: 'pro',
+    tagline: 'Switch sorcerer',
+    summary:
+      'Palindrome is fluent in every stance — switch, nollie, fakie, it is all the same. There is no off-foot to exploit here; it skates a flawless mirror of itself.',
+    skill: 8,
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    favorites: [],
+    stanceComfort: { fakie: 0.97, nollie: 0.95, switch: 0.92 },
+    avatar: { body: '#5fc9f3', accent: '#f9b234', variant: 1 },
+    rpsTaunts: {
+      countdown: ['Switch it up.', 'Freestyle toss.'],
+      win: ['Palindrome, first and switch.', 'Sorcery starts first.'],
+      lose: ['You switch better than me.', 'Spell broken.'],
+      tie: ['Switching gears — again.', 'Mirror spell.'],
+    },
+  },
+  {
     id: 'smitty',
-    name: 'Smitty',
+    name: 'Crown',
     tier: 'pro',
     tagline: 'Smith grind royalty',
     summary:
-      'Smitty is grind royalty, ruling the rails with smiths, feebles, and overcrookeds. Bow down — its lock-ins are very nearly flawless.',
+      'Crown is grind royalty, ruling the rails with smiths, feebles, and overcrookeds. Bow down — its lock-ins are very nearly flawless.',
     skill: 8.5,
     disciplines: ['roll', 'shuvit', 'rotation', 'flip', 'grind', 'slide'],
     focus: { grind: 0.2 },
@@ -398,18 +683,18 @@ export const ROBOTS: Robot[] = [
     avatar: { body: '#aab2bd', accent: '#7b6cf6', variant: 3 },
     rpsTaunts: {
       countdown: ['Smith grind royalty.', 'Bow to the crown.'],
-      win: ['Smitty sets. Bow down.', 'Royal first set.'],
+      win: ['Crown sets. Bow down.', 'Royal first set.'],
       lose: ['Lucky toss.', 'The crown slips.'],
       tie: ['Royal rematch.', 'Noble tie.'],
     },
   },
   {
     id: 'c360po',
-    name: 'C360PO',
+    name: 'Abacus',
     tier: 'pro',
     tagline: 'Fluent in 360s',
     summary:
-      'C360PO computes rotation like a machine — tre flips, laser flips, and every big-spinning variant in between. Calculated, precise, and very hard to copy.',
+      'Abacus computes rotation like a machine — tre flips, laser flips, and every big-spinning variant in between. Calculated, precise, and very hard to copy.',
     skill: 8.5,
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     focus: { flip: 0.15, rotation: 0.1 },
@@ -417,36 +702,36 @@ export const ROBOTS: Robot[] = [
     avatar: { body: '#f4f4f6', accent: '#2b2d42', variant: 0 },
     rpsTaunts: {
       countdown: ['Calculating probability...', 'Rotational analysis...'],
-      win: ['C360PO sets. Optimal.', '360 degrees of first.'],
+      win: ['Abacus sets. Optimal.', '360 degrees of first.'],
       lose: ['Variance detected.', 'Non-optimal outcome.'],
       tie: ['Tie probability: 33%. Again.', 'Recalculate.'],
     },
   },
   {
     id: 'drone',
-    name: 'Drone',
+    name: 'Metronome',
     tier: 'pro',
     tagline: 'Cold, calculated, consistent',
     summary:
-      'Drone has no favorites and no flair — just cold, relentless consistency across the entire trick list. It will not dazzle you; it will simply never miss.',
+      'Metronome has no favorites and no flair — just cold, relentless consistency across the entire trick list. It will not dazzle you; it will simply never miss.',
     skill: 9,
     disciplines: ['roll', 'shuvit', 'rotation', 'flip', 'grind', 'slide', 'manual', 'transition', 'oldschool'],
     favorites: [],
     avatar: { body: '#9d6bce', accent: '#3ddad7', variant: 1 },
     rpsTaunts: {
       countdown: ['Cold, calculated.', 'Consistent throw required.'],
-      win: ['Drone sets first.', 'Efficiency first.'],
+      win: ['Metronome sets first.', 'Efficiency first.'],
       lose: ['Unfortunate.', 'Margin of error exceeded.'],
       tie: ['Recalculating.', 'Tie within tolerance.'],
     },
   },
   {
     id: 'tre',
-    name: 'Tre',
+    name: 'Maestro',
     tier: 'pro',
     tagline: 'Tre flips on demand',
     summary:
-      'Tre throws 360 flips like they are ollies and only gets fancier from there. Elite-level flip tech — matching its sets is a very tall order.',
+      'Maestro throws 360 flips like they are ollies and only gets fancier from there. Elite-level flip tech — matching its sets is a very tall order.',
     skill: 9,
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     focus: { flip: 0.15 },
@@ -454,12 +739,97 @@ export const ROBOTS: Robot[] = [
     avatar: { body: '#f4f4f6', accent: '#2b2d42', variant: 2 },
     rpsTaunts: {
       countdown: ['Tre flips on demand.', 'Demand a good throw.'],
-      win: ['Tre sets. Flip it.', 'First flip coming up.'],
+      win: ['Maestro sets. Flip it.', 'First flip coming up.'],
       lose: ['You flipped the script.', 'Tre flip missed.'],
       tie: ['Flip again.', 'Tre-for-tre tie.'],
     },
   },
+  {
+    id: 'laser',
+    name: 'Scope',
+    tier: 'pro',
+    tagline: 'Laser flip sniper',
+    summary:
+      'Scope is the laser-flip sniper — 360 heels, bigspin heels, and every frontside-spinning flip combo. The rare bag where laser flips feel more natural than hardflips.',
+    skill: 8.8,
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    focus: { flip: 0.18, rotation: 0.08 },
+    favorites: ['Laser Flip', 'FS Bigspin Heelflip', 'Varial Heelflip', '360 Flip'],
+    // Laser flips are almost always regular/fakie even at pro; switch lasers are mythical.
+    trickAllowedStances: {
+      'Laser Flip': ['regular', 'fakie', 'nollie'],
+      'FS Bigspin Heelflip': ['regular', 'fakie'],
+      'BS Bigspin Heelflip': ['regular'],
+    },
+    stanceComfort: { fakie: 0.92, nollie: 0.82, switch: 0.72 },
+    avatar: { body: '#e0aaff', accent: '#10002b', variant: 0 },
+    rpsTaunts: {
+      countdown: ['Laser locked.', 'Sniper mode.'],
+      win: ['Scope sets first.', 'Target acquired.'],
+      lose: ['Missed the laser.', 'Off target.'],
+      tie: ['Recalibrate.', 'Laser rematch.'],
+    },
+  },
+  {
+    id: 'impy',
+    name: 'Houdini',
+    tier: 'pro',
+    tagline: 'Impossible artist',
+    summary:
+      'Houdini wraps the board with impossibles and pressure flips — old-school footwork tech that still cooks modern games of S.K.A.T.E. Weird bag, elite land rates.',
+    skill: 8.3,
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    focus: { flip: 0.12 },
+    favorites: ['Impossible', 'Pressure Flip'],
+    // These footwork tricks are almost exclusively regular/fakie in real skating.
+    trickAllowedStances: {
+      Impossible: ['regular', 'fakie'],
+      'Pressure Flip': ['regular', 'fakie'],
+      'Dolphin Flip': ['regular', 'fakie'],
+    },
+    excludes: ['BS Bigspin Heelflip', '360 Double Kickflip'],
+    stanceComfort: { fakie: 0.9, nollie: 0.75, switch: 0.7 },
+    avatar: { body: '#ffd6a5', accent: '#9b2226', variant: 1 },
+    rpsTaunts: {
+      countdown: ['Wrap it up.', 'Impossible odds.'],
+      win: ['Houdini first.', 'Art sets first.'],
+      lose: ['Possible loss.', 'Unwrapped.'],
+      tie: ['Wrap again.', 'Impossible rematch.'],
+    },
+  },
+  {
+    id: 'double',
+    name: 'Encore',
+    tier: 'pro',
+    tagline: 'Double flip dealer',
+    summary:
+      'Encore only feels alive when the board flips twice. Double kicks, double heels, 360 doubles — single flips are warmups. The modern contest-bag energy.',
+    skill: 9.2,
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    focus: { flip: 0.2 },
+    favorites: ['Double Kickflip', 'Double Heelflip', '360 Double Kickflip', '360 Flip'],
+    // Doubles stay regular/fakie-heavy; switch doubles are still rare even among pros.
+    trickAllowedStances: {
+      'Double Kickflip': ['regular', 'fakie', 'nollie'],
+      'Double Heelflip': ['regular', 'fakie'],
+      '360 Double Kickflip': ['regular', 'fakie'],
+      'BS Bigspin Heelflip': ['regular'],
+    },
+    stanceComfort: { fakie: 0.93, nollie: 0.85, switch: 0.78 },
+    avatar: { body: '#48cae4', accent: '#023e8a', variant: 2 },
+    rpsTaunts: {
+      countdown: ['Twice is nice.', 'Double or nothing.'],
+      win: ['Encore sets first.', 'Two flips ahead.'],
+      lose: ['Single loss.', 'Only flipped once.'],
+      tie: ['Double rematch.', 'Flip it twice more.'],
+    },
+  },
 ];
+
+/** Roster ordered easiest → hardest (skill, then name for ties). */
+export const ROBOTS: Robot[] = [...ROBOTS_UNSORTED].sort(
+  (a, b) => a.skill - b.skill || a.name.localeCompare(b.name),
+);
 
 export const ROBOT_BY_ID = new Map(ROBOTS.map((r) => [r.id, r]));
 
@@ -488,6 +858,15 @@ function hash01(s: string): number {
 
 const BAG_THRESHOLD = 0.2;
 
+// Late backside shuvit is a specialty move rather than a normal skill-band
+// unlock. Only robots that call it a favorite get to carry it in their bag.
+const SPECIALTY_ONLY_TRICKS = new Set(['Late Backside Shuvit']);
+
+/** Tier-wide ceilings for tricks that should remain a reach at that level. */
+const TIER_TRICK_CAPS: Partial<Record<Tier, Partial<Record<string, number>>>> = {
+  beginner: { 'switch-pop-shuvit': 0.5 },
+};
+
 function stanceComfortFor(robot: Robot, stance: OffStance): number {
   return robot.stanceComfort?.[stance] ?? TIER_STANCE_COMFORT[robot.tier][stance];
 }
@@ -512,7 +891,10 @@ export function robotConsistency(robot: Robot, trick: Trick): number | null {
   const discipline = trickDiscipline(trick);
   if (!robot.disciplines.includes(discipline)) return null;
   if (robot.excludes?.includes(trick.base)) return null;
+  if (SPECIALTY_ONLY_TRICKS.has(trick.base) && !robot.favorites.includes(trick.base)) return null;
   if (robot.allowedStances && !robot.allowedStances.includes(trick.stance)) return null;
+  const trickStances = robot.trickAllowedStances?.[trick.base];
+  if (trickStances && !trickStances.includes(trick.stance)) return null;
   // Tier-locked tricks (e.g. late shuvits) impose a hard skill floor no boost can
   // beat — below it the robot simply can't do the trick, regardless of focus.
   if (trick.minSkill !== undefined && robot.skill < trick.minSkill) return null;
@@ -527,7 +909,12 @@ export function robotConsistency(robot: Robot, trick: Trick): number | null {
   if (robot.signatureStance && trick.stance === robot.signatureStance) c += 0.12;
   c += (hash01(robot.id + trick.id) - 0.5) * 0.1; // ±0.05 deterministic jitter
 
-  c = Math.max(0, Math.min(0.97, c));
+  const robotCap = robot.consistencyCaps?.[trick.base] ?? 0.97;
+  const tierCap = TIER_TRICK_CAPS[robot.tier]?.[trick.id] ?? 0.97;
+  const cap = Math.min(robotCap, tierCap);
+  const override = robot.consistencyOverrides?.[trick.id];
+  if (override !== undefined) return Math.max(0, Math.min(cap, override));
+  c = Math.max(0, Math.min(cap, c));
   if (c < BAG_THRESHOLD) return null;
   return Math.round(c * 100) / 100;
 }

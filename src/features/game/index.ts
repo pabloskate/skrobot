@@ -4,7 +4,7 @@
  * same engine; never duplicate rules outside `engine.ts`. Mid-game save/resume
  * for the home continue card lives in `savedGame.ts`.
  */
-export type { Phase, Stage, Side, GameFormat, GameState, GameAction } from './engine';
+export type { Phase, Stage, Side, GameFormat, GameVariant, GameState, GameAction } from './engine';
 export {
   GAME_LETTERS,
   LETTERS,
@@ -15,7 +15,21 @@ export {
   chooseRobotTrick,
   rollAttempt,
 } from './engine';
-export { getGameFormat, setGameFormat, subscribeGameFormat, useGameFormat } from './gamePreferences';
+export {
+  getGameFormat,
+  setGameFormat,
+  subscribeGameFormat,
+  useGameFormat,
+  getGameVariant,
+  setGameVariant,
+  subscribeGameVariant,
+  useGameVariant,
+  getPlayerStance,
+  setPlayerStance,
+  subscribePlayerStance,
+  usePlayerStance,
+} from './gamePreferences';
+export type { PlayerStance } from './gamePreferences';
 export type { Rps, RpsOutcome } from './rps';
 export { RPS_CHOICES, BEATS, robotThrow, rpsOutcome } from './rps';
 export type { SavedGame, SavedGameMode } from './savedGame';

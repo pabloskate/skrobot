@@ -22,11 +22,31 @@ describe('Late Kickflip', () => {
   });
 });
 
+describe('Ollie North', () => {
+  it('is available in every flatground stance as a roll-family progression trick', () => {
+    const variants = ['regular', 'fakie', 'switch', 'nollie'].map((stance) =>
+      TRICK_BY_ID.get(`${stance}-ollie-north`),
+    );
+
+    expect(variants.every(Boolean)).toBe(true);
+    expect(variants.map((trick) => trick?.difficulty)).toEqual([2, 2.5, 4.5, 4]);
+    expect(variants.every((trick) => trick && trickDiscipline(trick) === 'roll')).toBe(true);
+  });
+
+  it('has player-facing guidance and a north alias', () => {
+    const trick = TRICK_BY_ID.get('regular-ollie-north');
+
+    expect(trickDescription(trick!)).toContain('front foot forward');
+    expect(trickMatchesSearch(trick!, 'north')).toBe(true);
+  });
+});
+
 describe('trick search aliases', () => {
   const trick = (id: string) => TRICK_BY_ID.get(id)!;
 
   it.each([
     ['regular-frontside-flip', 'frontside 180 kickflip'],
+    ['regular-ollie-north', 'north'],
     ['regular-dolphin-flip', 'forward flip'],
     ['regular-360-flip', 'tre flip'],
     ['nollie-360-flip', 'nollie tre flip'],
@@ -38,8 +58,16 @@ describe('trick search aliases', () => {
     ['fakie-backside-360', 'caballerial'],
     ['fakie-frontside-180', 'frontside half cab'],
     ['fakie-backside-flip', 'half cab flip'],
+    ['nollie-fs-bigspin', 'nollie bigspin'],
+    ['switch-fs-bigspin-flip', 'switch bigspin flip'],
+    ['fakie-bs-bigspin-heelflip', 'fakie bigspin heel'],
   ])('finds %s using %s', (id, query) => {
     expect(trickMatchesSearch(trick(id), query)).toBe(true);
+  });
+
+  it('keeps omitted-word matching ordered and stance-specific', () => {
+    expect(trickMatchesSearch(trick('switch-fs-bigspin'), 'nollie bigspin')).toBe(false);
+    expect(trickMatchesSearch(trick('nollie-fs-bigspin-flip'), 'nollie flip bigspin')).toBe(false);
   });
 
   it('uses the conventional display names while retaining stable ids and bases', () => {

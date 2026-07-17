@@ -61,6 +61,12 @@ describe('saveGame / getSavedGame', () => {
     expect(getSavedGame()?.state.used).toEqual(['kickflip']);
   });
 
+  it('round-trips the defense-only variant', () => {
+    const state = midGame({ gameVariant: 'defense', phase: 'robotSet' });
+    saveGame({ robotId: 'shifty', mode: 'screen', state });
+    expect(getSavedGame()?.state.gameVariant).toBe('defense');
+  });
+
   it('does not persist rps or over states', () => {
     expect(saveGame({ robotId: 'shifty', mode: 'screen', state: initialGameState })).toBeNull();
     expect(getSavedGame()).toBeNull();

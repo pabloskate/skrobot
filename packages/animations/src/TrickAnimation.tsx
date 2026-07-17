@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react';
-import type { Robot } from './types';
-import type { Trick } from './types';
+import type { RiderStance, Robot, Trick } from './types';
+import { resolveRiderMechanics } from './stanceMechanics';
 
 /**
  * Side-view animated robot attempt: roll in, pop the trick, then catch it and
@@ -28,6 +28,8 @@ interface Props {
   /** Whether the robot knew the trick (in its bag). When false and not landed,
    *  forces the "shank" fall (trick didn't even rotate). */
   knewIt?: boolean;
+  /** The rider's natural footedness. Trick stance is resolved separately. */
+  riderStance?: RiderStance;
 }
 
 // ---------- Trick → animation family ----------
@@ -47,6 +49,8 @@ interface Spec {
   forwardFlip: boolean;
   /** Nollie pops the nose, so the feet mirror (front foot pops, back foot flicks). */
   nollie: boolean;
+  /** Ollie North: lift and extend the leading foot past the nose during the pop. */
+  ollieNorth: boolean;
   /** Direction of travel: fakie rides backwards (-1). */
   dir: 1 | -1;
   /** Trick stance for adjusting wind-up awkwardness. */
@@ -66,6 +70,7 @@ function specFor(trick: Trick): Spec {
     roll: 0,
     forwardFlip: false,
     nollie: trick.stance === 'nollie',
+    ollieNorth: false,
     dir: trick.stance === 'fakie' ? -1 : 1,
     stance: trick.stance,
     spinDir: 0,
@@ -74,6 +79,8 @@ function specFor(trick: Trick): Spec {
   switch (trick.base) {
     case 'Kickflip':
       return { ...base, flips: 1, flipDir: 1 };
+    case 'Ollie North':
+      return { ...base, ollieNorth: true };
     case 'Heelflip':
       return { ...base, flips: 1, flipDir: -1 };
     case 'Double Kickflip':
@@ -81,8 +88,6 @@ function specFor(trick: Trick): Spec {
     case 'Double Heelflip':
       return { ...base, flips: 2, flipDir: -1 };
     case 'Varial Kickflip':
-    case 'Hospital Flip':
-    case 'Casper Flip':
       return { ...base, flips: 1, yaw: 180, flipDir: 1, spinDir: 1 };
     case 'Hardflip':
       return { ...base, flips: 1, yaw: 180, flipDir: 1, spinDir: -1 };
@@ -186,6 +191,9 @@ export const SLOW_MOTION_PLAYBACK_RATE = 0.38;
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 const easeInOutCubic = (p: number) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2);
+const easeOutCubic = (p: number) => 1 - Math.pow(1 - p, 3);
+/** Zero slope at both ends — for handoffs between two motion segments. */
+const smoothstep = (p: number) => p * p * (3 - 2 * p);
 const rad = (d: number) => (d * Math.PI) / 180;
 /** Signed yaw squash: passes through a thin edge instead of vanishing. */
 const signedSquash = (c: number) => (Math.abs(c) < 0.01 ? 0.15 : Math.sign(c) * (0.15 + 0.85 * Math.abs(c)));
@@ -353,7 +361,9 @@ interface Frame {
 }
 
 interface Feet {
+  /** Canonical tail-side channel. Renderers map it to the rider's anatomy. */
   footL: Pt;
+  /** Canonical nose-side channel. Renderers map it to the rider's anatomy. */
   footR: Pt;
 }
 
@@ -366,36 +376,64 @@ function boardGlued(spec: Spec): boolean {
 
 function feetForFlip(spec: Spec, p: number, bodyYOffset: number, boardRot: number): Feet {
   const lift = Math.sin(p * Math.PI);
-  let feet: Feet;
+  const baselineY = FOOT_Y - bodyYOffset - 4;
+  const popFromNose = spec.nollie;
+  const popBaseX = popFromNose ? 25 : -25;
+  const flickBaseX = popFromNose ? -25 : 25;
+  const popOutward = popFromNose ? 1 : -1;
+  const flickOutward = popFromNose ? -1 : 1;
+
+  // The frame channels are board roles, not anatomical labels: footR always
+  // occupies the nose side and footL always occupies the tail side. Nollie
+  // swaps which role pops/flicks, never which end of the board those channels
+  // represent. This is what lets the renderer attach a real regular/goofy
+  // skeleton without silently turning a kickflip into a heelflip.
+  const fromPopAndFlick = (pop: Pt, flick: Pt): Feet => popFromNose
+    ? { footR: pop, footL: flick }
+    : { footR: flick, footL: pop };
+
   if (spec.flips && spec.yaw && !spec.forwardFlip && spec.yaw < 360) {
     // Varial / hardflip: kickflip-style flick + mild scoop. Dolphin keeps the
     // tre-style path below (it still has forwardFlip), so we only change
     // true 180-shuv flip combos here.
-    const scoop = p < 0.35 ? -12 * Math.sin((p / 0.35) * Math.PI) : 0;
-    const flickX = spec.flipDir === -1 ? 10 : -4;
-    feet = {
-      footL: { x: -25 + scoop + lift * flickX * 0.4, y: FOOT_Y - bodyYOffset - 4 - lift * 14 },
-      footR: { x: 22 + lift * 8, y: FOOT_Y - bodyYOffset - 4 - lift * 18 },
-    };
+    const scoop = p < 0.35 ? 12 * Math.sin((p / 0.35) * Math.PI) : 0;
+    const flickReach = spec.flipDir === -1 ? 12 : 8;
+    return fromPopAndFlick(
+      {
+        x: popBaseX + popOutward * scoop,
+        y: baselineY - lift * 14,
+      },
+      {
+        x: flickBaseX + flickOutward * lift * flickReach,
+        y: baselineY - lift * 22,
+      },
+    );
   } else if (spec.flips && spec.yaw) {
     // Tre-flip style (and dolphin): back-foot scoop, front foot out of the way.
-    const scoop = p < 0.3 ? -20 * Math.sin((p / 0.3) * Math.PI) : 0;
-    feet = {
-      footL: { x: -25 + scoop, y: FOOT_Y - bodyYOffset - lift * 10 },
-      footR: { x: 25 + lift * 5, y: FOOT_Y - bodyYOffset - lift * 35 },
-    };
+    const scoop = p < 0.3 ? 20 * Math.sin((p / 0.3) * Math.PI) : 0;
+    return fromPopAndFlick(
+      {
+        x: popBaseX + popOutward * scoop,
+        y: baselineY - lift * 10,
+      },
+      {
+        x: flickBaseX + flickOutward * lift * 8,
+        y: baselineY - lift * 35,
+      },
+    );
   } else if (spec.flips) {
     // Kickflip/Heelflip style: front foot flicks off the nose.
-    // Kickflip kicks back/down slightly, Heelflip kicks forward/up.
-    const flickX = spec.flipDir === -1 ? 15 : -5;
+    // Kickflip and heelflip use opposite lateral edges in 3D; both extend the
+    // flicking foot outward from its board end instead of moving the pop foot.
+    const flickX = spec.flipDir === -1 ? 15 : 9;
     const flickY = spec.flipDir === -1 ? 30 : 25;
-    // Baseline matches the deck top (FOOT_Y - bodyYOffset - 4) so the catch
-    // frame plants the feet ON the board and hands off seamlessly to the
-    // landing pose; the lift terms raise the feet off the deck mid-flick.
-    feet = {
-      footR: { x: 25 + lift * 10, y: FOOT_Y - bodyYOffset - 4 - lift * 15 },
-      footL: { x: -25 + lift * flickX, y: FOOT_Y - bodyYOffset - 4 - lift * flickY },
-    };
+    return fromPopAndFlick(
+      { x: popBaseX, y: baselineY - lift * 15 },
+      {
+        x: flickBaseX + flickOutward * lift * flickX,
+        y: baselineY - lift * flickY,
+      },
+    );
   } else if (spec.roll) {
     // Impossible: The board does a full backflip end-over-end.
     // The popping foot stays relatively planted on the board while the board
@@ -429,25 +467,43 @@ function feetForFlip(spec: Spec, p: number, bodyYOffset: number, boardRot: numbe
     // early to skip the mirror block below (mirroring would push the front
     // foot back onto the tail and contradict the nose-down pop).
     const th = rad(boardRot);
-    return {
-      footR: { x: 25 * Math.cos(th), y: FOOT_Y - 6 + 25 * Math.sin(th) - bodyYOffset },
-      footL: { x: -25 * Math.cos(th), y: FOOT_Y - 6 - 25 * Math.sin(th) - bodyYOffset },
-    };
+    const footR = { x: 25 * Math.cos(th), y: FOOT_Y - 6 + 25 * Math.sin(th) - bodyYOffset };
+    const footL = { x: -25 * Math.cos(th), y: FOOT_Y - 6 - 25 * Math.sin(th) - bodyYOffset };
+    if (!spec.ollieNorth) return { footR, footL };
+
+    // The front/nose foot comes off the deck and reaches north. In nollie that
+    // is also the popping foot (footR): it snaps the nose first, then releases
+    // while footL levels the board. Fakie keeps regular foot roles—only the
+    // direction of travel reverses—so footR still kicks over the board's nose.
+    // Let the ollie read cleanly first, then send the foot north once the deck
+    // starts leveling. The smooth pulse gives the late extension a stylish
+    // pause before it returns in time for the catch.
+    const northP = clamp01((p - 0.32) / 0.62);
+    const northExtension = Math.sin(smoothstep(northP) * Math.PI);
+    // Favor horizontal travel over a tucked knee so the leg visibly straightens
+    // through the stylish kick instead of only lifting above the deck.
+    const lift = northExtension * 36;
+    const reach = northExtension * 32;
+    return { footR: { x: footR.x + reach, y: footR.y - lift }, footL };
   } else {
     // Shuvit family: the board spins beneath — tuck both knees out of the way.
-    feet = {
-      footR: { x: 12, y: FOOT_Y - bodyYOffset - 8 - lift * 22 },
-      footL: { x: -25, y: FOOT_Y - bodyYOffset - 8 - lift * 18 },
+    // Feet ease from the roll-in plant toward the ride-away plant across the
+    // flight (matching x at both seams) instead of jumping straight to a
+    // fixed tuck position, so the pop and the catch don't snap the feet
+    // sideways. Nollie's roll-in/landing seats are handled explicitly (like
+    // the ollie family above) since they aren't a mirror of the regular ones.
+    const ease = Math.sin(p * Math.PI * 0.5);
+    if (spec.nollie) {
+      return {
+        footR: { x: 34 - ease * 16, y: FOOT_Y - bodyYOffset - 4 - lift * 22 },
+        footL: { x: -8, y: FOOT_Y - bodyYOffset - 4 - lift * 18 },
+      };
+    }
+    return {
+      footR: { x: 10 + ease * 2, y: FOOT_Y - bodyYOffset - 4 - lift * 22 },
+      footL: { x: -34 + ease * 19, y: FOOT_Y - bodyYOffset - 4 - lift * 18 },
     };
   }
-  if (spec.nollie) {
-    // Nollie pops the nose: mirror the tuck/flick feet so the popping leg is
-    // forward over the nose and the flick leg drops back to the tail. The
-    // boardGlued family returns above and skips this (popAngle handles it).
-    feet.footL.x = -feet.footL.x;
-    feet.footR.x = -feet.footR.x;
-  }
-  return feet;
 }
 
 function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant): Frame {
@@ -519,7 +575,13 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
     // A "late" shuvit holds the board flat off the pop, then whips the rotation
     // through in the back half of the flight (the late scoop). Its yaw runs on a
     // delayed clock; everything else (pop arc, catch) stays on catchP.
-    const spinP = spec.late ? clamp01((p - 0.38) / 0.30) : catchP;
+    const rawSpinP = spec.late ? clamp01((p - 0.38) / 0.30) : catchP;
+    // Pure shuvits (no flip, no body rotation) decelerate into the catch
+    // instead of snapping to a dead stop mid-air — flip/bigspin families keep
+    // the linear clock since their sy/pitch curves already read fine at
+    // constant angular speed.
+    const shuvitFamily = spec.yaw > 0 && !spec.bodyYaw && !spec.flips && !spec.forwardFlip;
+    const spinP = shuvitFamily ? easeOutCubic(rawSpinP) : rawSpinP;
     
     // Shank: the trick doesn't complete. Flips land upside-down (half
     // rotation reads fine in 2D). Spins don't happen at all — the board
@@ -568,15 +630,25 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
       // Late tricks: board stays flat after the pop (no wobble). Shuvits
       // add a scoop dip as the back foot whips the tail around mid-flight;
       // late flips skip the dip — the flip itself comes from sy + pitch.
-      boardRot = p < 0.3 ? popAngle * (1 - Math.pow(p / 0.3, 2)) : 0;
+      // smoothstep (zero slope at both ends) instead of a plain quadratic so
+      // the decay settles into the flat hold instead of arriving at speed.
+      boardRot = p < 0.3 ? popAngle * (1 - smoothstep(clamp01(p / 0.3))) : 0;
       if (spec.yaw) {
         const scoopPhase = clamp01((p - 0.38) / 0.30);
         const dipEase = Math.sin(clamp01(scoopPhase / 0.2) * Math.PI);
         const dipDir = spec.nollie ? 1 : -1; // tail dips down regardless of stance
         boardRot += dipEase * dipDir * -14;
       }
+    } else if (p < 0.3) {
+      // smoothstep (zero slope at both ends) instead of a plain quadratic so
+      // the pop decay arrives at the wobble with zero velocity, not at speed.
+      boardRot = popAngle * (1 - smoothstep(clamp01(p / 0.3)));
     } else {
-      boardRot = p < 0.3 ? popAngle * (1 - Math.pow(p / 0.3, 2)) : Math.sin(catchP * Math.PI * 2) * 4;
+      // Idle flight wobble, faded in from the pop-decay's zero so the handoff
+      // doesn't jump straight to full amplitude mid-swing.
+      const wobbleP = clamp01((p - 0.3) / 0.7);
+      const wobbleFade = smoothstep(Math.min(1, wobbleP / 0.25));
+      boardRot = Math.sin(wobbleP * Math.PI * 2) * 4 * wobbleFade;
     }
 
     // 360s shouldn't snap flat right off the pop. Let the nose hang and dip
@@ -612,11 +684,16 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
     armFront = (-1.2 + jumpApex * 0.8) * flail; 
     armBack = (1.0 - jumpApex * 0.6) * flail;
     
-    // Add rotational flair for spins — arms swing in the direction of rotation
+    // Add restrained rotational flair for spins. A full sin(2π) cycle made the
+    // arms reverse direction halfway through the trick; when the near/far arm
+    // changed under 3D depth sorting, that looked like one forearm teleporting
+    // into a completely different pose. One half-sine gives a single smooth
+    // sweep that returns to the catch pose without reversing mid-air.
     if (spec.bodyYaw) {
       const spinSign = spec.spinDir || 1;
-      armFront -= Math.sin(p * Math.PI * 2) * 0.8 * flail * spinSign;
-      armBack += Math.sin(p * Math.PI * 2) * 0.8 * flail * spinSign;
+      const armSweep = Math.sin(p * Math.PI) * 0.28 * flail * spinSign;
+      armFront -= armSweep;
+      armBack += armSweep;
     }
     
     if (spec.late) {
@@ -636,22 +713,31 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
         // board as the rotation comes around so the foot doesn't hang out.
         const scoopArc = Math.sin(scoopP * Math.PI) * (1 - scoopP * 0.5);
         const th = rad(boardRot);
-        const holdR = { x: 10 * Math.cos(th), y: FOOT_Y - 6 + 10 * Math.sin(th) - bodyYOffset };
-        const holdL = { x: -25 * Math.cos(th), y: FOOT_Y - 6 - 25 * Math.sin(th) - bodyYOffset };
-        // Scoop: subtle reach-back, front foot lifts out of the way briefly.
-        footR = {
-          x: holdR.x - scoopArc * 8,
-          y: holdR.y - scoopArc * 10,
-        };
-        footL = {
-          x: holdL.x - scoopArc * 22,
-          y: holdL.y - scoopArc * 16,
-        };
+        const noseX = spec.nollie ? 25 : 10;
+        const tailX = spec.nollie ? -10 : -25;
+        const holdR = { x: noseX * Math.cos(th), y: FOOT_Y - 6 + noseX * Math.sin(th) - bodyYOffset };
+        const holdL = { x: tailX * Math.cos(th), y: FOOT_Y - 6 + tailX * Math.sin(th) - bodyYOffset };
+        // The actual popping end scoops outward. The other end lifts just
+        // enough to clear the late rotation; rider stance does not alter this
+        // nose/tail mechanic.
         if (spec.nollie) {
-          // Nollie: front foot (footR) is the scooping foot.
-          const tmp = footR;
-          footR = { x: -footL.x, y: footL.y };
-          footL = { x: -tmp.x, y: tmp.y };
+          footR = {
+            x: holdR.x + scoopArc * 22,
+            y: holdR.y - scoopArc * 16,
+          };
+          footL = {
+            x: holdL.x + scoopArc * 8,
+            y: holdL.y - scoopArc * 10,
+          };
+        } else {
+          footR = {
+            x: holdR.x - scoopArc * 8,
+            y: holdR.y - scoopArc * 10,
+          };
+          footL = {
+            x: holdL.x - scoopArc * 22,
+            y: holdL.y - scoopArc * 16,
+          };
         }
       }
     } else {
@@ -1020,23 +1106,15 @@ export default function TrickAnimation({
   fallVariant,
   paused = false,
   knewIt,
+  riderStance = 'regular',
 }: Props) {
   // Shank is forced when the robot doesn't know the trick; excluded from
   // the random pool when it does. undefined (playground) keeps the full pool.
   const forcedFall = !landed && knewIt === false ? 'shank' as FallVariant : undefined;
   const [randomizedFallVariant] = useState<FallVariant>(() => randomFallVariant(knewIt));
-  // Switch in 2D needs the same physical treatment as fakie/nollie rather
-  // than a pure scaleX mirror: reverse the street movement (dir=-1) and pop
-  // the nose (nollie=true) so the pop, spin, and travel all read in the
-  // correct direction. The 2D body.sx/stanceSign shading still distinguishes
-  // switch from fakie visually.
-  const [spec] = useState(() => {
-    const base = specFor(trick);
-    if (trick.stance === 'switch') {
-      return { ...base, dir: -1 as const, nollie: true };
-    }
-    return base;
-  });
+  // Fakie changes travel and nollie changes the pop end. Switch changes only
+  // anatomy in the renderer; it is not simulated as fakie + nollie.
+  const [spec] = useState(() => specFor(trick));
   const [randomizedBackgroundSceneId] = useState<BackgroundSceneId>(randomBackgroundSceneId);
   const resolvedFallVariant = forcedFall ?? fallVariant ?? randomizedFallVariant;
   const resolvedBackgroundSceneId = backgroundSceneId ?? randomizedBackgroundSceneId;
@@ -1117,16 +1195,25 @@ export default function TrickAnimation({
 
   const colors = robot.avatar;
   const f = frame;
-  // Which side of the bot faces the camera: switch/fakie start on the back
-  // (dark) side; body rotation (bodySX sign) flips the facing. Combining the
-  // stance sign with bodySX gives the currently visible side.
-  //   regular/nollie → starts front (light), 180 lands on back (dark)
-  //   switch/fakie   → starts back (dark), 180 lands on front (light)
-  const stanceSign = spec.stance === 'switch' || spec.stance === 'fakie' ? -1 : 1;
-  const showBack = stanceSign * f.body.sx < 0;
+  const mechanics = resolveRiderMechanics(riderStance, spec.stance);
+  // Body rotation changes the visible side; rider footedness supplies the
+  // baseline orientation. Fakie does not turn the body and switch does.
+  const showBack = mechanics.orientationSign * f.body.sx < 0;
   const bodyFill = showBack ? darken(colors.body) : colors.body;
-  const kneeL = knee(f.footL);
-  const kneeR = knee(f.footR);
+  // Frame channels are stable board roles, even when a foot reaches across
+  // during a flick: R is nose and L is tail. Re-sorting by current x erased
+  // the selected stance and could hand a kickflip path to the wrong foot.
+  const noseChannel = f.footR;
+  const tailChannel = f.footL;
+  const leftFoot = mechanics.noseFoot === 'left' ? noseChannel : tailChannel;
+  const rightFoot = mechanics.noseFoot === 'right' ? noseChannel : tailChannel;
+  const kneeL = knee(leftFoot);
+  const kneeR = knee(rightFoot);
+  const leftArmAngle = mechanics.frontArm === 'left' ? f.armFront : f.armBack;
+  const rightArmAngle = mechanics.frontArm === 'right' ? f.armFront : f.armBack;
+  const rightSideNear = mechanics.orientationSign * f.body.sx < 0;
+  const farArmAngle = rightSideNear ? leftArmAngle : rightArmAngle;
+  const nearArmAngle = rightSideNear ? rightArmAngle : leftArmAngle;
   const shoulder: Pt = { x: 5, y: -38 };
   const pivot = FOOT_Y - 2;
   // Board cosmetics — pure render, no physics. Deck fill flips with the board
@@ -1142,21 +1229,25 @@ export default function TrickAnimation({
   // landing, fall) this is a no-op, so it's safe to always apply for roll
   // tricks.
   const isImpossible = spec.roll !== 0;
-  const popFoot: Pt = isImpossible ? (spec.nollie ? f.footR : f.footL) : { x: 0, y: 0 };
+  const popFoot: Pt = isImpossible
+    ? (mechanics.popFoot === 'left' ? leftFoot : rightFoot)
+    : { x: 0, y: 0 };
   const pX = f.body.x + popFoot.x * f.body.sx;
   const pY = f.body.y + popFoot.y;
   const boardTransform = isImpossible
     ? `translate(${pX} ${pY}) rotate(${f.board.rot}) scale(${f.board.sx} ${f.board.sy}) translate(${f.board.x - pX} ${f.board.y - pY})`
     : `translate(${f.board.x} ${f.board.y}) rotate(${f.board.rot}) scale(${f.board.sx} ${f.board.sy})`;
 
-  // Kickflip vs heelflip z-order: the flicking foot (footR, the front foot)
-  // flicks behind the board for kickflips (regular/nollie) and in front for
-  // heelflips. Switch/fakie inverts the relationship. Only active during the
-  // flip phase so the layering doesn't affect roll-in or landing poses.
+  // Kickflip vs heelflip z-order follows the resolved toeside rather than a
+  // hard-coded trick label. The anatomical flick foot changes for nollie.
   const skaterTransform = `translate(${f.body.x} ${f.body.y}) scale(${f.body.sx} 1) translate(0 ${pivot}) rotate(${f.body.rot}) translate(0 ${-pivot})`;
   const hasFlick = spec.flipDir !== 0;
   const inFlipPhase = f.t >= ROLL_IN && f.t < ROLL_IN + FLIP_T;
-  const flickBehind = hasFlick && inFlipPhase && (spec.flipDir === 1) === (spec.stance === 'regular' || spec.stance === 'nollie');
+  const flickBehind = hasFlick && inFlipPhase && (spec.flipDir === 1) === (mechanics.orientationSign === 1);
+  const flickFoot = mechanics.flickFoot === 'left' ? leftFoot : rightFoot;
+  const flickKnee = mechanics.flickFoot === 'left' ? kneeL : kneeR;
+  const hideLeftFlick = flickBehind && mechanics.flickFoot === 'left';
+  const hideRightFlick = flickBehind && mechanics.flickFoot === 'right';
   const streetTranslate =
     -(((f.streetDist / STREET_DASH_SECONDS) * STREET_DASH_PERIOD * spec.dir) % STREET_DASH_PERIOD);
   const streetStyle = { '--street-translate': `${streetTranslate}px` } as CSSProperties;
@@ -1165,6 +1256,10 @@ export default function TrickAnimation({
     <div
       className={`trick-anim ${isPlaying ? 'trick-anim--moving' : ''}`}
       style={streetStyle}
+      data-rider-stance={riderStance}
+      data-nose-foot={mechanics.noseFoot}
+      data-body-yaw={mechanics.bodyYawDegrees}
+      data-toe-side={mechanics.orientationSign}
       aria-label={`Replay ${robot.name} attempting ${trick.name}`}
       aria-roledescription="trick animation"
       role="button"
@@ -1180,17 +1275,16 @@ export default function TrickAnimation({
         {/* Background scene motif; the full-width moving street layer lives in CSS. */}
         <g aria-hidden="true">{scene(0)}</g>
 
-        {/* Flicking foot + leg rendered behind the board for kickflips
-            (regular/nollie) and heelflips (switch/fakie), so the foot reads
-            as flicking off the far side of the deck. */}
+        {/* Anatomical flick foot rendered behind the board when it travels on
+            the far side of the resolved rider orientation. */}
         {flickBehind && (
           <g transform={skaterTransform}>
             <g stroke="currentColor" strokeWidth="6.5" strokeLinecap="round" fill="none">
-              <line x1="0" y1="0" x2={kneeR.x} y2={kneeR.y} />
-              <line x1={kneeR.x} y1={kneeR.y} x2={f.footR.x} y2={f.footR.y} />
+              <line x1="0" y1="0" x2={flickKnee.x} y2={flickKnee.y} />
+              <line x1={flickKnee.x} y1={flickKnee.y} x2={flickFoot.x} y2={flickFoot.y} />
             </g>
-            <circle cx={kneeR.x} cy={kneeR.y} r="3.6" fill={colors.accent} stroke="currentColor" strokeWidth="1.2" />
-            <rect x={f.footR.x - 3} y={f.footR.y - 3.5} width="13" height="7" rx="3.5" fill={colors.accent} stroke="currentColor" strokeWidth="2" />
+            <circle cx={flickKnee.x} cy={flickKnee.y} r="3.6" fill={colors.accent} stroke="currentColor" strokeWidth="1.2" />
+            <rect x={flickFoot.x - 3} y={flickFoot.y - 3.5} width="13" height="7" rx="3.5" fill={colors.body} stroke="currentColor" strokeWidth="2" />
           </g>
         )}
 
@@ -1221,27 +1315,30 @@ export default function TrickAnimation({
 
         {/* Skater */}
         <g transform={skaterTransform}>
-          {/* back arm (behind body) */}
+          {/* camera-far arm (behind body) */}
           <line
             x1={shoulder.x}
             y1={shoulder.y}
-            x2={shoulder.x + Math.sin(f.armBack) * 30}
-            y2={shoulder.y + Math.cos(f.armBack) * 30}
+            x2={shoulder.x + Math.sin(farArmAngle) * 30}
+            y2={shoulder.y + Math.cos(farArmAngle) * 30}
             stroke={colors.accent}
             strokeWidth="6.5"
             strokeLinecap="round"
             opacity="0.4"
           />
-          <circle cx={shoulder.x + Math.sin(f.armBack) * 30} cy={shoulder.y + Math.cos(f.armBack) * 30} r="4" fill={colors.accent} opacity="0.45" />
 
           {/* legs */}
           <g stroke="currentColor" strokeWidth="6.5" strokeLinecap="round" fill="none">
-            <line x1="0" y1="0" x2={kneeL.x} y2={kneeL.y} />
-            <line x1={kneeL.x} y1={kneeL.y} x2={f.footL.x} y2={f.footL.y} />
-            {!flickBehind && (
+            {!hideLeftFlick && (
+              <>
+                <line x1="0" y1="0" x2={kneeL.x} y2={kneeL.y} />
+                <line x1={kneeL.x} y1={kneeL.y} x2={leftFoot.x} y2={leftFoot.y} />
+              </>
+            )}
+            {!hideRightFlick && (
               <>
                 <line x1="0" y1="0" x2={kneeR.x} y2={kneeR.y} />
-                <line x1={kneeR.x} y1={kneeR.y} x2={f.footR.x} y2={f.footR.y} />
+                <line x1={kneeR.x} y1={kneeR.y} x2={rightFoot.x} y2={rightFoot.y} />
               </>
             )}
           </g>
@@ -1253,34 +1350,33 @@ export default function TrickAnimation({
           <line x1="7" y1="-50" x2="7" y2="-56" stroke={colors.accent} strokeWidth="3" strokeLinecap="round" />
           {/* head */}
           <rect x="-6" y="-76" width="26" height="22" rx="8" fill={bodyFill} stroke="currentColor" strokeWidth="2.5" />
-          {/* visor + eye */}
-          <rect x="-2" y="-70" width="18" height="9" rx="4.5" fill="currentColor" opacity="0.85" />
-          <circle cx="12" cy="-65.5" r="2.4" fill={colors.accent} />
+          {/* visor + eyes */}
+          <rect x="0" y="-70" width="18" height="9" rx="4.5" fill="currentColor" opacity="0.85" />
+          <circle cx="6" cy="-65.5" r="2.1" fill={colors.accent} />
+          <circle cx="12" cy="-65.5" r="2.1" fill={colors.accent} />
           {/* antenna */}
           <line x1="7" y1="-76" x2="7" y2="-84" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
           <circle cx="7" cy="-85.5" r="3" fill={colors.accent} stroke="currentColor" strokeWidth="1.5" />
 
           {/* joints */}
           <circle cx="0" cy="0" r="4.5" fill={colors.accent} stroke="currentColor" strokeWidth="1.5" />
-          <circle cx={shoulder.x} cy={shoulder.y} r="4.5" fill={colors.accent} stroke="currentColor" strokeWidth="1.5" />
-          <circle cx={kneeL.x} cy={kneeL.y} r="3.6" fill={colors.accent} stroke="currentColor" strokeWidth="1.2" />
-          {!flickBehind && <circle cx={kneeR.x} cy={kneeR.y} r="3.6" fill={colors.accent} stroke="currentColor" strokeWidth="1.2" />}
+          {!hideLeftFlick && <circle cx={kneeL.x} cy={kneeL.y} r="3.6" fill={colors.accent} stroke="currentColor" strokeWidth="1.2" />}
+          {!hideRightFlick && <circle cx={kneeR.x} cy={kneeR.y} r="3.6" fill={colors.accent} stroke="currentColor" strokeWidth="1.2" />}
 
-          {/* front arm */}
+          {/* camera-near arm */}
           <line
             x1={shoulder.x}
             y1={shoulder.y}
-            x2={shoulder.x + Math.sin(f.armFront) * 30}
-            y2={shoulder.y + Math.cos(f.armFront) * 30}
+            x2={shoulder.x + Math.sin(nearArmAngle) * 30}
+            y2={shoulder.y + Math.cos(nearArmAngle) * 30}
             stroke={colors.accent}
             strokeWidth="6.5"
             strokeLinecap="round"
           />
-          <circle cx={shoulder.x + Math.sin(f.armFront) * 30} cy={shoulder.y + Math.cos(f.armFront) * 30} r="4.5" fill={colors.accent} stroke="currentColor" strokeWidth="1.5" />
 
           {/* boots */}
-          <rect x={f.footL.x - 3} y={f.footL.y - 3.5} width="13" height="7" rx="3.5" fill={colors.accent} stroke="currentColor" strokeWidth="2" />
-          {!flickBehind && <rect x={f.footR.x - 3} y={f.footR.y - 3.5} width="13" height="7" rx="3.5" fill={colors.accent} stroke="currentColor" strokeWidth="2" />}
+          {!hideLeftFlick && <rect x={leftFoot.x - 3} y={leftFoot.y - 3.5} width="13" height="7" rx="3.5" fill={colors.body} stroke="currentColor" strokeWidth="2" />}
+          {!hideRightFlick && <rect x={rightFoot.x - 3} y={rightFoot.y - 3.5} width="13" height="7" rx="3.5" fill={colors.body} stroke="currentColor" strokeWidth="2" />}
         </g>
       </svg>
     </div>

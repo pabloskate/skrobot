@@ -8,8 +8,9 @@ export type HeroState =
   | { kind: 'next'; robot: Robot; beatenRobot: Robot }
   | { kind: 'complete'; robot: Robot };
 
-const SHIFTY = ROBOT_BY_ID.get('shifty')!;
+/** Easiest flatground bot first — roster is already skill-sorted. */
 const FLATGROUND_ROBOTS = ROBOTS.filter(isFlatgroundRobot);
+const STARTER = FLATGROUND_ROBOTS[0] ?? ROBOT_BY_ID.get('shifty')!;
 
 function recordGames(record: Record_ | undefined): number {
   return (record?.w ?? 0) + (record?.l ?? 0);
@@ -45,10 +46,10 @@ function heroFromRecords(records: Record<string, Record_>): HeroState | null {
 }
 
 export function computeHero(log: GameLogEntry[], records: Record<string, Record_>): HeroState {
-  if (log.length === 0) return heroFromRecords(records) ?? { kind: 'welcome', robot: SHIFTY };
+  if (log.length === 0) return heroFromRecords(records) ?? { kind: 'welcome', robot: STARTER };
 
   const last = log[log.length - 1];
-  const robot = ROBOT_BY_ID.get(last.robotId) ?? SHIFTY;
+  const robot = ROBOT_BY_ID.get(last.robotId) ?? STARTER;
   if (!last.won) return { kind: 'rematch', robot, record: records[last.robotId] };
   return heroAfterWin(robot, records);
 }

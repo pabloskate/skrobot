@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useKeyboardInset } from '@/shared/useKeyboardInset';
+import type { CSSProperties } from 'react';
+import { useVisualViewportHeight, useVisualViewportOffsetTop } from '@/shared/useKeyboardInset';
 import type { Stance, Trick } from './tricks';
 import { grade, trickMatchesSearch } from './tricks';
 
@@ -34,7 +35,8 @@ function DifficultyDots({ trick }: { trick: Trick }) {
 export default function TrickPicker({ title, pool, usedIds, onPick, onClose }: Props) {
   const [query, setQuery] = useState('');
   const [stance, setStance] = useState<Stance>('regular');
-  const keyboardInset = useKeyboardInset();
+  const visualViewportHeight = useVisualViewportHeight();
+  const visualViewportOffsetTop = useVisualViewportOffsetTop();
 
   const hasStances = useMemo(() => pool.some((t) => t.stance !== 'regular'), [pool]);
 
@@ -57,17 +59,25 @@ export default function TrickPicker({ title, pool, usedIds, onPick, onClose }: P
     return [...list].sort((a, b) => a.difficulty - b.difficulty || a.name.localeCompare(b.name));
   }, [pool, query, stance, hasStances]);
 
+  const visualViewportStyle: CSSProperties | undefined = visualViewportHeight
+    ? {
+        top: visualViewportOffsetTop,
+        bottom: 'auto',
+        height: visualViewportHeight,
+      }
+    : undefined;
+
   return (
     <div
       className="sheet-backdrop"
-      style={keyboardInset ? { paddingBottom: keyboardInset } : undefined}
+      style={visualViewportStyle}
       onClick={onClose}
     >
       <div
         className="sheet"
         role="dialog"
         aria-label={title}
-        style={keyboardInset ? { maxHeight: `min(82vh, calc(100vh - ${keyboardInset + 12}px))` } : undefined}
+        style={visualViewportHeight ? { maxHeight: 'min(82vh, calc(100% - 12px))' } : undefined}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="sheet-header">

@@ -13,7 +13,7 @@ import {
   gameReducer,
   rollAttempt,
 } from './engine';
-import type { GameFormat, GameState, Side } from './engine';
+import type { GameFormat, GameState, GameVariant, Side } from './engine';
 import { clearSavedGame } from './savedGame';
 import RpsPanel from './RpsPanel';
 import TrickAnimation from './TrickAnimation';
@@ -22,6 +22,7 @@ interface Props {
   robot: Robot;
   pool: Trick[];
   gameFormat: GameFormat;
+  gameVariant: GameVariant;
   /** Game state carried over when the player switches modes mid-game. */
   resume?: GameState;
   onExit: () => void;
@@ -75,8 +76,20 @@ function Scoreboard({ state, robot }: { state: GameState; robot: Robot }) {
 
 // ---------- Main screen ----------
 
-export default function GameScreen({ robot, pool, gameFormat, resume, onExit, onVoiceState, onGameState }: Props) {
-  const [state, dispatch] = useReducer(gameReducer, resume ?? createInitialGameState(gameFormat));
+export default function GameScreen({
+  robot,
+  pool,
+  gameFormat,
+  gameVariant,
+  resume,
+  onExit,
+  onVoiceState,
+  onGameState,
+}: Props) {
+  const [state, dispatch] = useReducer(
+    gameReducer,
+    resume ?? createInitialGameState(gameFormat, gameVariant),
+  );
   const [pickerOpen, setPickerOpen] = useState(false);
   const bag = useMemo(() => buildBag(robot, pool), [robot, pool]);
   // A resumed finished game was already recorded by the other mode.
@@ -122,7 +135,9 @@ export default function GameScreen({ robot, pool, gameFormat, resume, onExit, on
 
   // Tell the shell when voice mode can take over (only on player turns).
   const canHandToVoice =
-    onVoiceState != null && (state.phase === 'rps' || state.phase === 'playerSet' || state.phase === 'playerCopy');
+    state.gameVariant === 'classic' &&
+    onVoiceState != null &&
+    (state.phase === 'rps' || state.phase === 'playerSet' || state.phase === 'playerCopy');
   useEffect(() => {
     onVoiceState?.(canHandToVoice ? state : undefined);
   }, [canHandToVoice, state, onVoiceState]);
@@ -138,7 +153,19 @@ export default function GameScreen({ robot, pool, gameFormat, resume, onExit, on
   const robotAnim = state.stage === 'attempting' || state.stage === 'retry' || state.stage === 'thinking' ? 'anim-wobble' : '';
 
   return (
-    <div className="container game">
+    <div className={`container game ${state.gameVariant === 'defense' ? 'defense-game' : ''}`}>
+      {state.gameVariant === 'defense' && (
+        <div className="defense-mode-banner" role="status" aria-label="Defense only mode">
+          <span className="defense-mode-mark" aria-hidden="true">
+            D
+          </span>
+          <span className="defense-mode-copy">
+            <strong>Defense only</strong>
+            <small>{robot.name} sets every trick · You match</small>
+          </span>
+        </div>
+      )}
+
       {state.phase !== 'rps' && <Scoreboard state={state} robot={robot} />}
 
       {state.phase === 'rps' && (
@@ -169,6 +196,7 @@ export default function GameScreen({ robot, pool, gameFormat, resume, onExit, on
               robot={robot}
               trick={state.current}
               bag={bag}
+              alwaysLand={state.gameVariant === 'defense' && state.phase === 'robotSet'}
               onResult={({ landed, knewIt }) =>
                 dispatch(
                   state.phase === 'robotCopy'
@@ -192,12 +220,22 @@ export default function GameScreen({ robot, pool, gameFormat, resume, onExit, on
       )}
 
       {state.phase === 'playerCopy' && state.current && (
-        <div className="panel center">
+        <div className={`panel center ${state.gameVariant === 'defense' ? 'defense-copy-panel' : ''}`}>
           {state.note && <p className="note">{say(state.note)}</p>}
           <p className="muted">{robot.name} set:</p>
           <h2 className="trick-callout">{state.current.name}</h2>
-          <p className="muted">Land it or take a letter.</p>
-          <button className="btn-primary" onClick={() => dispatch({ type: 'PLAYER_COPY_LANDED' })}>
+          <p className="muted">
+            {state.gameVariant === 'defense'
+              ? `Land it and ${robot.name} gets a letter. Miss it and you do.`
+              : 'Land it or take a letter.'}
+          </p>
+          <button
+            className="btn-primary"
+            onClick={() => {
+              if (state.gameVariant === 'defense') tricksLanded.current.push(state.current!.name);
+              dispatch({ type: 'PLAYER_COPY_LANDED' });
+            }}
+          >
             Landed it 🤘
           </button>
           <button className="btn-danger" onClick={() => dispatch({ type: 'PLAYER_COPY_MISSED' })}>
@@ -253,14 +291,18 @@ function RobotAttempt({
   robot,
   trick,
   bag,
+  alwaysLand = false,
   onResult,
 }: {
   robot: Robot;
   trick: Trick;
   bag: Map<string, number>;
+  alwaysLand?: boolean;
   onResult: (r: { landed: boolean; knewIt: boolean }) => void;
 }) {
-  const [roll] = useState(() => rollAttempt(bag, trick.id));
+  const [roll] = useState(() =>
+    alwaysLand ? { landed: true, knewIt: true } : rollAttempt(bag, trick.id),
+  );
   return <TrickAnimation robot={robot} trick={trick} landed={roll.landed} knewIt={roll.knewIt} onDone={() => onResult(roll)} />;
 }
 
@@ -276,7 +318,8 @@ function RobotStatus({ state, say }: { state: GameState; say: (s: string) => str
   } else {
     if (state.stage === 'thinking') text = `{R} is picking a trick…`;
     else if (state.stage === 'attempting') text = `{R} goes for a ${trick}…`;
-    else if (state.stage === 'landed') text = `{R} set: ${trick}`;
+    else if (state.stage === 'landed')
+      text = state.gameVariant === 'defense' ? `{R} set the ${trick}` : `{R} set: ${trick}`;
     else if (state.stage === 'missed') text = `{R} didn't land it`;
     else if (state.stage === 'cant') text = `{R} is out of tricks to set!`;
   }
@@ -293,6 +336,7 @@ function continueLabel(state: GameState): string {
   if (state.winner) return 'See result';
   if (state.phase === 'robotCopy') return state.stage === 'landed' ? 'Set another trick' : 'Your set continues';
   if (state.stage === 'landed') return 'Go try it';
+  if (state.gameVariant === 'defense') return 'See result';
   return 'Your turn to set';
 }
 

@@ -188,6 +188,67 @@ describe('gameReducer — SK8 format', () => {
   })
 })
 
+describe('gameReducer — defense only', () => {
+  it('starts with the robot setting and skips the toss', () => {
+    const initial = createInitialGameState('skate', 'defense')
+    expect(initial.phase).toBe('robotSet')
+    expect(initial.stage).toBe('thinking')
+  })
+
+  it('treats every robot set as landed and records the trick as used', () => {
+    const initial = {
+      ...createInitialGameState('skate', 'defense'),
+      current: trick('kickflip'),
+      stage: 'attempting' as const,
+    }
+    const set = gameReducer(initial, { type: 'ROBOT_SET_RESULT', landed: false })
+    expect(set.stage).toBe('landed')
+    expect(set.used).toEqual(['kickflip'])
+  })
+
+  it('gives the robot a letter when the skater lands the copy', () => {
+    const copying = {
+      ...createInitialGameState('skate', 'defense'),
+      phase: 'playerCopy' as const,
+      stage: null,
+      current: trick('kickflip'),
+    }
+    const next = gameReducer(copying, { type: 'PLAYER_COPY_LANDED' })
+    expect(next.letters).toEqual({ player: 0, robot: 1 })
+    expect(next.phase).toBe('robotSet')
+    expect(next.stage).toBe('thinking')
+  })
+
+  it('gives the skater a letter on the first miss, including their last letter', () => {
+    const copying = {
+      ...createInitialGameState('skate', 'defense'),
+      phase: 'playerCopy' as const,
+      stage: null,
+      current: trick('kickflip'),
+      attemptsLeft: 2,
+      letters: { player: LETTERS.length - 1, robot: 0 },
+    }
+    const finished = gameReducer(copying, { type: 'PLAYER_COPY_MISSED' })
+    expect(finished.letters.player).toBe(LETTERS.length)
+    expect(finished.phase).toBe('over')
+    expect(finished.winner).toBe('robot')
+  })
+
+  it('ends SK8 when the robot receives its third letter and preserves defense on rematch', () => {
+    const copying = {
+      ...createInitialGameState('sk8', 'defense'),
+      phase: 'playerCopy' as const,
+      stage: null,
+      current: trick('kickflip'),
+      letters: { player: 1, robot: 2 },
+    }
+    const finished = gameReducer(copying, { type: 'PLAYER_COPY_LANDED' })
+    expect(finished.winner).toBe('player')
+    expect(finished.letters.robot).toBe(3)
+    expect(gameReducer(finished, { type: 'REMATCH' })).toEqual(createInitialGameState('sk8', 'defense'))
+  })
+})
+
 describe('chooseRobotTrick', () => {
   const bag = new Map([
     ['a', 0.9],

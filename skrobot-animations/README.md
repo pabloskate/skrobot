@@ -25,10 +25,11 @@ Then open the printed local URL (usually `http://localhost:5173`).
 ## How to use the playground
 
 1. Pick a robot.
-2. Pick a trick and stance.
-3. Click **Land** to see the success animation, **Fall** to see the bail, or **Replay** to restart the current one.
-4. Switch **Playback** between normal and slow motion to inspect trick timing.
-5. Pin a **Background** and **Fall** variant, then copy the parameter JSON below the demo.
+2. Pick the rider's natural **Rider stance** (`regular` or `goofy`).
+3. Pick a trick and its independent **Trick stance** (`regular`, `fakie`, `switch`, or `nollie`).
+4. Click **Land** to see the success animation, **Fall** to see the bail, or **Replay** to restart the current one.
+5. Switch **Playback** between normal and slow motion to inspect trick timing.
+6. Pin a **Background** and **Fall** variant, then copy the parameter JSON below the demo.
 
 ## Slow motion
 

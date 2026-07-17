@@ -8,9 +8,14 @@
   --spot-sky-mid: #a8daf5;
   --spot-sky-horizon: #d6eefb;
   --spot-wall: #8ecff2;
-  --spot-floor: #c4d0d8;
+  --spot-floor: #95c07f;
+  --spot-asphalt: #7d8794;
+  --spot-asphalt-deep: #6b7582;
+  --spot-lane: rgba(248, 246, 236, 0.72);
+  --spot-lane-center: rgba(255, 236, 170, 0.78);
+  --spot-curb: rgba(37, 53, 75, 0.28);
   --spot-edge: rgba(37, 53, 75, 0.2);
-  --spot-shadow: rgba(37, 53, 75, 0.22);
+  --spot-shadow: rgba(28, 36, 48, 0.32);
   isolation: isolate;
   overflow: hidden;
   border: 1px solid rgba(37, 53, 75, 0.14);
@@ -68,6 +73,14 @@
   fill: var(--spot-floor);
 }
 
+.trick-anim-3d__road-plane {
+  fill: var(--spot-asphalt);
+}
+
+.trick-anim-3d__road-sheen {
+  pointer-events: none;
+}
+
 .trick-anim-3d__back-edge {
   fill: none;
   stroke: var(--spot-edge);
@@ -76,11 +89,44 @@
   opacity: 0.55;
 }
 
+.trick-anim-3d__curb-line {
+  fill: none;
+  stroke: var(--spot-curb);
+  stroke-linecap: round;
+  stroke-width: 2.4;
+}
+
+.trick-anim-3d__curb-line--near {
+  opacity: 0.42;
+}
+
+.trick-anim-3d__curb-line--far {
+  opacity: 0.28;
+}
+
+.trick-anim-3d__curb-lip {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.34);
+  stroke-linecap: round;
+  stroke-width: 1.4;
+  opacity: 0.55;
+}
+
 .trick-anim-3d__deck-shadow {
   fill: var(--spot-shadow);
 }
 
 .trick-anim-3d__street-dash {
+  fill: none;
+  stroke: var(--spot-lane);
+  stroke-linecap: round;
+}
+
+.trick-anim-3d__street-dash--center {
+  stroke: var(--spot-lane-center);
+}
+
+.trick-anim-3d__road-grit {
   fill: none;
   stroke: var(--anim-ink);
   stroke-linecap: round;

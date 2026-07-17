@@ -8,12 +8,14 @@ import {
   TrickAnimation3D,
   type BackgroundSceneId,
   type FallVariant,
+  type RiderStance,
+  type Stance,
 } from '@skrobot/animations';
 import { ROBOTS, robotById, tricksForStance } from './data';
-import type { Stance } from '@skrobot/animations';
 import styles from './Playground.module.css';
 
 const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
+const RIDER_STANCES: RiderStance[] = ['regular', 'goofy'];
 const PLAYBACK_OPTIONS = [
   { id: 'normal', label: 'Normal', rate: 1 },
   { id: 'slow', label: 'Slow motion', rate: SLOW_MOTION_PLAYBACK_RATE },
@@ -59,6 +61,7 @@ export default function App() {
   const [selectedRobotId, setSelectedRobotId] = useState(ROBOTS[0].id);
   const [selectedBase, setSelectedBase] = useState('Kickflip');
   const [selectedStance, setSelectedStance] = useState<Stance>('regular');
+  const [selectedRiderStance, setSelectedRiderStance] = useState<RiderStance>('regular');
   const [landed, setLanded] = useState<boolean | null>(null);
   const [playKey, setPlayKey] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -81,6 +84,7 @@ export default function App() {
     playKey,
     selectedRobotId,
     currentTrick?.id ?? selectedBase,
+    selectedRiderStance,
     landed === null ? 'idle' : landed ? 'landed' : 'bailed',
     playbackMode,
     viewMode,
@@ -95,6 +99,7 @@ export default function App() {
       trickId: currentTrick?.id ?? null,
       trickBase: currentTrick?.base ?? selectedBase,
       stance: currentTrick?.stance ?? selectedStance,
+      riderStance: selectedRiderStance,
       landed,
       outcome: landed === null ? 'not-started' : landed ? 'landed' : 'bailed',
       playbackMode,
@@ -113,6 +118,7 @@ export default function App() {
       robot.id,
       robot.name,
       selectedBase,
+      selectedRiderStance,
       selectedStance,
       viewMode,
     ]
@@ -177,7 +183,23 @@ export default function App() {
         </div>
 
         <div>
-          <h2 className={styles.sectionTitle}>Stance</h2>
+          <h2 className={styles.sectionTitle}>Rider stance</h2>
+          <div className={styles.stanceRow}>
+            {RIDER_STANCES.map((stance) => (
+              <button
+                key={stance}
+                className={`${styles.stanceBtn} ${selectedRiderStance === stance ? styles.stanceBtnActive : ''}`}
+                onClick={() => setSelectedRiderStance(stance)}
+                aria-pressed={selectedRiderStance === stance}
+              >
+                {stance}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <h2 className={styles.sectionTitle}>Trick stance</h2>
           <div className={styles.stanceRow}>
             {STANCES.map((stance) => (
               <button
@@ -291,6 +313,7 @@ export default function App() {
                 playbackRate={playbackRate}
                 backgroundSceneId={backgroundSceneId}
                 fallVariant={fallVariant}
+                riderStance={selectedRiderStance}
                 paused={paused}
                 onDone={() => {}}
               />
@@ -303,6 +326,7 @@ export default function App() {
                 playbackRate={playbackRate}
                 backgroundSceneId={backgroundSceneId}
                 fallVariant={fallVariant}
+                riderStance={selectedRiderStance}
                 paused={paused}
                 onDone={() => {}}
               />

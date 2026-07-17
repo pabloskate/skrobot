@@ -15,6 +15,7 @@ export type Stage =
 export type Side = 'player' | 'robot';
 
 export type GameFormat = 'skate' | 'sk8';
+export type GameVariant = 'classic' | 'defense';
 
 export const GAME_LETTERS = {
   skate: ['S', 'K', 'A', 'T', 'E'],
@@ -30,6 +31,8 @@ export function lettersForFormat(format: GameFormat): readonly string[] {
 
 export interface GameState {
   gameFormat: GameFormat;
+  /** Classic alternates setters; defense keeps the robot setting every trick. */
+  gameVariant: GameVariant;
   phase: Phase;
   stage: Stage;
   letters: Record<Side, number>;
@@ -46,17 +49,21 @@ export interface GameState {
   winner: Side | null;
 }
 
-export function createInitialGameState(gameFormat: GameFormat = 'skate'): GameState {
+export function createInitialGameState(
+  gameFormat: GameFormat = 'skate',
+  gameVariant: GameVariant = 'classic',
+): GameState {
   return {
     gameFormat,
-    phase: 'rps',
-    stage: null,
+    gameVariant,
+    phase: gameVariant === 'defense' ? 'robotSet' : 'rps',
+    stage: gameVariant === 'defense' ? 'thinking' : null,
     letters: { player: 0, robot: 0 },
     used: [],
     current: null,
     attemptsLeft: 1,
     robotKnewIt: true,
-    note: '',
+    note: gameVariant === 'defense' ? '{R} sets every trick. Land it to give them a letter.' : '',
     winner: null,
   };
 }
@@ -120,14 +127,41 @@ export function gameReducer(s: GameState, a: GameAction): GameState {
         : { ...s, stage: 'cant', current: null };
 
     case 'ROBOT_SET_RESULT':
-      return a.landed
+      return a.landed || s.gameVariant === 'defense'
         ? { ...s, stage: 'landed', used: [...s.used, s.current!.id] }
         : { ...s, stage: 'missed' };
 
-    case 'PLAYER_COPY_LANDED':
+    case 'PLAYER_COPY_LANDED': {
+      if (s.gameVariant === 'defense') {
+        const robotLetters = s.letters.robot + 1;
+        const won = robotLetters >= lettersForFormat(s.gameFormat).length;
+        return {
+          ...s,
+          phase: won ? 'over' : 'robotSet',
+          stage: won ? null : 'thinking',
+          current: null,
+          letters: { ...s.letters, robot: robotLetters },
+          winner: won ? 'player' : null,
+          note: won ? '' : 'You matched it — {R} takes a letter and sets again.',
+        };
+      }
       return { ...s, phase: 'robotSet', stage: 'thinking', current: null, note: 'You matched it! {R} sets again.' };
+    }
 
     case 'PLAYER_COPY_MISSED': {
+      if (s.gameVariant === 'defense') {
+        const playerLetters = s.letters.player + 1;
+        const lost = playerLetters >= lettersForFormat(s.gameFormat).length;
+        return {
+          ...s,
+          phase: lost ? 'over' : 'robotSet',
+          stage: lost ? null : 'thinking',
+          current: null,
+          letters: { ...s.letters, player: playerLetters },
+          winner: lost ? 'robot' : null,
+          note: lost ? '' : "You missed it — that's your letter. {R} sets again.",
+        };
+      }
       if (s.attemptsLeft > 1) {
         const finalLetter = lettersForFormat(s.gameFormat).at(-1);
         return {
@@ -169,6 +203,9 @@ export function gameReducer(s: GameState, a: GameAction): GameState {
                 : '',
           };
         }
+        if (s.gameVariant === 'defense') {
+          return { ...s, phase: 'over', stage: null, current: null, winner: 'player', note: '' };
+        }
         const note = s.stage === 'cant' ? "{R} is out of tricks — you take over!" : "{R} didn't land it — your turn to set!";
         return { ...s, phase: 'playerSet', stage: null, current: null, note };
       }
@@ -176,7 +213,7 @@ export function gameReducer(s: GameState, a: GameAction): GameState {
     }
 
     case 'REMATCH':
-      return createInitialGameState(s.gameFormat);
+      return createInitialGameState(s.gameFormat, s.gameVariant);
 
     default:
       return s;

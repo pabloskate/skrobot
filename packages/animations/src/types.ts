@@ -1,4 +1,6 @@
 export type Stance = 'regular' | 'fakie' | 'switch' | 'nollie';
+export type RiderStance = 'regular' | 'goofy';
+export type BodySide = 'left' | 'right';
 
 export interface Robot {
   id: string;

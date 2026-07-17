@@ -51,6 +51,7 @@ const slug = (s: string) =>
 // [name, difficulty]
 const FLATGROUND: [string, number][] = [
   ['Ollie', 1],
+  ['Ollie North', 2],
   ['Frontside 180', 2],
   ['Backside 180', 2],
   ['Pop Shuvit', 2],
@@ -72,8 +73,6 @@ const FLATGROUND: [string, number][] = [
   ['Frontside Heelflip', 6],
   ['Frontside 360 Shuvit', 6],
   ['Pressure Flip', 6],
-  ['Hospital Flip', 6],
-  ['Casper Flip', 6],
   ['Hardflip', 7],
   ['Inward Heelflip', 7],
   ['360 Flip', 7],
@@ -83,7 +82,8 @@ const FLATGROUND: [string, number][] = [
   ['Dolphin Flip', 7],
   ['Impossible', 8],
   ['Double Heelflip', 8],
-  ['FS Bigspin Flip', 8],
+  // Elite contest-level tech: only a few pros carry it, at low consistency.
+  ['FS Bigspin Flip', 11.5],
   // Harder than the display cap of 10 so even pros only scrape a low land rate.
   ['BS Bigspin Heelflip', 12],
   ['FS Bigspin Heelflip', 8],
@@ -143,6 +143,7 @@ const OTHER: [string, number][] = [
  */
 const FLATGROUND_FAMILY: Record<string, Family> = {
   Ollie: 'roll',
+  'Ollie North': 'roll',
   'Pop Shuvit': 'shuvit',
   'Frontside Shuvit': 'shuvit',
   '360 Shuvit': 'shuvit',
@@ -170,6 +171,7 @@ const MIN_SKILL: Record<string, number> = {
   'Late Backside Shuvit': 4.5,
   'Late Frontside Shuvit': 4.5,
   'Late Kickflip': 6,
+  'FS Bigspin Flip': 8.4,
   // BS bigspin heelflip is elite tech — high-pro skill only, and still low odds.
   'BS Bigspin Heelflip': 8.5,
   '360 Double Kickflip': 8.4,
@@ -249,9 +251,24 @@ const STANCE_SENSITIVITY: Record<Family, number> = {
   flip: 1.0,
 };
 
+/**
+ * Some tricks are much more stance-sensitive than their broad family suggests.
+ * An Ollie North needs the leading foot to leave the board and reach past the
+ * nose, so switch/nollie versions are a bigger reset than a normal ollie.
+ */
+const TRICK_STANCE_SENSITIVITY: Partial<Record<string, Partial<Record<Stance, number>>>> = {
+  'Ollie North': { switch: 1.0, nollie: 1.0 },
+};
+
 export function stanceLoad(trick: Trick): number {
-  if (trick.stance === 'regular' || trick.category !== 'flatground') return 0;
-  return STANCE_BASE_COST[trick.stance] * STANCE_SENSITIVITY[trickFamily(trick.base)];
+  return stanceLoadFor(trick.base, trick.stance, trick.category);
+}
+
+function stanceLoadFor(base: string, stance: Stance, category: Category): number {
+  if (stance === 'regular' || category !== 'flatground') return 0;
+  const sensitivity = TRICK_STANCE_SENSITIVITY[base]?.[stance]
+    ?? STANCE_SENSITIVITY[trickFamily(base)];
+  return STANCE_BASE_COST[stance] * sensitivity;
 }
 
 const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
@@ -271,7 +288,7 @@ function build(): Trick[] {
   const tricks: Trick[] = [];
   for (const [base, difficulty] of FLATGROUND) {
     for (const stance of STANCES) {
-      const load = STANCE_BASE_COST[stance] * STANCE_SENSITIVITY[trickFamily(base)];
+      const load = stanceLoadFor(base, stance, 'flatground');
       tricks.push({
         id: slug(`${stance}-${base}`),
         name: stanceName(stance, base),
@@ -299,6 +316,7 @@ export const TRICK_BY_ID = new Map(TRICKS.map((t) => [t.id, t]));
 
 /** Canonical common-name aliases shared by typed search and voice resolution. */
 export const TRICK_BASE_ALIASES: Readonly<Partial<Record<string, readonly string[]>>> = {
+  'Ollie North': ['north', 'ollie north'],
   'Frontside 180': ['front 180', 'fs 180'],
   'Backside 180': ['back 180', 'bs 180'],
   'Pop Shuvit': ['pop shove it', 'shove it', 'shuv', 'shuvit'],
@@ -382,12 +400,29 @@ function searchAliases(trick: Trick): string[] {
 const normalizeSearch = (value: string) =>
   value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
 
+function searchWordsMatch(term: string, query: string): boolean {
+  if (term.includes(query)) return true;
+
+  const termWords = term.split(' ');
+  const queryWords = query.split(' ');
+  let termIndex = 0;
+
+  return queryWords.every((queryWord) => {
+    const matchIndex = termWords.findIndex(
+      (termWord, index) => index >= termIndex && termWord.startsWith(queryWord),
+    );
+    if (matchIndex < 0) return false;
+    termIndex = matchIndex + 1;
+    return true;
+  });
+}
+
 /** Match a trick's display name, base name, or common skateboarding aliases. */
 export function trickMatchesSearch(trick: Trick, query: string): boolean {
   const normalizedQuery = normalizeSearch(query);
   if (!normalizedQuery) return true;
   return [trick.name, trick.base, ...searchAliases(trick)]
-    .some((term) => normalizeSearch(term).includes(normalizedQuery));
+    .some((term) => searchWordsMatch(normalizeSearch(term), normalizedQuery));
 }
 
 export function tricksFor(category: Category): Trick[] {
@@ -415,6 +450,7 @@ export function grade(t: Trick): 1 | 2 | 3 {
 const DESCRIPTIONS: Record<string, string> = {
   // Flatground
   Ollie: 'Snap the tail and slide your front foot up to pop the whole board into the air — the move everything else is built on.',
+  'Ollie North': 'Pop an ollie, then kick your front foot forward past the nose before bringing it back to catch the board.',
   'Frontside 180': 'An ollie with a 180° turn, rotating your chest to face the way you came.',
   'Backside 180': 'An ollie with a 180° turn, spinning with your back leading the way.',
   'Pop Shuvit': 'Scoop the tail so the board spins a flat 180° under your feet while you hop.',
@@ -436,8 +472,6 @@ const DESCRIPTIONS: Record<string, string> = {
   'Frontside Heelflip': 'A heelflip wrapped into a frontside 180.',
   'Frontside 360 Shuvit': 'A 360 shuvit scooped frontside instead of backside.',
   'Pressure Flip': 'Pop off the back foot to flip and spin the board in a tight, low rotation.',
-  'Hospital Flip': 'A half kickflip caught mid-flip with your foot, then flicked back over.',
-  'Casper Flip': 'Flip the board into an upside-down casper, then kick it back upright.',
   Hardflip: 'A kickflip and frontside shuvit fused so the board flips vertically between your legs.',
   'Inward Heelflip': 'A heelflip combined with a backside shuvit, spinning in toward you.',
   '360 Flip': 'The tre flip — a 360 shuvit and a kickflip together in one spinning, flipping motion.',

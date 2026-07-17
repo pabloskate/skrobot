@@ -18,30 +18,31 @@ function logEntry(overrides: Partial<GameLogEntry>): GameLogEntry {
 }
 
 describe('computeHero', () => {
-  it('welcomes brand-new players', () => {
+  it('welcomes brand-new players with the easiest flatground robot', () => {
     const hero = computeHero([], emptyRecords);
 
     expect(hero.kind).toBe('welcome');
-    expect(hero.robot.id).toBe('shifty');
+    // Baily includes old-school disciplines, so Sacker is the softest remaining flatground opener.
+    expect(hero.robot.id).toBe('sacker');
   });
 
   it('recommends the next unbeaten flatground robot when records move past welcome', () => {
-    const hero = computeHero([], { shifty: { w: 1, l: 0 } });
+    const hero = computeHero([], { baily: { w: 1, l: 0 } });
 
     expect(hero.kind).toBe('next');
     expect(hero.robot.id).toBe('sacker');
   });
 
   it('offers a rematch from existing losses when the game log is empty', () => {
-    const hero = computeHero([], { shifty: { w: 0, l: 1 } });
+    const hero = computeHero([], { baily: { w: 0, l: 1 } });
 
     expect(hero.kind).toBe('rematch');
-    expect(hero.robot.id).toBe('shifty');
+    expect(hero.robot.id).toBe('baily');
   });
 
   it('uses the latest game log entry when one exists', () => {
     const hero = computeHero([logEntry({ robotId: 'sacker', won: false })], {
-      shifty: { w: 1, l: 0 },
+      baily: { w: 1, l: 0 },
       sacker: { w: 0, l: 1 },
     });
 
@@ -51,11 +52,12 @@ describe('computeHero', () => {
 
   it('keeps climbing from the robot just beaten', () => {
     const hero = computeHero([logEntry({ robotId: 'sacker', won: true })], {
-      shifty: { w: 1, l: 0 },
+      baily: { w: 1, l: 0 },
       sacker: { w: 1, l: 0 },
     });
 
     expect(hero.kind).toBe('next');
-    expect(hero.robot.id).toBe('flipster');
+    // After Sacker (2.6): Cabby and Shifty tie at 3 — name order puts Cabby next.
+    expect(hero.robot.id).toBe('cabby');
   });
 });

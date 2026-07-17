@@ -17,6 +17,7 @@ import {
   saveGame,
   subscribeSavedGame,
   useGameFormat,
+  useGameVariant,
 } from '@/features/game';
 import { HomeScreen } from '@/features/home';
 import type { Robot } from '@/features/robots';
@@ -73,7 +74,7 @@ const ROOT_TAB_LABELS: Record<Exclude<Tab, 'skate'>, string> = {
   settings: 'Settings',
 };
 
-function betaTabsEnabledFromLocation(): boolean {
+function betaTricksEnabledFromLocation(): boolean {
   if (typeof window === 'undefined') return false;
   return new URLSearchParams(window.location.search).get('beta') === 'true';
 }
@@ -110,14 +111,15 @@ const rootScreen = (): Screen => ({ id: 'home' });
 export default function AppShell() {
   const auth = useAuth();
   const gameFormat = useGameFormat();
+  const gameVariant = useGameVariant();
   const online = useOnlineStatus();
   const [screen, setScreen] = useState<Screen>(rootScreen);
   const [voiceState, setVoiceState] = useState<GameState | undefined>(undefined);
   const [liveGame, setLiveGame] = useState<GameState | undefined>(undefined);
   const [exitPromptOpen, setExitPromptOpen] = useState(false);
-  const betaTabsEnabled = useSyncExternalStore(
+  const betaTricksEnabled = useSyncExternalStore(
     subscribeToUrlChanges,
-    betaTabsEnabledFromLocation,
+    betaTricksEnabledFromLocation,
     () => false,
   );
   const savedGame = useSyncExternalStore(subscribeSavedGame, browserSavedSnapshot, serverSavedSnapshot);
@@ -191,7 +193,7 @@ export default function AppShell() {
 
   const activeTab = tabForScreen(screen);
   const root = isRootScreen(screen);
-  const showTabbar = root && betaTabsEnabled;
+  const showTabbar = root;
   const title = titleForScreen(screen);
   const exitRobotName =
     screen.id === 'game' || screen.id === 'voice' ? screen.robot.name : 'this robot';
@@ -273,6 +275,7 @@ export default function AppShell() {
               robot={screen.robot}
               pool={screen.pool}
               gameFormat={screen.resume?.gameFormat ?? gameFormat}
+              gameVariant={screen.resume?.gameVariant ?? gameVariant}
               resume={screen.resume}
               onExit={back}
               onVoiceState={setVoiceState}
@@ -340,13 +343,15 @@ export default function AppShell() {
             <TbSkateboard aria-hidden />
             <span className="tabbar-label">{gameFormat === 'sk8' ? 'SK8' : 'S.K.A.T.E.'}</span>
           </button>
-          <button
-            className={`tabbar-btn ${activeTab === 'tricks' ? 'active' : ''}`}
-            onClick={() => switchTab('tricks')}
-          >
-            <TbClipboardList aria-hidden />
-            <span className="tabbar-label">{ROOT_TAB_LABELS.tricks}</span>
-          </button>
+          {betaTricksEnabled && (
+            <button
+              className={`tabbar-btn ${activeTab === 'tricks' ? 'active' : ''}`}
+              onClick={() => switchTab('tricks')}
+            >
+              <TbClipboardList aria-hidden />
+              <span className="tabbar-label">{ROOT_TAB_LABELS.tricks}</span>
+            </button>
+          )}
           <button
             className={`tabbar-btn ${activeTab === 'settings' ? 'active' : ''}`}
             onClick={() => switchTab('settings')}

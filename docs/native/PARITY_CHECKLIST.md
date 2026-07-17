@@ -103,7 +103,7 @@ Native WebView requests must hit the same first-party API surface as web:
    - Billing endpoints remain disabled/enabled according to the same server flags as web.
 
 9. Trick gallery
-   - With `?beta=true`, the bottom nav bar appears with the selected game format, Tricks, and Settings tabs.
+   - The bottom nav bar always shows the selected game format and Settings; with `?beta=true`, it also shows Tricks.
    - Gallery shows flatground trick cards with difficulty dots, stance filters, and search.
    - Stance chips filter the list.
    - Tapping a trick with a curated video opens the video modal; tricks without tips are disabled.

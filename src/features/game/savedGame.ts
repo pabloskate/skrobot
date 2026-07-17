@@ -51,6 +51,7 @@ function rehydrateState(raw: GameState): GameState | null {
 
   return {
     gameFormat: raw.gameFormat === 'sk8' ? 'sk8' : 'skate',
+    gameVariant: raw.gameVariant === 'defense' ? 'defense' : 'classic',
     phase: raw.phase,
     stage: raw.stage ?? null,
     letters: {

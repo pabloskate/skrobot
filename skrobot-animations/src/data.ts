@@ -1,14 +1,15 @@
 import type { Robot, Stance, Trick } from '@skrobot/animations';
 
 export const ROBOTS: Robot[] = [
-  { id: 'shifty', name: 'Shifty', avatar: { body: '#7ec8e3', accent: '#e05c7a', variant: 0 } },
-  { id: 'baily', name: 'Baily', avatar: { body: '#5b8def', accent: '#f2a541', variant: 1 } },
-  { id: 'sacker', name: 'Sacker', avatar: { body: '#7ea0b5', accent: '#e0455c', variant: 2 } },
-  { id: 'nolly', name: 'Nolly', avatar: { body: '#9b59b6', accent: '#f1c40f', variant: 3 } },
+  { id: 'shifty', name: 'Swivel', avatar: { body: '#7ec8e3', accent: '#e05c7a', variant: 0 } },
+  { id: 'baily', name: 'Scuffy', avatar: { body: '#5b8def', accent: '#f2a541', variant: 1 } },
+  { id: 'sacker', name: 'Gutsy', avatar: { body: '#7ea0b5', accent: '#e0455c', variant: 2 } },
+  { id: 'nolly', name: 'Nosy', avatar: { body: '#9b59b6', accent: '#f1c40f', variant: 3 } },
 ];
 
 const FLATGROUND_BASES = [
   'Ollie',
+  'Ollie North',
   'Frontside 180',
   'Backside 180',
   'Pop Shuvit',
@@ -31,8 +32,6 @@ const FLATGROUND_BASES = [
   'Frontside Heelflip',
   'Frontside 360 Shuvit',
   'Pressure Flip',
-  'Hospital Flip',
-  'Casper Flip',
   'Hardflip',
   'Inward Heelflip',
   '360 Flip',
