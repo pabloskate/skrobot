@@ -168,6 +168,9 @@ const FOOT_Y = 65; // feet below the hip
 const THIGH = 35;
 const SHIN = 35;
 const KNEE_BEND_SCALE = 0.82;
+// Switch stance arm spread (radians): how much further each arm opens away
+// from the body compared with the natural stances.
+const SWITCH_ARM_SPREAD = 0.28;
 // Extra sky above the viewBox so the taller pop doesn't clip the skater's head.
 const SKY_PAD = 64;
 
@@ -1029,6 +1032,14 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
     streetDist = FULL_SPEED_TIME + (1 - Math.exp(-decayK * u)) / decayK;
   }
 
+  // Switch rides with the arms a touch more open: the front arm swings
+  // further toward the nose, the back arm further toward the tail. Applied
+  // after every phase so the crouch, flight, and landing all inherit it.
+  if (spec.stance === 'switch') {
+    armFront -= SWITCH_ARM_SPREAD;
+    armBack += SWITCH_ARM_SPREAD;
+  }
+
   return {
     t,
     board: { x: boardX, y: boardY, rot: boardRot, sx, sy, griptape: sy >= 0 },
@@ -1113,7 +1124,7 @@ export default function TrickAnimation({
   const forcedFall = !landed && knewIt === false ? 'shank' as FallVariant : undefined;
   const [randomizedFallVariant] = useState<FallVariant>(() => randomFallVariant(knewIt));
   // Fakie changes travel and nollie changes the pop end. Switch changes only
-  // anatomy in the renderer; it is not simulated as fakie + nollie.
+  // footedness/toeside; it is not simulated as fakie + nollie.
   const [spec] = useState(() => specFor(trick));
   const [randomizedBackgroundSceneId] = useState<BackgroundSceneId>(randomBackgroundSceneId);
   const resolvedFallVariant = forcedFall ?? fallVariant ?? randomizedFallVariant;
@@ -1197,7 +1208,8 @@ export default function TrickAnimation({
   const f = frame;
   const mechanics = resolveRiderMechanics(riderStance, spec.stance);
   // Body rotation changes the visible side; rider footedness supplies the
-  // baseline orientation. Fakie does not turn the body and switch does.
+  // baseline orientation. No stance turns the body; switch only flips which
+  // side faces the camera (the rider's opposite footedness).
   const showBack = mechanics.orientationSign * f.body.sx < 0;
   const bodyFill = showBack ? darken(colors.body) : colors.body;
   // Frame channels are stable board roles, even when a foot reaches across

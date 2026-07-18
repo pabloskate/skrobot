@@ -534,12 +534,13 @@ export default function TrickAnimation3D({
   const mechanics = resolveRiderMechanics(riderStance, spec.stance);
 
   // Natural stances keep both knees folding toward the nose and differ across
-  // the rider's depth/toeside. Switch alone receives the full 180-degree body
-  // turn that gives it the intentionally backward, awkward knee silhouette.
+  // the rider's depth/toeside. Switch rides the opposite footedness with no
+  // body turn: the same skeleton mirrored to the other toeside.
   const orientedRotation = orientTrickRotation(mechanics, f.spin3d);
   const baseBodySign: 1 | -1 = mechanics.bodyYawDegrees === 0 ? 1 : -1;
-  // Convert the desired world toeside into skeleton-local z. A switch body's
-  // 180-degree yaw flips z, while either natural stance stays unrotated.
+  // Convert the desired world toeside into skeleton-local z. No resting body
+  // yaw today, so this is the resolved toeside verbatim; the multiplication
+  // stays so a future resting turn flips z correctly.
   const localToeDir: 1 | -1 = (mechanics.orientationSign * baseBodySign) as 1 | -1;
   const yawDeg3d = orientedRotation.yawDeg;
   const bodyYawDeg3d = orientedRotation.bodyYawDeg;

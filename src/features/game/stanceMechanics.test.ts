@@ -49,7 +49,7 @@ const CASES: MechanicsCase[] = [
     trickStance: 'switch',
     expected: {
       orientationSign: -1,
-      bodyYawDegrees: 180,
+      bodyYawDegrees: 0,
       noseFoot: 'right',
       tailFoot: 'left',
       frontArm: 'right',
@@ -109,7 +109,7 @@ const CASES: MechanicsCase[] = [
     trickStance: 'switch',
     expected: {
       orientationSign: 1,
-      bodyYawDegrees: 180,
+      bodyYawDegrees: 0,
       noseFoot: 'left',
       tailFoot: 'right',
       frontArm: 'left',
@@ -159,14 +159,14 @@ describe('rider stance mechanics', () => {
     });
   });
 
-  it.each<RiderStance>(['regular', 'goofy'])('treats switch as an orientation-only change for a %s rider', (riderStance) => {
+  it.each<RiderStance>(['regular', 'goofy'])('treats switch as the opposite footedness for a %s rider', (riderStance) => {
     const regular = resolveRiderMechanics(riderStance, 'regular');
     const switched = resolveRiderMechanics(riderStance, 'switch');
 
     expect(switched).toEqual({
       ...regular,
       orientationSign: regular.orientationSign * -1,
-      bodyYawDegrees: regular.bodyYawDegrees === 0 ? 180 : 0,
+      bodyYawDegrees: regular.bodyYawDegrees,
       noseFoot: regular.tailFoot,
       tailFoot: regular.noseFoot,
       frontArm: regular.backArm,
@@ -176,7 +176,7 @@ describe('rider stance mechanics', () => {
     });
   });
 
-  it('keeps natural knees forward and reserves the full body turn for switch', () => {
+  it('gives switch the same un-turned skeleton as the natural stances', () => {
     const regular = resolveRiderMechanics('regular', 'regular');
     const goofy = resolveRiderMechanics('goofy', 'regular');
     const goofySwitch = resolveRiderMechanics('goofy', 'switch');
@@ -191,9 +191,10 @@ describe('rider stance mechanics', () => {
       bodyYawDegrees: 0,
       orientationSign: -1,
     });
+    // Switch = the rider's opposite stance, not a backward-facing body.
     expect(goofySwitch).toMatchObject({
       noseFoot: 'left',
-      bodyYawDegrees: 180,
+      bodyYawDegrees: 0,
       orientationSign: 1,
     });
   });

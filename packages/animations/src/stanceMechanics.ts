@@ -3,8 +3,10 @@ import type { BodySide, RiderStance, Stance } from './types';
 export interface RiderMechanics {
   /** World-space toeside: +1 points toward the camera, -1 points away. */
   orientationSign: 1 | -1;
-  /** Awkward full-body turn reserved for switch; the board/world are never mirrored. */
-  bodyYawDegrees: 0 | 180;
+  /** Resting full-body turn. Currently always 0: switch is the rider's
+   *  opposite footedness (anatomy + toeside flip), not a backward-facing
+   *  body, so no stance pre-rotates the skeleton. */
+  bodyYawDegrees: 0;
   /** Anatomical foot occupying the board's canonical +x / nose-side channel. */
   noseFoot: BodySide;
   /** Anatomical foot occupying the board's canonical -x / tail-side channel. */
@@ -42,7 +44,8 @@ const opposite = (side: BodySide): BodySide => side === 'left' ? 'right' : 'left
  * - regular/goofy chooses the natural leading foot;
  * - fakie reverses travel only;
  * - nollie moves the pop to the nose only;
- * - switch reverses the rider's anatomical orientation only.
+ * - switch rides the rider's opposite footedness: anatomy and toeside flip,
+ *   but the body is not turned around (renderers add the awkwardness).
  */
 export function resolveRiderMechanics(
   riderStance: RiderStance,
@@ -50,8 +53,8 @@ export function resolveRiderMechanics(
 ): RiderMechanics {
   // Natural regular/goofy stances share the forward-knee skeleton and differ
   // across its depth/toeside: regular puts the left foot at the nose, goofy
-  // puts the right foot there. Switch deliberately uses the full 180-degree
-  // body turn, preserving the backward-knee awkwardness as a visual cue.
+  // puts the right foot there. Switch flips the toeside and footedness, so a
+  // regular rider's switch pose is exactly the goofy pose (and vice versa).
   const naturalSign: 1 | -1 = riderStance === 'regular' ? 1 : -1;
   const orientationSign: 1 | -1 = trickStance === 'switch'
     ? naturalSign === 1 ? -1 : 1
@@ -62,7 +65,7 @@ export function resolveRiderMechanics(
 
   return {
     orientationSign,
-    bodyYawDegrees: trickStance === 'switch' ? 180 : 0,
+    bodyYawDegrees: 0,
     noseFoot,
     tailFoot,
     // The requested silhouette carries the same-side arm with the foot at
@@ -77,8 +80,7 @@ export function resolveRiderMechanics(
 
 /**
  * Convert trick-relative rotation into world rotation after the rider's pose
- * is established. Kickflip/heelflip and frontside/backside remain distinct;
- * switch also receives its intentionally awkward body yaw.
+ * is established. Kickflip/heelflip and frontside/backside remain distinct.
  */
 export function orientTrickRotation(
   mechanics: RiderMechanics,
