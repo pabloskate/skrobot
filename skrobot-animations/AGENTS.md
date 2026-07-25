@@ -19,6 +19,23 @@ From the repo root:
 npm run typecheck:animations
 ```
 
+## Verifying animation changes
+
+The playground header has a **Contact sheet** mode: every trick as a row of
+frozen key frames (wind-up → pop → peak → catch → touch down → ride away),
+rendered via the `fixedTime` prop on `TrickAnimation`/`TrickAnimation3D`.
+Use the filter to narrow to the trick family you're editing, set Rider to
+"both" to compare the regular/goofy mirror, and View "both" to compare the
+2D and 3D renderers side by side. Screenshot before and after a change and
+diff. Each cell's root carries `data-*` attributes (`data-board-flip`,
+`data-nose-foot`, `data-toe-side`, …) so pose state can also be asserted
+programmatically from the DOM.
+
+The symmetry invariants behind those poses are tested in
+`../packages/animations/src/animationInvariants.test.ts` (runs with the root
+`npm test`). Run it after any change to `computeFrame`, `specFor`, or
+`stanceMechanics`.
+
 ## Rules
 
 - Treat `src/` in this package as playground-only UI and fixtures.

@@ -103,6 +103,12 @@ const VOICE_ALIASES: Record<string, string> = {
   'fs flip': 'Frontside Flip',
   'frontside kickflip': 'Frontside Flip',
   'fs kickflip': 'Frontside Flip',
+  'backside 360 kickflip': 'Backside 360 Kickflip',
+  'bs 360 kickflip': 'Backside 360 Kickflip',
+  'backside three sixty kickflip': 'Backside 360 Kickflip',
+  'frontside 360 kickflip': 'Frontside 360 Kickflip',
+  'fs 360 kickflip': 'Frontside 360 Kickflip',
+  'frontside three sixty kickflip': 'Frontside 360 Kickflip',
   'backside heelflip': 'Backside Heelflip',
   'backside heel': 'Backside Heelflip',
   'back heel': 'Backside Heelflip',
@@ -184,6 +190,9 @@ const VOICE_ALIASES: Record<string, string> = {
   'full cab': 'Full Cab',
   'cab': 'Full Cab',
   'half cab flip': 'Fakie Backside Flip',
+  'full cab flip': 'Full Cab Flip',
+  'cab flip': 'Full Cab Flip',
+  'caballerial flip': 'Full Cab Flip',
 };
 
 const BASE_ALIASES: Record<string, string> = {

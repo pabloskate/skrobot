@@ -339,6 +339,28 @@ describe('Skateboarding-soundness invariants', () => {
   });
 });
 
+describe('Player-only tricks stay in the catalog but never enter a robot bag', () => {
+  const fs360Kickflip = TRICK_BY_ID.get('regular-frontside-360-kickflip')!;
+
+  it('Frontside 360 Kickflip exists for players/gallery', () => {
+    expect(fs360Kickflip).toBeDefined();
+    expect(fs360Kickflip.base).toBe('Frontside 360 Kickflip');
+  });
+
+  it('no robot can set or land a Frontside 360 Kickflip in any stance', () => {
+    const variants = ['regular', 'fakie', 'switch', 'nollie'].map(
+      (stance) => TRICK_BY_ID.get(`${stance}-frontside-360-kickflip`)!,
+    );
+    for (const robot of ROBOTS) {
+      const bag = buildBag(robot, TRICKS);
+      for (const trick of variants) {
+        expect(robotConsistency(robot, trick), `${robot.name} / ${trick.id}`).toBeNull();
+        expect(bag.has(trick.id), `${robot.name} bag has ${trick.id}`).toBe(false);
+      }
+    }
+  });
+});
+
 describe('Tier-locked tricks: late frontside shuvits are intermediate-and-up only', () => {
   const lateFs = TRICK_BY_ID.get('regular-late-frontside-shuvit')!;
   const lateBs = TRICK_BY_ID.get('regular-late-backside-shuvit')!;

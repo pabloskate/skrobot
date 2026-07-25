@@ -1,0 +1,18 @@
+- generic [active] [ref=f1e1]:
+  - generic [ref=f1e2]:
+    - banner [ref=f1e933]:
+      - button "Back" [ref=f1e934] [cursor=pointer]: ←
+      - heading "Gutsy" [level=1] [ref=f1e935]
+      - button "Play by voice" [ref=f1e975] [cursor=pointer]
+    - main [ref=f1e3]:
+      - generic [ref=f1e981]:
+        - heading "Rock, Paper, Scissors" [level=2] [ref=f1e982]
+        - generic [ref=f1e983]:
+          - button "Rock" [ref=f1e984] [cursor=pointer]:
+            - generic [ref=f1e985]: 🪨
+          - button "Paper" [ref=f1e987] [cursor=pointer]:
+            - generic [ref=f1e988]: 📄
+          - button "Scissors" [ref=f1e990] [cursor=pointer]:
+            - generic [ref=f1e991]: ✂️
+        - paragraph [ref=f1e993]: Tap a throw
+  - alert [ref=f1e932]

@@ -81,6 +81,13 @@ Record evidence for each item in the log:
 - Microphone permission prompt/result.
 - One completed on-screen game.
 - One attempted voice session.
+- Offline warm-cache result:
+  1. Launch online and leave the home screen open long enough for the service
+     worker to finish caching.
+  2. Force-quit the native app.
+  3. Enable airplane mode and relaunch.
+  4. Complete an on-screen game and verify the result persists after another
+     relaunch.
 - Any deviation from the web app.
 
 After all rows are filled with real results, run:

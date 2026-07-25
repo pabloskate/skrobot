@@ -58,6 +58,10 @@ interface Props {
   knewIt?: boolean;
   /** The rider's natural footedness. Trick stance is resolved separately. */
   riderStance?: RiderStance;
+  /** Render a single frozen frame at this absolute animation time (seconds,
+   *  clamped to the trick's duration). Disables playback, replay, and onDone —
+   *  used by the playground contact sheet to lay out key poses side by side. */
+  fixedTime?: number;
 }
 
 // ---------- 3D math ----------
@@ -187,49 +191,6 @@ function pushCapsule(
           <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke="currentColor" strokeWidth={(width + inkWidth * 2) * s} strokeLinecap="round" />
         )}
         <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke={fill} strokeWidth={width * s} strokeLinecap="round" />
-      </g>
-    ),
-  });
-}
-
-/** One continuous bent arm. Keeping the outline and fill on a single polyline
- * avoids the pinched elbow seam produced by overlapping capsule segments. */
-function pushBentArm(
-  prims: Prim[],
-  key: string,
-  shoulder: V3,
-  elbow: V3,
-  hand: V3,
-  width: number,
-  fill: string,
-  inkWidth: number,
-  depthBias = 0,
-) {
-  const ps = project(shoulder);
-  const pe = project(elbow);
-  const ph = project(hand);
-  const s = (ps.s + pe.s + ph.s) / 3;
-  const points = `${ps.x},${ps.y} ${pe.x},${pe.y} ${ph.x},${ph.y}`;
-  prims.push({
-    depth: (ps.depth + pe.depth + ph.depth) / 3 + depthBias,
-    el: (
-      <g key={key}>
-        <polyline
-          points={points}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={(width + inkWidth * 2) * s}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <polyline
-          points={points}
-          fill="none"
-          stroke={fill}
-          strokeWidth={width * s}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
       </g>
     ),
   });
@@ -418,6 +379,11 @@ function boardPoint(local: V3, flipDeg: number, pitchDeg: number, yawDeg: number
 // Local skater frame: hip at origin, y down (matches computeFrame's body
 // frame). Fall rotation (bodyRot) spins around the lateral axis through the
 // 2D pivot; body yaw spins around the vertical axis through the hips.
+//
+// Mild resting skate stance (3D only): feet already sit nose↔tail on the
+// board, but the authored skeleton faces travel. A moderate yaw toward
+// toeside turns the hips/shoulders to match that stance without going
+// full sideways. The head yaws less so it still looks a bit down-street.
 
 const BODY_PIVOT_Y = FOOT_Y - 2;
 // Feet stand ON the deck (half width 8.5), so the straddle is subtle — a wide
@@ -431,6 +397,10 @@ const BOOT_HEEL_Z = 2.4;
 const BOOT_TOE_Z = 3.8;
 const BOOT_W = 5.2;
 const ANKLE_LIFT = 2.2;
+/** Mild torso yaw from travel toward toeside — enough to match the legs. */
+const STANCE_BODY_YAW = 40;
+/** Degrees the head stays toward travel relative to the torso yaw. */
+const HEAD_LOOK_FORWARD = 16;
 
 function skaterPoint(local: V3, bodyRotDeg: number, bodyYawDeg: number, hip: V3): V3 {
   let q: V3 = { x: local.x, y: local.y - BODY_PIVOT_Y, z: local.z };
@@ -452,6 +422,7 @@ export default function TrickAnimation3D({
   paused = false,
   knewIt,
   riderStance = 'regular',
+  fixedTime,
 }: Props) {
   const skyGradId = useId().replace(/:/g, '');
   const forcedFall = !landed && knewIt === false ? ('shank' as FallVariant) : undefined;
@@ -467,6 +438,11 @@ export default function TrickAnimation3D({
   const onDoneRef = useRef(onDone);
   const pausedRef = useRef(paused);
   const effectivePlaybackRate = Math.max(0.05, playbackRate);
+  // Static mode: one frozen frame, computed in render so a changed fixedTime
+  // (e.g. a scrubber) re-renders without touching the playback machinery.
+  const staticTime = fixedTime == null
+    ? null
+    : Math.max(0, Math.min(fixedTime, ROLL_IN + FLIP_T + (landed ? LAND_T : FALL_T)));
 
   useEffect(() => {
     onDoneRef.current = onDone;
@@ -477,6 +453,7 @@ export default function TrickAnimation3D({
   }, [paused]);
 
   useEffect(() => {
+    if (staticTime != null) return;
     const end = ROLL_IN + FLIP_T + (landed ? LAND_T : FALL_T);
     const durationMs = ((end + HOLD) / effectivePlaybackRate) * 1000;
     const finish = () => {
@@ -520,16 +497,17 @@ export default function TrickAnimation3D({
       cancelAnimationFrame(raf);
       clearTimeout(failSafe);
     };
-  }, [spec, landed, resolvedFallVariant, effectivePlaybackRate, replayNonce]);
+  }, [spec, landed, resolvedFallVariant, effectivePlaybackRate, replayNonce, staticTime]);
 
   const replay = () => {
+    if (staticTime != null) return;
     setIsPlaying(true);
     setFrame(computeFrame(0, spec, landed, resolvedFallVariant));
     setReplayNonce((current) => current + 1);
   };
 
   const colors = robot.avatar;
-  const f = frame;
+  const f = staticTime != null ? computeFrame(staticTime, spec, landed, resolvedFallVariant) : frame;
   const prims: Prim[] = [];
   const mechanics = resolveRiderMechanics(riderStance, spec.stance);
 
@@ -538,12 +516,14 @@ export default function TrickAnimation3D({
   // body turn: the same skeleton mirrored to the other toeside.
   const orientedRotation = orientTrickRotation(mechanics, f.spin3d);
   const baseBodySign: 1 | -1 = mechanics.bodyYawDegrees === 0 ? 1 : -1;
-  // Convert the desired world toeside into skeleton-local z. No resting body
-  // yaw today, so this is the resolved toeside verbatim; the multiplication
-  // stays so a future resting turn flips z correctly.
+  // World toeside for board-space limb offsets. Resting yaw is applied below.
   const localToeDir: 1 | -1 = (mechanics.orientationSign * baseBodySign) as 1 | -1;
+  // Negative yaw turns travel-facing (+x) toward +z (camera) for regular.
+  const restingBodyYaw = -STANCE_BODY_YAW * mechanics.orientationSign;
+  const restingHeadYaw = -(STANCE_BODY_YAW - HEAD_LOOK_FORWARD) * mechanics.orientationSign;
   const yawDeg3d = orientedRotation.yawDeg;
-  const bodyYawDeg3d = orientedRotation.bodyYawDeg;
+  const bodyYawDeg3d = orientedRotation.bodyYawDeg + restingBodyYaw;
+  const headYawDeg3d = orientedRotation.bodyYawDeg + restingHeadYaw;
   const rawFlightP = (f.t - ROLL_IN) / FLIP_T;
   const catchP3d = clamp01(rawFlightP / 0.85);
   const spinP3d = rawFlightP < 0 ? 0 : rawFlightP >= 1 ? 1 : spec.late ? clamp01((rawFlightP - 0.38) / 0.30) : catchP3d;
@@ -618,6 +598,10 @@ export default function TrickAnimation3D({
   // ----- Skater -----
   const hip: V3 = { x: f.body.x, y: f.body.y, z: 0 };
   const S = (local: V3) => skaterPoint(local, f.body.rot, bodyYawDeg3d, hip);
+  // Head keeps a bit more travel-facing yaw than the torso.
+  const Shead = (local: V3) => skaterPoint(local, f.body.rot, headYawDeg3d, hip);
+  // Board-space feet/knees/boots: undo the resting body yaw so they stay planted.
+  const fromBoard = (board: V3) => S(rotY(board, -restingBodyYaw));
 
   // Flick-foot lateral swing follows the resolved local heel/toe side. The
   // stance pose carries it into world space without ever relabeling a
@@ -628,20 +612,14 @@ export default function TrickAnimation3D({
     flickZ = -spec.flipDir * localToeDir * flickAmount * Math.sin(spinP3d * Math.PI);
   }
 
-  // Frame channels are stable board roles: R is nose, L is tail. Attach those
-  // roles to anatomy once, then convert the canonical world x back into the
-  // turned skeleton's local coordinates. Applying the body yaw below restores
-  // the same board position while visibly turning hips, shoulders, and limbs.
+  // Frame channels are stable board roles: R is nose, L is tail. Keep those
+  // in board space; fromBoard() carries them into the mildly yawed skeleton.
   const noseChannel = f.footR;
   const tailChannel = f.footL;
   const leftFootChannel = mechanics.noseFoot === 'left' ? noseChannel : tailChannel;
   const rightFootChannel = mechanics.noseFoot === 'right' ? noseChannel : tailChannel;
-  const toBodyLocal = (foot: { x: number; y: number }) => ({
-    x: foot.x * baseBodySign,
-    y: foot.y,
-  });
-  const leftFoot = toBodyLocal(leftFootChannel);
-  const rightFoot = toBodyLocal(rightFootChannel);
+  const leftFoot = leftFootChannel;
+  const rightFoot = rightFootChannel;
   const leftFlickZ = mechanics.flickFoot === 'left' ? flickZ : 0;
   const rightFlickZ = mechanics.flickFoot === 'right' ? flickZ : 0;
   const kneeL = knee(leftFoot);
@@ -650,13 +628,13 @@ export default function TrickAnimation3D({
   const hipR3 = S({ x: 0, y: 0, z: HIP_Z });
   // Shin ends at the ankle (slightly above the sole) so the boot cuff reads
   // as a shoe rather than a line stabbed through the middle of a sausage.
-  const ankleL3 = S({ x: leftFoot.x, y: leftFoot.y - ANKLE_LIFT, z: -FOOT_Z + leftFlickZ });
-  const ankleR3 = S({ x: rightFoot.x, y: rightFoot.y - ANKLE_LIFT, z: FOOT_Z + rightFlickZ });
+  const ankleL3 = fromBoard({ x: leftFoot.x, y: leftFoot.y - ANKLE_LIFT, z: -FOOT_Z + leftFlickZ });
+  const ankleR3 = fromBoard({ x: rightFoot.x, y: rightFoot.y - ANKLE_LIFT, z: FOOT_Z + rightFlickZ });
   // Both knees protrude toward toeside (same z side), matching the 2D IK
   // which always bends both knees forward — splitting them to opposite z
   // sides makes the shins cross under the 3/4 camera.
-  const kneeL3 = S({ x: kneeL.x, y: kneeL.y, z: localToeDir * KNEE_Z + leftFlickZ * 0.55 });
-  const kneeR3 = S({ x: kneeR.x, y: kneeR.y, z: localToeDir * KNEE_Z + rightFlickZ * 0.55 });
+  const kneeL3 = fromBoard({ x: kneeL.x, y: kneeL.y, z: localToeDir * KNEE_Z + leftFlickZ * 0.55 });
+  const kneeR3 = fromBoard({ x: kneeR.x, y: kneeR.y, z: localToeDir * KNEE_Z + rightFlickZ * 0.55 });
 
   // Legs share the arm accent color and outline weight so the limbs read as
   // one material. Keep their primitive indexes separated by anatomy so the
@@ -686,9 +664,9 @@ export default function TrickAnimation3D({
   // long white-tipped sausages hanging off the rails.
   const pushBoot = (key: string, foot: { x: number; y: number }, centerZ: number, ankle: V3) => {
     const soleY = foot.y + 0.6;
-    const heel = S({ x: foot.x - 1.2, y: soleY, z: centerZ - localToeDir * BOOT_HEEL_Z });
-    const mid = S({ x: foot.x + 1.2, y: soleY, z: centerZ + localToeDir * 0.6 });
-    const toe = S({ x: foot.x + 3.6, y: soleY, z: centerZ + localToeDir * BOOT_TOE_Z });
+    const heel = fromBoard({ x: foot.x - 1.2, y: soleY, z: centerZ - localToeDir * BOOT_HEEL_Z });
+    const mid = fromBoard({ x: foot.x + 1.2, y: soleY, z: centerZ + localToeDir * 0.6 });
+    const toe = fromBoard({ x: foot.x + 3.6, y: soleY, z: centerZ + localToeDir * BOOT_TOE_Z });
     // Cuff: ankle → mid-boot so the shin meets a clean shoe top.
     pushCapsule(prims, `${key}Cuff`, ankle, mid, BOOT_W - 0.6, colors.body, 1.5, 1, 0.9);
     // Sole body: short heel→toe capsule, no white toe tip.
@@ -725,11 +703,11 @@ export default function TrickAnimation3D({
     }
   }
 
-  // Arms — actual upper/forearm segments on opposite sides of the torso.
-  // A single shoulder-to-hand primitive used to cross behind the torso as one
-  // unit, making the whole arm pop out of existence. Separate depth-sorted
-  // segments let the shoulder disappear first while the elbow/hand travel
-  // naturally around the body's silhouette.
+  // Arms — upper/forearm segments on opposite sides of the torso.
+  // Near/far is locked to toeside (stable across the crouch) so a shoulder
+  // depth crossing can't flip the ±bias for one frame and make an arm pop
+  // through the torso. Each arm is two capsules so a hand can stay visible
+  // while its shoulder sits behind the body.
   const armGeometry = (angle: number, sideZ: number, bend: number) => {
     const shoulderLocal: V3 = { x: 5, y: -38, z: sideZ };
     const elbowLocal: V3 = {
@@ -766,54 +744,70 @@ export default function TrickAnimation3D({
   );
   const armL = armGeometry(leftArmAngle, -6.5, -0.24);
   const armR = armGeometry(rightArmAngle, 6.5, 0.24);
+  // Near/far from shoulder depth only — shoulders don't swing during the
+  // crouch, so this stays stable (unlike averaging in the moving forearm,
+  // which used to flicker). Do NOT key off toeside: goofy's toeside faces
+  // *away* from the camera, so that pinned the wrong arm in front for
+  // goofy fakie/nollie and made both limbs read as growing out of the chest.
   const rightArmIsNear = project(armR.shoulder).depth >= project(armL.shoulder).depth;
+
+  // Torso depth anchor used to keep the far arm behind / near arm in front
+  // even when a swinging forearm's average depth briefly crosses the body.
+  const torsoTop = S({ x: 1, y: -39, z: 0 });
+  const torsoBot = S({ x: 1, y: -11, z: 0 });
+  const torsoDepth = (project(torsoTop).depth + project(torsoBot).depth) / 2;
 
   const drawArm = (
     key: string,
     arm: { shoulder: V3; elbow: V3; hand: V3 },
     isNear: boolean,
   ) => {
-    // One rounded silhouette has no shoulder ball, elbow seam, or hand ball.
-    // Darkening and pinning the rear arm behind the torso supplies stable depth
-    // while the near arm stays in front through body rotation.
     const armFill = isNear ? colors.accent : darken(colors.accent, 0.16);
-    pushBentArm(
-      prims,
-      key,
-      arm.shoulder,
-      arm.elbow,
-      arm.hand,
-      6.25,
-      armFill,
-      1.2,
-      isNear ? 8 : -8,
-    );
+    const pin = isNear ? 6 : -6;
+    const clampSeg = (a: V3, b: V3) => {
+      const raw = (project(a).depth + project(b).depth) / 2 + pin;
+      if (isNear) return Math.max(raw, torsoDepth + 1.5);
+      // Far arm stays behind the torso unless it is clearly in front (a real
+      // peek around the body). The dead zone around torsoDepth is what used
+      // to flicker the left arm for a frame during the crouch wind-up.
+      if (raw > torsoDepth + 4) return raw;
+      return Math.min(raw, torsoDepth - 1.5);
+    };
+    const upperDepth = clampSeg(arm.shoulder, arm.elbow);
+    const foreDepth = clampSeg(arm.elbow, arm.hand);
+    // Draw as depth-sorted capsules (bias baked into depth via a dummy push
+    // then overwrite) so shoulder and forearm can straddle the torso.
+    const upperStart = prims.length;
+    pushCapsule(prims, `${key}Upper`, arm.shoulder, arm.elbow, 6.25, armFill, 1.2);
+    prims[upperStart].depth = upperDepth;
+    const foreStart = prims.length;
+    pushCapsule(prims, `${key}Fore`, arm.elbow, arm.hand, 6.25, armFill, 1.2);
+    prims[foreStart].depth = foreDepth;
   };
   drawArm('armL', armL, !rightArmIsNear);
   drawArm('armR', armR, rightArmIsNear);
 
   // Torso. The legs use small left/right hip anchors, with no mechanical hip
   // dot drawn over the silhouette.
-  pushCapsule(prims, 'torso', S({ x: 1, y: -11, z: 0 }), S({ x: 1, y: -39, z: 0 }), 22, colors.body, 2.5);
+  pushCapsule(prims, 'torso', torsoBot, torsoTop, 22, colors.body, 2.5);
 
-  // Neck + head
-  pushLine(prims, 'neck', S({ x: 7, y: -50, z: 0 }), S({ x: 7, y: -56, z: 0 }), colors.accent, { width: 3 });
-  pushCapsule(prims, 'head', S({ x: 5, y: -65, z: 0 }), S({ x: 9, y: -65, z: 0 }), 22, colors.body, 2.5);
+  // Neck + head — slightly less toeside yaw than the torso so the face looks
+  // a bit down the street.
+  pushLine(prims, 'neck', Shead({ x: 7, y: -50, z: 0 }), Shead({ x: 7, y: -56, z: 0 }), colors.accent, { width: 3 });
+  pushCapsule(prims, 'head', Shead({ x: 5, y: -65, z: 0 }), Shead({ x: 9, y: -65, z: 0 }), 22, colors.body, 2.5);
   // Put the visor and eye on the curved front surface of the head rather than
   // near its center. They now orbit visibly around the head during yaw. Fade
   // them as the face turns through the silhouette so their disappearance reads
   // as turning away instead of an abrupt depth-sort pop.
-  // Aim the resting face partway between the camera and the travel direction
-  // (+x) so the robot reads as looking where it's going instead of at the
-  // viewer. The angle is measured from the camera ray toward +x; the tangent
-  // frame below keeps the visor/eyes on the matching patch of the head shell.
-  const FACE_FORWARD_DEG = 40;
+  // Aim the resting face a little toward travel (+x) from the camera so the
+  // rider looks where they're going. Measured from the camera ray toward +x.
+  const FACE_FORWARD_DEG = 28;
   const faceTheta = rad(FACE_FORWARD_DEG) - CAM_YAW;
   const FACE_COS = Math.cos(faceTheta);
   const FACE_SIN = Math.sin(faceTheta);
-  const restingFaceNormal: V3 = { x: FACE_SIN, y: 0, z: FACE_COS };
-  const restingFaceNormalLocal = rotY(restingFaceNormal, -mechanics.bodyYawDegrees);
-  const faceNormal = rotY(rotZ(restingFaceNormalLocal, f.body.rot), bodyYawDeg3d);
+  const restingFaceNormal: V3 = { x: FACE_SIN, y: 0, z: FACE_COS * localToeDir };
+  const restingFaceNormalLocal = rotY(restingFaceNormal, -restingHeadYaw);
+  const faceNormal = rotY(rotZ(restingFaceNormalLocal, f.body.rot), headYawDeg3d);
   // Keep the fade confined to the narrow silhouette crossing. Most of the
   // turn is carried by the eye's actual 3D orbit; opacity only softens the
   // final handoff as the head begins to occlude the eyes.
@@ -824,12 +818,12 @@ export default function TrickAnimation3D({
   // screen space at rest, while radius moves the feature onto the head shell.
   const facePoint = (offset: number, radius: number) => {
     const worldFacingOffset = {
-      x: FACE_SIN * radius + FACE_COS * offset,
+      x: FACE_SIN * radius + FACE_COS * (offset * localToeDir),
       y: 0,
-      z: FACE_COS * radius - FACE_SIN * offset,
+      z: (FACE_COS * radius - FACE_SIN * (offset * localToeDir)) * localToeDir,
     };
-    const localFacingOffset = rotY(worldFacingOffset, -mechanics.bodyYawDegrees);
-    return S({
+    const localFacingOffset = rotY(worldFacingOffset, -restingHeadYaw);
+    return Shead({
       x: headCenterX + localFacingOffset.x,
       y: -65.5,
       z: localFacingOffset.z,
@@ -876,8 +870,8 @@ export default function TrickAnimation3D({
   });
 
   // Antenna
-  pushLine(prims, 'antenna', S({ x: 7, y: -76, z: 0 }), S({ x: 7, y: -84, z: 0 }), 'currentColor', { width: 2.5 });
-  pushDot(prims, 'antennaBall', S({ x: 7, y: -85.5, z: 0 }), 3, colors.accent, 'currentColor', 1.5, 1, 0.2);
+  pushLine(prims, 'antenna', Shead({ x: 7, y: -76, z: 0 }), Shead({ x: 7, y: -84, z: 0 }), 'currentColor', { width: 2.5 });
+  pushDot(prims, 'antennaBall', Shead({ x: 7, y: -85.5, z: 0 }), 3, colors.accent, 'currentColor', 1.5, 1, 0.2);
 
   prims.sort((a, b) => a.depth - b.depth);
 
@@ -1018,15 +1012,17 @@ export default function TrickAnimation3D({
 
   return (
     <div
-      className={`trick-anim trick-anim--3d ${isPlaying ? 'trick-anim--moving' : ''}`}
+      className={`trick-anim trick-anim--3d ${isPlaying && staticTime == null ? 'trick-anim--moving' : ''}`}
       data-rider-stance={riderStance}
       data-nose-foot={mechanics.noseFoot}
       data-near-foot={forceRegularTailLegNear ? mechanics.tailFoot : undefined}
       data-body-yaw={mechanics.bodyYawDegrees}
+      data-stance-body-yaw={restingBodyYaw}
       data-toe-side={mechanics.orientationSign}
       data-board-flip={flipDeg3d.toFixed(1)}
       data-board-yaw={yawDeg3d.toFixed(1)}
       data-current-body-yaw={bodyYawDeg3d.toFixed(1)}
+      data-current-head-yaw={headYawDeg3d.toFixed(1)}
       aria-label={`Replay ${robot.name} attempting ${trick.name} in 3D`}
       aria-roledescription="trick animation"
       role="button"

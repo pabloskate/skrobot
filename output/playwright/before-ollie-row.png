@@ -1,0 +1,12 @@
+Unknown option: --selector
+
+playwright-cli screenshot [target]
+
+screenshot of the current page or element
+
+Arguments:
+  [target]                    exact target element reference from the page snapshot, or a unique element selector
+Options:
+  --filename                  file name to save the screenshot to. defaults to `page-{timestamp}.{png|jpeg}` if not specified.
+  --full-page                 when true, takes a screenshot of the full scrollable page, instead of the currently visible viewport.
+  --hires                     when true, captures a high-resolution screenshot using device pixels (accounts for the device pixel ratio), instead of css pixels.

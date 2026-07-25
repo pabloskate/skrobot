@@ -58,6 +58,9 @@ describe('trick search aliases', () => {
     ['fakie-backside-360', 'caballerial'],
     ['fakie-frontside-180', 'frontside half cab'],
     ['fakie-backside-flip', 'half cab flip'],
+    ['regular-backside-360-kickflip', 'bs 360 kickflip'],
+    ['fakie-backside-360-kickflip', 'full cab flip'],
+    ['regular-frontside-360-kickflip', 'fs 360 kickflip'],
     ['nollie-fs-bigspin', 'nollie bigspin'],
     ['switch-fs-bigspin-flip', 'switch bigspin flip'],
     ['fakie-bs-bigspin-heelflip', 'fakie bigspin heel'],
@@ -73,10 +76,15 @@ describe('trick search aliases', () => {
   it('uses the conventional display names while retaining stable ids and bases', () => {
     expect(trick('fakie-backside-180')).toMatchObject({ name: 'Half Cab', base: 'Backside 180' });
     expect(trick('fakie-backside-360')).toMatchObject({ name: 'Full Cab', base: 'Backside 360' });
+    expect(trick('fakie-backside-360-kickflip')).toMatchObject({
+      name: 'Full Cab Flip',
+      base: 'Backside 360 Kickflip',
+    });
   });
 
   it('does not apply fakie-only cab aliases to regular backside rotations', () => {
     expect(trickMatchesSearch(trick('regular-backside-180'), 'half cab')).toBe(false);
     expect(trickMatchesSearch(trick('regular-backside-360'), 'full cab')).toBe(false);
+    expect(trickMatchesSearch(trick('regular-backside-360-kickflip'), 'full cab flip')).toBe(false);
   });
 });

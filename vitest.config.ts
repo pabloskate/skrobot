@@ -1,12 +1,13 @@
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 
-// Pure-logic unit tests for the rules engine and resolvers. No DOM needed.
+// Pure-logic unit tests for the rules engine, resolvers, and the animation
+// core's symmetry invariants. No DOM needed.
 // The `@/` alias mirrors tsconfig so tests can import feature types/data.
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'packages/animations/src/**/*.test.ts'],
   },
   resolve: {
     alias: {

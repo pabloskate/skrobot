@@ -1,0 +1,365 @@
+- generic [ref=f1e3]:
+  - banner [ref=f1e4]:
+    - heading "Skrobot Animation Playground" [level=1] [ref=f1e5]
+    - paragraph [ref=f1e6]: Pick a robot, trick, and stance — then watch it land or bail.
+    - generic [ref=f1e7]:
+      - button "Playground" [ref=f1e8] [cursor=pointer]
+      - button "Contact sheet" [active] [pressed] [ref=f1e9] [cursor=pointer]
+  - generic [ref=f1e199]:
+    - generic [ref=f1e200]:
+      - generic [ref=f1e201]:
+        - generic [ref=f1e202]:
+          - generic [ref=f1e203]: Trick stance
+          - generic [ref=f1e204]:
+            - button "regular" [pressed] [ref=f1e205] [cursor=pointer]
+            - button "fakie" [ref=f1e206] [cursor=pointer]
+            - button "switch" [ref=f1e207] [cursor=pointer]
+            - button "nollie" [ref=f1e208] [cursor=pointer]
+        - generic [ref=f1e209]:
+          - generic [ref=f1e210]: Rider
+          - generic [ref=f1e211]:
+            - button "regular" [pressed] [ref=f1e212] [cursor=pointer]
+            - button "goofy" [ref=f1e213] [cursor=pointer]
+            - button "both" [ref=f1e214] [cursor=pointer]
+        - generic [ref=f1e215]:
+          - generic [ref=f1e216]: View
+          - generic [ref=f1e217]:
+            - button "3d" [pressed] [ref=f1e218] [cursor=pointer]
+            - button "2D" [ref=f1e219] [cursor=pointer]
+            - button "both" [ref=f1e220] [cursor=pointer]
+        - generic [ref=f1e221]:
+          - generic [ref=f1e222]: Outcome
+          - generic [ref=f1e223]:
+            - button "landed" [pressed] [ref=f1e224] [cursor=pointer]
+            - button "slam" [ref=f1e225] [cursor=pointer]
+            - button "slip" [ref=f1e226] [cursor=pointer]
+            - button "bail" [ref=f1e227] [cursor=pointer]
+            - button "tumble" [ref=f1e228] [cursor=pointer]
+            - button "shank" [ref=f1e229] [cursor=pointer]
+        - generic [ref=f1e230]:
+          - generic [ref=f1e231]: Robot
+          - combobox [ref=f1e232] [cursor=pointer]:
+            - option "Swivel" [selected]
+            - option "Scuffy"
+            - option "Gutsy"
+            - option "Nosy"
+        - generic [ref=f1e233]:
+          - generic [ref=f1e234]: Filter tricks
+          - searchbox "e.g. heelflip, bigspin…" [ref=f1e235]
+      - paragraph [ref=f1e236]: 37 tricks × 1 row × 6 frames = 222 cells
+    - generic [ref=f1e238]:
+      - generic [ref=f1e239]: Trick
+      - generic [ref=f1e240]:
+        - text: wind-up
+        - generic [ref=f1e241]: t = 0.25s
+      - generic [ref=f1e242]:
+        - text: pop
+        - generic [ref=f1e243]: t = 0.65s
+      - generic [ref=f1e244]:
+        - text: peak
+        - generic [ref=f1e245]: t = 1.03s
+      - generic [ref=f1e246]:
+        - text: catch
+        - generic [ref=f1e247]: t = 1.39s
+      - generic [ref=f1e248]:
+        - text: touch down
+        - generic [ref=f1e249]: t = 1.88s
+      - generic [ref=f1e250]:
+        - text: ride away
+        - generic [ref=f1e251]: t = 2.57s
+      - generic [ref=f1e252]:
+        - generic [ref=f1e253]: Ollie
+        - button "Replay Swivel attempting Ollie in 3D" [ref=f1e256]
+        - button "Replay Swivel attempting Ollie in 3D" [ref=f1e474]
+        - button "Replay Swivel attempting Ollie in 3D" [ref=f1e693]
+        - button "Replay Swivel attempting Ollie in 3D" [ref=f1e911]
+        - button "Replay Swivel attempting Ollie in 3D" [ref=f1e1128]
+        - button "Replay Swivel attempting Ollie in 3D" [ref=f1e1348]
+      - generic [ref=f1e1564]:
+        - generic [ref=f1e1565]: Ollie North
+        - button "Replay Swivel attempting Ollie North in 3D" [ref=f1e1568]
+        - button "Replay Swivel attempting Ollie North in 3D" [ref=f1e1786]
+        - button "Replay Swivel attempting Ollie North in 3D" [ref=f1e2005]
+        - button "Replay Swivel attempting Ollie North in 3D" [ref=f1e2223]
+        - button "Replay Swivel attempting Ollie North in 3D" [ref=f1e2440]
+        - button "Replay Swivel attempting Ollie North in 3D" [ref=f1e2660]
+      - generic [ref=f1e2876]:
+        - generic [ref=f1e2877]: Frontside 180
+        - button "Replay Swivel attempting Frontside 180 in 3D" [ref=f1e2880]
+        - button "Replay Swivel attempting Frontside 180 in 3D" [ref=f1e3098]
+        - button "Replay Swivel attempting Frontside 180 in 3D" [ref=f1e3315]
+        - button "Replay Swivel attempting Frontside 180 in 3D" [ref=f1e3533]
+        - button "Replay Swivel attempting Frontside 180 in 3D" [ref=f1e3750]
+        - button "Replay Swivel attempting Frontside 180 in 3D" [ref=f1e3970]
+      - generic [ref=f1e4186]:
+        - generic [ref=f1e4187]: Backside 180
+        - button "Replay Swivel attempting Backside 180 in 3D" [ref=f1e4190]
+        - button "Replay Swivel attempting Backside 180 in 3D" [ref=f1e4408]
+        - button "Replay Swivel attempting Backside 180 in 3D" [ref=f1e4627]
+        - button "Replay Swivel attempting Backside 180 in 3D" [ref=f1e4845]
+        - button "Replay Swivel attempting Backside 180 in 3D" [ref=f1e5062]
+        - button "Replay Swivel attempting Backside 180 in 3D" [ref=f1e5282]
+      - generic [ref=f1e5498]:
+        - generic [ref=f1e5499]: Pop Shuvit
+        - button "Replay Swivel attempting Pop Shuvit in 3D" [ref=f1e5502]
+        - button "Replay Swivel attempting Pop Shuvit in 3D" [ref=f1e5720]
+        - button "Replay Swivel attempting Pop Shuvit in 3D" [ref=f1e5939]
+        - button "Replay Swivel attempting Pop Shuvit in 3D" [ref=f1e6157]
+        - button "Replay Swivel attempting Pop Shuvit in 3D" [ref=f1e6374]
+        - button "Replay Swivel attempting Pop Shuvit in 3D" [ref=f1e6594]
+      - generic [ref=f1e6810]:
+        - generic [ref=f1e6811]: Frontside Shuvit
+        - button "Replay Swivel attempting Frontside Shuvit in 3D" [ref=f1e6814]
+        - button "Replay Swivel attempting Frontside Shuvit in 3D" [ref=f1e7032]
+        - button "Replay Swivel attempting Frontside Shuvit in 3D" [ref=f1e7249]
+        - button "Replay Swivel attempting Frontside Shuvit in 3D" [ref=f1e7467]
+        - button "Replay Swivel attempting Frontside Shuvit in 3D" [ref=f1e7684]
+        - button "Replay Swivel attempting Frontside Shuvit in 3D" [ref=f1e7904]
+      - generic [ref=f1e8120]:
+        - generic [ref=f1e8121]: Kickflip
+        - button "Replay Swivel attempting Kickflip in 3D" [ref=f1e8124]
+        - button "Replay Swivel attempting Kickflip in 3D" [ref=f1e8342]
+        - button "Replay Swivel attempting Kickflip in 3D" [ref=f1e8561]
+        - button "Replay Swivel attempting Kickflip in 3D" [ref=f1e8779]
+        - button "Replay Swivel attempting Kickflip in 3D" [ref=f1e8996]
+        - button "Replay Swivel attempting Kickflip in 3D" [ref=f1e9216]
+      - generic [ref=f1e9432]:
+        - generic [ref=f1e9433]: Heelflip
+        - button "Replay Swivel attempting Heelflip in 3D" [ref=f1e9436]
+        - button "Replay Swivel attempting Heelflip in 3D" [ref=f1e9654]
+        - button "Replay Swivel attempting Heelflip in 3D" [ref=f1e9871]
+        - button "Replay Swivel attempting Heelflip in 3D" [ref=f1e10091]
+        - button "Replay Swivel attempting Heelflip in 3D" [ref=f1e10308]
+        - button "Replay Swivel attempting Heelflip in 3D" [ref=f1e10528]
+      - generic [ref=f1e10744]:
+        - generic [ref=f1e10745]: Backside 360
+        - button "Replay Swivel attempting Backside 360 in 3D" [ref=f1e10748]
+        - button "Replay Swivel attempting Backside 360 in 3D" [ref=f1e10966]
+        - button "Replay Swivel attempting Backside 360 in 3D" [ref=f1e11185]
+        - button "Replay Swivel attempting Backside 360 in 3D" [ref=f1e11403]
+        - button "Replay Swivel attempting Backside 360 in 3D" [ref=f1e11620]
+        - button "Replay Swivel attempting Backside 360 in 3D" [ref=f1e11840]
+      - generic [ref=f1e12056]:
+        - generic [ref=f1e12057]: Frontside 360
+        - button "Replay Swivel attempting Frontside 360 in 3D" [ref=f1e12060]
+        - button "Replay Swivel attempting Frontside 360 in 3D" [ref=f1e12278]
+        - button "Replay Swivel attempting Frontside 360 in 3D" [ref=f1e12495]
+        - button "Replay Swivel attempting Frontside 360 in 3D" [ref=f1e12713]
+        - button "Replay Swivel attempting Frontside 360 in 3D" [ref=f1e12930]
+        - button "Replay Swivel attempting Frontside 360 in 3D" [ref=f1e13150]
+      - generic [ref=f1e13366]:
+        - generic [ref=f1e13367]: Backside Flip
+        - button "Replay Swivel attempting Backside Flip in 3D" [ref=f1e13370]
+        - button "Replay Swivel attempting Backside Flip in 3D" [ref=f1e13588]
+        - button "Replay Swivel attempting Backside Flip in 3D" [ref=f1e13807]
+        - button "Replay Swivel attempting Backside Flip in 3D" [ref=f1e14027]
+        - button "Replay Swivel attempting Backside Flip in 3D" [ref=f1e14244]
+        - button "Replay Swivel attempting Backside Flip in 3D" [ref=f1e14464]
+      - generic [ref=f1e14680]:
+        - generic [ref=f1e14681]: Frontside Flip
+        - button "Replay Swivel attempting Frontside Flip in 3D" [ref=f1e14684]
+        - button "Replay Swivel attempting Frontside Flip in 3D" [ref=f1e14902]
+        - button "Replay Swivel attempting Frontside Flip in 3D" [ref=f1e15121]
+        - button "Replay Swivel attempting Frontside Flip in 3D" [ref=f1e15341]
+        - button "Replay Swivel attempting Frontside Flip in 3D" [ref=f1e15558]
+        - button "Replay Swivel attempting Frontside Flip in 3D" [ref=f1e15778]
+      - generic [ref=f1e15994]:
+        - generic [ref=f1e15995]: Bigspin
+        - button "Replay Swivel attempting Bigspin in 3D" [ref=f1e15998]
+        - button "Replay Swivel attempting Bigspin in 3D" [ref=f1e16216]
+        - button "Replay Swivel attempting Bigspin in 3D" [ref=f1e16435]
+        - button "Replay Swivel attempting Bigspin in 3D" [ref=f1e16653]
+        - button "Replay Swivel attempting Bigspin in 3D" [ref=f1e16870]
+        - button "Replay Swivel attempting Bigspin in 3D" [ref=f1e17090]
+      - generic [ref=f1e17306]:
+        - generic [ref=f1e17307]: Varial Kickflip
+        - button "Replay Swivel attempting Varial Kickflip in 3D" [ref=f1e17310]
+        - button "Replay Swivel attempting Varial Kickflip in 3D" [ref=f1e17528]
+        - button "Replay Swivel attempting Varial Kickflip in 3D" [ref=f1e17747]
+        - button "Replay Swivel attempting Varial Kickflip in 3D" [ref=f1e17967]
+        - button "Replay Swivel attempting Varial Kickflip in 3D" [ref=f1e18184]
+        - button "Replay Swivel attempting Varial Kickflip in 3D" [ref=f1e18404]
+      - generic [ref=f1e18620]:
+        - generic [ref=f1e18621]: 360 Shuvit
+        - button "Replay Swivel attempting 360 Shuvit in 3D" [ref=f1e18624]
+        - button "Replay Swivel attempting 360 Shuvit in 3D" [ref=f1e18842]
+        - button "Replay Swivel attempting 360 Shuvit in 3D" [ref=f1e19061]
+        - button "Replay Swivel attempting 360 Shuvit in 3D" [ref=f1e19279]
+        - button "Replay Swivel attempting 360 Shuvit in 3D" [ref=f1e19496]
+        - button "Replay Swivel attempting 360 Shuvit in 3D" [ref=f1e19716]
+      - generic [ref=f1e19932]:
+        - generic [ref=f1e19933]: Late Backside Shuvit
+        - button "Replay Swivel attempting Late Backside Shuvit in 3D" [ref=f1e19936]
+        - button "Replay Swivel attempting Late Backside Shuvit in 3D" [ref=f1e20154]
+        - button "Replay Swivel attempting Late Backside Shuvit in 3D" [ref=f1e20373]
+        - button "Replay Swivel attempting Late Backside Shuvit in 3D" [ref=f1e20591]
+        - button "Replay Swivel attempting Late Backside Shuvit in 3D" [ref=f1e20808]
+        - button "Replay Swivel attempting Late Backside Shuvit in 3D" [ref=f1e21028]
+      - generic [ref=f1e21244]:
+        - generic [ref=f1e21245]: Late Frontside Shuvit
+        - button "Replay Swivel attempting Late Frontside Shuvit in 3D" [ref=f1e21248]
+        - button "Replay Swivel attempting Late Frontside Shuvit in 3D" [ref=f1e21466]
+        - button "Replay Swivel attempting Late Frontside Shuvit in 3D" [ref=f1e21685]
+        - button "Replay Swivel attempting Late Frontside Shuvit in 3D" [ref=f1e21903]
+        - button "Replay Swivel attempting Late Frontside Shuvit in 3D" [ref=f1e22120]
+        - button "Replay Swivel attempting Late Frontside Shuvit in 3D" [ref=f1e22340]
+      - generic [ref=f1e22556]:
+        - generic [ref=f1e22557]: Late Kickflip
+        - button "Replay Swivel attempting Late Kickflip in 3D" [ref=f1e22560]
+        - button "Replay Swivel attempting Late Kickflip in 3D" [ref=f1e22778]
+        - button "Replay Swivel attempting Late Kickflip in 3D" [ref=f1e22997]
+        - button "Replay Swivel attempting Late Kickflip in 3D" [ref=f1e23217]
+        - button "Replay Swivel attempting Late Kickflip in 3D" [ref=f1e23434]
+        - button "Replay Swivel attempting Late Kickflip in 3D" [ref=f1e23654]
+      - generic [ref=f1e23870]:
+        - generic [ref=f1e23871]: Varial Heelflip
+        - button "Replay Swivel attempting Varial Heelflip in 3D" [ref=f1e23874]
+        - button "Replay Swivel attempting Varial Heelflip in 3D" [ref=f1e24092]
+        - button "Replay Swivel attempting Varial Heelflip in 3D" [ref=f1e24309]
+        - button "Replay Swivel attempting Varial Heelflip in 3D" [ref=f1e24529]
+        - button "Replay Swivel attempting Varial Heelflip in 3D" [ref=f1e24746]
+        - button "Replay Swivel attempting Varial Heelflip in 3D" [ref=f1e24966]
+      - generic [ref=f1e25182]:
+        - generic [ref=f1e25183]: FS Bigspin
+        - button "Replay Swivel attempting FS Bigspin in 3D" [ref=f1e25186]
+        - button "Replay Swivel attempting FS Bigspin in 3D" [ref=f1e25404]
+        - button "Replay Swivel attempting FS Bigspin in 3D" [ref=f1e25621]
+        - button "Replay Swivel attempting FS Bigspin in 3D" [ref=f1e25839]
+        - button "Replay Swivel attempting FS Bigspin in 3D" [ref=f1e26056]
+        - button "Replay Swivel attempting FS Bigspin in 3D" [ref=f1e26276]
+      - generic [ref=f1e26492]:
+        - generic [ref=f1e26493]: Backside Heelflip
+        - button "Replay Swivel attempting Backside Heelflip in 3D" [ref=f1e26496]
+        - button "Replay Swivel attempting Backside Heelflip in 3D" [ref=f1e26714]
+        - button "Replay Swivel attempting Backside Heelflip in 3D" [ref=f1e26931]
+        - button "Replay Swivel attempting Backside Heelflip in 3D" [ref=f1e27149]
+        - button "Replay Swivel attempting Backside Heelflip in 3D" [ref=f1e27366]
+        - button "Replay Swivel attempting Backside Heelflip in 3D" [ref=f1e27586]
+      - generic [ref=f1e27802]:
+        - generic [ref=f1e27803]: Frontside Heelflip
+        - button "Replay Swivel attempting Frontside Heelflip in 3D" [ref=f1e27806]
+        - button "Replay Swivel attempting Frontside Heelflip in 3D" [ref=f1e28024]
+        - button "Replay Swivel attempting Frontside Heelflip in 3D" [ref=f1e28241]
+        - button "Replay Swivel attempting Frontside Heelflip in 3D" [ref=f1e28461]
+        - button "Replay Swivel attempting Frontside Heelflip in 3D" [ref=f1e28678]
+        - button "Replay Swivel attempting Frontside Heelflip in 3D" [ref=f1e28898]
+      - generic [ref=f1e29114]:
+        - generic [ref=f1e29115]: Frontside 360 Shuvit
+        - button "Replay Swivel attempting Frontside 360 Shuvit in 3D" [ref=f1e29118]
+        - button "Replay Swivel attempting Frontside 360 Shuvit in 3D" [ref=f1e29336]
+        - button "Replay Swivel attempting Frontside 360 Shuvit in 3D" [ref=f1e29553]
+        - button "Replay Swivel attempting Frontside 360 Shuvit in 3D" [ref=f1e29771]
+        - button "Replay Swivel attempting Frontside 360 Shuvit in 3D" [ref=f1e29988]
+        - button "Replay Swivel attempting Frontside 360 Shuvit in 3D" [ref=f1e30208]
+      - generic [ref=f1e30424]:
+        - generic [ref=f1e30425]: Pressure Flip
+        - button "Replay Swivel attempting Pressure Flip in 3D" [ref=f1e30428]
+        - button "Replay Swivel attempting Pressure Flip in 3D" [ref=f1e30646]
+        - button "Replay Swivel attempting Pressure Flip in 3D" [ref=f1e30863]
+        - button "Replay Swivel attempting Pressure Flip in 3D" [ref=f1e31083]
+        - button "Replay Swivel attempting Pressure Flip in 3D" [ref=f1e31300]
+        - button "Replay Swivel attempting Pressure Flip in 3D" [ref=f1e31520]
+      - generic [ref=f1e31736]:
+        - generic [ref=f1e31737]: Hardflip
+        - button "Replay Swivel attempting Hardflip in 3D" [ref=f1e31740]
+        - button "Replay Swivel attempting Hardflip in 3D" [ref=f1e31958]
+        - button "Replay Swivel attempting Hardflip in 3D" [ref=f1e32177]
+        - button "Replay Swivel attempting Hardflip in 3D" [ref=f1e32397]
+        - button "Replay Swivel attempting Hardflip in 3D" [ref=f1e32614]
+        - button "Replay Swivel attempting Hardflip in 3D" [ref=f1e32834]
+      - generic [ref=f1e33050]:
+        - generic [ref=f1e33051]: Inward Heelflip
+        - button "Replay Swivel attempting Inward Heelflip in 3D" [ref=f1e33054]
+        - button "Replay Swivel attempting Inward Heelflip in 3D" [ref=f1e33272]
+        - button "Replay Swivel attempting Inward Heelflip in 3D" [ref=f1e33489]
+        - button "Replay Swivel attempting Inward Heelflip in 3D" [ref=f1e33707]
+        - button "Replay Swivel attempting Inward Heelflip in 3D" [ref=f1e33924]
+        - button "Replay Swivel attempting Inward Heelflip in 3D" [ref=f1e34144]
+      - generic [ref=f1e34360]:
+        - generic [ref=f1e34361]: 360 Flip
+        - button "Replay Swivel attempting 360 Flip in 3D" [ref=f1e34364]
+        - button "Replay Swivel attempting 360 Flip in 3D" [ref=f1e34582]
+        - button "Replay Swivel attempting 360 Flip in 3D" [ref=f1e34801]
+        - button "Replay Swivel attempting 360 Flip in 3D" [ref=f1e35021]
+        - button "Replay Swivel attempting 360 Flip in 3D" [ref=f1e35238]
+        - button "Replay Swivel attempting 360 Flip in 3D" [ref=f1e35458]
+      - generic [ref=f1e35674]:
+        - generic [ref=f1e35675]: Double Kickflip
+        - button "Replay Swivel attempting Double Kickflip in 3D" [ref=f1e35678]
+        - button "Replay Swivel attempting Double Kickflip in 3D" [ref=f1e35896]
+        - button "Replay Swivel attempting Double Kickflip in 3D" [ref=f1e36115]
+        - button "Replay Swivel attempting Double Kickflip in 3D" [ref=f1e36335]
+        - button "Replay Swivel attempting Double Kickflip in 3D" [ref=f1e36552]
+        - button "Replay Swivel attempting Double Kickflip in 3D" [ref=f1e36772]
+      - generic [ref=f1e36988]:
+        - generic [ref=f1e36989]: Bigspin Flip
+        - button "Replay Swivel attempting Bigspin Flip in 3D" [ref=f1e36992]
+        - button "Replay Swivel attempting Bigspin Flip in 3D" [ref=f1e37210]
+        - button "Replay Swivel attempting Bigspin Flip in 3D" [ref=f1e37429]
+        - button "Replay Swivel attempting Bigspin Flip in 3D" [ref=f1e37649]
+        - button "Replay Swivel attempting Bigspin Flip in 3D" [ref=f1e37866]
+        - button "Replay Swivel attempting Bigspin Flip in 3D" [ref=f1e38086]
+      - generic [ref=f1e38302]:
+        - generic [ref=f1e38303]: Dolphin Flip
+        - button "Replay Swivel attempting Dolphin Flip in 3D" [ref=f1e38306]
+        - button "Replay Swivel attempting Dolphin Flip in 3D" [ref=f1e38524]
+        - button "Replay Swivel attempting Dolphin Flip in 3D" [ref=f1e38743]
+        - button "Replay Swivel attempting Dolphin Flip in 3D" [ref=f1e38963]
+        - button "Replay Swivel attempting Dolphin Flip in 3D" [ref=f1e39180]
+        - button "Replay Swivel attempting Dolphin Flip in 3D" [ref=f1e39400]
+      - generic [ref=f1e39616]:
+        - generic [ref=f1e39617]: Impossible
+        - button "Replay Swivel attempting Impossible in 3D" [ref=f1e39620]
+        - button "Replay Swivel attempting Impossible in 3D" [ref=f1e39838]
+        - button "Replay Swivel attempting Impossible in 3D" [ref=f1e40057]
+        - button "Replay Swivel attempting Impossible in 3D" [ref=f1e40277]
+        - button "Replay Swivel attempting Impossible in 3D" [ref=f1e40494]
+        - button "Replay Swivel attempting Impossible in 3D" [ref=f1e40714]
+      - generic [ref=f1e40930]:
+        - generic [ref=f1e40931]: Double Heelflip
+        - button "Replay Swivel attempting Double Heelflip in 3D" [ref=f1e40934]
+        - button "Replay Swivel attempting Double Heelflip in 3D" [ref=f1e41152]
+        - button "Replay Swivel attempting Double Heelflip in 3D" [ref=f1e41369]
+        - button "Replay Swivel attempting Double Heelflip in 3D" [ref=f1e41587]
+        - button "Replay Swivel attempting Double Heelflip in 3D" [ref=f1e41804]
+        - button "Replay Swivel attempting Double Heelflip in 3D" [ref=f1e42024]
+      - generic [ref=f1e42240]:
+        - generic [ref=f1e42241]: FS Bigspin Flip
+        - button "Replay Swivel attempting FS Bigspin Flip in 3D" [ref=f1e42244]
+        - button "Replay Swivel attempting FS Bigspin Flip in 3D" [ref=f1e42462]
+        - button "Replay Swivel attempting FS Bigspin Flip in 3D" [ref=f1e42681]
+        - button "Replay Swivel attempting FS Bigspin Flip in 3D" [ref=f1e42901]
+        - button "Replay Swivel attempting FS Bigspin Flip in 3D" [ref=f1e43118]
+        - button "Replay Swivel attempting FS Bigspin Flip in 3D" [ref=f1e43338]
+      - generic [ref=f1e43554]:
+        - generic [ref=f1e43555]: BS Bigspin Heelflip
+        - button "Replay Swivel attempting BS Bigspin Heelflip in 3D" [ref=f1e43558]
+        - button "Replay Swivel attempting BS Bigspin Heelflip in 3D" [ref=f1e43776]
+        - button "Replay Swivel attempting BS Bigspin Heelflip in 3D" [ref=f1e43995]
+        - button "Replay Swivel attempting BS Bigspin Heelflip in 3D" [ref=f1e44215]
+        - button "Replay Swivel attempting BS Bigspin Heelflip in 3D" [ref=f1e44432]
+        - button "Replay Swivel attempting BS Bigspin Heelflip in 3D" [ref=f1e44652]
+      - generic [ref=f1e44868]:
+        - generic [ref=f1e44869]: FS Bigspin Heelflip
+        - button "Replay Swivel attempting FS Bigspin Heelflip in 3D" [ref=f1e44872]
+        - button "Replay Swivel attempting FS Bigspin Heelflip in 3D" [ref=f1e45090]
+        - button "Replay Swivel attempting FS Bigspin Heelflip in 3D" [ref=f1e45307]
+        - button "Replay Swivel attempting FS Bigspin Heelflip in 3D" [ref=f1e45525]
+        - button "Replay Swivel attempting FS Bigspin Heelflip in 3D" [ref=f1e45742]
+        - button "Replay Swivel attempting FS Bigspin Heelflip in 3D" [ref=f1e45962]
+      - generic [ref=f1e46178]:
+        - generic [ref=f1e46179]: Laser Flip
+        - button "Replay Swivel attempting Laser Flip in 3D" [ref=f1e46182]
+        - button "Replay Swivel attempting Laser Flip in 3D" [ref=f1e46400]
+        - button "Replay Swivel attempting Laser Flip in 3D" [ref=f1e46617]
+        - button "Replay Swivel attempting Laser Flip in 3D" [ref=f1e46835]
+        - button "Replay Swivel attempting Laser Flip in 3D" [ref=f1e47052]
+        - button "Replay Swivel attempting Laser Flip in 3D" [ref=f1e47272]
+      - generic [ref=f1e47488]:
+        - generic [ref=f1e47489]: 360 Double Kickflip
+        - button "Replay Swivel attempting 360 Double Kickflip in 3D" [ref=f1e47492]
+        - button "Replay Swivel attempting 360 Double Kickflip in 3D" [ref=f1e47710]
+        - button "Replay Swivel attempting 360 Double Kickflip in 3D" [ref=f1e47929]
+        - button "Replay Swivel attempting 360 Double Kickflip in 3D" [ref=f1e48147]
+        - button "Replay Swivel attempting 360 Double Kickflip in 3D" [ref=f1e48364]
+        - button "Replay Swivel attempting 360 Double Kickflip in 3D" [ref=f1e48584]

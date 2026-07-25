@@ -4,6 +4,12 @@ export {
   BACKGROUND_SCENE_OPTIONS,
   FALL_VARIANT_OPTIONS,
   SLOW_MOTION_PLAYBACK_RATE,
+  // Phase timing (seconds) — lets tools like the playground contact sheet
+  // place fixedTime samples at meaningful points of the animation.
+  ROLL_IN,
+  FLIP_T,
+  LAND_T,
+  FALL_T,
   type BackgroundSceneId,
   type FallVariant,
 } from './TrickAnimation';

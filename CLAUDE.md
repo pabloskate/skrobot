@@ -111,7 +111,15 @@ break one and `npm run lint` fails with a message pointing back here.
   `eslint.config.js` to enforce it.
 - **Animation changes:** edit reusable robot/avatar/trick animation code in
   `packages/animations`; keep playground-only controls and fixture data in
-  `skrobot-animations`.
+  `skrobot-animations`. Verify with BOTH checks before calling it done:
+  (1) `npm test` runs `packages/animations/src/animationInvariants.test.ts` —
+  symmetry invariants (regular/goofy mirror, switch = opposite footedness,
+  fakie = travel flip, FS/BS spec mirrors, rotation completion) that catch the
+  sign errors this code is prone to; (2) the playground's **Contact sheet**
+  mode (`npm --prefix skrobot-animations run dev`, toggle in the header)
+  renders every trick as frozen key frames for visual diffing — filter to the
+  family you touched and compare rider "both" rows. Details in
+  `skrobot-animations/AGENTS.md`.
 - **Rules/catalog/robot/voice resolver changes:** edit the owning feature under
   `src/features/*` and update tests that exercise the behavior through the web
   feature API.

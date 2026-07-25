@@ -189,7 +189,11 @@ export default function AppShell() {
     go({ id: 'game', ...next });
   };
 
-  const switchTab = (tab: Tab) => go(TAB_ROOT_SCREEN[tab]);
+  const switchTab = (tab: Tab) => {
+    // Settings is a destination page, so opening it should always start at its header.
+    if (tab === 'settings') window.scrollTo(0, 0);
+    go(TAB_ROOT_SCREEN[tab]);
+  };
 
   const activeTab = tabForScreen(screen);
   const root = isRootScreen(screen);

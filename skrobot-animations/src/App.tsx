@@ -12,6 +12,7 @@ import {
   type Stance,
 } from '@skrobot/animations';
 import { ROBOTS, robotById, tricksForStance } from './data';
+import ContactSheet from './ContactSheet';
 import styles from './Playground.module.css';
 
 const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
@@ -29,6 +30,13 @@ const VIEW_OPTIONS = [
 ] as const;
 
 type ViewMode = (typeof VIEW_OPTIONS)[number]['id'];
+
+const APP_MODES = [
+  { id: 'playground', label: 'Playground' },
+  { id: 'sheet', label: 'Contact sheet' },
+] as const;
+
+type AppMode = (typeof APP_MODES)[number]['id'];
 
 async function writeClipboardText(text: string): Promise<boolean> {
   if (navigator.clipboard?.writeText) {
@@ -58,6 +66,7 @@ async function writeClipboardText(text: string): Promise<boolean> {
 }
 
 export default function App() {
+  const [appMode, setAppMode] = useState<AppMode>('playground');
   const [selectedRobotId, setSelectedRobotId] = useState(ROBOTS[0].id);
   const [selectedBase, setSelectedBase] = useState('Kickflip');
   const [selectedStance, setSelectedStance] = useState<Stance>('regular');
@@ -162,8 +171,24 @@ export default function App() {
       <header className={styles.header}>
         <h1>Skrobot Animation Playground</h1>
         <p>Pick a robot, trick, and stance — then watch it land or bail.</p>
+        <div className={styles.stanceRow}>
+          {APP_MODES.map((mode) => (
+            <button
+              key={mode.id}
+              className={`${styles.stanceBtn} ${appMode === mode.id ? styles.stanceBtnActive : ''}`}
+              onClick={() => setAppMode(mode.id)}
+              aria-pressed={appMode === mode.id}
+            >
+              {mode.label}
+            </button>
+          ))}
+        </div>
       </header>
 
+      {appMode === 'sheet' ? (
+        <ContactSheet />
+      ) : (
+        <>
       <section className={styles.card}>
         <div>
           <h2 className={styles.sectionTitle}>Robot</h2>
@@ -368,6 +393,8 @@ export default function App() {
         </div>
         <pre className={styles.paramsCode}>{paramsText}</pre>
       </section>
+        </>
+      )}
     </div>
   );
 }

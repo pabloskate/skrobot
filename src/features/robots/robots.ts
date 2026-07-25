@@ -240,7 +240,13 @@ const ROBOTS_UNSORTED: Robot[] = [
     focus: { shuvit: 0.12 },
     favorites: ['Frontside Shuvit', 'Frontside 180'],
     // Still has pop shuvits (learning order), but refuses backside rotation/flip lines.
-    excludes: ['Backside 180', 'Backside Flip', 'Backside Heelflip', 'Backside 360'],
+    excludes: [
+      'Backside 180',
+      'Backside Flip',
+      'Backside Heelflip',
+      'Backside 360',
+      'Backside 360 Kickflip',
+    ],
     trickAllowedStances: {
       Kickflip: ['regular', 'fakie'],
       Heelflip: ['regular'],
@@ -862,6 +868,9 @@ const BAG_THRESHOLD = 0.2;
 // unlock. Only robots that call it a favorite get to carry it in their bag.
 const SPECIALTY_ONLY_TRICKS = new Set(['Late Backside Shuvit']);
 
+/** Catalog tricks no robot ever sets or lands — still playable/viewable by humans. */
+const PLAYER_ONLY_TRICKS = new Set(['Frontside 360 Kickflip']);
+
 /** Tier-wide ceilings for tricks that should remain a reach at that level. */
 const TIER_TRICK_CAPS: Partial<Record<Tier, Partial<Record<string, number>>>> = {
   beginner: { 'switch-pop-shuvit': 0.5 },
@@ -891,6 +900,7 @@ export function robotConsistency(robot: Robot, trick: Trick): number | null {
   const discipline = trickDiscipline(trick);
   if (!robot.disciplines.includes(discipline)) return null;
   if (robot.excludes?.includes(trick.base)) return null;
+  if (PLAYER_ONLY_TRICKS.has(trick.base)) return null;
   if (SPECIALTY_ONLY_TRICKS.has(trick.base) && !robot.favorites.includes(trick.base)) return null;
   if (robot.allowedStances && !robot.allowedStances.includes(trick.stance)) return null;
   const trickStances = robot.trickAllowedStances?.[trick.base];

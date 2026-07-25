@@ -20,6 +20,8 @@ const FLATGROUND_BASES = [
   'Frontside 360',
   'Backside Flip',
   'Frontside Flip',
+  'Backside 360 Kickflip',
+  'Frontside 360 Kickflip',
   'Bigspin',
   'Varial Kickflip',
   '360 Shuvit',

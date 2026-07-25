@@ -1,0 +1,129 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 28px;
+  align-items: flex-end;
+}
+
+.controlGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.controlLabel {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.65;
+}
+
+.filterInput {
+  font: inherit;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 2px solid rgba(0, 0, 0, 0.25);
+  background: #fff;
+  min-width: 180px;
+}
+
+.meta {
+  font-size: 13px;
+  opacity: 0.7;
+}
+
+.sheet {
+  overflow-x: auto;
+  border: 2px solid rgba(0, 0, 0, 0.15);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.grid {
+  display: grid;
+  /* Column count is fixed: label + one column per phase. */
+  grid-template-columns: 150px repeat(var(--phase-count, 6), 168px);
+  align-items: stretch;
+  width: max-content;
+}
+
+.headCell {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f4f2ec;
+  border-bottom: 2px solid rgba(0, 0, 0, 0.2);
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.headCell small {
+  display: block;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  opacity: 0.6;
+}
+
+.labelCell {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 10px;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  font-size: 13px;
+  font-weight: 700;
+  background: #faf9f5;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+}
+
+.labelBadge {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.65;
+}
+
+.cell {
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  border-left: 1px solid rgba(0, 0, 0, 0.06);
+  padding: 4px;
+  /* The sheet is hundreds of dense SVGs; let the browser skip layout and
+     paint for offscreen cells so scrolling stays usable. The intrinsic size
+     matches a 160px-wide cell at the stage's 500:404 viewBox aspect. */
+  content-visibility: auto;
+  contain-intrinsic-size: 160px 130px;
+}
+
+/* Frozen frames are display-only: neutralize the replay-button affordance
+   and the CSS street/scenery motion the shared classes would add. */
+.cell :global(.trick-anim) {
+  cursor: default;
+  max-width: none;
+}
+
+/* The shared street-dash layer hints will-change for smooth scrolling during
+   playback; across hundreds of static cells that promotes one compositor
+   layer each and exhausts GPU tile memory (cells checkerboard and never
+   paint). Frozen frames never move, so drop the hint. */
+.cell :global(.trick-anim)::after {
+  will-change: auto;
+}
+
+.empty {
+  padding: 24px;
+  text-align: center;
+  opacity: 0.6;
+}

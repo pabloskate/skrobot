@@ -24,16 +24,24 @@ describe('mobile native parity config plugin', () => {
       _internal?: {
         modResults?: {
           android?: { manifest?: { manifest?: { application?: [{ $?: Record<string, string> }] } } };
-          ios?: { infoPlist?: { NSAppTransportSecurity?: Record<string, unknown> } };
+          ios?: {
+            infoPlist?: {
+              NSAppTransportSecurity?: Record<string, unknown>;
+              WKAppBoundDomains?: string[];
+            };
+          };
         };
       };
     };
 
     const androidApp = output._internal?.modResults?.android?.manifest?.manifest?.application?.[0].$;
-    const transport = output._internal?.modResults?.ios?.infoPlist?.NSAppTransportSecurity;
+    const infoPlist = output._internal?.modResults?.ios?.infoPlist;
+    const transport = infoPlist?.NSAppTransportSecurity;
 
     expect(androidApp?.['android:usesCleartextTraffic']).toBe('true');
     expect(transport?.NSAllowsLocalNetworking).toBe(true);
     expect(transport?.NSAllowsArbitraryLoadsInWebContent).toBe(true);
+    expect(infoPlist?.WKAppBoundDomains).toContain('skrobot.me-d6a.workers.dev');
+    expect(infoPlist?.WKAppBoundDomains).toContain('localhost');
   });
 });

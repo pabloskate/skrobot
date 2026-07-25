@@ -105,6 +105,7 @@ export default function App() {
         incognito={false}
         sharedCookiesEnabled
         thirdPartyCookiesEnabled
+        limitsNavigationsToAppBoundDomains={Platform.OS === 'ios'}
         setSupportMultipleWindows={false}
         contentInsetAdjustmentBehavior="never"
         automaticallyAdjustContentInsets={false}

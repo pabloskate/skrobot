@@ -30,6 +30,10 @@ interface Props {
   knewIt?: boolean;
   /** The rider's natural footedness. Trick stance is resolved separately. */
   riderStance?: RiderStance;
+  /** Render a single frozen frame at this absolute animation time (seconds,
+   *  clamped to the trick's duration). Disables playback, replay, and onDone —
+   *  used by the playground contact sheet to lay out key poses side by side. */
+  fixedTime?: number;
 }
 
 // ---------- Trick → animation family ----------
@@ -148,6 +152,10 @@ function specFor(trick: Trick): Spec {
       return { ...base, yaw: 360, bodyYaw: 360, spinDir: 1 };
     case 'Frontside 360':
       return { ...base, yaw: 360, bodyYaw: 360, spinDir: -1 };
+    case 'Backside 360 Kickflip':
+      return { ...base, flips: 1, yaw: 360, bodyYaw: 360, flipDir: 1, spinDir: 1 };
+    case 'Frontside 360 Kickflip':
+      return { ...base, flips: 1, yaw: 360, bodyYaw: 360, flipDir: 1, spinDir: -1 };
     case 'Impossible':
       return { ...base, roll: trick.stance === 'fakie' || trick.stance === 'nollie' ? 360 : -360 };
     default:
@@ -377,6 +385,28 @@ function boardGlued(spec: Spec): boolean {
   return !spec.flips && !spec.roll && spec.yaw === spec.bodyYaw;
 }
 
+/**
+ * Shuvits and tre/laser-style 360 flips spin the board under the feet — the
+ * readable catch is a front-foot stamp while the back foot stays tucked a beat
+ * longer. Body-rotation combos (bigspins, FS/BS flips) keep a two-footed catch.
+ */
+function wantsFrontFootCatch(spec: Spec): boolean {
+  if (spec.bodyYaw || spec.roll || spec.forwardFlip) return false;
+  if (spec.yaw > 0 && !spec.flips) return true;
+  if (spec.flips > 0 && spec.yaw >= 360) return true;
+  return false;
+}
+
+/**
+ * 0→1 through late flight: how hard the front foot has planted for the catch.
+ * `p` is the catch/spin clock passed into feetForFlip (finishes at ~0.85 of
+ * raw flight), so the plant is keyed to the last third of that clock — peaking
+ * near the contact-sheet "catch" frame without dipping the foot mid-spin.
+ */
+function frontFootCatchPlant(p: number): number {
+  return smoothstep(clamp01((p - 0.62) / 0.32));
+}
+
 function feetForFlip(spec: Spec, p: number, bodyYOffset: number, boardRot: number): Feet {
   const lift = Math.sin(p * Math.PI);
   const baselineY = FOOT_Y - bodyYOffset - 4;
@@ -385,6 +415,7 @@ function feetForFlip(spec: Spec, p: number, bodyYOffset: number, boardRot: numbe
   const flickBaseX = popFromNose ? -25 : 25;
   const popOutward = popFromNose ? 1 : -1;
   const flickOutward = popFromNose ? -1 : 1;
+  const catchPlant = wantsFrontFootCatch(spec) ? frontFootCatchPlant(p) : 0;
 
   // The frame channels are board roles, not anatomical labels: footR always
   // occupies the nose side and footL always occupies the tail side. Nollie
@@ -413,23 +444,28 @@ function feetForFlip(spec: Spec, p: number, bodyYOffset: number, boardRot: numbe
     );
   } else if (spec.flips && spec.yaw) {
     // Tre-flip style (and dolphin): back-foot scoop, front foot out of the way.
+    // For 360 flips the front/flick foot stamps the catch while the scooping
+    // foot stays tucked a beat longer.
     const scoop = p < 0.3 ? 20 * Math.sin((p / 0.3) * Math.PI) : 0;
+    const flickLift = lift * 35 * (1 - catchPlant);
+    const popLift = lift * 10 + catchPlant * 16;
+    const flickReturn = catchPlant * 10; // pull the kicked foot back over the bolts
     return fromPopAndFlick(
       {
         x: popBaseX + popOutward * scoop,
-        y: baselineY - lift * 10,
+        y: baselineY - popLift,
       },
       {
-        x: flickBaseX + flickOutward * lift * 8,
-        y: baselineY - lift * 35,
+        x: flickBaseX + flickOutward * lift * 8 * (1 - catchPlant) - flickOutward * flickReturn,
+        y: baselineY - flickLift,
       },
     );
   } else if (spec.flips) {
     // Kickflip/Heelflip style: front foot flicks off the nose.
     // Kickflip and heelflip use opposite lateral edges in 3D; both extend the
     // flicking foot outward from its board end instead of moving the pop foot.
-    const flickX = spec.flipDir === -1 ? 15 : 9;
-    const flickY = spec.flipDir === -1 ? 30 : 25;
+    const flickX = spec.flipDir === -1 ? 19 : 13;
+    const flickY = spec.flipDir === -1 ? 36 : 32;
     return fromPopAndFlick(
       { x: popBaseX, y: baselineY - lift * 15 },
       {
@@ -438,29 +474,32 @@ function feetForFlip(spec: Spec, p: number, bodyYOffset: number, boardRot: numbe
       },
     );
   } else if (spec.roll) {
-    // Impossible: The board does a full backflip end-over-end.
-    // The popping foot stays relatively planted on the board while the board
-    // wraps around it. The free foot tucks high up to clear the board.
+    // Impossible: the popping foot guides the wrap; the free foot tucks to
+    // clear the board. Drive the tuck off an ease that rises and releases
+    // without stalling at the apex (sin(πp) zeroed out mid-flight and read
+    // as a pause).
+    const wrapP = Math.min(1, p / 0.95);
+    const tuck = Math.sin(Math.min(1, wrapP / 0.55) * Math.PI * 0.5);
+    const release = smoothstep(clamp01((wrapP - 0.72) / 0.28));
+    const tuckAmt = tuck * (1 - release);
     if (spec.nollie) {
       // Nollie pops the nose: front foot (footR) is the scooping foot.
-      const tuckLift = Math.sin(p * Math.PI) * 35;
-      const scoopX = 25 - Math.sin(p * Math.PI) * 10;
-      const scoopY = -Math.sin(p * Math.PI) * 8;
+      const scoopX = 25 - tuckAmt * 10;
+      const scoopY = -tuckAmt * 8;
 
       return {
         footR: { x: scoopX, y: FOOT_Y - bodyYOffset - 4 + scoopY },
-        footL: { x: -15, y: FOOT_Y - bodyYOffset - 4 - tuckLift },
+        footL: { x: -15, y: FOOT_Y - bodyYOffset - 4 - tuckAmt * 35 },
       };
     }
 
     // Regular: back foot (footL) is the scooping foot.
-    const tuckLift = Math.sin(p * Math.PI) * 35;
-    const scoopX = -25 + Math.sin(p * Math.PI) * 10;
-    const scoopY = -Math.sin(p * Math.PI) * 8;
+    const scoopX = -25 + tuckAmt * 10;
+    const scoopY = -tuckAmt * 8;
 
     return {
       footL: { x: scoopX, y: FOOT_Y - bodyYOffset - 4 + scoopY },
-      footR: { x: 15, y: FOOT_Y - bodyYOffset - 4 - tuckLift },
+      footR: { x: 15, y: FOOT_Y - bodyYOffset - 4 - tuckAmt * 35 },
     };
   } else if (boardGlued(spec)) {
     // Ollie family: the feet ride the rotated deck — front foot up the nose
@@ -485,9 +524,9 @@ function feetForFlip(spec: Spec, p: number, bodyYOffset: number, boardRot: numbe
     const northExtension = Math.sin(smoothstep(northP) * Math.PI);
     // Favor horizontal travel over a tucked knee so the leg visibly straightens
     // through the stylish kick instead of only lifting above the deck.
-    const lift = northExtension * 36;
+    const northLift = northExtension * 36;
     const reach = northExtension * 32;
-    return { footR: { x: footR.x + reach, y: footR.y - lift }, footL };
+    return { footR: { x: footR.x + reach, y: footR.y - northLift }, footL };
   } else {
     // Shuvit family: the board spins beneath — tuck both knees out of the way.
     // Feet ease from the roll-in plant toward the ride-away plant across the
@@ -495,16 +534,33 @@ function feetForFlip(spec: Spec, p: number, bodyYOffset: number, boardRot: numbe
     // fixed tuck position, so the pop and the catch don't snap the feet
     // sideways. Nollie's roll-in/landing seats are handled explicitly (like
     // the ollie family above) since they aren't a mirror of the regular ones.
+    // Front-foot catch: stamp the stance-front foot onto the deck while the
+    // scooping foot stays tucked through the catch frame.
     const ease = Math.sin(p * Math.PI * 0.5);
+    const frontLift = lift * 22 * (1 - catchPlant);
+    const backLift = lift * 18 + catchPlant * 14;
     if (spec.nollie) {
+      // Nollie: anatomical front foot is on the tail (footL).
       return {
-        footR: { x: 34 - ease * 16, y: FOOT_Y - bodyYOffset - 4 - lift * 22 },
-        footL: { x: -8, y: FOOT_Y - bodyYOffset - 4 - lift * 18 },
+        footR: {
+          x: 34 - ease * 16,
+          y: baselineY - backLift,
+        },
+        footL: {
+          x: -8 - catchPlant * 4,
+          y: baselineY - frontLift,
+        },
       };
     }
     return {
-      footR: { x: 10 + ease * 2, y: FOOT_Y - bodyYOffset - 4 - lift * 22 },
-      footL: { x: -34 + ease * 19, y: FOOT_Y - bodyYOffset - 4 - lift * 18 },
+      footR: {
+        x: 10 + ease * 2 + catchPlant * 4,
+        y: baselineY - frontLift,
+      },
+      footL: {
+        x: -34 + ease * 19,
+        y: baselineY - backLift,
+      },
     };
   }
 }
@@ -516,7 +572,8 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
   let sx = 1;
   let sy = 1;
   let bodyX = X0;
-  let bodyYOffset = 0;
+  // Switch riders stand a bit taller on the board, naturally straightening the knees
+  let bodyYOffset = spec.stance === 'switch' ? -8 : 0;
   let bodySX = 1;
   let bodyRot = 0;
   let bodyFallY = 0;
@@ -538,10 +595,11 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
     // reads as the two knees bending in opposite directions.
     // Scale compression by trick difficulty (more flips/spins = deeper crouch)
     const complexity = (spec.flips * 0.5) + (spec.yaw / 180 * 0.3) + (spec.roll ? 0.5 : 0);
-    const stanceLoad = (spec.stance === 'switch' || spec.stance === 'nollie') ? 1.4 : 1;
+    // Nollie keeps its exaggerated load. Switch uses natural depth.
+    const stanceLoad = spec.stance === 'nollie' ? 1.4 : 1;
     const crouchDepth = (22 + (complexity * 8)) * stanceLoad;
     const crouchRatio = clamp01((t - (ROLL_IN - 0.2)) / 0.2);
-    bodyYOffset = Math.sin(t * 12) * 2 + crouchDepth * (0.5 + 0.5 * crouchRatio);
+    bodyYOffset += Math.sin(t * 12) * 2 + crouchDepth * (0.5 + 0.5 * crouchRatio);
 
     // Feet tucked under the hips so the trailing leg bends as much as the lead
     // leg — both knees then track forward toward the nose instead of one bowing
@@ -620,15 +678,15 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
     yawDeg = (spec.spinDir || 1) * spinP * spec.yaw * shankYawScale;
     forwardPitchDeg = spec.forwardFlip ? spec.dir * spinP * 180 * shankYawScale : 0;
     bodyYawDeg = (spec.spinDir || 1) * catchP * spec.bodyYaw * shankBodyScale;
-    // Impossible: the pop and the wrap are ONE continuous motion — the board
-    // launches off the pop and immediately starts rolling, with no flat
-    // pause between them. The roll runs on a linear clock starting at t=0
-    // (overlapping the pop taper) so the wrap reads from the very first
-    // frame of flight. At p=0 the board sits at popAngle; by p=0.85 the
-    // pop taper has fully decayed and the roll has completed a clean 360.
+    // Impossible: one continuous wrap from the popped angle through a full
+    // end-over-end revolution. A separate pop-taper + linear roll used to
+    // nearly cancel mid-flight (board almost stops rotating, then restarts),
+    // which read as two disjoint moves with a pause in the middle. Ease the
+    // whole 360 across nearly the full hang time so it also doesn't finish
+    // early and hang flat before the catch.
     if (spec.roll) {
-      boardRot = popAngle * (1 - Math.pow(Math.min(1, p / 0.3), 2));
-      boardRot += spec.roll * Math.min(1, p / 0.85) * shankRollScale;
+      const wrapP = easeOutCubic(Math.min(1, p / 0.95));
+      boardRot = popAngle + (spec.roll - popAngle) * wrapP * shankRollScale;
     } else if (spec.late) {
       // Late tricks: board stays flat after the pop (no wobble). Shuvits
       // add a scoop dip as the back foot whips the tail around mid-flight;
@@ -677,9 +735,14 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
       const pitchAmp = spec.yaw && !spec.forwardFlip && spec.yaw < 360 ? 4 : 15;
       boardRot += spec.flipDir * Math.sin(spinP * Math.PI) * pitchAmp;
     }
-    // When the board stays under the feet, keep the hip low so the knees read
-    // as tucked mid-air; flips get the full stretch so the feet clear the board.
-    bodyYOffset = 30 - Math.sin(Math.sqrt(p) * Math.PI) * (boardGlued(spec) ? 18 : 35);
+    // Explode out of the crouch into a near-straight popping leg, then settle
+    // into the mid-air tuck (glued) / stretch (flips). Without the early
+    // stretch the body stays crouched through the snap and the popping knee
+    // never opens — the tell is a bent back leg while the tail is still on
+    // the ground. Flips get the full stretch later so the feet clear the board.
+    const flightLift = Math.sin(Math.sqrt(p) * Math.PI);
+    const popStretch = Math.exp(-p / 0.1) * (boardGlued(spec) ? 24 : 16);
+    bodyYOffset += 30 - flightLift * (boardGlued(spec) ? 18 : 35) - popStretch;
     
     // Throw arms up and out during jump
     const jumpApex = Math.sin(p * Math.PI);
@@ -711,10 +774,12 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
       } else {
         // Late shuvit: back foot stays near the board during the hold phase,
         // then scoops backward/around to whip the board rotation mid-flight.
+        // Finish with a front-foot catch — same stamp as a regular shuvit.
         const scoopP = clamp01((p - 0.38) / 0.30);
         // Quick pop-and-return scoop arc: peaks early, tapers back toward the
         // board as the rotation comes around so the foot doesn't hang out.
         const scoopArc = Math.sin(scoopP * Math.PI) * (1 - scoopP * 0.5);
+        const catchPlant = frontFootCatchPlant(p);
         const th = rad(boardRot);
         const noseX = spec.nollie ? 25 : 10;
         const tailX = spec.nollie ? -10 : -25;
@@ -722,24 +787,25 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
         const holdL = { x: tailX * Math.cos(th), y: FOOT_Y - 6 + tailX * Math.sin(th) - bodyYOffset };
         // The actual popping end scoops outward. The other end lifts just
         // enough to clear the late rotation; rider stance does not alter this
-        // nose/tail mechanic.
+        // nose/tail mechanic. CatchPlant then drops the front foot onto the
+        // deck while the scooping foot stays tucked.
         if (spec.nollie) {
           footR = {
             x: holdR.x + scoopArc * 22,
-            y: holdR.y - scoopArc * 16,
+            y: holdR.y - scoopArc * 16 - catchPlant * 12,
           };
           footL = {
-            x: holdL.x + scoopArc * 8,
-            y: holdL.y - scoopArc * 10,
+            x: holdL.x + scoopArc * 8 * (1 - catchPlant),
+            y: holdL.y - scoopArc * 10 * (1 - catchPlant),
           };
         } else {
           footR = {
-            x: holdR.x - scoopArc * 8,
-            y: holdR.y - scoopArc * 10,
+            x: holdR.x - scoopArc * 8 * (1 - catchPlant),
+            y: holdR.y - scoopArc * 10 * (1 - catchPlant),
           };
           footL = {
             x: holdL.x - scoopArc * 22,
-            y: holdL.y - scoopArc * 16,
+            y: holdL.y - scoopArc * 16 - catchPlant * 12,
           };
         }
       }
@@ -752,7 +818,7 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
     // Compress on the catch, then ride away. After a 180/bigspin the skater
     // stays turned around (rides away switch).
     const complexity = (spec.flips * 0.5) + (spec.yaw / 180 * 0.3) + (spec.roll ? 0.5 : 0);
-    const stanceLoad = (spec.stance === 'switch' || spec.stance === 'nollie') ? 1.2 : 1;
+    const stanceLoad = spec.stance === 'nollie' ? 1.2 : 1;
     const landingCompression = (12 + (complexity * 6)) * stanceLoad;
     
     const p = clamp01((t - ROLL_IN - FLIP_T) / LAND_T);
@@ -763,9 +829,9 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
     if (p < 0.55) {
       const q = p / 0.55;
       const settle = easeInOutCubic(q);
-      bodyYOffset = FLIGHT_END_OFFSET * (1 - settle) + RIDE_AWAY_OFFSET * settle + landingCompression * Math.sin(q * Math.PI);
+      bodyYOffset += FLIGHT_END_OFFSET * (1 - settle) + RIDE_AWAY_OFFSET * settle + landingCompression * Math.sin(q * Math.PI);
     } else {
-      bodyYOffset = RIDE_AWAY_OFFSET + Math.sin(t * 12) * 2;
+      bodyYOffset += RIDE_AWAY_OFFSET + Math.sin(t * 12) * 2;
     }
     // Narrow stance during compression so the back knee doesn't protrude
     // below the board, then smoothly widen back to the ride-away stance across
@@ -800,7 +866,7 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
     // instant vertical teleport the moment the fall branch takes over, seed
     // bodyFallY from that offset and let the slam/slip/etc. drop extend it
     // further toward the ground. Positive = downward in screen space.
-    const FALL_START_Y = 30;
+    const FALL_START_Y = 30 + (spec.stance === 'switch' ? -8 : 0);
     let boardShootOut = 150;
     if (fall === 'bail') boardShootOut = -80; // kicks board behind them
     else if (fall === 'slip') boardShootOut = 250; // classic banana peel
@@ -1082,7 +1148,9 @@ export type { Frame, Spec, Pt };
 
 /** Two-bone IK: knee position for a hip-to-foot leg.
  *  Always returns the solution where the knee protrudes toward the front
- *  (+x) so both legs read as bending the same way in a skate stance. */
+ *  (+x) so both legs read as bending the same way in a skate stance.
+ *  Near full reach the artificial bend eases off so a pop snap can read as a
+ *  straight leg instead of keeping the permanent KNEE_BEND_SCALE kink. */
 function knee(foot: Pt): Pt {
   let { x: fx, y: fy } = foot;
   const dist = Math.sqrt(fx * fx + fy * fy);
@@ -1099,9 +1167,11 @@ function knee(foot: Pt): Pt {
   const k2 = { x: THIGH * Math.cos(baseAngle + angleB), y: THIGH * Math.sin(baseAngle + angleB) };
   const bent = k1.x >= k2.x ? k1 : k2;
   const straight = { x: fx / 2, y: fy / 2 };
+  const reach = c / (THIGH + SHIN);
+  const bendScale = KNEE_BEND_SCALE * (1 - Math.pow(reach, 6));
   return {
-    x: straight.x + (bent.x - straight.x) * KNEE_BEND_SCALE,
-    y: straight.y + (bent.y - straight.y) * KNEE_BEND_SCALE,
+    x: straight.x + (bent.x - straight.x) * bendScale,
+    y: straight.y + (bent.y - straight.y) * bendScale,
   };
 }
 
@@ -1118,6 +1188,7 @@ export default function TrickAnimation({
   paused = false,
   knewIt,
   riderStance = 'regular',
+  fixedTime,
 }: Props) {
   // Shank is forced when the robot doesn't know the trick; excluded from
   // the random pool when it does. undefined (playground) keeps the full pool.
@@ -1137,6 +1208,11 @@ export default function TrickAnimation({
   const onDoneRef = useRef(onDone);
   const pausedRef = useRef(paused);
   const effectivePlaybackRate = Math.max(0.05, playbackRate);
+  // Static mode: one frozen frame, computed in render so a changed fixedTime
+  // (e.g. a scrubber) re-renders without touching the playback machinery.
+  const staticTime = fixedTime == null
+    ? null
+    : Math.max(0, Math.min(fixedTime, ROLL_IN + FLIP_T + (landed ? LAND_T : FALL_T)));
 
   useEffect(() => {
     onDoneRef.current = onDone;
@@ -1149,6 +1225,7 @@ export default function TrickAnimation({
   }, [paused]);
 
   useEffect(() => {
+    if (staticTime != null) return;
     const end = ROLL_IN + FLIP_T + (landed ? LAND_T : FALL_T);
     const durationMs = ((end + HOLD) / effectivePlaybackRate) * 1000;
     const finish = () => {
@@ -1196,16 +1273,17 @@ export default function TrickAnimation({
       cancelAnimationFrame(raf);
       clearTimeout(failSafe);
     };
-  }, [spec, landed, resolvedFallVariant, effectivePlaybackRate, replayNonce]);
+  }, [spec, landed, resolvedFallVariant, effectivePlaybackRate, replayNonce, staticTime]);
 
   const replay = () => {
+    if (staticTime != null) return;
     setIsPlaying(true);
     setFrame(computeFrame(0, spec, landed, resolvedFallVariant));
     setReplayNonce((current) => current + 1);
   };
 
   const colors = robot.avatar;
-  const f = frame;
+  const f = staticTime != null ? computeFrame(staticTime, spec, landed, resolvedFallVariant) : frame;
   const mechanics = resolveRiderMechanics(riderStance, spec.stance);
   // Body rotation changes the visible side; rider footedness supplies the
   // baseline orientation. No stance turns the body; switch only flips which
@@ -1266,7 +1344,7 @@ export default function TrickAnimation({
 
   return (
     <div
-      className={`trick-anim ${isPlaying ? 'trick-anim--moving' : ''}`}
+      className={`trick-anim ${isPlaying && staticTime == null ? 'trick-anim--moving' : ''}`}
       style={streetStyle}
       data-rider-stance={riderStance}
       data-nose-foot={mechanics.noseFoot}

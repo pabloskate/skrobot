@@ -1,0 +1,14 @@
+- generic [active] [ref=f1e1]:
+  - generic [ref=f1e2]:
+    - banner [ref=f1e933]:
+      - button "Back" [ref=f1e934] [cursor=pointer]: ←
+      - heading "Gutsy" [level=1] [ref=f1e935]
+    - main [ref=f1e3]:
+      - generic [ref=f1e938]:
+        - img "Gutsy" [ref=f1e939]
+        - heading "Gutsy" [level=2] [ref=f1e970]
+        - paragraph [ref=f1e971]: Brave, mostly
+        - paragraph [ref=f1e972]: Gutsy will try anything once — usually a backside 180, usually with its eyes half shut. More courage than control, but you have to respect the send.
+        - button "Play Gutsy" [ref=f1e973] [cursor=pointer]
+        - button "See their tricks (8)" [ref=f1e974] [cursor=pointer]
+  - alert [ref=f1e932]

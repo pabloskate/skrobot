@@ -9,6 +9,13 @@
     "binding": "ASSETS"
   },
 
+  "routes": [
+    {
+      "pattern": "app.skaterobot.com",
+      "custom_domain": true
+    }
+  ],
+
   // Per-IP throttle for /api/live-token (Workers rate limiting binding).
   // Best-effort and per-colo, which is fine for abuse damping. A legit voice
   // session mints 1 token plus up to 4 reconnect retries, so 10/min is roomy.

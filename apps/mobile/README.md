@@ -30,12 +30,19 @@ feature screens of its own.
 
 The native app gets offline on-screen play from the web app's production service
 worker. After the WebView has loaded the deployed app once while online, the
-cached app shell can start again without connectivity and the on-screen S.K.A.T.E.
-flow keeps using the reducer plus localStorage records.
+worker verifies that the full app shell, build assets, local font, and public
+images are cached. The cached app shell can then start again without
+connectivity and the on-screen S.K.A.T.E. flow keeps using the reducer plus
+localStorage records.
 
 First launch still needs network because the shell points at a remote HTTPS app
 URL. Voice mode, auth, billing, and any `/api/*` work stay network-required; if
 the device is offline, players should use screen mode until connectivity returns.
+
+On iOS, the config plugin adds the configured web host to `WKAppBoundDomains`
+and the WebView opts into app-bound navigation so WebKit permits the production
+service worker. Offline validation must use a development/internal build rather
+than Expo Go, because Expo Go does not contain this app's generated Info.plist.
 
 ## Run
 

@@ -121,6 +121,10 @@ Native WebView requests must hit the same first-party API surface as web:
    - External non-app links open outside the shell.
    - Android hardware Back navigates WebView history before exiting the app.
    - WebView load failures show only Retry/Open URL recovery controls.
+   - After one successful online launch, force-quitting and relaunching in
+     airplane mode loads the cached shell and completes an on-screen game.
+   - Voice, auth, billing, video tips, and `/api/*` remain explicitly
+     network-required while offline.
 
 ## Device Matrix
 
@@ -147,4 +151,5 @@ For each device, record:
 - Microphone prompt/result.
 - One completed on-screen game.
 - One attempted voice session.
+- One force-quit and airplane-mode relaunch after an online cache warm-up.
 - Any deviation from the web app.

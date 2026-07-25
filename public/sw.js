@@ -1,9 +1,11 @@
-const VERSION = 'skrobot-offline-v1';
+const VERSION = 'skrobot-offline-v2';
 const APP_CACHE = `${VERSION}:app`;
 const RUNTIME_CACHE = `${VERSION}:runtime`;
+const CACHE_REQUEST = 'SKROBOT_CACHE_APP';
+const CACHE_READY = 'SKROBOT_OFFLINE_READY';
+const NAVIGATION_TIMEOUT_MS = 4_000;
 
 const APP_SHELL_URLS = [
-  '/',
   '/manifest.webmanifest',
   '/favicon.png',
   '/favicon.svg',
@@ -14,16 +16,13 @@ const APP_SHELL_URLS = [
   '/app-icon.svg',
   '/icons.svg',
   '/hero.png',
+  '/fonts/montserrat-latin.woff2',
 ];
-
-const FONT_ORIGINS = new Set(['https://fonts.googleapis.com', 'https://fonts.gstatic.com']);
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     (async () => {
-      const cache = await caches.open(APP_CACHE);
-      await cache.addAll(APP_SHELL_URLS);
-      await cacheDiscoveredShellAssets(cache);
+      await precacheAppShell();
       await self.skipWaiting();
     })(),
   );
@@ -43,6 +42,21 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+self.addEventListener('message', (event) => {
+  if (event.data?.type !== CACHE_REQUEST) return;
+
+  event.waitUntil(
+    (async () => {
+      try {
+        await precacheAppShell();
+        event.ports[0]?.postMessage({ type: CACHE_READY, version: VERSION });
+      } catch {
+        event.ports[0]?.postMessage({ type: 'SKROBOT_OFFLINE_FAILED', version: VERSION });
+      }
+    })(),
+  );
+});
+
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
@@ -55,7 +69,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (request.mode === 'navigate') {
-    event.respondWith(navigationResponse(request));
+    event.respondWith(navigationResponse(request, event));
     return;
   }
 
@@ -64,31 +78,55 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  if (url.origin === self.location.origin || FONT_ORIGINS.has(url.origin)) {
+  if (url.origin === self.location.origin) {
     event.respondWith(staleWhileRevalidate(request));
   }
 });
 
-async function cacheDiscoveredShellAssets(cache) {
-  try {
-    const response = await fetch('/', { cache: 'reload' });
-    if (!response.ok) return;
+async function precacheAppShell() {
+  const cache = await caches.open(APP_CACHE);
+  await Promise.all(APP_SHELL_URLS.map((url) => fetchAndCache(cache, url)));
 
-    await cache.put('/', response.clone());
-    const html = await response.text();
-    const assetUrls = [...html.matchAll(/(?:src|href)="([^"]+)"/g)]
-      .map((match) => match[1])
-      .filter((assetUrl) => assetUrl.startsWith('/_next/static/'));
-
-    await Promise.allSettled(assetUrls.map((assetUrl) => cache.add(assetUrl)));
-  } catch {
-    // The static public assets still give us the best available cached shell.
+  const response = await fetch('/', { cache: 'reload' });
+  if (!response.ok) {
+    throw new Error(`Could not cache app shell: HTTP ${response.status}`);
   }
+
+  await cacheDocumentAssets(cache, response.clone());
+  await cache.put('/', response);
+}
+
+async function cacheDocumentAssets(cache, response) {
+  const html = await response.text();
+  const assetUrls = [...html.matchAll(/(?:src|href)=["']([^"']+)["']/g)]
+    .map((match) => match[1])
+    .filter(isCacheableBuildAsset);
+
+  await Promise.all([...new Set(assetUrls)].map((url) => fetchAndCache(cache, url)));
+}
+
+function isCacheableBuildAsset(value) {
+  try {
+    const url = new URL(value, self.location.origin);
+    return url.origin === self.location.origin && url.pathname.startsWith('/_next/static/');
+  } catch {
+    return false;
+  }
+}
+
+async function fetchAndCache(cache, url) {
+  const request = new Request(url, { cache: 'reload' });
+  const response = await fetch(request);
+  if (!response.ok) {
+    throw new Error(`Could not cache ${url}: HTTP ${response.status}`);
+  }
+  await cache.put(request, response.clone());
+  return response;
 }
 
 async function networkOnly(request) {
   try {
-    return await fetch(request);
+    return await fetchWithTimeout(request, NAVIGATION_TIMEOUT_MS);
   } catch {
     return new Response(JSON.stringify({ error: 'offline' }), {
       status: 503,
@@ -100,17 +138,36 @@ async function networkOnly(request) {
   }
 }
 
-async function navigationResponse(request) {
+async function navigationResponse(request, event) {
   const cache = await caches.open(APP_CACHE);
+  const cached = await cache.match('/');
+  if (self.navigator.onLine === false && cached) return cached;
+
   try {
-    const response = await fetch(request);
+    const response = await fetchWithTimeout(request, NAVIGATION_TIMEOUT_MS);
     if (response.ok) {
-      await cache.put('/', response.clone());
-      await cacheDiscoveredShellAssets(cache);
+      const assetDiscoveryResponse = response.clone();
+      const cachedNavigationResponse = response.clone();
+      event.waitUntil(
+        (async () => {
+          await cacheDocumentAssets(cache, assetDiscoveryResponse);
+          await cache.put('/', cachedNavigationResponse);
+        })(),
+      );
     }
     return response;
   } catch {
-    return (await cache.match('/')) || Response.error();
+    return cached || Response.error();
+  }
+}
+
+async function fetchWithTimeout(request, timeoutMs) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(request, { signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
   }
 }
 

@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'vitest';
@@ -72,6 +72,7 @@ describe('mobile parity shell', () => {
     expect(appSource).toContain('incognito={false}');
     expect(appSource).toContain('sharedCookiesEnabled');
     expect(appSource).toContain('thirdPartyCookiesEnabled');
+    expect(appSource).toContain("limitsNavigationsToAppBoundDomains={Platform.OS === 'ios'}");
     expect(appSource).toContain('setSupportMultipleWindows={false}');
     expect(appSource).toContain('contentInsetAdjustmentBehavior="never"');
     expect(appSource).toContain('automaticallyAdjustContentInsets={false}');
@@ -101,6 +102,7 @@ describe('mobile parity shell', () => {
     const layoutSource = readFileSync(resolve(process.cwd(), 'src/app/layout.tsx'), 'utf8');
     const registrationSource = readFileSync(resolve(process.cwd(), 'src/app/ServiceWorkerRegistration.tsx'), 'utf8');
     const serviceWorkerSource = readFileSync(resolve(process.cwd(), 'public/sw.js'), 'utf8');
+    const globalCssSource = readFileSync(resolve(process.cwd(), 'src/app/globals.css'), 'utf8');
     const manifest = JSON.parse(readFileSync(resolve(process.cwd(), 'public/manifest.webmanifest'), 'utf8')) as {
       name?: string;
       start_url?: string;
@@ -111,8 +113,15 @@ describe('mobile parity shell', () => {
 
     expect(layoutSource).toContain("manifest: '/manifest.webmanifest'");
     expect(layoutSource).toContain('<ServiceWorkerRegistration />');
+    expect(layoutSource).not.toContain('fonts.googleapis.com');
+    expect(globalCssSource).toContain("url('/fonts/montserrat-latin.woff2')");
+    expect(existsSync(resolve(process.cwd(), 'public/fonts/montserrat-latin.woff2'))).toBe(true);
+    expect(existsSync(resolve(process.cwd(), 'public/fonts/OFL.txt'))).toBe(true);
     expect(registrationSource).toContain("navigator.serviceWorker.register('/sw.js')");
     expect(registrationSource).toContain("process.env.NODE_ENV !== 'production'");
+    expect(registrationSource).toContain('SKROBOT_CACHE_APP');
+    expect(registrationSource).toContain('SKROBOT_OFFLINE_READY');
+    expect(registrationSource).toContain('navigator.serviceWorker.ready');
     expect(manifest.name).toBe('Skate Robot');
     expect(manifest.start_url).toBe('/');
     expect(manifest.scope).toBe('/');
@@ -122,8 +131,19 @@ describe('mobile parity shell', () => {
     expect(serviceWorkerSource).toContain("request.mode === 'navigate'");
     expect(serviceWorkerSource).toContain("url.pathname.startsWith('/api/')");
     expect(serviceWorkerSource).toContain("url.pathname.startsWith('/_next/static/')");
-    expect(serviceWorkerSource).toContain('cacheDiscoveredShellAssets');
-    expect(serviceWorkerSource).toContain("return (await cache.match('/')) || Response.error()");
+    expect(serviceWorkerSource).toContain('precacheAppShell');
+    expect(serviceWorkerSource).toContain('cacheDocumentAssets');
+    expect(serviceWorkerSource).toContain('fetchWithTimeout');
+    expect(serviceWorkerSource).toContain("'/fonts/montserrat-latin.woff2'");
+    expect(serviceWorkerSource).not.toContain('Promise.allSettled');
+    expect(serviceWorkerSource).toContain("return cached || Response.error()");
+
+    const shellUrlsBlock = serviceWorkerSource.match(/const APP_SHELL_URLS = \[([\s\S]*?)\];/)?.[1] ?? '';
+    const shellUrls = [...shellUrlsBlock.matchAll(/'([^']+)'/g)].map((match) => match[1]);
+    expect(shellUrls.length).toBeGreaterThan(0);
+    for (const shellUrl of shellUrls) {
+      expect(existsSync(resolve(process.cwd(), 'public', shellUrl.slice(1))), shellUrl).toBe(true);
+    }
   });
 
   it('does not depend on game or domain packages directly', () => {

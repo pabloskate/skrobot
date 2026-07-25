@@ -82,6 +82,9 @@ const FLATGROUND: [string, number][] = [
   ['Dolphin Flip', 7],
   ['Impossible', 8],
   ['Double Heelflip', 8],
+  // Full 360 body rotation + kickflip — a step above the 180 flip combos.
+  ['Backside 360 Kickflip', 9],
+  ['Frontside 360 Kickflip', 9],
   // Elite contest-level tech: only a few pros carry it, at low consistency.
   ['FS Bigspin Flip', 11.5],
   // Harder than the display cap of 10 so even pros only scrape a low land rate.
@@ -171,6 +174,7 @@ const MIN_SKILL: Record<string, number> = {
   'Late Backside Shuvit': 4.5,
   'Late Frontside Shuvit': 4.5,
   'Late Kickflip': 6,
+  'Backside 360 Kickflip': 7,
   'FS Bigspin Flip': 8.4,
   // BS bigspin heelflip is elite tech — high-pro skill only, and still low odds.
   'BS Bigspin Heelflip': 8.5,
@@ -277,6 +281,7 @@ function stanceName(stance: Stance, base: string): string {
   if (stance === 'regular') return base;
   if (stance === 'fakie' && base === 'Backside 180') return 'Half Cab';
   if (stance === 'fakie' && base === 'Backside 360') return 'Full Cab';
+  if (stance === 'fakie' && base === 'Backside 360 Kickflip') return 'Full Cab Flip';
   if (base === 'Ollie') {
     if (stance === 'nollie') return 'Nollie';
     return `${stance[0].toUpperCase()}${stance.slice(1)} Ollie`;
@@ -332,6 +337,8 @@ export const TRICK_BASE_ALIASES: Readonly<Partial<Record<string, readonly string
     'fs 180 kickflip',
     'fs kickflip',
   ],
+  'Backside 360 Kickflip': ['bs 360 kickflip', 'backside three sixty kickflip'],
+  'Frontside 360 Kickflip': ['fs 360 kickflip', 'frontside three sixty kickflip'],
   Bigspin: ['big spin'],
   'FS Bigspin': ['frontside bigspin', 'frontside big spin', 'front bigspin'],
   'Varial Kickflip': ['varial flip'],
@@ -389,6 +396,9 @@ function searchAliases(trick: Trick): string[] {
   }
   if (trick.stance === 'fakie' && trick.base === 'Backside Flip') {
     aliases.push('half cab flip');
+  }
+  if (trick.stance === 'fakie' && trick.base === 'Backside 360 Kickflip') {
+    aliases.push('full cab flip', 'cab flip', 'caballerial flip');
   }
   if (trick.stance !== 'regular') {
     const prefix = trick.stance[0].toUpperCase() + trick.stance.slice(1);
@@ -463,6 +473,8 @@ const DESCRIPTIONS: Record<string, string> = {
   'Frontside 360': 'A full 360° ollie spun frontside, unwinding your shoulders all the way around.',
   'Backside Flip': 'A kickflip and a backside 180 at once — the board flips as you spin behind you.',
   'Frontside Flip': 'A kickflip folded into a frontside 180 — flip and rotation in one pop.',
+  'Backside 360 Kickflip': 'A kickflip wrapped into a full backside 360 — body and board spin all the way around while the deck flips.',
+  'Frontside 360 Kickflip': 'A kickflip wrapped into a full frontside 360 — flip and a complete frontside body rotation in one pop.',
   Bigspin: 'A 360° shuvit paired with a 180° body turn, board and rider spinning together.',
   'Varial Kickflip': 'A kickflip blended with a pop shuvit so the board flips and spins 180° at once.',
   '360 Shuvit': 'A shuvit spun a full 360° beneath you — all rotation, no flip.',
