@@ -354,29 +354,59 @@ function cloudAt(key: string, x: number, y: number, z: number, scale: number, op
 function buildSkyScenery(backZ: number): ReactElement[] {
   const z = backZ + 6;
   const sun = project({ x: X0 + 70, y: GROUND - 88, z });
-  // Distant hills anchor the horizon. Their lower halves are covered by the
-  // floor plane drawn after this group, so they read as terrain beyond the
-  // spot instead of floating blobs. Tinted from --spot-floor so background
-  // themes (sunset, skyline…) keep them in the same palette.
-  const hill = (key: string, dx: number, rx: number, ry: number, opacity: number): ReactElement => {
-    const p = project({ x: X0 + dx, y: GROUND, z: backZ });
+  // Layered mountain silhouettes anchor the horizon: a tall hazy far range,
+  // then a lower greener ridge. Bases extend below ground so the floor plane
+  // (drawn after this group) clips them cleanly. Both layers are OPAQUE
+  // solid fills mixed from the scene variables — translucency would darken
+  // every overlap and dissolve the ridgelines. The far range leans toward
+  // the horizon haze (aerial perspective); the ridge stays close to the
+  // floor green, so background themes (sunset, skyline…) keep both in palette.
+  const left = X0 - 900;
+  const right = W + 900;
+  const mountainRange = (
+    key: string,
+    peaks: ReadonlyArray<readonly [number, number]>,
+    fill: string,
+  ): ReactElement => {
+    // Shoulder points either side of each summit break the silhouette into
+    // ridges instead of perfect triangles.
+    const outline: V3[] = [{ x: left, y: GROUND, z: backZ }];
+    for (const [dx, h] of peaks) {
+      outline.push({ x: X0 + dx - 34, y: GROUND - h * 0.82, z: backZ });
+      outline.push({ x: X0 + dx, y: GROUND - h, z: backZ });
+      outline.push({ x: X0 + dx + 38, y: GROUND - h * 0.78, z: backZ });
+    }
+    outline.push({ x: right, y: GROUND, z: backZ });
+    outline.push({ x: right, y: GROUND + 60, z: backZ });
+    outline.push({ x: left, y: GROUND + 60, z: backZ });
     return (
-      <ellipse
+      <path
         key={key}
-        className="trick-anim-3d__hill"
-        cx={p.x}
-        cy={p.y}
-        rx={rx}
-        ry={ry}
-        fill="var(--spot-floor, #95c07f)"
-        opacity={opacity}
+        className="trick-anim-3d__mountain"
+        d={projectedPolyPath(outline)}
+        fill={fill}
       />
     );
   };
+  const FAR_PEAKS: ReadonlyArray<readonly [number, number]> = [
+    [-820, 44], [-650, 74], [-500, 38], [-340, 86], [-170, 54],
+    [-10, 80], [150, 46], [320, 90], [470, 56], [630, 84], [790, 48], [950, 70],
+  ];
+  const NEAR_PEAKS: ReadonlyArray<readonly [number, number]> = [
+    [-740, 26], [-560, 40], [-380, 22], [-200, 44], [-30, 28],
+    [140, 46], [310, 24], [480, 42], [660, 26], [840, 38], [1010, 22],
+  ];
   return [
-    hill('hillFarA', -280, 250, 36, 0.5),
-    hill('hillFarB', 90, 320, 48, 0.72),
-    hill('hillFarC', 450, 230, 32, 0.6),
+    mountainRange(
+      'mountainsFar',
+      FAR_PEAKS,
+      'color-mix(in srgb, var(--spot-floor, #95c07f) 42%, var(--spot-sky-horizon, #d6eefb))',
+    ),
+    mountainRange(
+      'mountainsNear',
+      NEAR_PEAKS,
+      'color-mix(in srgb, var(--spot-floor, #95c07f) 82%, var(--spot-sky-horizon, #d6eefb))',
+    ),
     <circle key="sun" className="trick-anim-3d__scenery-sun" cx={sun.x} cy={sun.y} r={30 * sun.s} opacity={0.85} />,
     <circle key="sunGlow" className="trick-anim-3d__scenery-sun" cx={sun.x} cy={sun.y} r={48 * sun.s} opacity={0.28} />,
     cloudAt('cloudA', 60, GROUND - 118, z + 4, 1.05, 0.72),
@@ -810,10 +840,12 @@ export default function TrickAnimation3D({
     );
     for (const wz of [-1, 1] as const) {
       const c = project(B({ x: tx, y: WHEEL_Y, z: wz * WHEEL_Z }));
-      // Spokes rotate with the distance actually traveled, so rolling reads
-      // on the ground and stops when the board does (air time keeps the last
-      // angle, which is fine — urethane wheels don't spin up in mid-air).
-      const rollDeg = ((f.streetDist / (2 * Math.PI * 5)) * 360) % 360;
+      // Spokes are phase-locked to the street-dash scroll: one revolution per
+      // dash period, derived from the same quantity that moves the lane
+      // markings. The roll reads as gripping the street, follows slow motion,
+      // and reverses with fakie exactly like the dashes do. (True surface
+      // speed at this wheel radius would be ~8.5 rev/s — pure strobe at 60fps.)
+      const rollDeg = ((f.streetDist / STREET_DASH_SECONDS) * spec.dir * 360) % 360;
       const ra = rad(rollDeg);
       const spokeR = 5 * c.s * 0.92;
       const ca = Math.cos(ra) * spokeR;

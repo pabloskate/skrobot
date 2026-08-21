@@ -29,7 +29,7 @@ type PlaybackMode = (typeof PLAYBACK_OPTIONS)[number]['id'];
 
 const VIEW_OPTIONS = [
   { id: 'side', label: 'Side (2D)' },
-  { id: '3d', label: '3D' },
+  { id: '3d', label: 'New 3D' },
   { id: '3d-legacy', label: '3D legacy' },
 ] as const;
 
