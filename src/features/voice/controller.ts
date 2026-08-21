@@ -1,4 +1,4 @@
-import type { GameAction, GameState, Rps } from '@/features/game';
+import type { GameAction, GameProgress, GameSessionSnapshot, GameState, Rps } from '@/features/game';
 import {
   createInitialGameState,
   chooseRobotTrick,
@@ -10,6 +10,7 @@ import {
   rpsOutcome,
 } from '@/features/game';
 import { appendGameLog, recordResult } from '@/features/records';
+import type { TrickAttempt } from '@/features/records';
 import type { Robot } from '@/features/robots';
 import { buildBag } from '@/features/robots';
 import type { Trick } from '@/features/tricks';
@@ -46,21 +47,33 @@ export class VoiceGameController {
   readonly pool: Trick[];
   private bag: Map<string, number>;
   private prevState: GameState | null = null;
+  private prevTricksLanded: string[] | null = null;
+  private prevTrickAttempts: TrickAttempt[] | null = null;
   private recorded = false;
   tricksLanded: string[] = [];
-  onChange?: (state: GameState) => void;
+  trickAttempts: TrickAttempt[] = [];
+  onChange?: (state: GameState, progress: GameProgress) => void;
   /** Fired for every robot trick attempt (including retries) so the UI can animate it. */
   onRobotAttempt?: (trick: Trick, landed: boolean) => void;
 
   /** `resume` continues a game handed over from the on-screen mode. */
-  constructor(robot: Robot, pool: Trick[], resume?: GameState) {
+  constructor(robot: Robot, pool: Trick[], resume?: GameSessionSnapshot) {
     this.robot = robot;
     this.pool = pool;
     this.bag = buildBag(robot, pool);
     if (resume) {
-      this.state = resume;
-      this.recorded = resume.phase === 'over';
+      this.state = resume.state;
+      this.recorded = resume.state.phase === 'over';
+      this.tricksLanded = [...resume.progress.tricksLanded];
+      this.trickAttempts = [...resume.progress.trickAttempts];
     }
+  }
+
+  private progress(): GameProgress {
+    return {
+      tricksLanded: [...this.tricksLanded],
+      trickAttempts: [...this.trickAttempts],
+    };
   }
 
   private dispatch(a: GameAction) {
@@ -78,9 +91,10 @@ export class VoiceGameController {
         playerLetters: this.state.letters.player,
         robotLetters: this.state.letters.robot,
         tricksLanded: this.tricksLanded,
+        trickAttempts: this.trickAttempts,
       });
     }
-    this.onChange?.(this.state);
+    this.onChange?.(this.state, this.progress());
   }
 
   snapshot(): Snapshot {
@@ -158,13 +172,19 @@ export class VoiceGameController {
 
   private saveUndo() {
     this.prevState = this.state;
+    this.prevTricksLanded = [...this.tricksLanded];
+    this.prevTrickAttempts = [...this.trickAttempts];
   }
 
   undo(): { ok: boolean; summary: string } {
     if (!this.prevState) return { ok: false, summary: `Nothing to undo. ${this.nextStep()}` };
     this.state = this.prevState;
     this.prevState = null;
-    this.onChange?.(this.state);
+    this.tricksLanded = this.prevTricksLanded ?? [];
+    this.trickAttempts = this.prevTrickAttempts ?? [];
+    this.prevTricksLanded = null;
+    this.prevTrickAttempts = null;
+    this.onChange?.(this.state, this.progress());
     return { ok: true, summary: `Reverted the last report. ${this.letterScore()} ${this.nextStep()}` };
   }
 
@@ -221,7 +241,7 @@ export class VoiceGameController {
 
   /** Run the robot's own set: pick a trick and attempt it. */
   private runRobotSet(): NonNullable<RobotEvents['robotSet']> {
-    const trick = chooseRobotTrick(this.bag, this.state.used, TRICK_BY_ID);
+    const trick = chooseRobotTrick(this.bag, this.state.used, TRICK_BY_ID, this.robot);
     this.dispatch({ type: 'ROBOT_SET_CHOICE', trick });
     if (!trick) {
       this.dispatch({ type: 'CONTINUE' });
@@ -251,6 +271,7 @@ export class VoiceGameController {
 
       this.saveUndo();
       this.tricksLanded.push(res.trick.name);
+      this.trickAttempts.push({ trick: res.trick.name, landed: true });
       this.dispatch({ type: 'PLAYER_SET_LANDED', trick: res.trick });
       const robotCopy = this.runRobotCopy();
       return {
@@ -265,6 +286,12 @@ export class VoiceGameController {
     }
 
     this.saveUndo();
+    // Best-effort stats: if the model told us what they were trying, record the
+    // miss. Resolution failure never blocks the game — the set passes either way.
+    if (trickName) {
+      const res = resolveTrick(trickName, this.pool);
+      if (res.kind === 'match') this.trickAttempts.push({ trick: res.trick.name, landed: false });
+    }
     this.dispatch({ type: 'PLAYER_SET_MISSED' });
     const robotSet = this.runRobotSet();
     return {
@@ -286,6 +313,7 @@ export class VoiceGameController {
     this.saveUndo();
     const trickName = this.state.current!.name;
     const events: RobotEvents = {};
+    this.trickAttempts.push({ trick: trickName, landed });
 
     if (landed) {
       this.tricksLanded.push(trickName);
@@ -319,10 +347,13 @@ export class VoiceGameController {
   rematch() {
     this.state = createInitialGameState(this.state.gameFormat);
     this.prevState = null;
+    this.prevTricksLanded = null;
+    this.prevTrickAttempts = null;
     this.recorded = false;
     this.tricksLanded = [];
+    this.trickAttempts = [];
     this.bag = buildBag(this.robot, this.pool);
-    this.onChange?.(this.state);
+    this.onChange?.(this.state, this.progress());
     return { summary: 'Fresh game started. Ask the player for their rock-paper-scissors throw.', ...this.snapshot() };
   }
 }

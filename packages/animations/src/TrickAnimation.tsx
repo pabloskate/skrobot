@@ -9,7 +9,7 @@ import { resolveRiderMechanics } from './stanceMechanics';
  * ride away — or slam. Board physics per trick family: flips are a cosine
  * scaleY (a heelflip reads identically to a kickflip in profile), shuvits and
  * spins are a scaleX yaw, tre flips combine both. Misses end in one of two
- * parametric falls (slam / slip) with the board shooting out.
+ * parametric falls (slam / bail / shank) with the board shooting out.
  *
  * Freezes on the final frame and fires onDone exactly once so the parent can
  * advance the game when the attempt resolves.
@@ -26,7 +26,7 @@ interface Props {
   /** Freeze the animation on the current frame (e.g. to grab a screenshot). */
   paused?: boolean;
   /** Whether the robot knew the trick (in its bag). When false and not landed,
-   *  forces the "shank" fall (trick didn't even rotate). */
+   *  forces the "shank" fall (trick under-rotates and stumbles off). */
   knewIt?: boolean;
   /** The rider's natural footedness. Trick stance is resolved separately. */
   riderStance?: RiderStance;
@@ -157,7 +157,9 @@ function specFor(trick: Trick): Spec {
     case 'Frontside 360 Kickflip':
       return { ...base, flips: 1, yaw: 360, bodyYaw: 360, flipDir: 1, spinDir: -1 };
     case 'Impossible':
-      return { ...base, roll: trick.stance === 'fakie' || trick.stance === 'nollie' ? 360 : -360 };
+      // Nollie wraps the other way because it pops the nose; fakie only
+      // reverses travel and still scoops the tail, so it keeps regular's sign.
+      return { ...base, roll: trick.stance === 'nollie' ? 360 : -360 };
     default:
       // Ollies, grinds, manuals, stalls… plain pop.
       return base;
@@ -194,7 +196,10 @@ const ROLL_IN = 0.5 * SPEED_SCALE;
 // pop flew for 0.75s.
 const FLIP_T = 0.75 * Math.sqrt(JUMP / 130) * SPEED_SCALE;
 const LAND_T = 0.95 * SPEED_SCALE;
-const FALL_T = 1.7 * SPEED_SCALE;
+// Falls share the landing's "impact → settle" budget so a miss doesn't feel
+// like a second, slower animation system. A touch longer than LAND_T for the
+// slide-out, but no longer the old 1.7s crawl.
+const FALL_T = 1.28 * SPEED_SCALE;
 const HOLD = 0.35 * SPEED_SCALE; // freeze on the final frame before onDone
 const STREET_DASH_PERIOD = 210;
 const STREET_DASH_SECONDS = 0.7 * SPEED_SCALE;
@@ -217,14 +222,12 @@ const darken = (hex: string, amount = 0.18): string => {
   return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
 };
 
-export type FallVariant = 'slam' | 'slip' | 'bail' | 'tumble' | 'shank';
+export type FallVariant = 'slam' | 'bail' | 'shank';
 export type BackgroundSceneId = 'sunset' | 'skyline' | 'park' | 'palms' | 'hills';
 
 export const FALL_VARIANT_OPTIONS: ReadonlyArray<{ id: FallVariant; label: string }> = [
   { id: 'slam', label: 'Slam' },
-  { id: 'slip', label: 'Slip' },
   { id: 'bail', label: 'Bail' },
-  { id: 'tumble', label: 'Tumble' },
   { id: 'shank', label: 'Shank' },
 ];
 
@@ -341,11 +344,16 @@ const SCENE_RENDERERS: Record<BackgroundSceneId, Scene> = {
   hills: SceneHills,
 };
 
-const FALL_VARIANTS_KNEW_IT = FALL_VARIANT_OPTIONS.filter((v) => v.id !== 'shank');
-const randomFallVariant = (knewIt?: boolean) => {
-  const pool = knewIt === false ? FALL_VARIANT_OPTIONS : knewIt === true ? FALL_VARIANTS_KNEW_IT : FALL_VARIANT_OPTIONS;
-  return pool[Math.floor(Math.random() * pool.length)].id;
+const randomFallVariant = () => {
+  // Full pool for every miss — shank (under-rotate) is allowed even when the
+  // bot knew the trick. Not knowing it still forces shank via forcedFall.
+  return FALL_VARIANT_OPTIONS[Math.floor(Math.random() * FALL_VARIANT_OPTIONS.length)].id;
 };
+/** How far a shanked trick gets before it dies — shared by flip and body spin. */
+const SHANK_PROGRESS_MIN = 0.35;
+const SHANK_PROGRESS_MAX = 0.90;
+const randomShankProgress = () =>
+  SHANK_PROGRESS_MIN + Math.random() * (SHANK_PROGRESS_MAX - SHANK_PROGRESS_MIN);
 const randomBackgroundSceneId = () =>
   BACKGROUND_SCENE_OPTIONS[Math.floor(Math.random() * BACKGROUND_SCENE_OPTIONS.length)].id;
 
@@ -435,11 +443,11 @@ function feetForFlip(spec: Spec, p: number, bodyYOffset: number, boardRot: numbe
     return fromPopAndFlick(
       {
         x: popBaseX + popOutward * scoop,
-        y: baselineY - lift * 14,
+        y: baselineY - lift * 11,
       },
       {
         x: flickBaseX + flickOutward * lift * flickReach,
-        y: baselineY - lift * 22,
+        y: baselineY - lift * 17,
       },
     );
   } else if (spec.flips && spec.yaw) {
@@ -447,8 +455,8 @@ function feetForFlip(spec: Spec, p: number, bodyYOffset: number, boardRot: numbe
     // For 360 flips the front/flick foot stamps the catch while the scooping
     // foot stays tucked a beat longer.
     const scoop = p < 0.3 ? 20 * Math.sin((p / 0.3) * Math.PI) : 0;
-    const flickLift = lift * 35 * (1 - catchPlant);
-    const popLift = lift * 10 + catchPlant * 16;
+    const flickLift = lift * 25 * (1 - catchPlant);
+    const popLift = lift * 8 + catchPlant * 16;
     const flickReturn = catchPlant * 10; // pull the kicked foot back over the bolts
     return fromPopAndFlick(
       {
@@ -464,10 +472,10 @@ function feetForFlip(spec: Spec, p: number, bodyYOffset: number, boardRot: numbe
     // Kickflip/Heelflip style: front foot flicks off the nose.
     // Kickflip and heelflip use opposite lateral edges in 3D; both extend the
     // flicking foot outward from its board end instead of moving the pop foot.
-    const flickX = spec.flipDir === -1 ? 19 : 13;
-    const flickY = spec.flipDir === -1 ? 36 : 32;
+    const flickX = spec.flipDir === -1 ? 16 : 11;
+    const flickY = spec.flipDir === -1 ? 26 : 23;
     return fromPopAndFlick(
-      { x: popBaseX, y: baselineY - lift * 15 },
+      { x: popBaseX, y: baselineY - lift * 10 },
       {
         x: flickBaseX + flickOutward * lift * flickX,
         y: baselineY - lift * flickY,
@@ -489,7 +497,7 @@ function feetForFlip(spec: Spec, p: number, bodyYOffset: number, boardRot: numbe
 
       return {
         footR: { x: scoopX, y: FOOT_Y - bodyYOffset - 4 + scoopY },
-        footL: { x: -15, y: FOOT_Y - bodyYOffset - 4 - tuckAmt * 35 },
+        footL: { x: -15, y: FOOT_Y - bodyYOffset - 4 - tuckAmt * 27 },
       };
     }
 
@@ -499,7 +507,7 @@ function feetForFlip(spec: Spec, p: number, bodyYOffset: number, boardRot: numbe
 
     return {
       footL: { x: scoopX, y: FOOT_Y - bodyYOffset - 4 + scoopY },
-      footR: { x: 15, y: FOOT_Y - bodyYOffset - 4 - tuckAmt * 35 },
+      footR: { x: 15, y: FOOT_Y - bodyYOffset - 4 - tuckAmt * 27 },
     };
   } else if (boardGlued(spec)) {
     // Ollie family: the feet ride the rotated deck — front foot up the nose
@@ -537,8 +545,8 @@ function feetForFlip(spec: Spec, p: number, bodyYOffset: number, boardRot: numbe
     // Front-foot catch: stamp the stance-front foot onto the deck while the
     // scooping foot stays tucked through the catch frame.
     const ease = Math.sin(p * Math.PI * 0.5);
-    const frontLift = lift * 22 * (1 - catchPlant);
-    const backLift = lift * 18 + catchPlant * 14;
+    const frontLift = lift * 17 * (1 - catchPlant);
+    const backLift = lift * 14 + catchPlant * 14;
     if (spec.nollie) {
       // Nollie: anatomical front foot is on the tail (footL).
       return {
@@ -565,7 +573,14 @@ function feetForFlip(spec: Spec, p: number, bodyYOffset: number, boardRot: numbe
   }
 }
 
-function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant): Frame {
+function computeFrame(
+  t: number,
+  spec: Spec,
+  landed: boolean,
+  fall: FallVariant,
+  /** Fraction of the trick that completes on a shank (flip + body spin). */
+  shankProgress = 0.65,
+): Frame {
   let boardX = X0;
   let boardY = GROUND;
   let boardRot = 0;
@@ -644,22 +659,21 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
     const shuvitFamily = spec.yaw > 0 && !spec.bodyYaw && !spec.flips && !spec.forwardFlip;
     const spinP = shuvitFamily ? easeOutCubic(rawSpinP) : rawSpinP;
     
-    // Shank: the trick doesn't complete. Flips land upside-down (half
-    // rotation reads fine in 2D). Spins don't happen at all — the board
-    // pops but never rotates, avoiding the thin edge-on look that any
-    // partial yaw produces in a side view. Crookedness comes from boardRot
-    // tilt in the fall phase, not from partial yaw squash.
-    const shankFlipScale = (!landed && fall === 'shank') ? 0.55 : 1;
-    const shankYawScale = (!landed && fall === 'shank') ? 0 : 1;
-    const shankBodyScale = (!landed && fall === 'shank') ? 0 : 1;
-    const shankRollScale = (!landed && fall === 'shank') ? 0.55 : 1;
+    // Shank: the trick dies mid-rotation. Flip and body spin (yaw) share the
+    // same per-attempt progress (35–90%) so an under-rotated kickflip 180
+    // reads as one incomplete move, not a flip with a frozen body.
+    const shankScale = (!landed && fall === 'shank') ? shankProgress : 1;
+    const shankFlipScale = shankScale;
+    const shankYawScale = shankScale;
+    const shankBodyScale = shankScale;
+    const shankRollScale = shankScale;
     
     boardY = GROUND - 4 * JUMP * p * (1 - p);
     // Lateral drift mid-spin: the board arcs toward the toes (frontside, -1)
     // or heels (backside, +1) so the spin reads with a direction. The drift
     // peaks at the rotation apex and returns to center for the catch.
     if (spec.spinDir && spec.yaw) {
-      const driftAmp = spec.yaw >= 360 ? 18 : 12;
+      const driftAmp = spec.yaw >= 360 ? 11 : 8;
       boardX += spec.spinDir * spec.dir * driftAmp * Math.sin(p * Math.PI);
     }
     // Late tricks run the rotation on a delayed clock (spinP); for non-late
@@ -855,218 +869,145 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
     armFront = armFront * (1 - p) + (Math.sin(t * 3) * 0.3 + landP * 0.5);
     armBack = armBack * (1 - p) + (Math.sin(t * 3 + Math.PI) * 0.3 - landP * 0.5);
   } else {
-    // Bail: board shoots out, skater slams or slips out. Everything mirrors
-    // with the direction of travel (fakie bails backwards).
+    // Fall: same physics language as a landing — impact, compress, settle —
+    // with a different outcome. Seed from the flight-end tuck so the handoff
+    // doesn't teleport limbs or arms into a separate ragdoll sim. Fakie
+    // mirrors via spec.dir on the body group below.
     falling = true;
     const u = t - ROLL_IN - FLIP_T;
 
-    // Body Y continuity. Just before the bail (trick flight end, p≈1) the
-    // skater's hip sits at boardY - LIFT + bodyYOffset where bodyYOffset≈30,
-    // i.e. ~30px above the standing-hip baseline (GROUND - LIFT). To avoid an
-    // instant vertical teleport the moment the fall branch takes over, seed
-    // bodyFallY from that offset and let the slam/slip/etc. drop extend it
-    // further toward the ground. Positive = downward in screen space.
+    // Flight-end hip offset (~30) matches the landed branch's FLIGHT_END_OFFSET
+    // so a miss starts at the same height a catch would.
     const FALL_START_Y = 30 + (spec.stance === 'switch' ? -8 : 0);
-    let boardShootOut = 150;
-    if (fall === 'bail') boardShootOut = -80; // kicks board behind them
-    else if (fall === 'slip') boardShootOut = 250; // classic banana peel
-    else if (fall === 'slam') boardShootOut = 100;
-    else if (fall === 'tumble') boardShootOut = -120; // caught on nose
-    else if (fall === 'shank') boardShootOut = 35; // lands crooked right next to skater
+    const FEET_PLANT_Y = 2;
+    const FLIGHT_FOOT_Y = FOOT_Y - FALL_START_Y - 4;
+    const PLANT_FOOT_Y = FOOT_Y - 2;
+    // Flight-end arms (p→1 of the jump): apex term zeroes out, leaving the
+    // thrown-up catch pose. Falls blend from here instead of snapping to flail.
+    const FLIGHT_ARM_F = -1.2;
+    const FLIGHT_ARM_B = 1.0;
 
-    boardX = X0 + spec.dir * boardShootOut * (1 - Math.exp(-2.5 * u));
+    // Shared timing: a quick impact (like landing compression) then a settle
+    // that fills the rest of FALL_T. Continuous curves — no hard phase cuts.
+    const IMPACT_T = 0.4;
+    const impact = easeInOutCubic(clamp01(u / IMPACT_T));
+    const settle = easeOutCubic(clamp01((u - IMPACT_T) / Math.max(0.01, FALL_T - IMPACT_T)));
+    // Soft secondary motion at landing-bob frequencies, not frantic flail.
+    const wobble = (amp: number, freq: number, decay: number) =>
+      amp * Math.sin(u * freq) * Math.exp(-decay * u);
+
+    // Board leave eases with the body impact so deck and rider feel coupled.
+    const boardLeave =
+      fall === 'bail' ? -70
+        : fall === 'slam' ? 85
+          : 38; // shank: crooked, nearby
+    boardX = X0 + spec.dir * boardLeave * easeOutCubic(clamp01(u / 0.55));
 
     let fx: number;
     let fy: number;
-    // End-state body Y for rotation-driven falls (slam/tumble): we want the
-    // skater "planted" on the ground, so the feet (at body-frame y=FOOT_Y-2)
-    // land at the ground line. That means bodyFallY settles to FEET_PLANT_Y,
-    // i.e. the body sinks FROM the airborne FALL_START_Y DOWN to FEET_PLANT_Y
-    // (smaller value = higher on screen). The visible "drop" then comes from
-    // the rotation folding the torso/head over the planted feet, not from
-    // translating the whole body through the ground.
-    const FEET_PLANT_Y = 2;
+
     if (fall === 'slam') {
-      // Sink the hips down to plant the feet as the body folds forward.
-      const plantP = easeInOutCubic(clamp01(u / 0.55));
-      const plantedY = FALL_START_Y * (1 - plantP) + FEET_PLANT_Y * plantP;
-      if (u < 0.55) {
-        const q = easeInOutCubic(clamp01(u / 0.55));
-        bodyRot = 95 * q;
-        fx = 14 * q;
-        fy = plantedY;
-      } else if (u < 0.95) {
-        const q = clamp01((u - 0.55) / 0.4);
-        bodyRot = 95 + 22 * (1 - Math.exp(-6 * q)) + 6 * Math.sin(q * Math.PI * 2) * Math.exp(-3 * q);
-        fx = 14 + 18 * q;
-        fy = FEET_PLANT_Y + 6 * Math.sin(q * Math.PI) * Math.exp(-2.2 * q);
-      } else {
-        const q = u - 0.95;
-        fx = 32 + 80 * (1 - Math.exp(-1.4 * q));
-        fy = FEET_PLANT_Y + 2 * Math.sin(q * 8) * Math.exp(-2 * q);
-        bodyRot = 110 + 4 * Math.sin(q * 6) * Math.exp(-2 * q);
-      }
-      // Feet stay planted where the skater left the board; knees crumple as
-      // they fold forward. We do NOT mirror foot x with spec.dir here — the
-      // body group is rotated (bodyRot *= spec.dir below) and that already
-      // carries the direction. Mirroring x too would double-flip fakie falls
-      // and make the knees fold backwards.
-      const p = clamp01(u / 0.7);
-      footR = { x: 24, y: FOOT_Y - 2 + 10 * p };
-      footL = { x: -20 - 8 * p, y: FOOT_Y - 2 + 22 * p };
-      armFront = -1.2 + Math.sin(u * 18) * 1.2 * Math.exp(-u * 0.8);
-      armBack = 1.0 - Math.sin(u * 20) * 1.5 * Math.exp(-u * 0.9);
-    } else if (fall === 'slip') {
-      // Slip = feet shoot out, body drops backward onto the ground (butt
-      // slam). Here bodyFallY genuinely grows large because the pivot slides
-      // out from under the skater.
-      if (u < 0.32) {
-        const q = easeInOutCubic(clamp01(u / 0.32));
-        bodyRot = -55 * q;
-        fx = -10 * q;
-        fy = FALL_START_Y + 12 * q;
-      } else if (u < 0.78) {
-        const q = clamp01((u - 0.32) / 0.46);
-        bodyRot = -55 - 33 * (1 - Math.exp(-7 * q)) + 7 * Math.sin(q * Math.PI * 2) * Math.exp(-2.5 * q);
-        fx = -10 - 22 * q;
-        fy = FALL_START_Y + 12 + 36 * (1 - Math.exp(-3.5 * q)) + 7 * Math.sin(q * Math.PI) * Math.exp(-2.0 * q);
-      } else {
-        const q = u - 0.78;
-        fx = -32 - 34 * (1 - Math.exp(-2.0 * q));
-        fy = FALL_START_Y + 12 + 36 + 1.5 * Math.sin(q * 10) * Math.exp(-2.2 * q);
-        bodyRot = -85 + 3.5 * Math.sin(q * 7) * Math.exp(-2.4 * q);
-      }
-      // Feet slide out from under the skater (banana peel). Direction handled
-      // by bodyRot *= spec.dir, not by mirroring foot x.
-      const p = clamp01(u / 0.55);
-      footR = { x: 28 + 28 * p, y: FOOT_Y - 2 + 18 * p };
-      footL = { x: -12 + 16 * p, y: FOOT_Y - 2 + 14 * p };
-      armFront = -0.7 + Math.sin(u * 12) * 1.8 * Math.exp(-u * 0.9);
-      armBack = 0.5 - Math.sin(u * 15) * 1.4 * Math.exp(-u * 0.8);
+      // Forward fold over planted feet — hips drop, torso follows.
+      bodyRot = 90 * impact + 14 * settle + wobble(2.5, 5, 2.6);
+      fx = 8 * impact + 20 * settle;
+      fy = FALL_START_Y * (1 - impact) + FEET_PLANT_Y * impact + wobble(2, 6, 2.4);
+
+      // Feet: flight tuck → plant + crumple (pull toward hip, stay in reach).
+      const crumple = easeOutCubic(clamp01(u / 0.5));
+      footR = clampFootReach({
+        x: 12 + 6 * (1 - crumple),
+        y: FLIGHT_FOOT_Y * (1 - crumple) + (PLANT_FOOT_Y - 10) * crumple,
+      });
+      footL = clampFootReach({
+        x: -18 - 4 * crumple,
+        y: FLIGHT_FOOT_Y * (1 - crumple) + (PLANT_FOOT_Y - 14) * crumple,
+      });
+
+      // Arms: flight pose → protective brace → quiet settle (land language).
+      const brace = Math.sin(clamp01(u / IMPACT_T) * Math.PI);
+      armFront = FLIGHT_ARM_F * (1 - impact) + (-0.35 + brace * 0.55) * impact + wobble(0.12, 4, 2);
+      armBack = FLIGHT_ARM_B * (1 - impact) + (0.45 - brace * 0.35) * impact + wobble(0.1, 4.5, 2);
     } else if (fall === 'bail') {
-      // Stepped off the board: a brief jog to run out the speed, decelerating
-      // into a settled, slightly crouched stance. Feet stay planted on the
-      // ground; the skater drops their hips (absorbing the landing) from the
-      // mid-air continuity height down to the standing plant, plus a small
-      // compression dip — so the bail reads as a fall, not a clean ride-away.
-      const slow = 1 - Math.exp(-2.2 * u); // 0→1 decel envelope
-      fx = 100 * slow;
-      // Sink from airborne FALL_START_Y down to ~FEET_PLANT_Y, then add a
-      // small landing compression that fades. Net: starts at the trick-end
-      // height (no teleport), settles with feet on the ground after a dip.
-      fy = FALL_START_Y * (1 - slow) + FEET_PLANT_Y * slow + 10 * slow * Math.exp(-2.5 * u) * (1 - Math.exp(-3 * u));
-      bodyRot = 8 * Math.sin(u * 6) * Math.exp(-1.8 * u); // recovery wobble
+      // Stepped off: jog out the speed, then settle like a heavy landing.
+      const slow = easeOutCubic(clamp01(u / 0.85));
+      fx = 95 * slow;
+      // Same compression envelope as a catch: dip then ride-away height.
+      const compress = Math.sin(clamp01(u / 0.45) * Math.PI);
+      fy = FALL_START_Y * (1 - slow) + FEET_PLANT_Y * slow + 10 * compress * (1 - settle);
+      bodyRot = 6 * Math.sin(clamp01(u / 0.35) * Math.PI) * (1 - settle) + wobble(2, 4.5, 2);
 
-      const runSpeed = 14;
-      const cycle = u * runSpeed;
-      // Vigor fades as the skater decelerates; feet lift mid-stride then settle
-      // into a planted stance at the end.
-      const runVigor = Math.exp(-2.0 * u);
-      const settle = 1 - runVigor;
-      const strideX = 22 * runVigor;
-      const liftAmp = 18 * runVigor;
-
-      // Walk gait, phased so each foot swings FORWARD while airborne, then
-      // plants and is passed by the body (reads as planted-pushing-backward).
-      // Lifting the foot exactly when its x swing is at the back of the
-      // planted stroke and driving it forward through the air avoids the
-      // "moonwalk" look (front leg swinging back while lifted).
-      //   liftR peaks when cos(cycle) < 0  (footR in the air)
-      //   x_R   = sin(cycle)             so during lift (cycle in (π/2,3π/2))
-      //          x_R goes 1→-1→0, i.e. forward-then-back — net forward swing
-      //   footL is the opposite phase (+π).
+      // Gait decelerates with the body — cadence matches land bob, not a sprint.
+      const runVigor = Math.exp(-1.6 * u);
+      const planted = 1 - runVigor;
+      const cycle = u * 9;
+      const strideX = 16 * runVigor;
+      const liftAmp = 12 * runVigor;
       const liftR = Math.max(0, Math.cos(cycle));
       const liftL = Math.max(0, -Math.cos(cycle));
-      footR = {
-        x: 12 + settle * 6 + Math.sin(cycle) * strideX,
-        y: FOOT_Y - 2 - liftR * liftAmp + settle * 2,
-      };
-      footL = {
-        x: -10 - settle * 6 + Math.sin(cycle + Math.PI) * strideX,
-        y: FOOT_Y - 2 - liftL * liftAmp + settle * 2,
-      };
+      footR = clampFootReach({
+        x: 12 + planted * 4 + Math.sin(cycle) * strideX,
+        y: FLIGHT_FOOT_Y * (1 - impact)
+          + (PLANT_FOOT_Y - liftR * liftAmp + planted * 2) * impact,
+      });
+      footL = clampFootReach({
+        x: -10 - planted * 4 + Math.sin(cycle + Math.PI) * strideX,
+        y: FLIGHT_FOOT_Y * (1 - impact)
+          + (PLANT_FOOT_Y - liftL * liftAmp + planted * 2) * impact,
+      });
 
-      armFront = Math.sin(cycle) * 1.3 * runVigor + 0.4 * settle;
-      armBack = -Math.sin(cycle) * 1.3 * runVigor - 0.3 * settle;
-    } else if (fall === 'tumble') { // tumble
-      // Tumble: forward roll over the nose.
-      // Compensate for the foot-pivot so the rotation happens around the torso.
-      const ROT_MAX = 410;
-      const GAMMA = 1.8;
-      bodyRot = ROT_MAX * (1 - Math.exp(-GAMMA * u));
-
-      const SLIDE_MAX = 140;
-      const BETA = 1.6;
-      const torsoX = SLIDE_MAX * (1 - Math.exp(-BETA * u));
-
-      const P1 = FOOT_Y - 2; // 63
-      const P0 = -20; // Torso center
-      const P_diff = P1 - P0; // 83
-
-      const blend = easeInOutCubic(clamp01(u / 0.4));
-      const bounce = 25 * Math.sin(u * 6) * Math.exp(-2.0 * u);
-      
-      const torsoY_start = FALL_START_Y + P0;
-      const torsoY_end = 50; 
-      const torsoY = torsoY_start * (1 - blend) + torsoY_end * blend + bounce;
-
-      const r_base = rad(bodyRot);
-
-      // Offset fx, fy so the visual pivot is P0
-      fx = torsoX - P_diff * Math.sin(r_base);
-      fy = torsoY - P0 - P_diff * (1 - Math.cos(r_base));
-
-      // Flail/tuck limbs
-      const tVal = clamp01(u / 0.4);
-      const sVal = easeInOutCubic(clamp01((u - 0.4) / 0.8));
-
-      // Tuck legs during the roll, then extend slightly at the end
-      const fRx = 14 * (1 - tVal) + 15 * tVal * (1 - sVal) + 35 * sVal;
-      const fRy = (FOOT_Y - 2) * (1 - tVal) + (FOOT_Y - 45) * tVal * (1 - sVal) + (FOOT_Y - 15) * sVal;
-      footR = { x: fRx, y: fRy };
-
-      const fLx = 4 * (1 - tVal) + 5 * tVal * (1 - sVal) + 20 * sVal;
-      const fLy = (FOOT_Y - 2) * (1 - tVal) + (FOOT_Y - 40) * tVal * (1 - sVal) + (FOOT_Y - 10) * sVal;
-      footL = { x: fLx, y: fLy };
-
-      armFront = -1.0 * (1 - tVal) + Math.sin(u * 10) * 1.5 * Math.exp(-1.5 * u);
-      armBack = 1.0 * (1 - tVal) + Math.cos(u * 10) * 1.5 * Math.exp(-1.5 * u);
+      armFront = FLIGHT_ARM_F * (1 - impact)
+        + (Math.sin(cycle) * 0.7 * runVigor + 0.35 * planted) * impact;
+      armBack = FLIGHT_ARM_B * (1 - impact)
+        + (-Math.sin(cycle) * 0.7 * runVigor - 0.25 * planted) * impact;
     } else if (fall === 'shank') {
-      // Under-rotated trick: board landed crooked nearby. Bot stumbles
-      // forward off the sideways deck, arms flailing for balance.
-      // Flips land upside-down; spins didn't happen so the board sits
-      // flat but tilted (crooked), not edge-on. Both the tilt and the
-      // half-flip settle to flat (parallel to ground) as the fall ends.
-      const SHANK_FLIP = 0.55;
-      const SHANK_ROLL = 0.55;
-      const settleRot = Math.exp(-2.5 * u); // 1→0: crooked→flat
-      boardRot = (spec.roll ? spec.roll * SHANK_ROLL : 35) * settleRot;
-      const shankSy = spec.flips ? Math.cos(rad(spec.flips * 360 * SHANK_FLIP)) : 1;
-      sy = shankSy * settleRot + 1 * (1 - settleRot); // flip→flat
-      flipDeg = spec.flipDir * spec.flips * 360 * SHANK_FLIP * settleRot;
-      // sx and bodySX stay at 1 — no yaw squash since the spin never happened
+      // Under-rotated: board lands crooked nearby, bot stumbles off it.
+      // Freeze flip/yaw/body at the incomplete pose the flight died at — easing
+      // those back to 0 made failed 180s slowly unwind to the start on the
+      // ground. Only the crooked landing tilt (pitch) settles flat.
+      const tiltSettle = Math.exp(-2.2 * u);
+      boardRot = spec.roll ? spec.roll * shankProgress : 32 * tiltSettle;
+      const shankAngle = spec.flips * 360 * shankProgress;
+      sy = spec.flips ? Math.cos(rad(shankAngle)) : 1;
+      if (spec.yaw) {
+        const c = Math.cos(rad(spec.yaw * shankProgress));
+        sx = spec.flips ? 0.2 + 0.8 * Math.abs(c) : signedSquash(c);
+      }
+      if (spec.bodyYaw) {
+        bodySX = signedSquash(Math.cos(rad(spec.bodyYaw * shankProgress)));
+      }
+      flipDeg = spec.flipDir * shankAngle;
+      yawDeg = (spec.spinDir || 1) * spec.yaw * shankProgress;
+      forwardPitchDeg = spec.forwardFlip ? spec.dir * 180 * shankProgress : 0;
+      bodyYawDeg = (spec.spinDir || 1) * spec.bodyYaw * shankProgress;
 
-      const slow = 1 - Math.exp(-2.8 * u);
-      fx = 55 * slow;
-      fy = FALL_START_Y * (1 - slow) + FEET_PLANT_Y * slow + 6 * slow * Math.exp(-3 * u) * (1 - Math.exp(-4 * u));
-      bodyRot = 18 * Math.sin(u * 6) * Math.exp(-1.5 * u); // forward wobble
+      const slow = easeOutCubic(clamp01(u / 0.75));
+      fx = 48 * slow;
+      const compress = Math.sin(clamp01(u / 0.4) * Math.PI);
+      fy = FALL_START_Y * (1 - slow) + FEET_PLANT_Y * slow + 7 * compress * (1 - settle);
+      bodyRot = 12 * Math.sin(clamp01(u / 0.4) * Math.PI) * (1 - settle) + wobble(2.5, 5, 2);
 
-      const cycle = u * 11;
-      const vigor = Math.exp(-2.2 * u);
-      const settle = 1 - vigor;
-      footR = {
-        x: 12 + settle * 4 + Math.sin(cycle) * 14 * vigor,
-        y: FOOT_Y - 2 - Math.max(0, Math.cos(cycle)) * 10 * vigor + settle * 2,
-      };
-      footL = {
-        x: -10 - settle * 4 + Math.sin(cycle + Math.PI) * 14 * vigor,
-        y: FOOT_Y - 2 - Math.max(0, -Math.cos(cycle)) * 10 * vigor + settle * 2,
-      };
+      const vigor = Math.exp(-1.8 * u);
+      const planted = 1 - vigor;
+      const cycle = u * 8;
+      const stride = 10 * vigor;
+      footR = clampFootReach({
+        x: 12 + planted * 3 + Math.sin(cycle) * stride,
+        y: FLIGHT_FOOT_Y * (1 - impact)
+          + (PLANT_FOOT_Y - Math.max(0, Math.cos(cycle)) * 8 * vigor + planted * 2) * impact,
+      });
+      footL = clampFootReach({
+        x: -10 - planted * 3 + Math.sin(cycle + Math.PI) * stride,
+        y: FLIGHT_FOOT_Y * (1 - impact)
+          + (PLANT_FOOT_Y - Math.max(0, -Math.cos(cycle)) * 8 * vigor + planted * 2) * impact,
+      });
 
-      armFront = Math.sin(cycle) * 1.6 * vigor + 0.3 * settle;
-      armBack = -Math.sin(cycle) * 1.6 * vigor - 0.2 * settle;
+      armFront = FLIGHT_ARM_F * (1 - impact)
+        + (Math.sin(cycle) * 0.9 * vigor + 0.3 * planted) * impact;
+      armBack = FLIGHT_ARM_B * (1 - impact)
+        + (-Math.sin(cycle) * 0.9 * vigor - 0.2 * planted) * impact;
     } else {
-      fx = 0; fy = FALL_START_Y;
+      fx = 0;
+      fy = FALL_START_Y;
     }
     bodyX = X0 + spec.dir * fx;
     bodyRot *= spec.dir;
@@ -1088,13 +1029,16 @@ function computeFrame(t: number, spec: Spec, landed: boolean, fall: FallVariant)
   const bodyY = falling ? GROUND - LIFT + bodyFallY : boardY - LIFT + bodyYOffset;
 
   // Street distance: full speed during roll-in, flight, and ride-away;
-  // decelerates exponentially during falls so the ground slows as the
-  // skater loses momentum. Each fall variant has its own decay rate.
+  // decelerates during falls with the same impact→settle energy as the body
+  // so the ground doesn't keep racing after the skater has already stopped.
   let streetDist = t;
   if (falling) {
     const u = t - ROLL_IN - FLIP_T;
     const FULL_SPEED_TIME = ROLL_IN + FLIP_T;
-    const decayK = fall === 'slam' ? 2.2 : fall === 'slip' ? 1.5 : fall === 'bail' ? 1.0 : fall === 'shank' ? 1.6 : 1.3;
+    const decayK =
+      fall === 'slam' ? 2.4
+        : fall === 'bail' ? 1.3
+          : 1.9; // shank
     streetDist = FULL_SPEED_TIME + (1 - Math.exp(-decayK * u)) / decayK;
   }
 
@@ -1125,9 +1069,11 @@ export {
   specFor,
   computeFrame,
   knee,
+  clampFootReach,
   darken,
   SCENE_RENDERERS,
   randomFallVariant,
+  randomShankProgress,
   randomBackgroundSceneId,
   W,
   H,
@@ -1146,13 +1092,24 @@ export {
 };
 export type { Frame, Spec, Pt };
 
+/** Keep a body-local foot target inside the two-bone leg's reachable length.
+ *  Fall poses that push past this make the shin stretch from a clamped knee to
+ *  an unreachable ankle — the "limbs disconnect" look in the screenshots. */
+function clampFootReach(foot: Pt): Pt {
+  const maxDist = THIGH + SHIN - 0.5;
+  const dist = Math.hypot(foot.x, foot.y);
+  if (dist <= maxDist || dist < 1e-6) return foot;
+  const s = maxDist / dist;
+  return { x: foot.x * s, y: foot.y * s };
+}
+
 /** Two-bone IK: knee position for a hip-to-foot leg.
  *  Always returns the solution where the knee protrudes toward the front
  *  (+x) so both legs read as bending the same way in a skate stance.
  *  Near full reach the artificial bend eases off so a pop snap can read as a
  *  straight leg instead of keeping the permanent KNEE_BEND_SCALE kink. */
 function knee(foot: Pt): Pt {
-  let { x: fx, y: fy } = foot;
+  let { x: fx, y: fy } = clampFootReach(foot);
   const dist = Math.sqrt(fx * fx + fy * fy);
   const maxDist = THIGH + SHIN - 0.1;
   if (dist > maxDist) {
@@ -1190,10 +1147,12 @@ export default function TrickAnimation({
   riderStance = 'regular',
   fixedTime,
 }: Props) {
-  // Shank is forced when the robot doesn't know the trick; excluded from
-  // the random pool when it does. undefined (playground) keeps the full pool.
+  // Not knowing the trick still forces shank; knowing it can still roll shank
+  // randomly with the other miss styles.
   const forcedFall = !landed && knewIt === false ? 'shank' as FallVariant : undefined;
-  const [randomizedFallVariant] = useState<FallVariant>(() => randomFallVariant(knewIt));
+  const [randomizedFallVariant] = useState<FallVariant>(randomFallVariant);
+  // Per-attempt under-rotation for shank (flip + body spin share this).
+  const [shankProgress] = useState(randomShankProgress);
   // Fakie changes travel and nollie changes the pop end. Switch changes only
   // footedness/toeside; it is not simulated as fakie + nollie.
   const [spec] = useState(() => specFor(trick));
@@ -1201,7 +1160,7 @@ export default function TrickAnimation({
   const resolvedFallVariant = forcedFall ?? fallVariant ?? randomizedFallVariant;
   const resolvedBackgroundSceneId = backgroundSceneId ?? randomizedBackgroundSceneId;
   const scene = SCENE_RENDERERS[resolvedBackgroundSceneId];
-  const [frame, setFrame] = useState(() => computeFrame(0, spec, landed, resolvedFallVariant));
+  const [frame, setFrame] = useState(() => computeFrame(0, spec, landed, resolvedFallVariant, shankProgress));
   const [isPlaying, setIsPlaying] = useState(true);
   const [replayNonce, setReplayNonce] = useState(0);
   const doneRef = useRef(false);
@@ -1246,7 +1205,7 @@ export default function TrickAnimation({
       if (!pausedRef.current) {
         animationTime += dt * effectivePlaybackRate;
       }
-      setFrame(computeFrame(Math.min(animationTime, end), spec, landed, resolvedFallVariant));
+      setFrame(computeFrame(Math.min(animationTime, end), spec, landed, resolvedFallVariant, shankProgress));
       if (animationTime >= end + HOLD) {
         finish();
         return;
@@ -1264,7 +1223,7 @@ export default function TrickAnimation({
           armFailSafe();
           return;
         }
-        setFrame(computeFrame(end, spec, landed, resolvedFallVariant));
+        setFrame(computeFrame(end, spec, landed, resolvedFallVariant, shankProgress));
         finish();
       }, durationMs + 500);
     };
@@ -1273,17 +1232,19 @@ export default function TrickAnimation({
       cancelAnimationFrame(raf);
       clearTimeout(failSafe);
     };
-  }, [spec, landed, resolvedFallVariant, effectivePlaybackRate, replayNonce, staticTime]);
+  }, [spec, landed, resolvedFallVariant, shankProgress, effectivePlaybackRate, replayNonce, staticTime]);
 
   const replay = () => {
     if (staticTime != null) return;
     setIsPlaying(true);
-    setFrame(computeFrame(0, spec, landed, resolvedFallVariant));
+    setFrame(computeFrame(0, spec, landed, resolvedFallVariant, shankProgress));
     setReplayNonce((current) => current + 1);
   };
 
   const colors = robot.avatar;
-  const f = staticTime != null ? computeFrame(staticTime, spec, landed, resolvedFallVariant) : frame;
+  const f = staticTime != null
+    ? computeFrame(staticTime, spec, landed, resolvedFallVariant, shankProgress)
+    : frame;
   const mechanics = resolveRiderMechanics(riderStance, spec.stance);
   // Body rotation changes the visible side; rider footedness supplies the
   // baseline orientation. No stance turns the body; switch only flips which
@@ -1293,8 +1254,10 @@ export default function TrickAnimation({
   // Frame channels are stable board roles, even when a foot reaches across
   // during a flick: R is nose and L is tail. Re-sorting by current x erased
   // the selected stance and could hand a kickflip path to the wrong foot.
-  const noseChannel = f.footR;
-  const tailChannel = f.footL;
+  // Clamp again at draw time so a shin never stretches past the knee even if
+  // a pose briefly overshoots leg length.
+  const noseChannel = clampFootReach(f.footR);
+  const tailChannel = clampFootReach(f.footL);
   const leftFoot = mechanics.noseFoot === 'left' ? noseChannel : tailChannel;
   const rightFoot = mechanics.noseFoot === 'right' ? noseChannel : tailChannel;
   const kneeL = knee(leftFoot);

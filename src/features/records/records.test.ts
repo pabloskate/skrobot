@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { GameLogEntry } from './records';
-import { deriveProvenTricks, getTrickMarks } from './records';
+import { deriveProvenTricks, deriveTrickStats, getTrickMarks } from './records';
 
 function entry(overrides: Partial<GameLogEntry>): GameLogEntry {
   return {
@@ -63,6 +63,64 @@ describe('deriveProvenTricks', () => {
   it('counts a trick landed twice in one game twice', () => {
     const proven = deriveProvenTricks([entry({ tricksLanded: ['Kickflip', 'Kickflip'] })]);
     expect(proven['Kickflip'].count).toBe(2);
+  });
+});
+
+describe('deriveTrickStats', () => {
+  it('returns an empty map for an empty log', () => {
+    expect(deriveTrickStats([])).toEqual({});
+  });
+
+  it('skips legacy entries logged before attempt tracking', () => {
+    expect(deriveTrickStats([entry({ tricksLanded: ['Kickflip'] })])).toEqual({});
+  });
+
+  it('folds makes and misses across games into a consistency rate', () => {
+    const stats = deriveTrickStats([
+      entry({
+        trickAttempts: [
+          { trick: 'Kickflip', landed: true },
+          { trick: 'Kickflip', landed: false },
+        ],
+      }),
+      entry({
+        trickAttempts: [
+          { trick: 'Kickflip', landed: true },
+          { trick: 'Pop Shuvit', landed: false },
+        ],
+      }),
+    ]);
+    expect(stats['Kickflip']).toMatchObject({ attempts: 3, makes: 2, misses: 1, rate: 2 / 3 });
+    expect(stats['Pop Shuvit']).toMatchObject({ attempts: 1, makes: 0, misses: 1, rate: 0 });
+  });
+
+  it('counts every last-letter retry as its own attempt', () => {
+    const stats = deriveTrickStats([
+      entry({
+        trickAttempts: [
+          { trick: 'Heelflip', landed: false },
+          { trick: 'Heelflip', landed: false },
+        ],
+      }),
+    ]);
+    expect(stats['Heelflip']).toMatchObject({ attempts: 2, makes: 0, misses: 2, rate: 0 });
+  });
+
+  it('keeps the most recent game as the last attempt', () => {
+    const stats = deriveTrickStats([
+      entry({
+        date: '2026-06-01T10:00:00.000Z',
+        robotId: 'shifty',
+        trickAttempts: [{ trick: 'Kickflip', landed: true }],
+      }),
+      entry({
+        date: '2026-07-01T10:00:00.000Z',
+        robotId: 'pivot',
+        trickAttempts: [{ trick: 'Kickflip', landed: false }],
+      }),
+    ]);
+    expect(stats['Kickflip'].lastDate).toBe('2026-07-01T10:00:00.000Z');
+    expect(stats['Kickflip'].lastRobotId).toBe('pivot');
   });
 });
 

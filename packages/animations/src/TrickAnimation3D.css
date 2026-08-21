@@ -70,12 +70,12 @@
   display: none;
 }
 
-.trick-anim-3d__floor-plane {
-  fill: var(--spot-floor);
-}
-
+/* No `fill` here: both planes carry an inline depth gradient whose stops read
+   the --spot-* vars below. A class-level fill is a CSS declaration and would
+   beat the presentation attribute, flattening the near/far tint. */
+.trick-anim-3d__floor-plane,
 .trick-anim-3d__road-plane {
-  fill: var(--spot-asphalt);
+  stroke: none;
 }
 
 .trick-anim-3d__road-sheen {
@@ -117,6 +117,18 @@
   fill: var(--spot-shadow);
 }
 
+/* Pop / touch-down scuff on the asphalt. */
+.trick-anim-3d__contact-ring {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.85);
+  stroke-width: 2;
+}
+
+.trick-anim-3d__contact-puff {
+  fill: rgba(255, 255, 255, 0.9);
+  stroke: none;
+}
+
 .trick-anim-3d__street-dash {
   fill: none;
   stroke: var(--spot-lane);
@@ -138,6 +150,21 @@
   stroke: none;
 }
 
+.trick-anim-3d__hill {
+  stroke: none;
+}
+
+.trick-anim-3d__speed-streak {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.85);
+  stroke-linecap: round;
+}
+
+.trick-anim-3d__wheel-spoke {
+  stroke: rgba(37, 53, 75, 0.5);
+  stroke-linecap: round;
+}
+
 .trick-anim-3d__cloud {
   fill: rgba(255, 255, 255, 0.92);
   stroke: none;
@@ -157,6 +184,65 @@
   user-select: none;
 }
 
+.trick-anim-3d__replay {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.trick-anim-3d__replay:focus-visible {
+  outline: 3px solid rgba(100, 49, 216, 0.58);
+  outline-offset: -4px;
+  border-radius: inherit;
+}
+
+.trick-anim-3d__speed-toggle {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 4;
+  display: grid;
+  min-width: 46px;
+  min-height: 36px;
+  padding: 7px 11px;
+  place-items: center;
+  border: 1px solid rgba(37, 53, 75, 0.2);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 4px 14px rgba(37, 53, 75, 0.16);
+  color: var(--anim-ink);
+  font: 800 13px/1 Montserrat, system-ui, -apple-system, sans-serif;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  touch-action: manipulation;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: transform 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.trick-anim-3d__speed-toggle:hover {
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 6px 18px rgba(37, 53, 75, 0.2);
+}
+
+.trick-anim-3d__speed-toggle:active {
+  transform: scale(0.94);
+}
+
+.trick-anim-3d__speed-toggle:focus-visible {
+  outline: 3px solid rgba(100, 49, 216, 0.58);
+  outline-offset: 2px;
+}
+
 /* Full-bleed stage. The 2D scene caps SVG at 360px and centers it; on wide
    screens that letterboxed the 3D sky and made drop-shadow look like side
    panels. 3D draws its own oversized floor, so stretch edge-to-edge. */
@@ -170,12 +256,8 @@
   filter: none;
 }
 
-.trick-anim--3d[role='button']:focus-visible {
-  outline-color: rgba(25, 128, 246, 0.62);
-}
-
 @media (hover: hover) {
-  .trick-anim--3d[role='button']:hover {
+  .trick-anim--3d:hover {
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.9),
       inset 0 -24px 42px rgba(37, 53, 75, 0.08),
@@ -185,7 +267,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .trick-anim--3d,
-  .trick-anim--3d svg {
+  .trick-anim--3d svg,
+  .trick-anim-3d__speed-toggle {
     transition: none;
     filter: none;
   }
@@ -201,5 +284,12 @@
   .trick-anim--3d::before,
   .trick-anim--3d::after {
     display: none;
+  }
+
+  .trick-anim-3d__speed-toggle {
+    border: 1px solid ButtonText;
+    background: ButtonFace;
+    color: ButtonText;
+    box-shadow: none;
   }
 }

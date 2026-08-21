@@ -59,11 +59,13 @@ src/
 │   ├── billing/          # Beta quota screen + dormant Stripe server helpers
 │   ├── tricks/           # Trick UI, catalog, difficulty, and metadata (routed app is flatground-only today)
 │   ├── robots/           # Robot UI, roster, and skill model (home exposes flatground robots today)
-│   ├── game/             # On-screen game UI, reducer, RPS, and attempt logic
+│   ├── game/             # On-screen game UI, reducer, RPS, attempt logic, want-to-learn star on defense (beta)
 │   ├── voice/            # Voice mode: Gemini Live session, tools, audio; server/ = token mint
-│   ├── records/          # Player W/L + game log + trick marks (localStorage today, D1 candidate)
+│   ├── records/          # Player W/L + game log + trick marks + per-trick attempt stats (localStorage today, D1 candidate)
+│   ├── skater/           # Player model: skate score (unlocks at 8 games, beta-gated), robot-ladder placement, adaptive rival robot
 │   ├── home/             # Landing screen / flatground robot choice
-│   ├── gallery/          # Flatground trick gallery + player trick book (stance filters, video tips, proven/claimed/learning)
+│   ├── install/          # App Store handoff + Android PWA install guidance (web-only)
+│   ├── gallery/          # Flatground trick gallery + player trick book (search, stance filters, video tips, want-to-learn shelf, proven marks, consistency stats)
 │   └── dice/             # Standalone random-trick roller
 ├── platform/             # Runtime infrastructure (Cloudflare env, D1 bindings)
 └── shared/               # Primitive domain-neutral helpers (online status, etc.)
@@ -90,9 +92,10 @@ break one and `npm run lint` fails with a message pointing back here.
    `src/features/game/engine.ts` is the pure reducer; tricks, robots, records,
    and voice resolver logic live in their owning feature folders. Mobile must not
    rebuild or import game/domain logic; it loads the same web app in a WebView.
-4. **Dependency direction:** `home`/`dice`/`game`/`voice` (screens) may depend on
-   `tricks`/`robots`/`records` (domain data); domain features don't import screens.
-   `voice` also wraps `game`. The exact allowed feature graph lives in
+4. **Dependency direction:** `home`/`dice`/`game`/`voice`/`gallery` (screens) may
+   depend on `tricks`/`robots`/`records` (domain data); domain features don't
+   import screens. `gallery` also shows the player model (`skater`) in its Stats
+   tab. `voice` also wraps `game`. The exact allowed feature graph lives in
    `docs/ARCHITECTURE.md`. Nothing imports from `src/app/`.
 5. **Server vs client:** files under `features/*/server/` are server-only.
    Everything else in features is client-safe (most components are `'use client'`).
@@ -118,10 +121,14 @@ break one and `npm run lint` fails with a message pointing back here.
 - **New package/app:** document its ownership and verification path in
   `docs/ARCHITECTURE.md` and make `npm run check` cover at least its typecheck.
 - **New screen in the existing flow:** add a variant to `Screen` in
-  `src/app/AppShell.tsx`. Screens are in-memory state by design (trick pools aren't
-  URL-serializable); if a screen must be linkable, split it into a real route instead.
-  Top-level tabs (the selected game format and Settings) are root screens available to everyone;
-  the Tricks tab is additionally shown when the URL has `?beta=true`. Sub-screens (profile, game, voice, signin,
+  `src/app/AppShell.tsx`. Root tabs are shareable via `?tab=skate|tricks|settings`.
+  Game/profile stay in-memory because trick
+  pools aren't URL-serializable; if one of those must be linkable, lift its
+  inputs into the URL and split it into its own route under src/app/.
+  Top-level tabs (the selected game format, Tricks, and Settings) are root
+  screens available to everyone (release 1.3.1 made the Tricks tab generally
+  available); voice mode and the Adaptive challenge are beta-only and require
+  `?version=beta`. Sub-screens (profile, game, voice, signin,
   upgrade) show a back button and hide the tab bar.
 - **New API endpoint:** thin route under `src/app/api/`, logic in
   `features/<name>/server/`.
@@ -149,3 +156,15 @@ break one and `npm run lint` fails with a message pointing back here.
   ones); the `nolly` robot is the reference example.
 - After `next build`/`next dev`, Next may rewrite `tsconfig.json` includes — that's
   expected, don't fight it.
+
+## Preview tools (t3-code_preview_*)
+
+- The web dev server runs on port **3000**. Open it with
+  `preview_navigate({"target": {"kind": "environment-port", "port": 3000}})` —
+  `port` is a literal **number**, never `{}` or a string. To sidestep the union
+  entirely, pass `url: "http://localhost:3000"` instead.
+- Optional params (`url`, `tabId`, etc.) must be **omitted**, never `null`.
+- If a call fails argument validation, **change the argument** — never retry the
+  same payload.
+- This model may not support image input. Verify UI via `preview_snapshot` /
+  `preview_evaluate` rather than asking the user for screenshots.

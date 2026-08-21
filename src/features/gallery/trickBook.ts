@@ -1,6 +1,4 @@
-import type { ProvenTrick, TrickMark } from '@/features/records';
-import type { Robot } from '@/features/robots';
-import { ROBOTS, isFlatgroundRobot } from '@/features/robots';
+import type { ProvenTrick, TrickMark, TrickStat } from '@/features/records';
 import type { Trick } from '@/features/tricks';
 
 /**
@@ -38,64 +36,70 @@ export function inBag(entry: BookEntry | undefined): boolean {
   return entry?.state === 'proven';
 }
 
-/**
- * The player's effective skill on the robots' 1-10 scale: the mean difficulty of
- * the 3 hardest tricks in the bag. A frontier metric on purpose — a big bag of
- * ollies shouldn't outrank a small bag with a kickflip in it. Null until the bag
- * has 3 tricks (too little signal to place someone on the ladder).
- */
-export function bagSkill(tricks: Trick[], book: TrickBook): number | null {
-  const bag = tricks.filter((t) => inBag(book.get(t.id)));
-  if (bag.length < 3) return null;
-  const top = bag
-    .map((t) => t.difficulty)
-    .sort((a, b) => b - a)
-    .slice(0, 3);
-  const mean = top.reduce((sum, d) => sum + d, 0) / top.length;
-  return Math.round(mean * 10) / 10;
-}
-
-export interface LadderSpot {
-  /** The flatground robot whose skill the player's bag rides like. */
-  peer: Robot;
-  /** The next flatground robot up the ladder, if the player isn't at the top. */
-  next: Robot | null;
-}
-
-export function ladderSpot(skill: number): LadderSpot {
-  const ladder = ROBOTS.filter(isFlatgroundRobot).sort((a, b) => a.skill - b.skill);
-  const peer = [...ladder].reverse().find((r) => r.skill <= skill) ?? ladder[0];
-  const next = ladder.find((r) => r.skill > skill) ?? null;
-  return { peer, next };
-}
-
-/** Everything the gallery header/cards need, computed in one pass. */
+/** Everything the gallery tabs need, computed in one pass. */
 export interface BookView {
   book: TrickBook;
   bagCount: number;
   learningCount: number;
-  skill: number | null;
-  spot: LadderSpot | null;
-  suggestions: Trick[];
+  /** The Learning tab's queue: starred tricks first, then suggestions. */
+  queue: LearningItem[];
+  /** Per-trick consistency from tracked game attempts, keyed by trick NAME.
+   * Empty until games logged with attempt tracking exist. */
+  stats: Record<string, TrickStat>;
 }
 
 export function computeBookView(
   tricks: Trick[],
   marks: Record<string, TrickMark>,
   proven: Record<string, ProvenTrick>,
+  stats: Record<string, TrickStat> = {},
 ): BookView {
   const book = buildTrickBook(tricks, marks, proven);
   const bagCount = tricks.filter((t) => inBag(book.get(t.id))).length;
   const learningCount = tricks.filter((t) => book.get(t.id)?.state === 'learning').length;
-  const skill = bagSkill(tricks, book);
   return {
     book,
     bagCount,
     learningCount,
-    skill,
-    spot: skill === null ? null : ladderSpot(skill),
-    suggestions: nextUp(tricks, book),
+    queue: learningQueue(tricks, book),
+    stats,
   };
+}
+
+/** One row of the Learning tab's queue. */
+export interface LearningItem {
+  trick: Trick;
+  /** True when the player starred it (their stated intent), false when suggested. */
+  starred: boolean;
+  /** Short human reason shown under the trick name. */
+  why: string;
+}
+
+/**
+ * The Learning tab's queue: every starred trick (easiest first — it's the
+ * player's list, we don't reorder their intent) followed by a few suggestions
+ * from `nextUp`. The hero card is simply queue[0]. Never empty: with no stars
+ * and no bag it degrades to the easiest catalog tricks, so a brand-new skater
+ * still gets an onboarding ramp.
+ */
+export function learningQueue(tricks: Trick[], book: TrickBook, suggestedLimit = 3): LearningItem[] {
+  const bagBases = new Set(tricks.filter((t) => inBag(book.get(t.id))).map((t) => t.base));
+  const whyFor = (t: Trick): string => {
+    if (bagBases.has(t.base) && t.base !== t.name) return `Builds on your ${t.base}`;
+    return 'A fresh trick to learn';
+  };
+
+  const starred: LearningItem[] = tricks
+    .filter((t) => book.get(t.id)?.state === 'learning')
+    .sort((a, b) => a.difficulty - b.difficulty || a.name.localeCompare(b.name))
+    .map((t) => ({ trick: t, starred: true, why: 'On your list' }));
+
+  const suggested: LearningItem[] = nextUp(tricks, book, starred.length + suggestedLimit)
+    .filter((t) => book.get(t.id)?.state !== 'learning')
+    .slice(0, suggestedLimit)
+    .map((t) => ({ trick: t, starred: false, why: whyFor(t) }));
+
+  return [...starred, ...suggested];
 }
 
 /**

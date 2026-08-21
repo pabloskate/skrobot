@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { appendGameLog, recordResult } from '@/features/records';
+import type { TrickAttempt } from '@/features/records';
 import type { Robot } from '@/features/robots';
 import { buildBag, RobotAvatar } from '@/features/robots';
 import type { Trick } from '@/features/tricks';
@@ -14,22 +15,26 @@ import {
   rollAttempt,
 } from './engine';
 import type { GameFormat, GameState, GameVariant, Side } from './engine';
+import type { GameSessionSnapshot } from './savedGame';
 import { clearSavedGame } from './savedGame';
 import RpsPanel from './RpsPanel';
 import TrickAnimation from './TrickAnimation';
+import TrickSaveToggle from './TrickSaveToggle';
 
 interface Props {
   robot: Robot;
   pool: Trick[];
   gameFormat: GameFormat;
   gameVariant: GameVariant;
-  /** Game state carried over when the player switches modes mid-game. */
-  resume?: GameState;
+  /** Game state and player evidence carried over across saves or mode switches. */
+  resume?: GameSessionSnapshot;
   onExit: () => void;
   /** Report when the current game state can be handed to voice mode. */
-  onVoiceState?: (state: GameState | undefined) => void;
+  onVoiceState?: (snapshot: GameSessionSnapshot | undefined) => void;
   /** Live game state for the shell's save-on-exit prompt. */
-  onGameState?: (state: GameState) => void;
+  onGameState?: (snapshot: GameSessionSnapshot) => void;
+  /** Beta: show the want-to-learn star on defended tricks. */
+  trickSaveEnabled?: boolean;
 }
 
 // ---------- Scoreboard ----------
@@ -85,16 +90,18 @@ export default function GameScreen({
   onExit,
   onVoiceState,
   onGameState,
+  trickSaveEnabled,
 }: Props) {
   const [state, dispatch] = useReducer(
     gameReducer,
-    resume ?? createInitialGameState(gameFormat, gameVariant),
+    resume?.state ?? createInitialGameState(gameFormat, gameVariant),
   );
   const [pickerOpen, setPickerOpen] = useState(false);
   const bag = useMemo(() => buildBag(robot, pool), [robot, pool]);
   // A resumed finished game was already recorded by the other mode.
-  const recorded = useRef(resume?.phase === 'over');
-  const tricksLanded = useRef<string[]>([]);
+  const recorded = useRef(resume?.state.phase === 'over');
+  const tricksLanded = useRef<string[]>([...(resume?.progress.tricksLanded ?? [])]);
+  const trickAttempts = useRef<TrickAttempt[]>([...(resume?.progress.trickAttempts ?? [])]);
 
   const say = (template: string) => template.replaceAll('{R}', robot.name);
 
@@ -104,11 +111,11 @@ export default function GameScreen({
   useEffect(() => {
     if (state.phase !== 'robotSet' || state.stage !== 'thinking') return;
     const t = setTimeout(
-      () => dispatch({ type: 'ROBOT_SET_CHOICE', trick: chooseRobotTrick(bag, state.used, TRICK_BY_ID) }),
+      () => dispatch({ type: 'ROBOT_SET_CHOICE', trick: chooseRobotTrick(bag, state.used, TRICK_BY_ID, robot) }),
       1400,
     );
     return () => clearTimeout(t);
-  }, [state.phase, state.stage, state.used, bag]);
+  }, [state.phase, state.stage, state.used, bag, robot]);
 
   // Persist W/L once per game.
   useEffect(() => {
@@ -125,11 +132,13 @@ export default function GameScreen({
         playerLetters: state.letters.player,
         robotLetters: state.letters.robot,
         tricksLanded: tricksLanded.current,
+        trickAttempts: trickAttempts.current,
       });
     }
     if (state.phase === 'rps') {
       recorded.current = false;
       tricksLanded.current = [];
+      trickAttempts.current = [];
     }
   }, [state.phase, state.winner, state.letters.player, state.letters.robot, robot.id]);
 
@@ -139,11 +148,27 @@ export default function GameScreen({
     onVoiceState != null &&
     (state.phase === 'rps' || state.phase === 'playerSet' || state.phase === 'playerCopy');
   useEffect(() => {
-    onVoiceState?.(canHandToVoice ? state : undefined);
+    onVoiceState?.(
+      canHandToVoice
+        ? {
+            state,
+            progress: {
+              tricksLanded: [...tricksLanded.current],
+              trickAttempts: [...trickAttempts.current],
+            },
+          }
+        : undefined,
+    );
   }, [canHandToVoice, state, onVoiceState]);
 
   useEffect(() => {
-    onGameState?.(state);
+    onGameState?.({
+      state,
+      progress: {
+        tricksLanded: [...tricksLanded.current],
+        trickAttempts: [...trickAttempts.current],
+      },
+    });
   }, [state, onGameState]);
 
   const usedIds = useMemo(() => new Set(state.used), [state.used]);
@@ -232,15 +257,24 @@ export default function GameScreen({
           <button
             className="btn-primary"
             onClick={() => {
-              if (state.gameVariant === 'defense') tricksLanded.current.push(state.current!.name);
+              // A landed copy is a proven land in every mode (matches voice).
+              tricksLanded.current.push(state.current!.name);
+              trickAttempts.current.push({ trick: state.current!.name, landed: true });
               dispatch({ type: 'PLAYER_COPY_LANDED' });
             }}
           >
             Landed it 🤘
           </button>
-          <button className="btn-danger" onClick={() => dispatch({ type: 'PLAYER_COPY_MISSED' })}>
+          <button
+            className="btn-danger"
+            onClick={() => {
+              trickAttempts.current.push({ trick: state.current!.name, landed: false });
+              dispatch({ type: 'PLAYER_COPY_MISSED' });
+            }}
+          >
             Missed it
           </button>
+          {trickSaveEnabled && <TrickSaveToggle trick={state.current} />}
         </div>
       )}
 
@@ -274,6 +308,7 @@ export default function GameScreen({
           onPick={(trick) => {
             setPickerOpen(false);
             tricksLanded.current.push(trick.name);
+            trickAttempts.current.push({ trick: trick.name, landed: true });
             dispatch({ type: 'PLAYER_SET_LANDED', trick });
           }}
         />

@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
-import { TRICK_BY_ID, trickDescription, trickDiscipline, trickMatchesSearch } from './tricks';
+import { TRICK_BY_ID, TRICK_BY_NAME, TRICKS, trickDescription, trickDiscipline, trickMatchesSearch } from './tricks';
+
+describe('TRICK_BY_NAME', () => {
+  it('has a unique display name for every trick (game records key attempts by name)', () => {
+    expect(TRICK_BY_NAME.size).toBe(TRICKS.length);
+  });
+
+  it('resolves stance-variant display names back to the right trick', () => {
+    expect(TRICK_BY_NAME.get('Half Cab')?.id).toBe('fakie-backside-180');
+    expect(TRICK_BY_NAME.get('Nollie')?.id).toBe('nollie-ollie');
+    expect(TRICK_BY_NAME.get('Switch Kickflip')?.id).toBe('switch-kickflip');
+  });
+});
 
 describe('Late Kickflip', () => {
   it('is available in every flatground stance with the intended progression metadata', () => {

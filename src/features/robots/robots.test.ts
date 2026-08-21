@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ROBOTS, buildBag, robotConsistency } from './robots';
+import { ROBOTS, buildBag, isFlatgroundRobot, robotConsistency, robotDisplayRating, trickSetWeight } from './robots';
 import { TRICKS, TRICK_BY_ID, trickDiscipline } from '@/features/tricks';
 
 describe('Robots repertoire and consistency math', () => {
@@ -414,10 +414,19 @@ describe('Tier skill bands do not overlap', () => {
     expect(ROBOTS.filter((r) => r.tier === 'pro').length).toBeGreaterThan(0);
   });
 
-  it('ROBOTS is sorted easiest to hardest by skill', () => {
-    for (let i = 1; i < ROBOTS.length; i++) {
-      expect(ROBOTS[i].skill).toBeGreaterThanOrEqual(ROBOTS[i - 1].skill);
+  it('orders the routed flatground roster easiest to hardest by calibrated Elo', () => {
+    const calibrated = ROBOTS.filter(isFlatgroundRobot);
+    expect(calibrated.every((robot) => robot.elo !== undefined)).toBe(true);
+    for (let i = 1; i < calibrated.length; i++) {
+      expect(calibrated[i].elo!).toBeGreaterThanOrEqual(calibrated[i - 1].elo!);
     }
+  });
+
+  it('maps raw Elo onto stable, rounded product ratings', () => {
+    expect(robotDisplayRating({ elo: -145 })).toBe(800);
+    expect(robotDisplayRating({ elo: 3095 })).toBe(2400);
+    expect(robotDisplayRating({ elo: 1949 })).toBe(1830);
+    expect(robotDisplayRating({})).toBeNull();
   });
 });
 
@@ -472,5 +481,68 @@ describe('FS bigspin flip rarity', () => {
 
     expect(proConsistencies.length).toBeGreaterThan(0);
     expect(Math.max(...proConsistencies)).toBeLessThanOrEqual(0.45);
+  });
+});
+
+describe('trickSetWeight', () => {
+  const byId = (id: string) => ROBOTS.find((r) => r.id === id)!;
+  const kickflip = TRICK_BY_ID.get('regular-kickflip')!;
+  const ollieNorth = TRICK_BY_ID.get('regular-ollie-north')!;
+  const lateShuvit = TRICK_BY_ID.get('regular-late-frontside-shuvit')!;
+  const lateKickflip = TRICK_BY_ID.get('regular-late-kickflip')!;
+  const sparky = byId('flipster');
+  const snooze = byId('latezy');
+  const swivel = byId('shifty');
+
+  it('falls back to land rate when no robot is given', () => {
+    expect(trickSetWeight(kickflip, 0.5)).toBe(0.5);
+  });
+
+  it('overrides by base name, and trick id wins when both are set', () => {
+    expect(trickSetWeight(kickflip, 0.5, { ...sparky, setWeights: { Kickflip: 0.2 } })).toBe(0.2);
+    expect(
+      trickSetWeight(kickflip, 0.5, {
+        ...sparky,
+        setWeights: { Kickflip: 0.2, 'regular-kickflip': 0.9 },
+      }),
+    ).toBe(0.9);
+  });
+
+  it('treats 0 as never-set without going negative', () => {
+    expect(trickSetWeight(kickflip, 0.5, { ...sparky, setWeights: { Kickflip: 0 } })).toBe(0);
+    expect(trickSetWeight(kickflip, 0.5, { ...sparky, setWeights: { Kickflip: -2 } })).toBe(0);
+  });
+
+  it('boosts favorites 2–3× land rate, hashed per robot so the bump is not a constant', () => {
+    const a = trickSetWeight(kickflip, 0.9, sparky);
+    const b = trickSetWeight(kickflip, 0.9, byId('switchy'));
+    expect(a).toBeGreaterThanOrEqual(1.8);
+    expect(a).toBeLessThan(2.7);
+    expect(b).toBeGreaterThanOrEqual(1.8);
+    expect(b).toBeLessThan(2.7);
+    expect(a).not.toBe(b);
+  });
+
+  it('cuts Ollie North and late shuvits to at most half for non-specialists', () => {
+    expect(trickSetWeight(ollieNorth, 0.8, swivel)).toBeLessThanOrEqual(0.4);
+    expect(trickSetWeight(lateShuvit, 0.8, swivel)).toBeLessThanOrEqual(0.4);
+  });
+
+  it('cuts late flips to at most 40% of land rate for non-specialists', () => {
+    expect(trickSetWeight(lateKickflip, 0.8, byId('flipper'))).toBeLessThanOrEqual(0.32);
+  });
+
+  it('lets a late-trick specialist set lates at the specialty boost, not the rare cut', () => {
+    const late = trickSetWeight(lateKickflip, 0.9, snooze);
+    const shuv = trickSetWeight(lateShuvit, 0.9, snooze);
+    expect(late).toBeGreaterThanOrEqual(1.8);
+    expect(late).toBeLessThan(2.7);
+    expect(shuv).toBeGreaterThanOrEqual(1.8);
+    expect(shuv).toBeLessThan(2.7);
+  });
+
+  it('still lets setWeights override specialty and uncommon policy', () => {
+    expect(trickSetWeight(lateKickflip, 0.9, { ...snooze, setWeights: { 'Late Kickflip': 0.1 } })).toBe(0.1);
+    expect(trickSetWeight(ollieNorth, 0.8, { ...swivel, setWeights: { 'Ollie North': 1.2 } })).toBe(1.2);
   });
 });

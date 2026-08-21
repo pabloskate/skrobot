@@ -126,10 +126,13 @@ break one and `npm run lint` fails with a message pointing back here.
 - **New package/app:** document its ownership and verification path in
   `docs/ARCHITECTURE.md` and make `npm run check` cover at least its typecheck.
 - **New screen in the existing flow:** add a variant to `Screen` in
-  `src/app/AppShell.tsx`. Screens are in-memory state by design (trick pools aren't
-  URL-serializable); if a screen must be linkable, split it into a real route instead.
-  Top-level tabs (S.K.A.T.E., Tricks, Account) are beta root screens shown only
-  when the URL has `?beta=true`; sub-screens (profile, game, voice, signin,
+  `src/app/AppShell.tsx`. Root tabs are shareable via `?tab=skate|tricks|settings`.
+  Game/profile stay in-memory because trick
+  pools aren't URL-serializable; if one of those must be linkable, lift its
+  inputs into the URL and split it into its own route under src/app/.
+  Top-level tabs (S.K.A.T.E., Tricks, Account) are root screens available to
+  everyone (release 1.3.1 made the Tricks tab generally available); voice mode
+  and the Adaptive challenge are beta-only and require `?version=beta`; sub-screens (profile, game, voice, signin,
   upgrade) show a back button and hide the tab bar.
 - **New API endpoint:** thin route under `src/app/api/`, logic in
   `features/<name>/server/`.

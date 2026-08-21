@@ -57,7 +57,23 @@ describe('computeHero', () => {
     });
 
     expect(hero.kind).toBe('next');
-    // After Sacker (2.6): Cabby and Shifty tie at 3 — name order puts Cabby next.
-    expect(hero.robot.id).toBe('cabby');
+    // Magnet is the next robot above Gutsy in the simulated Elo ladder.
+    expect(hero.robot.id).toBe('fronty');
+  });
+
+  it('ignores rival games — the ladder hero always reflects the last roster game', () => {
+    const hero = computeHero(
+      [logEntry({ robotId: 'sacker', won: true }), logEntry({ robotId: 'rival', won: false })],
+      { sacker: { w: 1, l: 0 }, rival: { w: 0, l: 1 } },
+    );
+
+    expect(hero.kind).toBe('next');
+    expect(hero.robot.id).toBe('fronty');
+  });
+
+  it('treats a rival-only log like no log at all', () => {
+    const hero = computeHero([logEntry({ robotId: 'rival', won: true })], { rival: { w: 1, l: 0 } });
+
+    expect(hero.kind).toBe('welcome');
   });
 });

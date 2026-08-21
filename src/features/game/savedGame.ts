@@ -1,14 +1,27 @@
 import type { GameState } from './engine';
+import type { TrickAttempt } from '@/features/records';
 import { TRICK_BY_ID } from '@/features/tricks';
 
 export type SavedGameMode = 'screen' | 'voice';
 
+/** Player evidence accumulated during a match, carried across saves and mode switches. */
+export interface GameProgress {
+  tricksLanded: string[];
+  trickAttempts: TrickAttempt[];
+}
+
+export interface GameSessionSnapshot {
+  state: GameState;
+  progress: GameProgress;
+}
+
 export interface SavedGame {
-  version: 1;
+  version: 2;
   savedAt: string;
   robotId: string;
   mode: SavedGameMode;
   state: GameState;
+  progress: GameProgress;
 }
 
 const KEY = 'skaterobot-saved-game';
@@ -67,16 +80,50 @@ function rehydrateState(raw: GameState): GameState | null {
   };
 }
 
+function rehydrateProgress(value: unknown): GameProgress {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) {
+    return { tricksLanded: [], trickAttempts: [] };
+  }
+  const raw = value as Partial<GameProgress>;
+  const tricksLanded = Array.isArray(raw.tricksLanded)
+    ? raw.tricksLanded.filter((name): name is string => typeof name === 'string')
+    : [];
+  const trickAttempts = Array.isArray(raw.trickAttempts)
+    ? raw.trickAttempts.filter(
+        (attempt): attempt is TrickAttempt =>
+          attempt != null &&
+          typeof attempt === 'object' &&
+          typeof attempt.trick === 'string' &&
+          typeof attempt.landed === 'boolean',
+      )
+    : [];
+  return { tricksLanded, trickAttempts };
+}
+
 function parseSavedGame(value: unknown): SavedGame | null {
   if (value == null || typeof value !== 'object' || Array.isArray(value)) return null;
-  const v = value as Partial<SavedGame>;
-  if (v.version !== 1) return null;
+  const v = value as {
+    version?: unknown;
+    savedAt?: unknown;
+    robotId?: unknown;
+    mode?: unknown;
+    state?: unknown;
+    progress?: unknown;
+  };
+  if (v.version !== 1 && v.version !== 2) return null;
   if (typeof v.robotId !== 'string' || !v.robotId) return null;
   if (v.mode !== 'screen' && v.mode !== 'voice') return null;
   if (typeof v.savedAt !== 'string') return null;
   const state = rehydrateState(v.state as GameState);
   if (!state || !isSaveWorthKeeping(state)) return null;
-  return { version: 1, savedAt: v.savedAt, robotId: v.robotId, mode: v.mode, state };
+  return {
+    version: 2,
+    savedAt: v.savedAt,
+    robotId: v.robotId,
+    mode: v.mode,
+    state,
+    progress: v.version === 2 ? rehydrateProgress(v.progress) : rehydrateProgress(null),
+  };
 }
 
 export function getSavedGame(): SavedGame | null {
@@ -105,17 +152,19 @@ export function saveGame(input: {
   robotId: string;
   mode: SavedGameMode;
   state: GameState;
+  progress: GameProgress;
 }): SavedGame | null {
   if (!isSaveWorthKeeping(input.state)) {
     clearSavedGame();
     return null;
   }
   const saved: SavedGame = {
-    version: 1,
+    version: 2,
     savedAt: new Date().toISOString(),
     robotId: input.robotId,
     mode: input.mode,
     state: input.state,
+    progress: rehydrateProgress(input.progress),
   };
   try {
     const raw = JSON.stringify(saved);

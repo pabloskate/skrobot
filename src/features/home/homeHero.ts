@@ -1,6 +1,7 @@
 import type { GameLogEntry, Record_ } from '@/features/records';
 import { isFlatgroundRobot, ROBOT_BY_ID, ROBOTS } from '@/features/robots';
 import type { Robot } from '@/features/robots';
+import { isRivalId } from '@/features/skater';
 
 export type HeroState =
   | { kind: 'welcome'; robot: Robot }
@@ -8,7 +9,7 @@ export type HeroState =
   | { kind: 'next'; robot: Robot; beatenRobot: Robot }
   | { kind: 'complete'; robot: Robot };
 
-/** Easiest flatground bot first — roster is already skill-sorted. */
+/** Easiest flatground bot first — the calibrated roster is Elo-sorted. */
 const FLATGROUND_ROBOTS = ROBOTS.filter(isFlatgroundRobot);
 const STARTER = FLATGROUND_ROBOTS[0] ?? ROBOT_BY_ID.get('shifty')!;
 
@@ -46,9 +47,12 @@ function heroFromRecords(records: Record<string, Record_>): HeroState | null {
 }
 
 export function computeHero(log: GameLogEntry[], records: Record<string, Record_>): HeroState {
-  if (log.length === 0) return heroFromRecords(records) ?? { kind: 'welcome', robot: STARTER };
+  // Rival games adapt to the player, so they don't move the roster ladder —
+  // the hero always reflects the last game against a roster robot.
+  const ladderLog = log.filter((entry) => !isRivalId(entry.robotId));
+  if (ladderLog.length === 0) return heroFromRecords(records) ?? { kind: 'welcome', robot: STARTER };
 
-  const last = log[log.length - 1];
+  const last = ladderLog[ladderLog.length - 1];
   const robot = ROBOT_BY_ID.get(last.robotId) ?? STARTER;
   if (!last.won) return { kind: 'rematch', robot, record: records[last.robotId] };
   return heroAfterWin(robot, records);

@@ -13,6 +13,15 @@ export function getRecords(): Record<string, Record_> {
   }
 }
 
+/** One player trick attempt with a known outcome. Keyed by trick NAME, same as
+ * tricksLanded. Only attributable attempts are recorded: landed sets, and copy
+ * makes/misses. A passed set ("couldn't land one") names no trick, so it isn't
+ * one — consistency rates are over the attempts we can attribute. */
+export interface TrickAttempt {
+  trick: string;
+  landed: boolean;
+}
+
 export interface GameLogEntry {
   date: string;
   robotId: string;
@@ -21,6 +30,9 @@ export interface GameLogEntry {
   playerLetters: number;
   robotLetters: number;
   tricksLanded: string[];
+  /** Per-trick make/miss outcomes. Absent on entries logged before attempt
+   * tracking — those contribute to proven tricks but not to consistency stats. */
+  trickAttempts?: TrickAttempt[];
 }
 
 const LOG_KEY = 'skaterobot-gamelog';
@@ -107,6 +119,42 @@ export function deriveProvenTricks(log: GameLogEntry[]): Record<string, ProvenTr
     }
   }
   return proven;
+}
+
+/** Per-trick consistency over tracked attempts, derived from the game log.
+ * Keyed by trick NAME. This is the raw material for trick recommendations:
+ * rate tells you how dialled a trick is, attempts how much to trust it. */
+export interface TrickStat {
+  attempts: number;
+  makes: number;
+  misses: number;
+  /** makes / attempts (0–1). */
+  rate: number;
+  lastDate: string;
+  lastRobotId: string;
+}
+
+export function getTrickStats(): Record<string, TrickStat> {
+  return deriveTrickStats(getGameLog());
+}
+
+export function deriveTrickStats(log: GameLogEntry[]): Record<string, TrickStat> {
+  const stats: Record<string, TrickStat> = {};
+  for (const entry of log) {
+    for (const attempt of entry.trickAttempts ?? []) {
+      const s =
+        stats[attempt.trick] ??
+        { attempts: 0, makes: 0, misses: 0, rate: 0, lastDate: entry.date, lastRobotId: entry.robotId };
+      s.attempts += 1;
+      if (attempt.landed) s.makes += 1;
+      else s.misses += 1;
+      s.rate = s.makes / s.attempts;
+      s.lastDate = entry.date;
+      s.lastRobotId = entry.robotId;
+      stats[attempt.trick] = s;
+    }
+  }
+  return stats;
 }
 
 export function recordResult(robotId: string, won: boolean): void {

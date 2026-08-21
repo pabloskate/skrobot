@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { SignInScreen } from '@/features/auth';
 import { UpgradeScreen } from '@/features/billing';
-import type { GameFormat, GameState } from '@/features/game';
+import type { GameFormat, GameProgress, GameSessionSnapshot, GameState } from '@/features/game';
 import { TrickAnimation, createInitialGameState, lettersForFormat } from '@/features/game';
 import type { Robot } from '@/features/robots';
 import { RobotAvatar } from '@/features/robots';
@@ -17,13 +17,13 @@ interface Props {
   robot: Robot;
   pool: Trick[];
   gameFormat: GameFormat;
-  /** Game state carried over when the player switches modes mid-game. */
-  resume?: GameState;
+  /** Game state and player evidence carried over across saves or mode switches. */
+  resume?: GameSessionSnapshot;
   onExit: () => void;
   /** Hand the live game state back to the on-screen mode. */
-  onScreenMode?: (state: GameState) => void;
+  onScreenMode?: (snapshot: GameSessionSnapshot) => void;
   /** Live game state for the shell's save-on-exit prompt. */
-  onGameState?: (state: GameState) => void;
+  onGameState?: (snapshot: GameSessionSnapshot) => void;
 }
 
 type Status = 'idle' | 'connecting' | 'live' | 'reconnecting' | 'ended' | 'error';
@@ -58,7 +58,7 @@ export default function VoiceGameScreen({ robot, pool, gameFormat, resume, onExi
   const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState<string | null>(null);
   const [gate, setGate] = useState<VoiceStartErrorCode | null>(null);
-  const [game, setGame] = useState<GameState>(resume ?? createInitialGameState(gameFormat));
+  const [game, setGame] = useState<GameState>(resume?.state ?? createInitialGameState(gameFormat));
   const [captions, setCaptions] = useState<Caption[]>([]);
   const [muted, setMuted] = useState(false);
   const [pocket, setPocket] = useState(false);
@@ -69,6 +69,9 @@ export default function VoiceGameScreen({ robot, pool, gameFormat, resume, onExi
   const attemptId = useRef(0);
   const pocketRef = useRef(false);
   const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const progressRef = useRef<GameProgress>(
+    resume?.progress ?? { tricksLanded: [], trickAttempts: [] },
+  );
 
   const start = async () => {
     setError(null);
@@ -79,8 +82,12 @@ export default function VoiceGameScreen({ robot, pool, gameFormat, resume, onExi
     }
     // Seed from the current scoreboard state so a carried-over game (or a
     // stopped-and-restarted session) picks up where it left off.
-    const controller = new VoiceGameController(robot, pool, game);
-    controller.onChange = (s) => {
+    const controller = new VoiceGameController(robot, pool, {
+      state: game,
+      progress: progressRef.current,
+    });
+    controller.onChange = (s, progress) => {
+      progressRef.current = progress;
       setGame({ ...s });
       // A rematch resets to the toss — drop any leftover attempt animations.
       if (s.phase === 'rps') setAttempts([]);
@@ -163,7 +170,7 @@ export default function VoiceGameScreen({ robot, pool, gameFormat, resume, onExi
   }, [captions]);
 
   useEffect(() => {
-    onGameState?.(game);
+    onGameState?.({ state: game, progress: progressRef.current });
   }, [game, onGameState]);
 
   if (pocket) {
@@ -218,7 +225,10 @@ export default function VoiceGameScreen({ robot, pool, gameFormat, resume, onExi
             🎙 Start voice session
           </button>
           {onScreenMode && (
-            <button className="btn-ghost" onClick={() => onScreenMode(game)}>
+            <button
+              className="btn-ghost"
+              onClick={() => onScreenMode({ state: game, progress: progressRef.current })}
+            >
               📱 Play on screen instead
             </button>
           )}
@@ -285,7 +295,7 @@ export default function VoiceGameScreen({ robot, pool, gameFormat, resume, onExi
                 className="btn-ghost"
                 onClick={async () => {
                   await stop();
-                  onScreenMode(game);
+                  onScreenMode({ state: game, progress: progressRef.current });
                 }}
               >
                 📱 Screen mode

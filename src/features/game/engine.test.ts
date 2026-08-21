@@ -17,6 +17,7 @@ const trick = (id: string): Trick => ({
   base: id,
   stance: 'regular',
   category: 'flatground',
+  baseDifficulty: 1,
   difficulty: 1,
 })
 
@@ -276,6 +277,26 @@ describe('chooseRobotTrick', () => {
   it('returns null when nothing is left', () => {
     expect(chooseRobotTrick(bag, ['a', 'b'], byId)).toBeNull()
   })
+
+  it('lets setWeights override land rate for the pick', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5)
+    const robot = { id: 'test', favorites: [] as string[], setWeights: { b: 2 } }
+    expect(chooseRobotTrick(bag, [], byId)?.id).toBe('a')
+    expect(chooseRobotTrick(bag, [], byId, robot)?.id).toBe('b')
+  })
+
+  it('never sets a trick whose set-weight is 0', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0)
+    expect(chooseRobotTrick(bag, [], byId, { id: 'test', favorites: [], setWeights: { a: 0 } })?.id).toBe('b')
+  })
+
+  it('returns null when every leftover trick has a set-weight of 0', () => {
+    expect(chooseRobotTrick(bag, [], byId, { id: 'test', favorites: [], setWeights: { a: 0, b: 0 } })).toBeNull()
+  })
+
+  it('accepts an injected random source for deterministic offline simulations', () => {
+    expect(chooseRobotTrick(bag, [], byId, undefined, () => 0.99)?.id).toBe('b')
+  })
 })
 
 describe('rollAttempt', () => {
@@ -295,5 +316,10 @@ describe('rollAttempt', () => {
 
   it('auto-misses a trick the robot does not know (outside the bag)', () => {
     expect(rollAttempt(bag, 'unknown')).toEqual({ landed: false, knewIt: false })
+  })
+
+  it('accepts an injected random source for deterministic offline simulations', () => {
+    expect(rollAttempt(bag, 'a', () => 0.4).landed).toBe(true)
+    expect(rollAttempt(bag, 'a', () => 0.6).landed).toBe(false)
   })
 })

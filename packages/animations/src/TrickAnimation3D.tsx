@@ -7,8 +7,10 @@ import {
   computeFrame,
   specFor,
   knee,
+  clampFootReach,
   darken,
   randomFallVariant,
+  randomShankProgress,
   W,
   H,
   GROUND,
@@ -50,11 +52,13 @@ interface Props {
   landed: boolean;
   onDone: () => void;
   playbackRate?: number;
+  /** Show the in-stage .5x / 1x playback toggle. */
+  showSpeedToggle?: boolean;
   backgroundSceneId?: BackgroundSceneId;
   fallVariant?: FallVariant;
   /** Freeze the animation on the current frame (e.g. to grab a screenshot). */
   paused?: boolean;
-  /** Whether the robot knew the trick; false forces the "shank" fall. */
+  /** Whether the robot knew the trick; false forces shank. true can still roll it. */
   knewIt?: boolean;
   /** The rider's natural footedness. Trick stance is resolved separately. */
   riderStance?: RiderStance;
@@ -77,6 +81,7 @@ interface V3 {
 
 const rad = (d: number) => (d * Math.PI) / 180;
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+const easeOutCubic = (p: number) => 1 - Math.pow(1 - p, 3);
 
 const rotX = (p: V3, deg: number): V3 => {
   const c = Math.cos(rad(deg));
@@ -131,6 +136,58 @@ function dirDepth(d: V3): number {
   return -d.y * SIN_B + z1 * COS_B;
 }
 
+// ---------- Lighting ----------
+// One directional key light placed to agree with the drawn sun (high, to the
+// right, slightly behind the rider). World y is DOWN, so the vector pointing
+// *at* the light has a negative y. Everything with a real surface normal —
+// the deck faces, the rails, the wheels — gets a Lambert term from this; the
+// limbs are capsules with no single normal, so they take a screen-space
+// highlight instead (see pushCapsule). Same light for both, so the shading
+// reads as one scene rather than two unrelated tricks.
+
+const norm3 = (v: V3): V3 => {
+  const m = Math.hypot(v.x, v.y, v.z) || 1;
+  return { x: v.x / m, y: v.y / m, z: v.z / m };
+};
+const LIGHT_DIR = norm3({ x: 0.46, y: -0.82, z: 0.34 });
+/** Screen-space light direction (y down), used for capsule highlights. */
+const LIGHT_SCREEN = (() => {
+  const a = project({ x: X0, y: GROUND - 40, z: 0 });
+  const b = project({
+    x: X0 + LIGHT_DIR.x * 40,
+    y: GROUND - 40 + LIGHT_DIR.y * 40,
+    z: LIGHT_DIR.z * 40,
+  });
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const m = Math.hypot(dx, dy) || 1;
+  return { x: dx / m, y: dy / m };
+})();
+
+const hexToRgb = (hex: string): [number, number, number] => {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
+};
+const rgbToHex = (r: number, g: number, b: number) =>
+  `#${((Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(b)).toString(16).padStart(6, '0')}`;
+/** Mix a hex color toward white by `amount` (0–1). */
+const lighten = (hex: string, amount: number): string => {
+  const [r, g, b] = hexToRgb(hex);
+  return rgbToHex(r + (255 - r) * amount, g + (255 - g) * amount, b + (255 - b) * amount);
+};
+/** Lambert term for a surface normal, clamped to an ambient floor so nothing
+ *  goes fully black — this is a bright outdoor scene with sky bounce. */
+function lambert(n: V3): number {
+  const d = n.x * LIGHT_DIR.x + n.y * LIGHT_DIR.y + n.z * LIGHT_DIR.z;
+  return clamp01(0.5 + 0.5 * d);
+}
+/** Apply a Lambert term to a base color: lit faces gain white, shaded faces
+ *  lose value. `strength` scales the whole effect for subtler materials. */
+function shade(hex: string, lam: number, strength = 1): string {
+  const k = (lam - 0.5) * 2 * strength;
+  return k >= 0 ? lighten(hex, k * 0.34) : darken(hex, -k * 0.34);
+}
+
 // ---------- Depth-sorted primitives ----------
 
 interface Prim {
@@ -167,8 +224,12 @@ function pushLine(prims: Prim[], key: string, a: V3, b: V3, stroke: string, opts
   });
 }
 
-/** A filled rounded shape with an ink outline, drawn as two stacked
- *  round-cap strokes (the 3D stand-in for the 2D rounded rects). */
+/** A filled rounded shape with an ink outline, drawn as stacked round-cap
+ *  strokes (the 3D stand-in for the 2D rounded rects). A limb has no single
+ *  surface normal, so its volume comes from two offset strokes instead: a
+ *  narrow highlight on the lit side of the cylinder and a narrow core shadow
+ *  on the other. Both ride the shared LIGHT_SCREEN direction, so every limb,
+ *  the torso, and the head are lit from the same place as the deck faces. */
 function pushCapsule(
   prims: Prim[],
   key: string,
@@ -178,22 +239,47 @@ function pushCapsule(
   fill: string,
   inkWidth: number,
   opacity = 1,
-  depthBias = 0
+  depthBias = 0,
+  /** 0 disables the volume shading (flat detail panels, decals). */
+  shading = 1
 ) {
   const pa = project(a);
   const pb = project(b);
   const s = (pa.s + pb.s) / 2;
-  prims.push({
+  // Screen-space perpendicular to the segment, flipped to point at the light.
+  let px = -(pb.y - pa.y);
+  let py = pb.x - pa.x;
+  const pm = Math.hypot(px, py) || 1;
+  px /= pm;
+  py /= pm;
+  if (px * LIGHT_SCREEN.x + py * LIGHT_SCREEN.y < 0) {
+    px = -px;
+    py = -py;
+  }
+  const w = width * s;
+  return prims.push({
     depth: (pa.depth + pb.depth) / 2 + depthBias,
     el: (
       <g key={key} opacity={opacity}>
         {inkWidth > 0 && (
-          <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke="currentColor" strokeWidth={(width + inkWidth * 2) * s} strokeLinecap="round" />
+          <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke="currentColor" strokeWidth={w + inkWidth * 2 * s} strokeLinecap="round" />
         )}
-        <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke={fill} strokeWidth={width * s} strokeLinecap="round" />
+        <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke={fill} strokeWidth={w} strokeLinecap="round" />
+        {shading > 0 && (
+          <line
+            x1={pa.x + px * w * 0.3}
+            y1={pa.y + py * w * 0.3}
+            x2={pb.x + px * w * 0.3}
+            y2={pb.y + py * w * 0.3}
+            stroke={lighten(fill, 0.45)}
+            strokeWidth={w * 0.22}
+            strokeLinecap="round"
+            opacity={0.35 * shading}
+          />
+        )}
       </g>
     ),
-  });
+  }) - 1;
 }
 
 function pushDot(
@@ -222,17 +308,6 @@ function pushDot(
         opacity={opacity}
       />
     ),
-  });
-}
-
-function pushPoly(prims: Prim[], key: string, pts: V3[], fill: string, strokeWidth: number, depthBias = 0) {
-  const proj = pts.map(project);
-  const depth = proj.reduce((sum, p) => sum + p.depth, 0) / proj.length;
-  const sAvg = proj.reduce((sum, p) => sum + p.s, 0) / proj.length;
-  const d = proj.map((p, i) => `${i ? 'L' : 'M'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ') + ' Z';
-  prims.push({
-    depth: depth + depthBias,
-    el: <path key={key} d={d} fill={fill} stroke="currentColor" strokeWidth={strokeWidth * sAvg} strokeLinejoin="round" />,
   });
 }
 
@@ -279,7 +354,29 @@ function cloudAt(key: string, x: number, y: number, z: number, scale: number, op
 function buildSkyScenery(backZ: number): ReactElement[] {
   const z = backZ + 6;
   const sun = project({ x: X0 + 70, y: GROUND - 88, z });
+  // Distant hills anchor the horizon. Their lower halves are covered by the
+  // floor plane drawn after this group, so they read as terrain beyond the
+  // spot instead of floating blobs. Tinted from --spot-floor so background
+  // themes (sunset, skyline…) keep them in the same palette.
+  const hill = (key: string, dx: number, rx: number, ry: number, opacity: number): ReactElement => {
+    const p = project({ x: X0 + dx, y: GROUND, z: backZ });
+    return (
+      <ellipse
+        key={key}
+        className="trick-anim-3d__hill"
+        cx={p.x}
+        cy={p.y}
+        rx={rx}
+        ry={ry}
+        fill="var(--spot-floor, #95c07f)"
+        opacity={opacity}
+      />
+    );
+  };
   return [
+    hill('hillFarA', -280, 250, 36, 0.5),
+    hill('hillFarB', 90, 320, 48, 0.72),
+    hill('hillFarC', 450, 230, 32, 0.6),
     <circle key="sun" className="trick-anim-3d__scenery-sun" cx={sun.x} cy={sun.y} r={30 * sun.s} opacity={0.85} />,
     <circle key="sunGlow" className="trick-anim-3d__scenery-sun" cx={sun.x} cy={sun.y} r={48 * sun.s} opacity={0.28} />,
     cloudAt('cloudA', 60, GROUND - 118, z + 4, 1.05, 0.72),
@@ -347,23 +444,42 @@ function deckHalfWidth(x: number): number {
   return DECK_HALF_W * Math.sqrt(1 - u * u);
 }
 
-/** Closed local-space outline: left rail nose→tail, then right rail tail→nose. */
-function buildDeckOutlineLocal(): V3[] {
+/** Closed local-space outline: left rail nose→tail, then right rail tail→nose.
+ *  `offsetY` shifts the loop along the deck's own normal, which is how the top
+ *  and bottom faces of the (now solid) deck are generated from one profile. */
+function buildDeckOutlineLocal(offsetY = 0): V3[] {
   const pts: V3[] = [];
   const n = DECK_OUTLINE_SAMPLES;
   for (let i = 0; i <= n; i++) {
     const x = -DECK_TIP_X + (2 * DECK_TIP_X * i) / n;
-    pts.push({ x, y: deckKickY(x), z: -deckHalfWidth(x) });
+    pts.push({ x, y: deckKickY(x) + offsetY, z: -deckHalfWidth(x) });
   }
   // Skip tip endpoints (already on left rail where half-width → 0).
   for (let i = n - 1; i >= 1; i--) {
     const x = -DECK_TIP_X + (2 * DECK_TIP_X * i) / n;
-    pts.push({ x, y: deckKickY(x), z: deckHalfWidth(x) });
+    pts.push({ x, y: deckKickY(x) + offsetY, z: deckHalfWidth(x) });
   }
   return pts;
 }
 
-const DECK_OUTLINE_LOCAL = buildDeckOutlineLocal();
+/** Deck thickness in board units (7 plies read as ~2 at this scale). Without
+ *  it the deck is an infinitely thin cutout that vanishes edge-on mid-flip. */
+const DECK_THICKNESS = 1.8;
+/** Ply/rail color: the raw maple edge, lighter than the printed underside. */
+const DECK_PLY = '#cdaa74';
+const DECK_TOP_LOCAL = buildDeckOutlineLocal(-DECK_THICKNESS / 2);
+const DECK_BOTTOM_LOCAL = buildDeckOutlineLocal(DECK_THICKNESS / 2);
+/** Outline samples per rail quad — 4 keeps the ply band under ~20 paths. */
+const DECK_RAIL_STEP = 4;
+
+const sub3 = (a: V3, b: V3): V3 => ({ x: a.x - b.x, y: a.y - b.y, z: a.z - b.z });
+const cross3 = (a: V3, b: V3): V3 => ({
+  x: a.y * b.z - a.z * b.y,
+  y: a.z * b.x - a.x * b.z,
+  z: a.x * b.y - a.y * b.x,
+});
+const dot3 = (a: V3, b: V3) => a.x * b.x + a.y * b.y + a.z * b.z;
+const neg3 = (a: V3): V3 => ({ x: -a.x, y: -a.y, z: -a.z });
 
 /** Board local → world: flip around the long axis first, then pitch, then
  *  yaw, all around the pivot (pivot = board center except impossibles, which
@@ -418,6 +534,7 @@ export default function TrickAnimation3D({
   landed,
   onDone,
   playbackRate = 1,
+  showSpeedToggle = true,
   fallVariant,
   paused = false,
   knewIt,
@@ -426,18 +543,21 @@ export default function TrickAnimation3D({
 }: Props) {
   const skyGradId = useId().replace(/:/g, '');
   const forcedFall = !landed && knewIt === false ? ('shank' as FallVariant) : undefined;
-  const [randomizedFallVariant] = useState<FallVariant>(() => randomFallVariant(knewIt));
+  const [randomizedFallVariant] = useState<FallVariant>(randomFallVariant);
+  const [shankProgress] = useState(randomShankProgress);
   // Fakie changes travel and nollie changes the pop end. Switch changes only
   // anatomy below; it is not simulated as fakie + nollie.
   const [spec] = useState(() => specFor(trick));
   const resolvedFallVariant = forcedFall ?? fallVariant ?? randomizedFallVariant;
-  const [frame, setFrame] = useState(() => computeFrame(0, spec, landed, resolvedFallVariant));
+  const [frame, setFrame] = useState(() => computeFrame(0, spec, landed, resolvedFallVariant, shankProgress));
   const [isPlaying, setIsPlaying] = useState(true);
   const [replayNonce, setReplayNonce] = useState(0);
+  const [selectedPlaybackRate, setSelectedPlaybackRate] = useState<0.5 | 1>(() => playbackRate === 0.5 ? 0.5 : 1);
   const doneRef = useRef(false);
   const onDoneRef = useRef(onDone);
   const pausedRef = useRef(paused);
-  const effectivePlaybackRate = Math.max(0.05, playbackRate);
+  const speedToggleVisible = showSpeedToggle && fixedTime == null;
+  const effectivePlaybackRate = Math.max(0.05, speedToggleVisible ? selectedPlaybackRate : playbackRate);
   // Static mode: one frozen frame, computed in render so a changed fixedTime
   // (e.g. a scrubber) re-renders without touching the playback machinery.
   const staticTime = fixedTime == null
@@ -473,7 +593,7 @@ export default function TrickAnimation3D({
       if (!pausedRef.current) {
         animationTime += dt * effectivePlaybackRate;
       }
-      setFrame(computeFrame(Math.min(animationTime, end), spec, landed, resolvedFallVariant));
+      setFrame(computeFrame(Math.min(animationTime, end), spec, landed, resolvedFallVariant, shankProgress));
       if (animationTime >= end + HOLD) {
         finish();
         return;
@@ -488,7 +608,7 @@ export default function TrickAnimation3D({
           armFailSafe();
           return;
         }
-        setFrame(computeFrame(end, spec, landed, resolvedFallVariant));
+        setFrame(computeFrame(end, spec, landed, resolvedFallVariant, shankProgress));
         finish();
       }, durationMs + 500);
     };
@@ -497,17 +617,28 @@ export default function TrickAnimation3D({
       cancelAnimationFrame(raf);
       clearTimeout(failSafe);
     };
-  }, [spec, landed, resolvedFallVariant, effectivePlaybackRate, replayNonce, staticTime]);
+  }, [spec, landed, resolvedFallVariant, shankProgress, effectivePlaybackRate, replayNonce, staticTime]);
 
   const replay = () => {
     if (staticTime != null) return;
     setIsPlaying(true);
-    setFrame(computeFrame(0, spec, landed, resolvedFallVariant));
+    setFrame(computeFrame(0, spec, landed, resolvedFallVariant, shankProgress));
+    setReplayNonce((current) => current + 1);
+  };
+
+  const togglePlaybackRate = () => {
+    if (!speedToggleVisible) return;
+    doneRef.current = false;
+    setIsPlaying(true);
+    setFrame(computeFrame(0, spec, landed, resolvedFallVariant, shankProgress));
+    setSelectedPlaybackRate((current) => current === 1 ? 0.5 : 1);
     setReplayNonce((current) => current + 1);
   };
 
   const colors = robot.avatar;
-  const f = staticTime != null ? computeFrame(staticTime, spec, landed, resolvedFallVariant) : frame;
+  const f = staticTime != null
+    ? computeFrame(staticTime, spec, landed, resolvedFallVariant, shankProgress)
+    : frame;
   const prims: Prim[] = [];
   const mechanics = resolveRiderMechanics(riderStance, spec.stance);
 
@@ -523,7 +654,13 @@ export default function TrickAnimation3D({
   const restingHeadYaw = -(STANCE_BODY_YAW - HEAD_LOOK_FORWARD) * mechanics.orientationSign;
   const yawDeg3d = orientedRotation.yawDeg;
   const bodyYawDeg3d = orientedRotation.bodyYawDeg + restingBodyYaw;
-  const headYawDeg3d = orientedRotation.bodyYawDeg + restingHeadYaw;
+  // Head looks a bit more down-street while upright. Once the body folds in a
+  // fall, that yaw delta is applied after rotZ around the foot pivot and
+  // swings the head off the neck — blend it out so head/torso stay attached.
+  const uprightP = clamp01(1 - Math.abs(f.body.rot) / 55);
+  const headYawDeg3d = orientedRotation.bodyYawDeg
+    + restingHeadYaw * uprightP
+    + restingBodyYaw * (1 - uprightP);
   const rawFlightP = (f.t - ROLL_IN) / FLIP_T;
   const catchP3d = clamp01(rawFlightP / 0.85);
   const spinP3d = rawFlightP < 0 ? 0 : rawFlightP >= 1 ? 1 : spec.late ? clamp01((rawFlightP - 0.38) / 0.30) : catchP3d;
@@ -541,59 +678,183 @@ export default function TrickAnimation3D({
   const pivot: V3 = popFoot ? { x: f.body.x + popFoot.x, y: f.body.y + popFoot.y, z: 0 } : boardCenter;
   const B = (local: V3) => boardPoint(local, flipDeg3d, pitchDeg3d, yawDegBoard3d, boardCenter, pivot);
 
-  // Deck faces: dark gray griptape on top, wood + accent graphic on bottom
-  // so flip rotations read clearly (the 3D version of the 2D sy flip).
-  // Outline uses rounded nose/tail caps (see buildDeckOutlineLocal).
+  // Deck as a SOLID: griptape top face, printed wood bottom face, and a ply
+  // rail band joining them. The band is what makes a flip read — edge-on the
+  // old zero-thickness polygon collapsed to a hairline and the board looked
+  // like it blinked out mid-rotation. Everything is lit by the shared key
+  // light, so the face you can see also tells you which way it is tipped.
   const deckNormal = rotY(rotZ(rotX({ x: 0, y: -1, z: 0 }, flipDeg3d), pitchDeg3d), yawDegBoard3d);
   const seeingTop = dirDepth(deckNormal) >= 0;
-  const deckFill = seeingTop ? GRIP_TAPE : DECK_WOOD;
-  const deckPts: V3[] = DECK_OUTLINE_LOCAL.map(B);
-  pushPoly(prims, 'deck', deckPts, deckFill, 2);
-  // The deck sorts by its projected center, which sits well in front of the
-  // up-street leg (the board is long; depth varies ~13 units nose to tail).
-  // Legs and boots clamp to this so they never vanish under the board.
-  const deckDepth = prims[prims.length - 1].depth;
+  const topWorld: V3[] = DECK_TOP_LOCAL.map(B);
+  const bottomWorld: V3[] = DECK_BOTTOM_LOCAL.map(B);
+  const topFill = shade(GRIP_TAPE, lambert(deckNormal), 1.35);
+  const bottomFill = shade(DECK_WOOD, lambert(neg3(deckNormal)));
 
-  // Simple underside graphic (center stripe + mid oval) — only when the
-  // bottom faces the camera. Offset slightly toward +y (local down) so it
-  // sits on the bottom plane without z-fighting the deck fill.
+  // Rail quads, back-face culled and individually lit so the ply band curves
+  // with the deck instead of reading as a flat outline.
+  const railEls: ReactElement[] = [];
+  const railCount = topWorld.length;
+  for (let i = 0; i < railCount; i += DECK_RAIL_STEP) {
+    const j = (i + DECK_RAIL_STEP) % railCount;
+    const t0 = topWorld[i];
+    const t1 = topWorld[j];
+    const b1 = bottomWorld[j];
+    const b0 = bottomWorld[i];
+    let n = cross3(sub3(t1, t0), sub3(b0, t0));
+    const m = Math.hypot(n.x, n.y, n.z);
+    if (m < 1e-6) continue;
+    n = { x: n.x / m, y: n.y / m, z: n.z / m };
+    // Orient outward (away from the board's center) regardless of winding.
+    if (dot3(n, sub3(t0, boardCenter)) < 0) n = neg3(n);
+    if (dirDepth(n) < 0) continue; // facing away from the camera
+    const railFill = shade(DECK_PLY, lambert(n), 1.2);
+    railEls.push(
+      // Stroked in its own fill so neighbouring quads don't leave hairline
+      // seams where the projected edges disagree by a fraction of a pixel.
+      <path key={`rail${i}`} d={projectedPolyPath([t0, t1, b1, b0])} fill={railFill} stroke={railFill} strokeWidth={0.6} />
+    );
+  }
+
+  // Underside graphic (center stripe + badge), lifted just off the bottom
+  // plane so it never z-fights the face it sits on.
+  const graphicEls: ReactElement[] = [];
   if (!seeingTop) {
-    const bottomY = (x: number) => deckKickY(x) + 0.25;
+    const bottomY = (x: number) => deckKickY(x) + DECK_THICKNESS / 2 + 0.2;
+    const graphicFill = shade(colors.accent, lambert(neg3(deckNormal)));
     const stripeHalfW = 2.4;
-    const stripePts: V3[] = [
+    const poly = (key: string, pts: V3[], fill: string) => {
+      graphicEls.push(
+        <path
+          key={key}
+          d={projectedPolyPath(pts)}
+          fill={fill}
+          stroke="currentColor"
+          strokeWidth={1.2 * project(boardCenter).s}
+          strokeLinejoin="round"
+        />
+      );
+    };
+    poly('deckGraphicStripe', [
       B({ x: -34, y: bottomY(-34), z: -stripeHalfW }),
       B({ x: 34, y: bottomY(34), z: -stripeHalfW }),
       B({ x: 34, y: bottomY(34), z: stripeHalfW }),
       B({ x: -34, y: bottomY(-34), z: stripeHalfW }),
-    ];
-    pushPoly(prims, 'deckGraphicStripe', stripePts, colors.accent, 1.2, 0.4);
-    // Small center badge.
-    const badge: V3[] = [
+    ], graphicFill);
+    poly('deckGraphicBadge', [
       B({ x: -7, y: bottomY(0), z: 0 }),
       B({ x: 0, y: bottomY(0), z: -5 }),
       B({ x: 7, y: bottomY(0), z: 0 }),
       B({ x: 0, y: bottomY(0), z: 5 }),
-    ];
-    pushPoly(prims, 'deckGraphicBadge', badge, colors.accent, 1.2, 0.5);
+    ], graphicFill);
   }
 
-  // Trucks (hanger + axle) and wheels.
+  const topPath = projectedPolyPath(topWorld);
+  const bottomPath = projectedPolyPath(bottomWorld);
+  const deckProj = project(boardCenter);
+  const deckScale = deckProj.s;
+  // The deck sorts by its projected center, which sits well in front of the
+  // up-street leg (the board is long; depth varies ~13 units nose to tail).
+  // Legs and boots clamp to this so they never vanish under the board.
+  const deckDepth = deckProj.depth;
+
+  // Trucks live in the same SVG group as the deck faces so facing (grip vs
+  // wood) — not the global painter's list — decides whether they sit under or
+  // over the deck. Within that group, though, parts still need camera-depth
+  // order: a fixed local-z loop draws far wheels on top after a 180° shuvit
+  // (local +z becomes world-far), which makes the landing silhouette look
+  // mirrored vs takeoff. Sort far → near so before/after a board 180 match.
+  //   grip facing camera → trucks FIRST (under the opaque faces)
+  //   wood facing camera → trucks LAST  (on the underside, where they belong)
+  const truckParts: { depth: number; el: ReactElement }[] = [];
   for (const side of [-1, 1] as const) {
     const tx = side * WHEEL_X;
-    pushLine(prims, `hanger${side}`, B({ x: tx, y: 1, z: 0 }), B({ x: tx, y: WHEEL_Y - 1, z: 0 }), 'currentColor', {
-      width: 4,
-      opacity: 0.45,
-    });
-    pushLine(prims, `axle${side}`, B({ x: tx, y: WHEEL_Y, z: -WHEEL_Z }), B({ x: tx, y: WHEEL_Y, z: WHEEL_Z }), 'currentColor', {
-      width: 2.5,
-      opacity: 0.45,
-    });
+    const hangerA = project(B({ x: tx, y: 1, z: 0 }));
+    const hangerB = project(B({ x: tx, y: WHEEL_Y - 1, z: 0 }));
+    const axleA = project(B({ x: tx, y: WHEEL_Y, z: -WHEEL_Z }));
+    const axleB = project(B({ x: tx, y: WHEEL_Y, z: WHEEL_Z }));
+    const hs = (hangerA.s + hangerB.s) / 2;
+    const as = (axleA.s + axleB.s) / 2;
+    truckParts.push(
+      {
+        depth: (hangerA.depth + hangerB.depth) / 2,
+        el: (
+          <line
+            key={`hanger${side}`}
+            x1={hangerA.x}
+            y1={hangerA.y}
+            x2={hangerB.x}
+            y2={hangerB.y}
+            stroke="currentColor"
+            strokeWidth={4 * hs}
+            strokeLinecap="round"
+            opacity={0.45}
+          />
+        ),
+      },
+      {
+        depth: (axleA.depth + axleB.depth) / 2,
+        el: (
+          <line
+            key={`axle${side}`}
+            x1={axleA.x}
+            y1={axleA.y}
+            x2={axleB.x}
+            y2={axleB.y}
+            stroke="currentColor"
+            strokeWidth={2.5 * as}
+            strokeLinecap="round"
+            opacity={0.45}
+          />
+        ),
+      },
+    );
     for (const wz of [-1, 1] as const) {
-      const c = B({ x: tx, y: WHEEL_Y, z: wz * WHEEL_Z });
-      pushDot(prims, `wheel${side}${wz}`, c, 5, '#fbfbf3', 'currentColor', 2);
-      pushDot(prims, `hub${side}${wz}`, c, 1.8, colors.accent, undefined, 0, 1, 0.6);
+      const c = project(B({ x: tx, y: WHEEL_Y, z: wz * WHEEL_Z }));
+      // Spokes rotate with the distance actually traveled, so rolling reads
+      // on the ground and stops when the board does (air time keeps the last
+      // angle, which is fine — urethane wheels don't spin up in mid-air).
+      const rollDeg = ((f.streetDist / (2 * Math.PI * 5)) * 360) % 360;
+      const ra = rad(rollDeg);
+      const spokeR = 5 * c.s * 0.92;
+      const ca = Math.cos(ra) * spokeR;
+      const sa = Math.sin(ra) * spokeR;
+      // Wheel + hub share a depth and a fragment so the hub never peels off.
+      truckParts.push({
+        depth: c.depth,
+        el: (
+          <g key={`wheel${side}${wz}`}>
+            <circle
+              cx={c.x}
+              cy={c.y}
+              r={5 * c.s}
+              fill="#fbfbf3"
+              stroke="currentColor"
+              strokeWidth={2 * c.s}
+            />
+            <line className="trick-anim-3d__wheel-spoke" x1={c.x - ca} y1={c.y - sa} x2={c.x + ca} y2={c.y + sa} strokeWidth={1.3 * c.s} />
+            <line className="trick-anim-3d__wheel-spoke" x1={c.x + sa} y1={c.y - ca} x2={c.x - sa} y2={c.y + ca} strokeWidth={1.3 * c.s} />
+            <circle cx={c.x} cy={c.y} r={1.8 * c.s} fill={colors.accent} />
+          </g>
+        ),
+      });
     }
   }
+  truckParts.sort((a, b) => a.depth - b.depth);
+  const truckEls = truckParts.map((part) => part.el);
+
+  prims.push({
+    depth: deckDepth,
+    el: (
+      <g key="deck">
+        {seeingTop ? truckEls : null}
+        <path d={seeingTop ? bottomPath : topPath} fill={seeingTop ? bottomFill : topFill} stroke="currentColor" strokeWidth={2 * deckScale} strokeLinejoin="round" />
+        {railEls}
+        <path d={seeingTop ? topPath : bottomPath} fill={seeingTop ? topFill : bottomFill} stroke="currentColor" strokeWidth={2 * deckScale} strokeLinejoin="round" />
+        {graphicEls}
+        {seeingTop ? null : truckEls}
+      </g>
+    ),
+  });
 
   // ----- Skater -----
   const hip: V3 = { x: f.body.x, y: f.body.y, z: 0 };
@@ -614,8 +875,9 @@ export default function TrickAnimation3D({
 
   // Frame channels are stable board roles: R is nose, L is tail. Keep those
   // in board space; fromBoard() carries them into the mildly yawed skeleton.
-  const noseChannel = f.footR;
-  const tailChannel = f.footL;
+  // Clamp to leg length so fall poses can't stretch a shin off its knee.
+  const noseChannel = clampFootReach(f.footR);
+  const tailChannel = clampFootReach(f.footL);
   const leftFootChannel = mechanics.noseFoot === 'left' ? noseChannel : tailChannel;
   const rightFootChannel = mechanics.noseFoot === 'right' ? noseChannel : tailChannel;
   const leftFoot = leftFootChannel;
@@ -708,18 +970,22 @@ export default function TrickAnimation3D({
   // depth crossing can't flip the ±bias for one frame and make an arm pop
   // through the torso. Each arm is two capsules so a hand can stay visible
   // while its shoulder sits behind the body.
+  // Shoulders sit out at the torso's own half-width. At the old ±6.5 the whole
+  // arm lived inside the 22-wide torso capsule and simply never appeared —
+  // under the 3/4 camera the arm swing runs mostly along x, which projects
+  // short, so only lateral offset can get a limb clear of the body.
   const armGeometry = (angle: number, sideZ: number, bend: number) => {
-    const shoulderLocal: V3 = { x: 5, y: -38, z: sideZ };
+    const shoulderLocal: V3 = { x: 4, y: -37, z: sideZ };
     const elbowLocal: V3 = {
       x: shoulderLocal.x + Math.sin(angle) * 15,
       y: shoulderLocal.y + Math.cos(angle) * 15,
-      z: sideZ * 1.18,
+      z: sideZ * 1.3,
     };
     const forearmAngle = angle + bend;
     const handLocal: V3 = {
       x: elbowLocal.x + Math.sin(forearmAngle) * 14,
       y: elbowLocal.y + Math.cos(forearmAngle) * 14,
-      z: sideZ * 1.3,
+      z: sideZ * 1.5,
     };
     return {
       shoulder: S(shoulderLocal),
@@ -734,16 +1000,28 @@ export default function TrickAnimation3D({
   const regularArmCue = riderStance === 'regular' && spec.stance !== 'switch'
     ? clamp01(1 - f.t / ROLL_IN)
     : 0;
+  // Mid-flight balance carriage: arms spread and elbows fold as the rider
+  // rises, then relax into the catch. Symmetric ± terms inside the mirrored
+  // parens keep the goofy mirror exact.
+  const flightArmLift = rawFlightP >= 0 && rawFlightP <= 1
+    ? Math.sin(clamp01(rawFlightP) * Math.PI)
+    : 0;
   const leftArmAngle = baseBodySign * (
     (mechanics.frontArm === 'left' ? f.armFront : f.armBack)
     + regularArmCue * 0.3
+    + flightArmLift * 0.38
   );
   const rightArmAngle = baseBodySign * (
     (mechanics.frontArm === 'right' ? f.armFront : f.armBack)
     - regularArmCue * 0.5
+    - flightArmLift * 0.38
   );
-  const armL = armGeometry(leftArmAngle, -6.5, -0.24);
-  const armR = armGeometry(rightArmAngle, 6.5, 0.24);
+  // Wider than the trunk's half-width (see the torso capsule below) so the
+  // arms hang clear of the silhouette instead of being swallowed by it.
+  const SHOULDER_Z = 12;
+  const armBend = 0.24 * (1 + 1.5 * flightArmLift);
+  const armL = armGeometry(leftArmAngle, -SHOULDER_Z, -armBend);
+  const armR = armGeometry(rightArmAngle, SHOULDER_Z, armBend);
   // Near/far from shoulder depth only — shoulders don't swing during the
   // crouch, so this stays stable (unlike averaging in the moving forearm,
   // which used to flicker). Do NOT key off toeside: goofy's toeside faces
@@ -783,13 +1061,17 @@ export default function TrickAnimation3D({
     const foreStart = prims.length;
     pushCapsule(prims, `${key}Fore`, arm.elbow, arm.hand, 6.25, armFill, 1.2);
     prims[foreStart].depth = foreDepth;
+    // Hand cap shares the forearm's depth so it can't split off mid-swing.
+    const handStart = prims.length;
+    pushDot(prims, `${key}Hand`, arm.hand, 3, colors.accent, 'currentColor', 1.1);
+    prims[handStart].depth = foreDepth;
   };
   drawArm('armL', armL, !rightArmIsNear);
   drawArm('armR', armR, rightArmIsNear);
 
   // Torso. The legs use small left/right hip anchors, with no mechanical hip
   // dot drawn over the silhouette.
-  pushCapsule(prims, 'torso', torsoBot, torsoTop, 22, colors.body, 2.5);
+  pushCapsule(prims, 'torso', torsoBot, torsoTop, 20, colors.body, 2.5);
 
   // Neck + head — slightly less toeside yaw than the torso so the face looks
   // a bit down the street.
@@ -983,10 +1265,48 @@ export default function TrickAnimation3D({
     }
   }
 
+  // Air streaks during flight: short horizontal whooshes trailing the board,
+  // peaking mid-air. They sell travel speed through the pop, which the
+  // scrolling ground alone can't do once the wheels leave the asphalt.
+  const flightStreaks: ReactElement[] = [];
+  if (rawFlightP >= 0 && rawFlightP <= 1) {
+    const intensity = Math.sin(clamp01(rawFlightP) * Math.PI);
+    const streakConfigs = [
+      { dy: -30, dz: -26, len: 46, back: 78 },
+      { dy: -12, dz: 16, len: 38, back: 100 },
+      { dy: 4, dz: -8, len: 54, back: 68 },
+      { dy: 20, dz: 32, len: 34, back: 92 },
+    ];
+    streakConfigs.forEach((cfg, i) => {
+      const xTip = f.board.x - cfg.back;
+      const a = project({ x: xTip, y: f.board.y + cfg.dy, z: cfg.dz });
+      const b = project({ x: xTip + cfg.len, y: f.board.y + cfg.dy, z: cfg.dz });
+      flightStreaks.push(
+        <line
+          key={`streak${i}`}
+          className="trick-anim-3d__speed-streak"
+          x1={a.x}
+          y1={a.y}
+          x2={b.x}
+          y2={b.y}
+          strokeWidth={Math.max(1, 2.2 * a.s)}
+          opacity={0.5 * intensity}
+        />
+      );
+    });
+  }
+
+  // Shadows are cast, not pinned: a point at height h projects onto the ground
+  // along the key light's ray, so the blob slides away from the rider as they
+  // rise instead of staying nailed under them. It also softens and shrinks
+  // with height, which is the cue that actually sells the pop.
+  const SHADOW_SLIDE_X = -LIGHT_DIR.x / LIGHT_DIR.y; // y is down; LIGHT_DIR.y < 0
+  const SHADOW_SLIDE_Z = -LIGHT_DIR.z / LIGHT_DIR.y;
   const shadowFor = (x: number, height: number, baseR: number, key: string) => {
-    const p = project({ x, y: GROUND, z: 0 });
-    const hf = clamp01(height / JUMP);
-    const rx = baseR * p.s * (1 - 0.35 * hf);
+    const h = Math.max(0, height);
+    const p = project({ x: x + SHADOW_SLIDE_X * h, y: GROUND, z: SHADOW_SLIDE_Z * h });
+    const hf = clamp01(h / JUMP);
+    const rx = baseR * p.s * (1 - 0.3 * hf);
     return (
       <ellipse
         key={key}
@@ -995,20 +1315,80 @@ export default function TrickAnimation3D({
         cy={p.y}
         rx={rx}
         ry={Math.max(2, rx * 0.22)}
-        opacity={0.95 * (1 - 0.55 * hf)}
+        opacity={0.9 * (1 - 0.62 * hf)}
+        filter={`url(#${skyGradId}-soft)`}
       />
     );
   };
-  const boardShadow = shadowFor(f.board.x, Math.max(0, GROUND - f.board.y), 46, 'shadowBoard');
+  const boardHeight = Math.max(0, GROUND - f.board.y);
+  const boardShadow = shadowFor(f.board.x, boardHeight, 46, 'shadowBoard');
   const skaterShadow = shadowFor(f.body.x, Math.max(0, GROUND - f.body.y - (FOOT_Y - 2)), 30, 'shadowSkater');
+
+  // Ground contact FX. The pop and the touch-down are the two frames where the
+  // tail actually loads the asphalt; without a scuff there they read as the
+  // board silently teleporting off and back onto the street.
+  const contactEls: ReactElement[] = [];
+  const pushScuff = (key: string, progress: number, atX: number, strength: number) => {
+    const grow = easeOutCubic(progress);
+    const fade = (1 - progress) * (1 - progress);
+    const ring = project({ x: atX, y: GROUND, z: 0 });
+    const r = (10 + 46 * grow) * ring.s * strength;
+    contactEls.push(
+      <ellipse
+        key={`${key}Ring`}
+        className="trick-anim-3d__contact-ring"
+        cx={ring.x}
+        cy={ring.y}
+        rx={r}
+        ry={r * 0.24}
+        opacity={0.34 * fade}
+      />
+    );
+    for (let i = 0; i < 5; i++) {
+      const dir = i % 2 === 0 ? -1 : 1;
+      const spread = (0.4 + (i % 3) * 0.35) * dir;
+      const puffX = atX + spread * 44 * grow;
+      const puffZ = ((i % 3) - 1) * 12 * grow;
+      const lift = 16 * grow * (1 - grow * 0.4);
+      const pp = project({ x: puffX, y: GROUND - lift, z: puffZ });
+      contactEls.push(
+        <circle
+          key={`${key}Puff${i}`}
+          className="trick-anim-3d__contact-puff"
+          cx={pp.x}
+          cy={pp.y}
+          r={(2.6 + 5 * grow) * pp.s * strength}
+          opacity={0.3 * fade}
+        />
+      );
+    }
+  };
+  const SCUFF_T = 0.34;
+  const popProgress = (f.t - ROLL_IN) / SCUFF_T;
+  if (popProgress >= 0 && popProgress < 1) {
+    // Scuff at the popping end of the deck, not at its center.
+    pushScuff('pop', popProgress, X0 + (spec.nollie ? 30 : -30), 0.75);
+  }
+  const landProgress = (f.t - (ROLL_IN + FLIP_T)) / SCUFF_T;
+  if (landed && landProgress >= 0 && landProgress < 1) {
+    pushScuff('land', landProgress, f.board.x, 1);
+  }
   const skyScenery = buildSkyScenery(spotBackZ);
   const asphaltGradId = `${skyGradId}-asphalt`;
   const shoulderGradId = `${skyGradId}-shoulder`;
   const roadSheenId = `${skyGradId}-sheen`;
+  const hazeGradId = `${skyGradId}-haze`;
+  const hazeClipId = `${skyGradId}-haze-clip`;
 
   // Projected anchors for gradient mapping (near vs far asphalt tone).
   const nearFloor = project({ x: X0, y: GROUND, z: spotFrontZ * 0.35 });
   const farFloor = project({ x: X0, y: GROUND, z: spotBackZ });
+  // The spot's far edge is a diagonal under this camera, so the haze band has
+  // to cover the whole span of that edge, not a single horizon y.
+  const backLeft = project({ x: spotLeft, y: GROUND, z: spotBackZ });
+  const backRight = project({ x: spotRight, y: GROUND, z: spotBackZ });
+  const hazeTop = Math.min(backLeft.y, backRight.y);
+  const hazeHeight = Math.abs(backLeft.y - backRight.y) + 52;
 
   return (
     <div
@@ -1023,18 +1403,16 @@ export default function TrickAnimation3D({
       data-board-yaw={yawDeg3d.toFixed(1)}
       data-current-body-yaw={bodyYawDeg3d.toFixed(1)}
       data-current-head-yaw={headYawDeg3d.toFixed(1)}
-      aria-label={`Replay ${robot.name} attempting ${trick.name} in 3D`}
-      aria-roledescription="trick animation"
-      role="button"
-      tabIndex={0}
-      onClick={replay}
-      onKeyDown={(event) => {
-        if (event.key !== 'Enter' && event.key !== ' ') return;
-        event.preventDefault();
-        replay();
-      }}
+      data-playback-rate={effectivePlaybackRate}
     >
-      <svg viewBox={`0 ${-SKY_PAD} ${W} ${H + SKY_PAD}`} xmlns="http://www.w3.org/2000/svg">
+      <button
+        type="button"
+        className="trick-anim-3d__replay"
+        aria-label={`Replay ${robot.name} attempting ${trick.name} in 3D`}
+        aria-roledescription="trick animation"
+        onClick={replay}
+      >
+        <svg viewBox={`0 ${-SKY_PAD} ${W} ${H + SKY_PAD}`} xmlns="http://www.w3.org/2000/svg">
         <defs>
           <linearGradient id={skyGradId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#7ec8f0" />
@@ -1051,8 +1429,8 @@ export default function TrickAnimation3D({
             x2={farFloor.x}
             y2={farFloor.y}
           >
-            <stop offset="0%" stopColor="#6b7582" />
-            <stop offset="45%" stopColor="#7d8794" />
+            <stop offset="0%" stopColor="var(--spot-asphalt-deep, #6b7582)" />
+            <stop offset="45%" stopColor="var(--spot-asphalt, #7d8794)" />
             <stop offset="100%" stopColor="#9aa6b2" />
           </linearGradient>
           <linearGradient
@@ -1064,7 +1442,7 @@ export default function TrickAnimation3D({
             y2={farFloor.y}
           >
             <stop offset="0%" stopColor="#7fad6e" />
-            <stop offset="55%" stopColor="#95c07f" />
+            <stop offset="55%" stopColor="var(--spot-floor, #95c07f)" />
             <stop offset="100%" stopColor="#b5d49a" />
           </linearGradient>
           <radialGradient
@@ -1078,6 +1456,29 @@ export default function TrickAnimation3D({
             <stop offset="42%" stopColor="rgba(255,255,255,0.05)" />
             <stop offset="100%" stopColor="rgba(255,255,255,0)" />
           </radialGradient>
+          {/* Contact shadows are soft, not stamped. */}
+          <filter id={`${skyGradId}-soft`} x="-40%" y="-160%" width="180%" height="420%">
+            <feGaussianBlur stdDeviation="3.2" />
+          </filter>
+          {/* Aerial perspective at the far edge of the spot: the ground fades
+              into the sky instead of ending on a hard diagonal cut. Clipped to
+              the floor so it tints only the ground — unclipped it washed out
+              the sky and the sun along the whole band. */}
+          <clipPath id={hazeClipId}>
+            <path d={floorPath} />
+          </clipPath>
+          <linearGradient
+            id={hazeGradId}
+            gradientUnits="userSpaceOnUse"
+            x1={0}
+            y1={hazeTop}
+            x2={0}
+            y2={hazeTop + hazeHeight}
+          >
+            <stop offset="0%" stopColor="var(--spot-sky-horizon, #d6eefb)" stopOpacity="0.8" />
+            <stop offset="45%" stopColor="var(--spot-sky-horizon, #d6eefb)" stopOpacity="0.28" />
+            <stop offset="100%" stopColor="var(--spot-sky-horizon, #d6eefb)" stopOpacity="0" />
+          </linearGradient>
         </defs>
         {/* Full-frame sky under everything so projected floor edges never
             leak the container background on wide layouts. */}
@@ -1092,6 +1493,15 @@ export default function TrickAnimation3D({
         <path className="trick-anim-3d__floor-plane" d={floorPath} fill={`url(#${shoulderGradId})`} />
         <path className="trick-anim-3d__road-plane" d={roadPath} fill={`url(#${asphaltGradId})`} />
         <path className="trick-anim-3d__road-sheen" d={roadPath} fill={`url(#${roadSheenId})`} />
+        <rect
+          aria-hidden="true"
+          x={0}
+          y={hazeTop}
+          width={W}
+          height={hazeHeight}
+          fill={`url(#${hazeGradId})`}
+          clipPath={`url(#${hazeClipId})`}
+        />
         <path className="trick-anim-3d__back-edge" d={backEdge} />
         <path className="trick-anim-3d__curb-line trick-anim-3d__curb-line--far" d={farCurb} />
         <path className="trick-anim-3d__curb-line trick-anim-3d__curb-line--near" d={nearCurb} />
@@ -1099,12 +1509,26 @@ export default function TrickAnimation3D({
         <path className="trick-anim-3d__curb-lip" d={nearCurbLip} />
         {gritMarks}
         {streetDashes}
+        {flightStreaks}
         {boardShadow}
         {skaterShadow}
+        {contactEls}
 
         {/* Depth-sorted board + skater */}
         {prims.map((p) => p.el)}
-      </svg>
+        </svg>
+      </button>
+      {speedToggleVisible && (
+        <button
+          type="button"
+          className="trick-anim-3d__speed-toggle"
+          aria-label={`Animation speed ${selectedPlaybackRate === 1 ? '1x' : '.5x'}; switch to ${selectedPlaybackRate === 1 ? '.5x' : '1x'}`}
+          title={`Animation speed: ${selectedPlaybackRate === 1 ? '1x' : '.5x'}`}
+          onClick={togglePlaybackRate}
+        >
+          {selectedPlaybackRate === 1 ? '1x' : '.5x'}
+        </button>
+      )}
     </div>
   );
 }

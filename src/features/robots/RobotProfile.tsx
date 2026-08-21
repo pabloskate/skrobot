@@ -6,6 +6,7 @@ import { trickDescription } from '@/features/tricks';
 import type { Robot } from './robots';
 import { buildBag } from './robots';
 import RobotAvatar from './RobotAvatar';
+import RobotRating from './RobotRating';
 
 interface Props {
   robot: Robot;
@@ -88,6 +89,7 @@ export default function RobotProfile({ robot, pool, onStart }: Props) {
       <div className="panel center robot-profile">
         <RobotAvatar robot={robot} size={150} />
         <h2 className="panel-title">{robot.name}</h2>
+        <RobotRating robot={robot} profile />
         <p className="profile-tagline">{robot.tagline}</p>
         <p className="muted profile-summary">{robot.summary}</p>
 

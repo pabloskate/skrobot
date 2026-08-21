@@ -1,11 +1,12 @@
 /**
- * Gallery feature — flatground trick gallery with stance filtering and search,
- * plus the player's trick book: personal state (proven in games / learning)
- * overlaid on the catalog, with a bag-vs-robot-ladder readout and "next up"
- * suggestions. Bag membership is earned only by landing tricks in games;
- * the player can mark tricks as "learning" to feed suggestions. Browses the
- * trick catalog (owned by features/tricks) and links each trick to an optional
- * curated video tip. Video metadata is gallery-owned curation, not trick data.
+ * Gallery feature — the Tricks screen, organized as three tabs by job:
+ * Learning (one queue: starred tricks first, then suggestions with reasoning),
+ * All Tricks (the catalog: search, stance lens, trick-book chips, video tips and
+ * 3D animation fallbacks), and Stats (skate score + robot ladder, per-trick
+ * consistency, record vs robots). Bag membership is earned only by landing
+ * tricks in games; the player can mark tricks as "learning" to pin them to
+ * the top of their queue. Video metadata is gallery-owned curation, not trick
+ * data.
  */
 export type { TipVideo } from './tips';
 export { TIP_VIDEOS, tipForTrick } from './tips';

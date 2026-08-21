@@ -1,3 +1,4 @@
+import { trickSetWeight, type SetWeightRobot } from '@/features/robots';
 import type { Trick } from '@/features/tricks';
 
 export type Phase = 'rps' | 'playerSet' | 'robotCopy' | 'robotSet' | 'playerCopy' | 'over';
@@ -222,24 +223,30 @@ export function gameReducer(s: GameState, a: GameAction): GameState {
 
 /**
  * Weighted random pick from the robot's bag, excluding tricks already set this
- * game. Weight is the consistency itself, so a 90% trick is 9x more likely
- * than a 10% trick. Returns null when nothing is left.
+ * game. Weight is the land rate by default (a 90% trick is 9x a 10% trick),
+ * with specialty/uncommon-set policy from the robot. Returns null when nothing
+ * is left (or every leftover trick has a set-weight of 0).
  */
 export function chooseRobotTrick(
   bag: Map<string, number>,
   used: string[],
   trickById: Map<string, Trick>,
+  robot?: SetWeightRobot,
+  random: () => number = Math.random,
 ): Trick | null {
   const usedSet = new Set(used);
   const options: { trick: Trick; weight: number }[] = [];
   for (const [id, consistency] of bag) {
     if (usedSet.has(id)) continue;
     const trick = trickById.get(id);
-    if (trick) options.push({ trick, weight: consistency });
+    if (!trick) continue;
+    const weight = trickSetWeight(trick, consistency, robot);
+    if (weight <= 0) continue;
+    options.push({ trick, weight });
   }
   if (options.length === 0) return null;
   const total = options.reduce((sum, o) => sum + o.weight, 0);
-  let roll = Math.random() * total;
+  let roll = random() * total;
   for (const o of options) {
     roll -= o.weight;
     if (roll <= 0) return o.trick;
@@ -248,8 +255,12 @@ export function chooseRobotTrick(
 }
 
 /** Roll a landing attempt. Tricks outside the bag are an automatic miss. */
-export function rollAttempt(bag: Map<string, number>, trickId: string): { landed: boolean; knewIt: boolean } {
+export function rollAttempt(
+  bag: Map<string, number>,
+  trickId: string,
+  random: () => number = Math.random,
+): { landed: boolean; knewIt: boolean } {
   const consistency = bag.get(trickId);
   if (consistency === undefined) return { landed: false, knewIt: false };
-  return { landed: Math.random() < consistency, knewIt: true };
+  return { landed: random() < consistency, knewIt: true };
 }

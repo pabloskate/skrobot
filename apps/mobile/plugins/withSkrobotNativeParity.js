@@ -1,6 +1,12 @@
 const { withAndroidManifest, withInfoPlist, AndroidConfig } = require('@expo/config-plugins');
 
-const DEFAULT_APP_BOUND_DOMAINS = ['skrobot.me-d6a.workers.dev', 'localhost'];
+const DEFAULT_APP_BOUND_DOMAINS = [
+  'skrobot.me-d6a.workers.dev',
+  'localhost',
+  'www.youtube.com',
+  'www.youtube-nocookie.com',
+  'www.instagram.com',
+];
 
 function configuredWebHost() {
   const configuredUrl = process.env.EXPO_PUBLIC_SKROBOT_WEB_URL;

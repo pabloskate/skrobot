@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { isShellInternalWebUrl, normalizeUrl, sameOrigin, webUrlFromDeepLink } from '../../apps/mobile/linking';
+import {
+  isInAppEmbedUrl,
+  isShellInternalWebUrl,
+  normalizeUrl,
+  sameOrigin,
+  webUrlFromDeepLink,
+} from '../../apps/mobile/linking';
 
 const APP_URL = 'https://skaterobot.example/';
+const VERSIONED_APP_URL = 'https://skaterobot.example/?version=1.3.0';
 
 describe('mobile WebView linking', () => {
   it('normalizes invalid app URLs to the platform fallback', () => {
@@ -11,6 +18,12 @@ describe('mobile WebView linking', () => {
   it('routes native auth callbacks into the app origin callback route', () => {
     expect(webUrlFromDeepLink('skrobot://auth/callback?token=abc_123', APP_URL)).toBe(
       'https://skaterobot.example/api/auth/callback?token=abc_123',
+    );
+  });
+
+  it('preserves the native release version through auth callbacks', () => {
+    expect(webUrlFromDeepLink('skrobot://auth/callback?token=abc_123', VERSIONED_APP_URL)).toBe(
+      'https://skaterobot.example/api/auth/callback?token=abc_123&version=1.3.0',
     );
   });
 
@@ -42,5 +55,12 @@ describe('mobile WebView linking', () => {
 
   it('keeps cross-origin web links outside the shell', () => {
     expect(isShellInternalWebUrl('https://evil.example/api/auth/callback?token=x', APP_URL)).toBe(false);
+  });
+
+  it('keeps gallery YouTube and Instagram embed players inside the WebView', () => {
+    expect(isInAppEmbedUrl('https://www.instagram.com/reel/DbJnFcnRURR/embed/captioned/')).toBe(true);
+    expect(isInAppEmbedUrl('https://www.youtube-nocookie.com/embed/9msHUYrxlis?autoplay=1&rel=0')).toBe(true);
+    expect(isInAppEmbedUrl('https://www.youtube.com/embed/9msHUYrxlis?playsinline=1')).toBe(true);
+    expect(isInAppEmbedUrl('https://www.instagram.com/reel/DbJnFcnRURR/')).toBe(false);
   });
 });

@@ -21,9 +21,11 @@ If the answer is unclear, tighten the feature boundary before adding more code.
 | Auth/session/quota | `src/features/auth/` | Client auth state in the barrel; server code under `server/`. |
 | Billing | `src/features/billing/` | Beta quota UI plus dormant Stripe server helpers. |
 | Tricks | `src/features/tricks/` | Catalog, difficulty, metadata, picker/setup UI, and the default routed trick pool. Routed games currently use flatground only. |
-| Gallery | `src/features/gallery/` | Flatground trick gallery plus the player trick book: browse the catalog with stance filters, curated video tips, and personal proven/claimed/learning state with ladder placement. |
+| Gallery | `src/features/gallery/` | Flatground trick gallery plus the player trick book: browse the catalog with stance filters, curated video tips, personal proven/learning state, and per-trick consistency stats. |
 | Robots | `src/features/robots/` | Roster, skill model, profile/select/avatar UI. Routed home currently exposes flatground robots only. |
-| Records | `src/features/records/` | LocalStorage W/L, game log, and trick marks until the D1 port. |
+| Player skill / adaptive rival | `src/features/skater/` | Skate score (robot-equivalent curve fit + frontier fallback), robot-ladder placement, and the generated rival robot. All derived from the game log; nothing persisted. |
+| Records | `src/features/records/` | LocalStorage W/L, game log, trick marks, and per-trick attempt stats until the D1 port. |
+| Web/native install handoff | `src/features/install/` | App Store handoff, Android PWA instructions, and browser/WebView detection. |
 | Runtime infrastructure | `src/platform/server/` | Cloudflare env and bindings, D1, future logging/HTTP adapters. |
 | Shared primitives | `src/shared/` | Reserved for domain-neutral primitives only, such as online status. |
 | Expo companion app | `apps/mobile/` | Native WebView shell that loads the same web app; no alternate game implementation. |
@@ -44,10 +46,12 @@ route is importing server-only feature code. This map is enforced by
 | `auth` | `platform/server` from server files | Gameplay, screens, other features |
 | `billing` | `platform/server` from server files | Auth UI, gameplay, screens, other features |
 | `tricks` | none | Other features |
-| `gallery` | `tricks`, `records`, `robots` | Other features |
+| `gallery` | `tricks`, `records`, `robots`, `skater` | Other features |
 | `records` | none | Other features |
-| `robots` | `tricks`, `records`, `@skrobot/animations` | Screens, game, voice, auth, billing |
-| `home` | `robots`, `records` | Game/voice flow internals; non-flatground roster setup |
+| `robots` | `tricks`, `records`, `@skrobot/animations` | Screens, game, voice, auth, billing, skater |
+| `skater` | `tricks`, `records`, `robots` | Screens, game, voice, auth, billing |
+| `home` | `robots`, `records`, `skater` | Game/voice flow internals; non-flatground roster setup |
+| `install` | none | Other features; AppShell supplies native-shell context |
 | `dice` | `tricks` | Robot/game/record/auth concerns |
 | `game` | `tricks`, `robots`, `records`, `@skrobot/animations` | Voice, home, dice, auth, billing |
 | `voice` | `game`, `tricks`, `robots`, `records`, `auth`, `billing` | Home and dice screens |

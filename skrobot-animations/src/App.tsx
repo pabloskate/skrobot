@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import {
   BACKGROUND_SCENE_OPTIONS,
   FALL_VARIANT_OPTIONS,
@@ -6,6 +6,7 @@ import {
   SLOW_MOTION_PLAYBACK_RATE,
   TrickAnimation,
   TrickAnimation3D,
+  TrickAnimation3DLegacy,
   type BackgroundSceneId,
   type FallVariant,
   type RiderStance,
@@ -14,6 +15,8 @@ import {
 import { ROBOTS, robotById, tricksForStance } from './data';
 import ContactSheet from './ContactSheet';
 import styles from './Playground.module.css';
+
+const BlenderPrototype = lazy(() => import('./blender-prototype/BlenderPrototype'));
 
 const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
 const RIDER_STANCES: RiderStance[] = ['regular', 'goofy'];
@@ -27,6 +30,7 @@ type PlaybackMode = (typeof PLAYBACK_OPTIONS)[number]['id'];
 const VIEW_OPTIONS = [
   { id: 'side', label: 'Side (2D)' },
   { id: '3d', label: '3D' },
+  { id: '3d-legacy', label: '3D legacy' },
 ] as const;
 
 type ViewMode = (typeof VIEW_OPTIONS)[number]['id'];
@@ -34,6 +38,7 @@ type ViewMode = (typeof VIEW_OPTIONS)[number]['id'];
 const APP_MODES = [
   { id: 'playground', label: 'Playground' },
   { id: 'sheet', label: 'Contact sheet' },
+  { id: 'blender', label: 'Blender prototype' },
 ] as const;
 
 type AppMode = (typeof APP_MODES)[number]['id'];
@@ -185,7 +190,11 @@ export default function App() {
         </div>
       </header>
 
-      {appMode === 'sheet' ? (
+      {appMode === 'blender' ? (
+        <Suspense fallback={<p className={styles.placeholder}>Loading Blender prototype…</p>}>
+          <BlenderPrototype />
+        </Suspense>
+      ) : appMode === 'sheet' ? (
         <ContactSheet />
       ) : (
         <>
@@ -329,19 +338,36 @@ export default function App() {
               <strong>{currentTrick?.name ?? selectedBase}</strong> —{' '}
               {landed ? 'Landed' : 'Bailed'}
             </p>
-            {viewMode === '3d' ? (
+            {viewMode === '3d' || viewMode === '3d-legacy' ? (
+              viewMode === '3d' ? (
               <TrickAnimation3D
                 key={animationKey}
                 robot={robot}
                 trick={currentTrick ?? { id: 'kickflip-regular', name: 'Kickflip', base: 'Kickflip', stance: 'regular' }}
                 landed={landed}
                 playbackRate={playbackRate}
+                showSpeedToggle={false}
                 backgroundSceneId={backgroundSceneId}
                 fallVariant={fallVariant}
                 riderStance={selectedRiderStance}
                 paused={paused}
                 onDone={() => {}}
               />
+              ) : (
+              <TrickAnimation3DLegacy
+                key={animationKey}
+                robot={robot}
+                trick={currentTrick ?? { id: 'kickflip-regular', name: 'Kickflip', base: 'Kickflip', stance: 'regular' }}
+                landed={landed}
+                playbackRate={playbackRate}
+                showSpeedToggle={false}
+                backgroundSceneId={backgroundSceneId}
+                fallVariant={fallVariant}
+                riderStance={selectedRiderStance}
+                paused={paused}
+                onDone={() => {}}
+              />
+              )
             ) : (
               <TrickAnimation
                 key={animationKey}

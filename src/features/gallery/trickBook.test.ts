@@ -1,15 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ProvenTrick, TrickMark } from '@/features/records';
-import { ROBOTS, isFlatgroundRobot } from '@/features/robots';
 import { TRICK_BY_ID, tricksFor } from '@/features/tricks';
-import {
-  bagSkill,
-  buildTrickBook,
-  computeBookView,
-  inBag,
-  ladderSpot,
-  nextUp,
-} from './trickBook';
+import { buildTrickBook, computeBookView, inBag, learningQueue, nextUp } from './trickBook';
 
 const FLAT = tricksFor('flatground');
 
@@ -54,56 +46,6 @@ describe('buildTrickBook', () => {
   });
 });
 
-describe('bagSkill', () => {
-  it('is null until the bag has 3 tricks', () => {
-    const book = buildTrickBook(FLAT, {}, proven(['Ollie', 'Kickflip']));
-    expect(bagSkill(FLAT, book)).toBeNull();
-  });
-
-  it('is the mean difficulty of the 3 hardest tricks in the bag', () => {
-    const book = buildTrickBook(FLAT, {}, proven(['Ollie', 'Pop Shuvit', 'Kickflip', 'Heelflip']));
-    // top 3: heelflip 4, kickflip 3, pop shuvit 2
-    expect(bagSkill(FLAT, book)).toBe(3);
-  });
-
-  it('is a frontier: a pile of easy tricks does not outrank hard ones', () => {
-    const easy = buildTrickBook(
-      FLAT,
-      {},
-      proven(['Ollie', 'Fakie Ollie', 'Pop Shuvit', 'Frontside Shuvit', 'Frontside 180', 'Backside 180']),
-    );
-    const hard = buildTrickBook(
-      FLAT,
-      {},
-      proven(['Kickflip', 'Heelflip', '360 Flip']),
-    );
-    expect(bagSkill(FLAT, hard)!).toBeGreaterThan(bagSkill(FLAT, easy)!);
-  });
-});
-
-describe('ladderSpot', () => {
-  const ladder = ROBOTS.filter(isFlatgroundRobot).sort((a, b) => a.skill - b.skill);
-
-  it('places a below-everyone bag at the bottom robot', () => {
-    const spot = ladderSpot(0.5);
-    expect(spot.peer.id).toBe(ladder[0].id);
-    expect(spot.next).not.toBeNull();
-  });
-
-  it('places a top bag at the top robot with no next', () => {
-    const spot = ladderSpot(ladder[ladder.length - 1].skill + 1);
-    expect(spot.peer.id).toBe(ladder[ladder.length - 1].id);
-    expect(spot.next).toBeNull();
-  });
-
-  it('peer is at or below the skill, next is strictly above', () => {
-    const spot = ladderSpot(4);
-    expect(spot.peer.skill).toBeLessThanOrEqual(4);
-    expect(spot.next!.skill).toBeGreaterThan(4);
-    expect(spot.next!.skill).toBeGreaterThanOrEqual(spot.peer.skill);
-  });
-});
-
 describe('nextUp', () => {
   it('suggests the easiest tricks for an empty book', () => {
     const book = buildTrickBook(FLAT, {}, {});
@@ -131,23 +73,68 @@ describe('nextUp', () => {
   });
 });
 
+describe('learningQueue', () => {
+  it('degrades to easiest-first suggestions for a brand-new skater', () => {
+    const queue = learningQueue(FLAT, buildTrickBook(FLAT, {}, {}));
+    expect(queue.length).toBeGreaterThan(0);
+    expect(queue.every((item) => !item.starred)).toBe(true);
+    expect(queue[0].trick.name).toBe('Ollie');
+    expect(queue[0].why).toBe('A fresh trick to learn');
+  });
+
+  it('puts starred tricks first, easiest first within the stars', () => {
+    const marks: Record<string, TrickMark> = {
+      'regular-heelflip': 'learning',
+      'regular-backside-180': 'learning',
+    };
+    const queue = learningQueue(FLAT, buildTrickBook(FLAT, marks, {}));
+    expect(queue[0].trick.id).toBe('regular-backside-180');
+    expect(queue[1].trick.id).toBe('regular-heelflip');
+    expect(queue.slice(0, 2).every((item) => item.starred && item.why === 'On your list')).toBe(true);
+  });
+
+  it('suggests tricks that build on the bag, and never bagged or starred ones', () => {
+    const marks: Record<string, TrickMark> = { 'regular-360-flip': 'learning' };
+    const book = buildTrickBook(FLAT, marks, proven(['Kickflip']));
+    const queue = learningQueue(FLAT, book);
+    const suggested = queue.filter((item) => !item.starred);
+    expect(suggested.length).toBeGreaterThan(0);
+    for (const item of suggested) {
+      expect(inBag(book.get(item.trick.id))).toBe(false);
+      expect(book.get(item.trick.id)?.state).not.toBe('learning');
+    }
+    // fakie kickflip builds on the bagged kickflip
+    const fakieKickflip = suggested.find((item) => item.trick.id === 'fakie-kickflip');
+    expect(fakieKickflip?.why).toBe('Builds on your Kickflip');
+  });
+
+  it('caps suggestions but never the starred list', () => {
+    const marks: Record<string, TrickMark> = Object.fromEntries(
+      ['regular-heelflip', 'regular-varial-kickflip', 'regular-hardflip', 'regular-bigspin'].map(
+        (id) => [id, 'learning'],
+      ),
+    );
+    const queue = learningQueue(FLAT, buildTrickBook(FLAT, marks, {}));
+    expect(queue.filter((item) => item.starred)).toHaveLength(4);
+    expect(queue.filter((item) => !item.starred)).toHaveLength(3);
+  });
+});
+
 describe('computeBookView', () => {
-  it('summarizes counts, skill, ladder spot, and suggestions in one pass', () => {
+  it('summarizes counts and queue in one pass', () => {
     const marks: Record<string, TrickMark> = {
       'regular-heelflip': 'learning',
     };
     const view = computeBookView(FLAT, marks, proven(['Ollie', 'Pop Shuvit', 'Kickflip']));
     expect(view.bagCount).toBe(3); // proven: ollie + pop shuvit + kickflip
     expect(view.learningCount).toBe(1);
-    expect(view.skill).toBe(2); // (3 + 2 + 1) / 3
-    expect(view.spot).not.toBeNull();
-    expect(view.suggestions.length).toBeGreaterThan(0);
+    expect(view.queue.length).toBeGreaterThan(0);
+    expect(view.queue[0].trick.id).toBe('regular-heelflip'); // starred first
   });
 
-  it('has no ladder spot or skill for an empty book', () => {
+  it('has an empty bag and still suggests next tricks', () => {
     const view = computeBookView(FLAT, {}, {});
     expect(view.bagCount).toBe(0);
-    expect(view.skill).toBeNull();
-    expect(view.spot).toBeNull();
+    expect(view.queue.length).toBeGreaterThan(0);
   });
 });

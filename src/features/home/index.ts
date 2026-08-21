@@ -1,7 +1,6 @@
 /**
- * Home feature — the landing screen. A dynamic hero card (knows what you want to
- * do next from your game log, or continues a mid-match save) sits above the
- * flatground robot roster. Voice mode is a first-class action from the hero,
- * not a hidden door three taps deep.
+ * Home feature — the landing screen. The beta experience switches one matchup
+ * hero between the standard fixed roster and an adaptive rival calibrated by
+ * the player's Skate Score; saved games take precedence above the robot roster.
  */
 export { default as HomeScreen } from './HomeScreen';

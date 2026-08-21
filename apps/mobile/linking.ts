@@ -33,7 +33,11 @@ export function webUrlFromDeepLink(url: string, appUrl: string): string | null {
   const path = parsed.hostname === 'auth' && parsed.pathname === '/callback' ? '/api/auth/callback' : parsed.pathname;
   if (parsed.protocol === 'skrobot:' && path === '/api/auth/callback') {
     const token = parsed.searchParams.get('token');
-    return token ? `${origin}/api/auth/callback?token=${encodeURIComponent(token)}` : null;
+    if (!token) return null;
+
+    const version = new URL(appUrl).searchParams.get('version');
+    const versionQuery = version ? `&version=${encodeURIComponent(version)}` : '';
+    return `${origin}/api/auth/callback?token=${encodeURIComponent(token)}${versionQuery}`;
   }
 
   if (parsed.protocol === 'skrobot:' && parsed.hostname === 'open') {
@@ -53,6 +57,37 @@ export function isShellInternalWebUrl(url: string, appUrl: string): boolean {
   }
 
   if ((parsed.protocol === 'http:' || parsed.protocol === 'https:') && sameOrigin(parsed.toString(), appUrl)) {
+    return true;
+  }
+
+  return false;
+}
+
+/** Iframe players the gallery modal loads; these must stay inside the WebView. */
+export function isInAppEmbedUrl(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+
+  if (parsed.protocol !== 'https:') return false;
+
+  const host = parsed.hostname;
+  const path = parsed.pathname;
+
+  if (
+    (host === 'www.instagram.com' || host === 'instagram.com') &&
+    /^\/(p|reel|tv)\/[^/]+\/embed\/?/.test(path)
+  ) {
+    return true;
+  }
+
+  if (
+    (host === 'www.youtube-nocookie.com' || host === 'www.youtube.com') &&
+    path.startsWith('/embed/')
+  ) {
     return true;
   }
 

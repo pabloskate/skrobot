@@ -6,6 +6,7 @@ export type { Stance, Category, Discipline, Family, Trick, TrickPool } from './t
 export {
   TRICKS,
   TRICK_BY_ID,
+  TRICK_BY_NAME,
   TRICK_BASE_ALIASES,
   tricksFor,
   defaultRoutedTrickPool,

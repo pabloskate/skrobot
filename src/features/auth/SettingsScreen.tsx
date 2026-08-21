@@ -5,11 +5,12 @@ import { useAuth } from './useAuth';
 
 interface Props {
   onSignIn: () => void;
+  voiceVisible?: boolean;
   children?: ReactNode;
 }
 
 /** Settings screen: local preferences plus optional signed-in account controls. */
-export default function SettingsScreen({ onSignIn, children }: Props) {
+export default function SettingsScreen({ onSignIn, voiceVisible = true, children }: Props) {
   const { user, voiceQuota, logout, loading } = useAuth();
 
   const accountContent = (() => {
@@ -61,12 +62,14 @@ export default function SettingsScreen({ onSignIn, children }: Props) {
         <h1>Settings</h1>
       </header>
       {children}
-      <section className="settings-section" aria-labelledby="account-title">
-        <div className="settings-section-heading">
-          <h2 id="account-title">Account</h2>
-        </div>
-        <div className="settings-account">{accountContent}</div>
-      </section>
+      {voiceVisible && (
+        <section className="settings-section" aria-labelledby="account-title">
+          <div className="settings-section-heading">
+            <h2 id="account-title">Account</h2>
+          </div>
+          <div className="settings-account">{accountContent}</div>
+        </section>
+      )}
     </div>
   );
 }

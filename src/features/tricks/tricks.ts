@@ -319,6 +319,14 @@ export const TRICKS: Trick[] = build();
 
 export const TRICK_BY_ID = new Map(TRICKS.map((t) => [t.id, t]));
 
+/**
+ * Lookup by display name. Names are unique across the catalog (stance variants
+ * get distinct display names — "Half Cab", "Nollie", "Switch Kickflip"), and
+ * game records key attempts by name, so this map is the way back from a
+ * recorded name to the trick. A uniqueness test guards the invariant.
+ */
+export const TRICK_BY_NAME = new Map(TRICKS.map((t) => [t.name, t]));
+
 /** Canonical common-name aliases shared by typed search and voice resolution. */
 export const TRICK_BASE_ALIASES: Readonly<Partial<Record<string, readonly string[]>>> = {
   'Ollie North': ['north', 'ollie north'],

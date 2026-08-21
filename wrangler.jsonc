@@ -9,6 +9,11 @@
     "binding": "ASSETS"
   },
 
+  // Keep the generated workers.dev subdomain enabled: the shipped native app and
+  // eas.json point at skrobot.me-d6a.workers.dev. Without this, every deploy
+  // disables that subdomain (wrangler default) and the WebView shell 404s.
+  "workers_dev": true,
+
   "routes": [
     {
       "pattern": "app.skaterobot.com",

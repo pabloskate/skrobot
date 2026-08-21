@@ -27,10 +27,12 @@ the loaded web app or explicitly noted as not routed yet:
 - `game` — S.K.A.T.E. rules and on-screen game mode.
 - `gallery` — flatground trick gallery with stance filters and optional curated video tips.
 - `home` — landing hero and flatground robot roster entry point.
+- `install` — web-only App Store/PWA install promotion; intentionally hidden in the native shell and other WebViews.
 - `records` — localStorage records and game log.
 - `robots` — roster data, avatars, profile, and trick repertoire.
+- `skater` — player model: skate score and the adaptive rival, exposed only with `?version=beta`; release builds use the standard challenge flow.
 - `tricks` — flatground trick catalog, picker, and stance tabs in the routed app; custom setup is not currently routed.
-- `voice` — Gemini Live voice game mode.
+- `voice` — Gemini Live voice game mode, exposed only with `?version=beta`; it is hidden from release builds.
 
 ## Routed Screen States
 
@@ -62,7 +64,10 @@ Native WebView requests must hit the same first-party API surface as web:
 1. Home screen
    - Dynamic hero appears.
    - Flatground robot roster appears.
-   - Hero and robot cards can enter profile or voice flow.
+   - App Store and Android PWA install promotion stays hidden inside the native WebView shell.
+   - Hero and robot cards can enter profile flow; with `?version=beta`, the hero can enter voice flow.
+   - With `?version=beta`, Standard and Adaptive share one challenge hero. Adaptive remains visibly locked through game 7, explains the 8-game requirement when activated, then shows Skate Score and Nemesis once enough trick evidence exists. Without beta, the picker is hidden and the challenge is always Standard.
+   - A resumable saved match takes over Home until the player continues it or chooses Start fresh; a pre-threshold saved Adaptive match is retained and explained by the lock notice.
 
 2. Robot profile
    - Avatar, tagline, summary, and `Play <robot>` action appear.
@@ -72,7 +77,7 @@ Native WebView requests must hit the same first-party API surface as web:
 3. On-screen game mode
    - Rock-paper-scissors flow works.
    - Player set, trick picker, robot copy/set animation, player copy, rematch, and exit flow work.
-   - Switching from eligible screen-game states into voice mode is offered when expected.
+   - With `?version=beta`, switching from eligible screen-game states into voice mode is offered when expected.
 
 4. Trick selection
    - Trick search works.
@@ -103,7 +108,7 @@ Native WebView requests must hit the same first-party API surface as web:
    - Billing endpoints remain disabled/enabled according to the same server flags as web.
 
 9. Trick gallery
-   - The bottom nav bar always shows the selected game format and Settings; with `?beta=true`, it also shows Tricks.
+    - The bottom nav bar always shows the selected game format, Tricks, and Settings (Tricks is generally available since release 1.3.1). Voice entry points appear only with `?version=beta`. Root tabs are addressable as `?tab=skate|tricks|settings`.
    - Gallery shows flatground trick cards with difficulty dots, stance filters, and search.
    - Stance chips filter the list.
    - Tapping a trick with a curated video opens the video modal; tricks without tips are disabled.

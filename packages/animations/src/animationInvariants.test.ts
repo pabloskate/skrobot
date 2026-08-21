@@ -71,7 +71,7 @@ const BASES = [
 
 const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
 const RIDER_STANCES: RiderStance[] = ['regular', 'goofy'];
-const FALLS: FallVariant[] = ['slam', 'slip', 'bail', 'tumble', 'shank'];
+const FALLS: FallVariant[] = ['slam', 'bail', 'shank'];
 
 const trick = (base: string, stance: Stance): Trick => ({
   id: `${base}-${stance}`,
@@ -184,6 +184,13 @@ describe('specFor', () => {
     }
   });
 
+  it('impossible roll flips only for nollie; fakie keeps the tail wrap', () => {
+    expect(specFor(trick('Impossible', 'regular')).roll).toBe(-360);
+    expect(specFor(trick('Impossible', 'switch')).roll).toBe(-360);
+    expect(specFor(trick('Impossible', 'fakie')).roll).toBe(-360);
+    expect(specFor(trick('Impossible', 'nollie')).roll).toBe(360);
+  });
+
   // Mirror pairs must be identical specs up to the mirrored signs — anything
   // else means the two directions of the "same" trick have quietly diverged.
   // Three families: kick/heel pairs mirror the flip only, FS/BS pairs mirror
@@ -268,7 +275,7 @@ describe('computeFrame', () => {
       const spec = specFor(trick(base, 'regular'));
       const t = ROLL_IN + FLIP_T * 0.5;
       expect(computeFrame(t, spec, true, 'slam')).toEqual(computeFrame(t, spec, true, 'slam'));
-      expect(computeFrame(t, spec, false, 'tumble')).toEqual(computeFrame(t, spec, false, 'tumble'));
+      expect(computeFrame(t, spec, false, 'bail')).toEqual(computeFrame(t, spec, false, 'bail'));
     }
   });
 
@@ -325,6 +332,41 @@ describe('computeFrame', () => {
         const regX = computeFrame(t, regular, true, 'slam').board.x - X0;
         expect(computeFrame(t, fakie, true, 'slam').board.x - X0).toBeCloseTo(-regX, 5);
         expect(computeFrame(t, switchSpec, true, 'slam').board.x - X0).toBeCloseTo(regX, 5);
+      }
+    }
+  });
+
+  it('shank under-rotates flip and body spin by the same progress', () => {
+    const progress = 0.7;
+    const spec = specFor(trick('Backside Flip', 'regular'));
+    const atCatch = computeFrame(ROLL_IN + FLIP_T * 0.9, spec, false, 'shank', progress).spin3d;
+    expect(atCatch.flipDeg).toBeCloseTo(spec.flipDir * spec.flips * 360 * progress, 5);
+    expect(atCatch.yawDeg).toBeCloseTo((spec.spinDir || 1) * spec.yaw * progress, 5);
+    expect(atCatch.bodyYawDeg).toBeCloseTo((spec.spinDir || 1) * spec.bodyYaw * progress, 5);
+  });
+
+  it('shank holds incomplete spin on the ground (no unwind to start)', () => {
+    const progress = 0.7;
+    const spec = specFor(trick('Backside 180', 'regular'));
+    const midFall = computeFrame(ROLL_IN + FLIP_T + FALL_T * 0.7, spec, false, 'shank', progress).spin3d;
+    expect(midFall.yawDeg).toBeCloseTo((spec.spinDir || 1) * spec.yaw * progress, 5);
+    expect(midFall.bodyYawDeg).toBeCloseTo((spec.spinDir || 1) * spec.bodyYaw * progress, 5);
+  });
+
+  it('fall feet stay within two-bone leg reach (no stretched shins)', () => {
+    // THIGH + SHIN - slack, matching clampFootReach in TrickAnimation.
+    const MAX_REACH = 35 + 35 - 0.5;
+    for (const base of ['Ollie', 'Kickflip', 'Impossible', 'Backside 180'] as const) {
+      for (const stance of STANCES) {
+        const spec = specFor(trick(base, stance));
+        for (const fall of FALLS) {
+          for (const t of sampleTimes(false, 32)) {
+            if (t < ROLL_IN + FLIP_T) continue;
+            const f = computeFrame(t, spec, false, fall);
+            expect(Math.hypot(f.footL.x, f.footL.y)).toBeLessThanOrEqual(MAX_REACH + 1e-6);
+            expect(Math.hypot(f.footR.x, f.footR.y)).toBeLessThanOrEqual(MAX_REACH + 1e-6);
+          }
+        }
       }
     }
   });

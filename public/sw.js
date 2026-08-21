@@ -1,4 +1,4 @@
-const VERSION = 'skrobot-offline-v2';
+const VERSION = 'skrobot-offline-v4';
 const APP_CACHE = `${VERSION}:app`;
 const RUNTIME_CACHE = `${VERSION}:runtime`;
 const CACHE_REQUEST = 'SKROBOT_CACHE_APP';
@@ -14,6 +14,7 @@ const APP_SHELL_URLS = [
   '/apple-icon.png',
   '/app-icon.png',
   '/app-icon.svg',
+  '/maskable-icon-512.png',
   '/icons.svg',
   '/hero.png',
   '/fonts/montserrat-latin.woff2',
@@ -154,8 +155,14 @@ async function navigationResponse(request, event) {
           await cache.put('/', cachedNavigationResponse);
         })(),
       );
+      return response;
     }
-    return response;
+
+    // A non-OK document (deploy blip, flaky captive portal, edge glitch) must
+    // never surface to the native shell as a fatal error when we already have a
+    // working cached shell to fall back on. Only propagate the bad status on a
+    // true first-launch miss where no cache exists yet.
+    return cached || response;
   } catch {
     return cached || Response.error();
   }

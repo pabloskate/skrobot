@@ -32,7 +32,12 @@ export {
 export type { PlayerStance } from './gamePreferences';
 export type { Rps, RpsOutcome } from './rps';
 export { RPS_CHOICES, BEATS, robotThrow, rpsOutcome } from './rps';
-export type { SavedGame, SavedGameMode } from './savedGame';
+export type {
+  GameProgress,
+  GameSessionSnapshot,
+  SavedGame,
+  SavedGameMode,
+} from './savedGame';
 export {
   getSavedGame,
   saveGame,

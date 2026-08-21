@@ -77,6 +77,7 @@ describe('mobile parity shell', () => {
     expect(appSource).toContain('contentInsetAdjustmentBehavior="never"');
     expect(appSource).toContain('automaticallyAdjustContentInsets={false}');
     expect(appSource).toContain('allowsBackForwardNavigationGestures');
+    expect(appSource).toContain('if (!request.isTopFrame) return true');
     expect(appSource).toContain('BackHandler.addEventListener');
     expect(appSource).toContain('hardwareBackPress');
     expect(appSource).toContain('webviewRef.current?.goBack()');
@@ -84,6 +85,12 @@ describe('mobile parity shell', () => {
     expect(appSource).toContain('onError={handleLoadError}');
     expect(appSource).toContain('onHttpError={handleHttpError}');
     expect(appSource).toContain('webviewRef.current?.reload()');
+    // A recoverable HTTP miss must auto-retry once before the fatal overlay wins,
+    // and the overlay must still offer recovery controls only (no feature screens).
+    expect(appSource).toContain('MAX_HTTP_ERROR_RETRIES');
+    expect(appSource).toContain('httpErrorRetriesRef');
+    expect(appSource).toContain('Retry');
+    expect(appSource).toContain('Open URL');
     expect(appSource).toContain('NATIVE_APP_MARKER_SCRIPT');
     expect(appSource).toContain('injectedJavaScriptBeforeContentLoaded={NATIVE_APP_MARKER_SCRIPT}');
     expect(appSource).toContain('injectedJavaScript={NATIVE_APP_MARKER_SCRIPT}');
@@ -137,6 +144,11 @@ describe('mobile parity shell', () => {
     expect(serviceWorkerSource).toContain("'/fonts/montserrat-latin.woff2'");
     expect(serviceWorkerSource).not.toContain('Promise.allSettled');
     expect(serviceWorkerSource).toContain("return cached || Response.error()");
+    // A non-OK navigation document must fall back to the cached shell rather than
+    // surfacing a fatal status to the native WebView (stale-if-error). Only a true
+    // first-launch miss with no cache may propagate the bad response.
+    expect(serviceWorkerSource).toContain("const VERSION = 'skrobot-offline-v4'");
+    expect(serviceWorkerSource).toContain('return cached || response;');
 
     const shellUrlsBlock = serviceWorkerSource.match(/const APP_SHELL_URLS = \[([\s\S]*?)\];/)?.[1] ?? '';
     const shellUrls = [...shellUrlsBlock.matchAll(/'([^']+)'/g)].map((match) => match[1]);
@@ -192,6 +204,8 @@ describe('mobile parity shell', () => {
     expect(pluginSource).toContain("android:usesCleartextTraffic");
     expect(pluginSource).toContain('NSAllowsLocalNetworking');
     expect(pluginSource).toContain('NSAllowsArbitraryLoadsInWebContent');
+    expect(pluginSource).toContain("'www.youtube.com'");
+    expect(pluginSource).toContain("'www.instagram.com'");
   });
 
   it('keeps stable native identifiers and build profiles for device validation', () => {

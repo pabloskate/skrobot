@@ -159,7 +159,7 @@ export default defineConfig([
   // feature needs a new dependency, update docs/ARCHITECTURE.md and this map
   // together so the boundary stays discoverable and enforced.
   {
-    files: ['src/features/{auth,billing,records,tricks}/**/*.{ts,tsx}'],
+    files: ['src/features/{auth,billing,install,records,tricks}/**/*.{ts,tsx}'],
     ignores: ['src/features/*/server/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': restrictedImports(noClientServerImports, noClientPlatformServerImports, noFeatureImports),
@@ -171,8 +171,8 @@ export default defineConfig([
     ignores: ['src/features/*/server/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': restrictedImports(noClientServerImports, noClientPlatformServerImports, {
-        group: ['@/features/auth', '@/features/billing', '@/features/dice', '@/features/game', '@/features/home', '@/features/voice'],
-        message: 'Gallery may depend on tricks, records, and robots only. It browses the catalog, owns video tip curation, and overlays the player trick book. See docs/ARCHITECTURE.md.',
+        group: ['@/features/auth', '@/features/billing', '@/features/dice', '@/features/game', '@/features/home', '@/features/install', '@/features/voice'],
+        message: 'Gallery may depend on tricks, records, robots, and skater (the player model, for the stats tab). It browses the catalog, owns video tip curation, and overlays the player trick book. See docs/ARCHITECTURE.md.',
       }),
     },
   },
@@ -182,9 +182,21 @@ export default defineConfig([
     ignores: ['src/features/*/server/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': restrictedImports(noClientServerImports, noClientPlatformServerImports, {
-        group: ['@/features/auth', '@/features/billing', '@/features/dice', '@/features/game', '@/features/home', '@/features/voice'],
+        group: ['@/features/auth', '@/features/billing', '@/features/dice', '@/features/game', '@/features/home', '@/features/install', '@/features/voice', '@/features/skater'],
         message:
           'Robots may depend on tricks/records only. Keep screen/game/auth concerns out of the roster model. See docs/ARCHITECTURE.md.',
+      }),
+    },
+  },
+
+  {
+    files: ['src/features/skater/**/*.{ts,tsx}'],
+    ignores: ['src/features/*/server/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': restrictedImports(noClientServerImports, noClientPlatformServerImports, {
+        group: ['@/features/auth', '@/features/billing', '@/features/dice', '@/features/gallery', '@/features/game', '@/features/home', '@/features/install', '@/features/voice'],
+        message:
+          'Skater is the player model (skate score, adaptive rival) and may depend on tricks/records/robots only. See docs/ARCHITECTURE.md.',
       }),
     },
   },
@@ -194,7 +206,7 @@ export default defineConfig([
     ignores: ['src/features/*/server/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': restrictedImports(noClientServerImports, noClientPlatformServerImports, {
-        group: ['@/features/auth', '@/features/billing', '@/features/dice', '@/features/game', '@/features/tricks', '@/features/voice'],
+        group: ['@/features/auth', '@/features/billing', '@/features/dice', '@/features/game', '@/features/install', '@/features/tricks', '@/features/voice'],
         message: 'Home composes records and robots only. Route broader flow changes through AppShell. See docs/ARCHITECTURE.md.',
       }),
     },
@@ -205,7 +217,7 @@ export default defineConfig([
     ignores: ['src/features/*/server/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': restrictedImports(noClientServerImports, noClientPlatformServerImports, {
-        group: ['@/features/auth', '@/features/billing', '@/features/game', '@/features/home', '@/features/records', '@/features/robots', '@/features/voice'],
+        group: ['@/features/auth', '@/features/billing', '@/features/game', '@/features/home', '@/features/install', '@/features/records', '@/features/robots', '@/features/voice'],
         message: 'Dice is a standalone trick roller and may depend on tricks only. See docs/ARCHITECTURE.md.',
       }),
     },
@@ -216,7 +228,7 @@ export default defineConfig([
     ignores: ['src/features/*/server/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': restrictedImports(noClientServerImports, noClientPlatformServerImports, {
-        group: ['@/features/auth', '@/features/billing', '@/features/dice', '@/features/home', '@/features/voice'],
+        group: ['@/features/auth', '@/features/billing', '@/features/dice', '@/features/home', '@/features/install', '@/features/voice'],
         message: 'Game may depend on tricks/robots/records only. Voice wraps game, not the reverse. See docs/ARCHITECTURE.md.',
       }),
     },
@@ -227,7 +239,7 @@ export default defineConfig([
     ignores: ['src/features/*/server/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': restrictedImports(noClientServerImports, noClientPlatformServerImports, {
-        group: ['@/features/dice', '@/features/home'],
+        group: ['@/features/dice', '@/features/home', '@/features/install'],
         message: 'Voice wraps game and auth/billing quota UI; it should not depend on unrelated screens. See docs/ARCHITECTURE.md.',
       }),
     },

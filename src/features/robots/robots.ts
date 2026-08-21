@@ -21,6 +21,8 @@ export interface Robot {
   summary: string;
   /** Overall skill 1-10. A trick lands well when it sits below this; above it, falls off fast. */
   skill: number;
+  /** Offline robot-vs-robot calibration rating. Present for the routed flatground roster. */
+  elo?: number;
   /** Disciplines this robot rides at all. Tricks outside these are never in their bag. */
   disciplines: Discipline[];
   /** Per-discipline consistency boost — what this robot is known for. */
@@ -44,6 +46,13 @@ export interface Robot {
   consistencyCaps?: Partial<Record<string, number>>;
   /** Exact consistency overrides for named stance variants, in the 0..1 range. */
   consistencyOverrides?: Partial<Record<string, number>>;
+  /**
+   * Optional pick-weight overrides when this robot sets a trick. Keys are trick
+   * ids (`regular-kickflip`) or base names (`Kickflip`); id wins. Omit a key —
+   * or the whole field — to use the default policy (land rate, with uncommon
+   * tricks cut and favorites boosted). `0` means never set it (it stays copyable).
+   */
+  setWeights?: Partial<Record<string, number>>;
   avatar: { body: string; accent: string; variant: 0 | 1 | 2 | 3 };
   /** Trash talk during the rock-paper-scissors toss. */
   rpsTaunts: RpsTaunts;
@@ -832,10 +841,62 @@ const ROBOTS_UNSORTED: Robot[] = [
   },
 ];
 
-/** Roster ordered easiest → hardest (skill, then name for ties). */
-export const ROBOTS: Robot[] = [...ROBOTS_UNSORTED].sort(
-  (a, b) => a.skill - b.skill || a.name.localeCompare(b.name),
-);
+/**
+ * Canonical output of the seeded 506,000-game flatground calibration tournament
+ * (`npm run simulate:robot-elo -- --games=2000 --seed=20260820`). Elo is only
+ * comparable within that routed flatground field; other-discipline robots have
+ * not been assigned a misleading flatground rating.
+ */
+export const ROBOT_ELO_BY_ID: Readonly<Partial<Record<string, number>>> = {
+  sacker: -145,
+  fronty: -50,
+  flipper: -31,
+  flipster: 3,
+  cabby: 50,
+  shifty: 91,
+  heelzy: 1114,
+  varial: 1182,
+  nolly: 1299,
+  fakie: 1373,
+  biggy: 1397,
+  jupiter: 1769,
+  hesh: 1834,
+  latezy: 1861,
+  switchy: 1949,
+  hardy: 1978,
+  caball: 2023,
+  freely: 2195,
+  impy: 2443,
+  c360po: 2953,
+  laser: 3035,
+  tre: 3082,
+  double: 3095,
+};
+
+// Fixed display anchors keep product-facing ratings stable when the calibration
+// is rerun. Values outside today's field may naturally display below/above them.
+const RAW_RATING_LOW = -145;
+const RAW_RATING_HIGH = 3095;
+const DISPLAY_RATING_LOW = 800;
+const DISPLAY_RATING_HIGH = 2400;
+
+/** Friendly 800–2400-ish rating derived from raw Elo, rounded to the nearest 10. */
+export function robotDisplayRating(robot: Pick<Robot, 'elo'>): number | null {
+  if (robot.elo === undefined) return null;
+  const normalized = (robot.elo - RAW_RATING_LOW) / (RAW_RATING_HIGH - RAW_RATING_LOW);
+  const rating = DISPLAY_RATING_LOW + normalized * (DISPLAY_RATING_HIGH - DISPLAY_RATING_LOW);
+  return Math.round(rating / 10) * 10;
+}
+
+/** Calibrated robots first, ordered easiest → hardest by Elo. */
+export const ROBOTS: Robot[] = ROBOTS_UNSORTED
+  .map((robot) => ({ ...robot, elo: ROBOT_ELO_BY_ID[robot.id] }))
+  .sort((a, b) => {
+    if (a.elo !== undefined && b.elo !== undefined) return a.elo - b.elo || a.name.localeCompare(b.name);
+    if (a.elo !== undefined) return -1;
+    if (b.elo !== undefined) return 1;
+    return a.skill - b.skill || a.name.localeCompare(b.name);
+  });
 
 export const ROBOT_BY_ID = new Map(ROBOTS.map((r) => [r.id, r]));
 
@@ -846,9 +907,9 @@ export function isFlatgroundRobot(robot: Robot): boolean {
 }
 
 export const TIERS: { tier: Tier; label: string }[] = [
-  { tier: 'beginner', label: 'Beginner' },
-  { tier: 'intermediate', label: 'Intermediate' },
-  { tier: 'advanced', label: 'Advanced' },
+  { tier: 'beginner', label: 'Easy' },
+  { tier: 'intermediate', label: 'Medium' },
+  { tier: 'advanced', label: 'Hard' },
   { tier: 'pro', label: 'Pro' },
 ];
 
@@ -863,6 +924,15 @@ function hash01(s: string): number {
 }
 
 const BAG_THRESHOLD = 0.2;
+
+/**
+ * The consistency curve over headroom (skill - effective difficulty): right at
+ * the edge ≈ 50%, well within ≈ 90%+, beyond it falls off fast. Exported so the
+ * player skate score (features/skater) is fit onto the same ruler the robots ride.
+ */
+export function consistencyCurve(headroom: number): number {
+  return 0.5 + 0.45 * Math.tanh(headroom * 0.45);
+}
 
 // Late backside shuvit is a specialty move rather than a normal skill-band
 // unlock. Only robots that call it a favorite get to carry it in their bag.
@@ -913,7 +983,7 @@ export function robotConsistency(robot: Robot, trick: Trick): number | null {
   const effDifficulty = trick.baseDifficulty + stanceLoad(trick) * (1 - comfort);
   const headroom = robot.skill - effDifficulty;
 
-  let c = 0.5 + 0.45 * Math.tanh(headroom * 0.45);
+  let c = consistencyCurve(headroom);
   if (robot.favorites.includes(trick.base)) c += 0.15;
   if (robot.focus?.[discipline]) c += robot.focus[discipline]!;
   if (robot.signatureStance && trick.stance === robot.signatureStance) c += 0.12;
@@ -937,6 +1007,50 @@ export function buildBag(robot: Robot, pool: Trick[]): Map<string, number> {
     if (c !== null) bag.set(trick.id, c);
   }
   return bag;
+}
+
+/** The robot fields the set-picker reads. */
+export type SetWeightRobot = Pick<Robot, 'id' | 'favorites' | 'setWeights'>;
+
+/**
+ * Tricks most robots can land but rarely choose to set — Ollie Norths and
+ * anything "late". Specialists skip this via `favorites`.
+ */
+function isUncommonSet(trick: Trick): boolean {
+  return trick.base === 'Ollie North' || trick.base.startsWith('Late ');
+}
+
+/** 0.18–0.50 of land rate, with late flips the rarest. Deterministic per robot. */
+function uncommonSetMultiplier(robot: SetWeightRobot, trick: Trick): number {
+  const jitter = hash01(`${robot.id}:uncommon-set:${trick.base}`);
+  if (trickDiscipline(trick) === 'flip') return 0.18 + jitter * 0.22;
+  if (trick.base.startsWith('Late ')) return 0.25 + jitter * 0.22;
+  return 0.28 + jitter * 0.22;
+}
+
+/** 2–3× land rate, hashed per robot + trick so specialties don't share one bump. */
+function specialtySetMultiplier(robot: SetWeightRobot, trick: Trick): number {
+  return 2 + hash01(`${robot.id}:specialty-set:${trick.base}`);
+}
+
+/**
+ * Weight used when this robot picks a trick to set.
+ *
+ * Default is the land rate. Favorites are set 2–3× as often as they land;
+ * Ollie Norths and late tricks are at least halved unless they're a favorite.
+ * `setWeights` replaces that result for a trick id or base name.
+ */
+export function trickSetWeight(trick: Trick, consistency: number, robot?: SetWeightRobot): number {
+  const override = robot?.setWeights?.[trick.id] ?? robot?.setWeights?.[trick.base];
+  if (override !== undefined) return Math.max(0, override);
+
+  let weight = consistency;
+  if (robot?.favorites.includes(trick.base)) {
+    weight *= specialtySetMultiplier(robot, trick);
+  } else if (robot && isUncommonSet(trick)) {
+    weight *= uncommonSetMultiplier(robot, trick);
+  }
+  return weight;
 }
 
 const GENERIC_TAUNTS: RpsTaunts = {

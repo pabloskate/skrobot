@@ -14,7 +14,7 @@
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_SKROBOT_WEB_URL": "https://skrobot.me-d6a.workers.dev"
+        "EXPO_PUBLIC_SKROBOT_WEB_URL": "https://skrobot.me-d6a.workers.dev/?version=1.3.0"
       }
     }
   },

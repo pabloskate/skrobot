@@ -24,7 +24,11 @@ export const functionDeclarations: FunctionDeclaration[] = [
       type: Type.OBJECT,
       properties: {
         landed: { type: Type.BOOLEAN },
-        trick: { type: Type.STRING, description: 'Trick name as spoken, e.g. "nollie tre flip". Required when landed=true.' },
+        trick: {
+          type: Type.STRING,
+          description:
+            'Trick name as spoken, e.g. "nollie tre flip". Required when landed=true; when landed=false, pass it too if you know what they were trying (feeds the player\'s trick stats).',
+        },
       },
       required: ['landed'],
     },

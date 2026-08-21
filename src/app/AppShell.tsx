@@ -1,12 +1,13 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useState, useSyncExternalStore } from 'react';
+import { useState, useSyncExternalStore, type MouseEvent } from 'react';
 import { TbClipboardList, TbMicrophone, TbSettings, TbSkateboard } from 'react-icons/tb';
 import { SignInScreen, SettingsScreen, useAuth } from '@/features/auth';
 import { UpgradeScreen } from '@/features/billing';
 import { GalleryScreen } from '@/features/gallery';
-import type { GameState, SavedGame } from '@/features/game';
+import { getGameLog, getRecords } from '@/features/records';
+import type { GameSessionSnapshot, SavedGame } from '@/features/game';
 import {
   GameScreen,
   GamePreferencesSection,
@@ -20,11 +21,21 @@ import {
   useGameVariant,
 } from '@/features/game';
 import { HomeScreen } from '@/features/home';
+import { AppInstallBanner, useAppInstallOffer } from '@/features/install';
 import type { Robot } from '@/features/robots';
-import { ROBOT_BY_ID, RobotProfile } from '@/features/robots';
+import { RobotProfile } from '@/features/robots';
+import { isRivalId, resolveRobot } from '@/features/skater';
 import type { TrickPool } from '@/features/tricks';
 import { defaultRoutedTrickPool } from '@/features/tricks';
 import { useOnlineStatus } from '@/shared/useOnlineStatus';
+import {
+  betaFeaturesEnabledFromSearch,
+  hrefForRootTab,
+  parseRootTab,
+  subscribeToUrlChanges,
+  syncRootTabUrl,
+  type RootTab,
+} from './rootTab';
 
 function serverSavedSnapshot(): SavedGame | null {
   return null;
@@ -34,6 +45,22 @@ function browserSavedSnapshot(): SavedGame | null {
   return getSavedGame();
 }
 
+function subscribeToNativeApp(): () => void {
+  return () => {};
+}
+
+function browserNativeAppSnapshot(): boolean {
+  const nativeWindow = window as Window & {
+    ReactNativeWebView?: unknown;
+    __SKROBOT_NATIVE_APP?: true;
+  };
+  return nativeWindow.__SKROBOT_NATIVE_APP === true || nativeWindow.ReactNativeWebView !== undefined;
+}
+
+function serverNativeAppSnapshot(): boolean {
+  return false;
+}
+
 // Voice mode pulls in the Live SDK + audio worklets — load it only when entered.
 const VoiceGameScreen = dynamic(() => import('@/features/voice').then((m) => m.VoiceGameScreen), {
   ssr: false,
@@ -41,19 +68,19 @@ const VoiceGameScreen = dynamic(() => import('@/features/voice').then((m) => m.V
 });
 
 /** Top-level tabs shown in the bottom navigation bar. */
-type Tab = 'skate' | 'tricks' | 'settings';
+type Tab = RootTab;
 
 /**
  * Client-side screen state machine. The whole game is a single page by design:
- * trick pools and the chosen robot are in-memory state passed between screens,
- * not URL state. If a screen ever needs to be linkable, lift its inputs into
- * the URL and split it into its own route under src/app/.
+ * trick pools and the chosen robot are in-memory state. Root tabs are
+ * addressable with `?tab=skate|tricks|settings` so they can be shared; game
+ * screens stay in memory because trick pools aren't URL-serializable.
  */
 type Screen =
   | { id: 'home' }
   | ({ id: 'profile'; robot: Robot } & TrickPool)
-  | ({ id: 'game'; robot: Robot; resume?: GameState } & TrickPool)
-  | ({ id: 'voice'; robot: Robot; resume?: GameState } & TrickPool)
+  | ({ id: 'game'; robot: Robot; resume?: GameSessionSnapshot } & TrickPool)
+  | ({ id: 'voice'; robot: Robot; resume?: GameSessionSnapshot } & TrickPool)
   | { id: 'gallery' }
   | { id: 'settings' }
   | { id: 'signin'; next?: Screen; from?: Screen }
@@ -73,17 +100,6 @@ const ROOT_TAB_LABELS: Record<Exclude<Tab, 'skate'>, string> = {
   tricks: 'Tricks',
   settings: 'Settings',
 };
-
-function betaTricksEnabledFromLocation(): boolean {
-  if (typeof window === 'undefined') return false;
-  return new URLSearchParams(window.location.search).get('beta') === 'true';
-}
-
-function subscribeToUrlChanges(onStoreChange: () => void): () => void {
-  if (typeof window === 'undefined') return () => {};
-  window.addEventListener('popstate', onStoreChange);
-  return () => window.removeEventListener('popstate', onStoreChange);
-}
 
 function isRootScreen(screen: Screen): boolean {
   return ROOT_SCREEN_IDS.has(screen.id);
@@ -108,28 +124,54 @@ function titleForScreen(screen: Screen): string {
 
 const rootScreen = (): Screen => ({ id: 'home' });
 
-export default function AppShell() {
+export default function AppShell({ initialSearch = '' }: { initialSearch?: string }) {
   const auth = useAuth();
   const gameFormat = useGameFormat();
   const gameVariant = useGameVariant();
   const online = useOnlineStatus();
-  const [screen, setScreen] = useState<Screen>(rootScreen);
-  const [voiceState, setVoiceState] = useState<GameState | undefined>(undefined);
-  const [liveGame, setLiveGame] = useState<GameState | undefined>(undefined);
-  const [exitPromptOpen, setExitPromptOpen] = useState(false);
-  const betaTricksEnabled = useSyncExternalStore(
-    subscribeToUrlChanges,
-    betaTricksEnabledFromLocation,
-    () => false,
+  const nativeApp = useSyncExternalStore(
+    subscribeToNativeApp,
+    browserNativeAppSnapshot,
+    serverNativeAppSnapshot,
   );
+  const appInstallOffer = useAppInstallOffer(nativeApp);
+  const search = useSyncExternalStore(subscribeToUrlChanges, () => window.location.search, () => initialSearch);
+  const betaFeaturesEnabled = betaFeaturesEnabledFromSearch(search);
+  const urlTab = parseRootTab(search);
+  const [detail, setDetail] = useState<Screen | null>(null);
+  const screen = detail ?? TAB_ROOT_SCREEN[urlTab];
+  const [voiceState, setVoiceState] = useState<GameSessionSnapshot | undefined>(undefined);
+  const [liveGame, setLiveGame] = useState<GameSessionSnapshot | undefined>(undefined);
+  const [exitPromptOpen, setExitPromptOpen] = useState(false);
   const savedGame = useSyncExternalStore(subscribeSavedGame, browserSavedSnapshot, serverSavedSnapshot);
-  const savedRobot = savedGame ? ROBOT_BY_ID.get(savedGame.robotId) : undefined;
+  // Roster lookup, with the adaptive rival resolved from current form (it
+  // adapts between games — a resumed save meets the rival as it skates today).
+  const resolvedSavedRobot = savedGame ? resolveRobot(savedGame.robotId, getGameLog(), getRecords()) : undefined;
+  const savedRobot = savedGame && isRivalId(savedGame.robotId) && !betaFeaturesEnabled
+    ? undefined
+    : resolvedSavedRobot;
+  const adaptiveSaveWaiting = Boolean(
+    betaFeaturesEnabled && savedGame && isRivalId(savedGame.robotId) && !savedRobot,
+  );
 
   const go = (next: Screen | ((current: Screen) => Screen)) => {
     setVoiceState(undefined);
     setLiveGame(undefined);
     setExitPromptOpen(false);
-    setScreen(next);
+    setDetail((currentDetail) => {
+      const current = currentDetail ?? TAB_ROOT_SCREEN[urlTab];
+      const resolved = typeof next === 'function' ? next(current) : next;
+      return isRootScreen(resolved) ? null : resolved;
+    });
+  };
+
+  const goRoot = (tab: Tab) => {
+    if (tab === 'settings') window.scrollTo(0, 0);
+    syncRootTabUrl(tab);
+    setVoiceState(undefined);
+    setLiveGame(undefined);
+    setExitPromptOpen(false);
+    setDetail(null);
   };
 
   const leaveMatch = (opts: { save: boolean }) => {
@@ -137,27 +179,30 @@ export default function AppShell() {
       saveGame({
         robotId: screen.robot.id,
         mode: screen.id === 'voice' ? 'voice' : 'screen',
-        state: liveGame,
+        state: liveGame.state,
+        progress: liveGame.progress,
       });
     } else if (opts.save === false) {
       clearSavedGame();
     }
-    go({ id: 'home' });
+    goRoot('skate');
   };
 
   const back = () => {
     if (screen.id === 'game' || screen.id === 'voice') {
-      if (liveGame && isSaveWorthKeeping(liveGame)) {
+      if (liveGame && isSaveWorthKeeping(liveGame.state)) {
         setExitPromptOpen(true);
         return;
       }
-      go({ id: 'home' });
+      goRoot('skate');
       return;
     }
-    if (screen.id === 'profile') go({ id: 'home' });
-    else if (screen.id === 'signin' || screen.id === 'upgrade')
-      go(screen.from ?? { id: 'settings' });
-    else go(rootScreen());
+    if (screen.id === 'profile') goRoot('skate');
+    else if (screen.id === 'signin' || screen.id === 'upgrade') {
+      const from = screen.from ?? { id: 'settings' as const };
+      if (isRootScreen(from)) goRoot(tabForScreen(from));
+      else go(from);
+    } else goRoot('skate');
   };
 
   const enterVoice = (next: Extract<Screen, { id: 'voice' }>, from: Screen) => {
@@ -180,19 +225,20 @@ export default function AppShell() {
     const next = {
       ...defaultRoutedTrickPool(),
       robot: savedRobot,
-      resume: savedGame.state,
+      resume: { state: savedGame.state, progress: savedGame.progress },
     };
-    if (savedGame.mode === 'voice') {
+    if (betaFeaturesEnabled && savedGame.mode === 'voice') {
       enterVoice({ id: 'voice', ...next }, { id: 'home' });
       return;
     }
+    // Older release channels resume any saved voice match on screen.
     go({ id: 'game', ...next });
   };
 
-  const switchTab = (tab: Tab) => {
-    // Settings is a destination page, so opening it should always start at its header.
-    if (tab === 'settings') window.scrollTo(0, 0);
-    go(TAB_ROOT_SCREEN[tab]);
+  const switchTab = (tab: Tab, event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+    event.preventDefault();
+    goRoot(tab);
   };
 
   const activeTab = tabForScreen(screen);
@@ -203,14 +249,14 @@ export default function AppShell() {
     screen.id === 'game' || screen.id === 'voice' ? screen.robot.name : 'this robot';
 
   return (
-    <div className={`${showTabbar ? 'has-tabbar ' : ''}${root ? 'is-root-screen' : 'is-detail-screen'}`}>
+    <div className={`${showTabbar ? 'has-tabbar ' : ''}${root ? 'is-root-screen' : 'is-detail-screen'}${nativeApp ? ' is-native-app' : ''}`}>
       {!root && (
         <header className="topbar">
           <button className="back-btn" onClick={back} aria-label="Back">
             ←
           </button>
           <h1>{title}</h1>
-          {screen.id === 'game' && voiceState && (
+          {betaFeaturesEnabled && screen.id === 'game' && voiceState && (
             <button
               className="voice-nav-btn"
               disabled={!online}
@@ -238,16 +284,23 @@ export default function AppShell() {
         <div className="screen" key={screen.id}>
           {screen.id === 'home' && (
             <HomeScreen
+              installBanner={<AppInstallBanner offer={appInstallOffer} />}
               onPickRobot={(robot) => go({ id: 'profile', ...defaultRoutedTrickPool(), robot })}
+              voiceVisible={betaFeaturesEnabled}
+              adaptiveMatchVisible={betaFeaturesEnabled}
+              adaptiveSaveWaiting={betaFeaturesEnabled && adaptiveSaveWaiting}
               voiceEnabled={online}
-              onPlayVoice={(robot) =>
-                enterVoice({ id: 'voice', ...defaultRoutedTrickPool(), robot }, { id: 'home' })
+              onPlayVoice={
+                betaFeaturesEnabled
+                  ? (robot) =>
+                      enterVoice({ id: 'voice', ...defaultRoutedTrickPool(), robot }, { id: 'home' })
+                  : undefined
               }
               continueMatch={
                 savedGame && savedRobot
                   ? {
                       robot: savedRobot,
-                      mode: savedGame.mode,
+                      mode: betaFeaturesEnabled ? savedGame.mode : 'screen',
                       playerLetters: savedGame.state.letters.player,
                       robotLetters: savedGame.state.letters.robot,
                       gameLetters: lettersForFormat(savedGame.state.gameFormat),
@@ -260,7 +313,10 @@ export default function AppShell() {
           )}
           {screen.id === 'gallery' && <GalleryScreen />}
           {screen.id === 'settings' && (
-            <SettingsScreen onSignIn={() => go({ id: 'signin', from: { id: 'settings' } })}>
+            <SettingsScreen
+              onSignIn={() => go({ id: 'signin', from: { id: 'settings' } })}
+              voiceVisible={betaFeaturesEnabled}
+            >
               <GamePreferencesSection />
             </SettingsScreen>
           )}
@@ -278,20 +334,21 @@ export default function AppShell() {
               key={screen.robot.id}
               robot={screen.robot}
               pool={screen.pool}
-              gameFormat={screen.resume?.gameFormat ?? gameFormat}
-              gameVariant={screen.resume?.gameVariant ?? gameVariant}
+              gameFormat={screen.resume?.state.gameFormat ?? gameFormat}
+              gameVariant={screen.resume?.state.gameVariant ?? gameVariant}
               resume={screen.resume}
               onExit={back}
-              onVoiceState={setVoiceState}
+              onVoiceState={betaFeaturesEnabled ? setVoiceState : undefined}
               onGameState={setLiveGame}
+              trickSaveEnabled
             />
           )}
-          {screen.id === 'voice' && (
+          {betaFeaturesEnabled && screen.id === 'voice' && (
             <VoiceGameScreen
               key={screen.robot.id}
               robot={screen.robot}
               pool={screen.pool}
-              gameFormat={screen.resume?.gameFormat ?? gameFormat}
+              gameFormat={screen.resume?.state.gameFormat ?? gameFormat}
               resume={screen.resume}
               onExit={back}
               onGameState={setLiveGame}
@@ -323,7 +380,8 @@ export default function AppShell() {
             </p>
             {liveGame && (
               <p className="exit-sheet-score muted">
-                Score — You {liveGame.letters.player} · {exitRobotName} {liveGame.letters.robot}
+                Score — You {liveGame.state.letters.player} · {exitRobotName}{' '}
+                {liveGame.state.letters.robot}
               </p>
             )}
             <div className="exit-sheet-actions">
@@ -340,29 +398,33 @@ export default function AppShell() {
 
       {showTabbar && (
         <nav className="tabbar">
-          <button
+          <a
+            href={hrefForRootTab('skate', search)}
             className={`tabbar-btn ${activeTab === 'skate' ? 'active' : ''}`}
-            onClick={() => switchTab('skate')}
+            aria-current={activeTab === 'skate' ? 'page' : undefined}
+            onClick={(event) => switchTab('skate', event)}
           >
             <TbSkateboard aria-hidden />
             <span className="tabbar-label">{gameFormat === 'sk8' ? 'SK8' : 'S.K.A.T.E.'}</span>
-          </button>
-          {betaTricksEnabled && (
-            <button
-              className={`tabbar-btn ${activeTab === 'tricks' ? 'active' : ''}`}
-              onClick={() => switchTab('tricks')}
-            >
-              <TbClipboardList aria-hidden />
-              <span className="tabbar-label">{ROOT_TAB_LABELS.tricks}</span>
-            </button>
-          )}
-          <button
+          </a>
+          <a
+            href={hrefForRootTab('tricks', search)}
+            className={`tabbar-btn ${activeTab === 'tricks' ? 'active' : ''}`}
+            aria-current={activeTab === 'tricks' ? 'page' : undefined}
+            onClick={(event) => switchTab('tricks', event)}
+          >
+            <TbClipboardList aria-hidden />
+            <span className="tabbar-label">{ROOT_TAB_LABELS.tricks}</span>
+          </a>
+          <a
+            href={hrefForRootTab('settings', search)}
             className={`tabbar-btn ${activeTab === 'settings' ? 'active' : ''}`}
-            onClick={() => switchTab('settings')}
+            aria-current={activeTab === 'settings' ? 'page' : undefined}
+            onClick={(event) => switchTab('settings', event)}
           >
             <TbSettings aria-hidden />
             <span className="tabbar-label">{ROOT_TAB_LABELS.settings}</span>
-          </button>
+          </a>
         </nav>
       )}
     </div>
