@@ -86,9 +86,13 @@ export function orientTrickRotation(
   mechanics: RiderMechanics,
   rotation: RawTrickRotation,
 ): OrientedTrickRotation {
+  // A nose scoop sends a board-only shuv around the opposite world-space yaw
+  // from the equivalent tail scoop. When the rider turns too (180s, 360s, and
+  // bigspins), the body carries the board in the same direction instead.
+  const noseShuvSign = mechanics.popFoot === mechanics.noseFoot && rotation.bodyYawDeg === 0 ? -1 : 1;
   return {
     flipDeg: mechanics.orientationSign * rotation.flipDeg,
-    yawDeg: -mechanics.orientationSign * rotation.yawDeg,
+    yawDeg: -mechanics.orientationSign * noseShuvSign * rotation.yawDeg,
     bodyYawDeg: mechanics.bodyYawDegrees - mechanics.orientationSign * rotation.bodyYawDeg,
   };
 }

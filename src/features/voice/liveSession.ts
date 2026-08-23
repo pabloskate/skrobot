@@ -11,6 +11,7 @@ export interface SessionEvents {
   onStatus: (status: 'connecting' | 'live' | 'reconnecting' | 'ended' | 'error') => void;
   onCaption: (who: 'you' | 'robot', text: string, final: boolean) => void;
   onError: (message: string) => void;
+  onConnectionFailure?: () => void;
 }
 
 export class VoiceSession {
@@ -56,6 +57,7 @@ export class VoiceSession {
       this.isSessionOpen = false;
       this.events.onStatus('error');
       this.events.onError(error instanceof Error ? error.message : 'Could not send microphone audio.');
+      this.events.onConnectionFailure?.();
     }
   }
 
@@ -136,6 +138,7 @@ export class VoiceSession {
     }
     this.events.onStatus('error');
     this.events.onError('Lost connection and could not reconnect.');
+    this.events.onConnectionFailure?.();
   }
 
   private handleMessage(msg: LiveServerMessage): void {

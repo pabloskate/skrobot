@@ -12,9 +12,11 @@ const TIER_TAB_KEY = 'skrobot.robotTier';
 
 interface Props {
   onPick: (robot: Robot) => void;
+  /** Unlock every robot regardless of the beat-the-previous gate (?override=true). */
+  override?: boolean;
 }
 
-export default function RobotSelect({ onPick }: Props) {
+export default function RobotSelect({ onPick, override = false }: Props) {
   const [records, setRecords] = useState<Record<string, Record_>>({});
   const [tier, setTier] = useState<Tier>(TIERS[0].tier);
   const trackRef = useRef<HTMLDivElement>(null);
@@ -85,7 +87,8 @@ export default function RobotSelect({ onPick }: Props) {
             const previousRobot = tierRobots[index - 1];
             const rec = records[robot.id];
             const defeated = (rec?.w ?? 0) > 0;
-            const unlocked = defeated || !previousRobot || (records[previousRobot.id]?.w ?? 0) > 0;
+            const unlocked =
+              override || defeated || !previousRobot || (records[previousRobot.id]?.w ?? 0) > 0;
 
             return (
               <button

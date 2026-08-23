@@ -2,7 +2,7 @@
 
 import type { ComponentProps } from 'react';
 import {
-  TrickAnimation3DLegacy,
+  TrickAnimation3D,
 } from '@skrobot/animations';
 import { usePlayerStance } from './gamePreferences';
 
@@ -16,11 +16,9 @@ export {
   type FallVariant,
 } from '@skrobot/animations';
 
-type Props = ComponentProps<typeof TrickAnimation3DLegacy>;
+type Props = ComponentProps<typeof TrickAnimation3D>;
 
 export default function PlayerStanceTrickAnimation(props: Props) {
   const stance = usePlayerStance();
-  // Legacy 3D renderer until the reworked one is ironed out (see
-  // TrickAnimation3DLegacy in @skrobot/animations).
-  return <TrickAnimation3DLegacy {...props} riderStance={stance} />;
+  return <TrickAnimation3D {...props} riderStance={stance} />;
 }

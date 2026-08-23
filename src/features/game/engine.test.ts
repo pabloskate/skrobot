@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Trick } from '@/features/tricks'
 import {
   LETTERS,
@@ -256,46 +256,59 @@ describe('chooseRobotTrick', () => {
     ['b', 0.1],
   ])
   const byId = new Map([trick('a'), trick('b')].map((t) => [t.id, t]))
+  const robot = { id: 'test' }
+  let setWeights: Record<string, number>
 
-  afterEach(() => vi.restoreAllMocks())
+  const pick = (used: string[] = [], random: () => number = Math.random) =>
+    chooseRobotTrick(bag, used, byId, robot, random, (candidate) => setWeights[candidate.id] ?? 0)
+
+  beforeEach(() => {
+    setWeights = { a: 0.9, b: 0.1 }
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
 
   it('weights by consistency — a low roll picks the heavy option', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0)
-    expect(chooseRobotTrick(bag, [], byId)?.id).toBe('a')
+    expect(pick()?.id).toBe('a')
   })
 
   it('a high roll lands in the light option', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.99)
-    expect(chooseRobotTrick(bag, [], byId)?.id).toBe('b')
+    expect(pick()?.id).toBe('b')
   })
 
   it('never picks a used trick', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0)
-    expect(chooseRobotTrick(bag, ['a'], byId)?.id).toBe('b')
+    expect(pick(['a'])?.id).toBe('b')
   })
 
   it('returns null when nothing is left', () => {
-    expect(chooseRobotTrick(bag, ['a', 'b'], byId)).toBeNull()
+    expect(pick(['a', 'b'])).toBeNull()
   })
 
-  it('lets setWeights override land rate for the pick', () => {
+  it('uses the robot/trick set weights instead of land rate', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.5)
-    const robot = { id: 'test', favorites: [] as string[], setWeights: { b: 2 } }
-    expect(chooseRobotTrick(bag, [], byId)?.id).toBe('a')
-    expect(chooseRobotTrick(bag, [], byId, robot)?.id).toBe('b')
+    expect(pick()?.id).toBe('a')
+    setWeights = { a: 0.1, b: 2 }
+    expect(pick()?.id).toBe('b')
   })
 
   it('never sets a trick whose set-weight is 0', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0)
-    expect(chooseRobotTrick(bag, [], byId, { id: 'test', favorites: [], setWeights: { a: 0 } })?.id).toBe('b')
+    setWeights = { a: 0, b: 1 }
+    expect(pick()?.id).toBe('b')
   })
 
   it('returns null when every leftover trick has a set-weight of 0', () => {
-    expect(chooseRobotTrick(bag, [], byId, { id: 'test', favorites: [], setWeights: { a: 0, b: 0 } })).toBeNull()
+    setWeights = { a: 0, b: 0 }
+    expect(pick()).toBeNull()
   })
 
   it('accepts an injected random source for deterministic offline simulations', () => {
-    expect(chooseRobotTrick(bag, [], byId, undefined, () => 0.99)?.id).toBe('b')
+    expect(pick([], () => 0.99)?.id).toBe('b')
   })
 })
 

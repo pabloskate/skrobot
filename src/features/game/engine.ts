@@ -223,24 +223,24 @@ export function gameReducer(s: GameState, a: GameAction): GameState {
 
 /**
  * Weighted random pick from the robot's bag, excluding tricks already set this
- * game. Weight is the land rate by default (a 90% trick is 9x a 10% trick),
- * with specialty/uncommon-set policy from the robot. Returns null when nothing
- * is left (or every leftover trick has a set-weight of 0).
+ * game. Every weight is explicitly configured for that robot/trick. Returns
+ * null when nothing is left (or every leftover trick has weight 0).
  */
 export function chooseRobotTrick(
   bag: Map<string, number>,
   used: string[],
   trickById: Map<string, Trick>,
-  robot?: SetWeightRobot,
+  robot: SetWeightRobot,
   random: () => number = Math.random,
+  setWeight: (trick: Trick, robot: SetWeightRobot) => number = trickSetWeight,
 ): Trick | null {
   const usedSet = new Set(used);
   const options: { trick: Trick; weight: number }[] = [];
-  for (const [id, consistency] of bag) {
+  for (const [id] of bag) {
     if (usedSet.has(id)) continue;
     const trick = trickById.get(id);
     if (!trick) continue;
-    const weight = trickSetWeight(trick, consistency, robot);
+    const weight = setWeight(trick, robot);
     if (weight <= 0) continue;
     options.push({ trick, weight });
   }

@@ -1,5 +1,5 @@
 import { consumeLink, nativeCallbackLink } from '@/features/auth/server/magicLink';
-import { PRESERVED_VERSIONS } from '../../rootTab';
+import { PRESERVED_VERSIONS } from '../../../rootTab';
 
 export async function GET(request: Request) {
   const url = new URL(request.url);

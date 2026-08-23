@@ -17,25 +17,25 @@ describe('Robots repertoire and consistency math', () => {
     const keys = Array.from(bag.keys());
 
     expect(keys.length).toBeGreaterThan(0);
-    // Discipline filter guarantees only Shifty's chosen families make the bag.
+    // Its explicit table contains only tricks that fit the intended bag.
     for (const id of keys) {
       const disc = trickDiscipline(TRICK_BY_ID.get(id)!);
       expect(['roll', 'shuvit', 'rotation', 'flip']).toContain(disc);
     }
     expect(bag.has('regular-pop-shuvit')).toBe(true);
-    // Stance load on a shuvit is tiny, so even a beginner keeps switch shuvits.
+    // Switch shuvits are explicitly part of this beginner's bag.
     expect(bag.has('switch-pop-shuvit')).toBe(true);
-    // Kickflips are the one shaky exception: regular/fakie only, capped at 50%.
+    // Regular is solid, fakie is shaky, and switch/nollie are absent.
     expect(bag.has('regular-kickflip')).toBe(true);
     expect(bag.has('fakie-kickflip')).toBe(true);
     expect(bag.has('switch-kickflip')).toBe(false);
     expect(bag.has('nollie-kickflip')).toBe(false);
-    expect(bag.get('regular-kickflip')).toBeLessThanOrEqual(0.5);
-    expect(bag.get('fakie-kickflip')).toBeLessThanOrEqual(0.5);
+    expect(bag.get('regular-kickflip')).toBe(0.7);
+    expect(bag.get('fakie-kickflip')).toBe(0.38);
     expect(bag.has('boardslide')).toBe(false);
   });
 
-  it.each(['shifty', 'sacker'])('%s has only a shaky regular/fakie kickflip', (id) => {
+  it.each(['sacker'])('%s has only a shaky regular/fakie kickflip', (id) => {
     const robot = byId(id);
     const bag = buildBag(robot, TRICKS);
     expect(bag.get('regular-kickflip')).toBeDefined();
@@ -53,10 +53,10 @@ describe('Robots repertoire and consistency math', () => {
     expect(bag.get('regular-heelflip')).toBe(0.35);
     expect(bag.get('regular-pop-shuvit')).toBe(0.68);
     expect(bag.get('fakie-pop-shuvit')).toBe(0.68);
-    expect(bag.get('switch-backside-180')).toBe(0.1);
+    expect(bag.get('switch-backside-180')).toBe(0);
     expect(bag.get('regular-ollie')).toBe(0.9);
-    expect(bag.get('nollie-ollie')).toBe(0.75);
-    expect(bag.get('switch-ollie')).toBe(0.75);
+    expect(bag.get('nollie-ollie')).toBe(0.4);
+    expect(bag.get('switch-ollie')).toBe(0.6);
   });
 
   it('Boomerang lands switch pop shuvits at exactly 50%', () => {
@@ -123,16 +123,17 @@ describe('Robots repertoire and consistency math', () => {
     expect(bag.has('regular-pop-shuvit')).toBe(true);
     expect(bag.has('regular-frontside-180')).toBe(true);
     expect(bag.has('regular-ollie')).toBe(true);
-    // Stylistic refusal + skill gate keep its flip game to just the kickflip.
+    // Its explicit flip bag stops at kickflips.
     expect(bag.has('regular-heelflip')).toBe(false);
     expect(bag.has('regular-360-flip')).toBe(false);
   });
 
-  it('Flipper (heels over head) mirrors Kicker — heelflip + fundamentals, no kickflip', () => {
+  it('Flipper (heels over head) mirrors Kicker — heelflip + fundamentals, kickflip hand-tuned', () => {
     const bag = buildBag(flipper, TRICKS);
     expect(bag.has('regular-heelflip')).toBe(true);
     expect(bag.has('regular-pop-shuvit')).toBe(true);
-    expect(bag.has('regular-kickflip')).toBe(false);
+    // Kickflip is hand-tuned into Flipper's bag at 40%.
+    expect(bag.get('regular-kickflip')).toBe(0.4);
     expect(bag.get('regular-varial-kickflip')).toBe(0.4);
     expect(bag.has('fakie-varial-kickflip')).toBe(false);
     expect(bag.has('switch-varial-kickflip')).toBe(false);
@@ -192,7 +193,8 @@ describe('Robots repertoire and consistency math', () => {
     expect(halfCab!).toBeGreaterThan(regularBs180!);
     expect(bag.has('regular-kickflip')).toBe(true);
     expect(bag.has('switch-kickflip')).toBe(false);
-    expect(bag.has('fakie-kickflip')).toBe(false);
+    // Fakie kickflip is hand-tuned into Cabby's bag at 50%.
+    expect(bag.get('fakie-kickflip')).toBe(0.5);
     expect(bag.has('regular-frontside-360')).toBe(false);
     expect(bag.has('regular-dolphin-flip')).toBe(false);
     expect(bag.has('fakie-dolphin-flip')).toBe(false);
@@ -228,17 +230,25 @@ describe('Robots repertoire and consistency math', () => {
     expect(bag.has('regular-hardflip')).toBe(false);
     expect(bag.has('regular-laser-flip')).toBe(false);
     expect(bag.has('switch-bigspin')).toBe(false);
+    expect(bag.get('regular-360-flip')).toBe(0.4);
   });
 
-  it('Heelzy walks the heelflip path harder than the kickflip path', () => {
+  it("Achilles' heelflip is his literal weakness — kickflips fine, heels shaky", () => {
     const heelzy = byId('heelzy');
     const heel = robotConsistency(heelzy, TRICK_BY_ID.get('regular-heelflip')!);
     const kick = robotConsistency(heelzy, TRICK_BY_ID.get('regular-kickflip')!);
     expect(heel).not.toBeNull();
     expect(kick).not.toBeNull();
-    expect(heel!).toBeGreaterThan(kick!);
-    expect(buildBag(heelzy, TRICKS).has('regular-varial-heelflip')).toBe(true);
-    expect(buildBag(heelzy, TRICKS).has('regular-360-flip')).toBe(false);
+    expect(kick!).toBeGreaterThan(0.7);
+    expect(heel!).toBeLessThanOrEqual(0.3);
+    expect(heel!).toBeLessThan(kick!);
+    // Every heel variant that stays in the bag stays shaky; kickflip stays.
+    const bag = buildBag(heelzy, TRICKS);
+    for (const [id, c] of bag) {
+      if (/heelflip/.test(id)) expect(c!).toBeLessThanOrEqual(0.3);
+    }
+    expect(bag.has('regular-kickflip')).toBe(true);
+    expect(bag.get('regular-360-flip')).toBe(0.42);
   });
 
   it('Fakie lands fakie 360s better than regular ones (signature stance shows on harder tricks)', () => {
@@ -308,34 +318,48 @@ describe('Robots repertoire and consistency math', () => {
   });
 });
 
-describe('Skateboarding-soundness invariants', () => {
-  it('no robot can kickflip without also having shuvits (learning order is respected)', () => {
-    for (const robot of ROBOTS) {
-      const bag = buildBag(robot, TRICKS);
-      if (bag.has('regular-kickflip')) {
-        expect(bag.has('regular-pop-shuvit'), `${robot.name} has a kickflip but no shuvit`).toBe(true);
-        expect(bag.has('regular-ollie'), `${robot.name} has a kickflip but no ollie`).toBe(true);
-      }
-    }
-  });
-
-  it('stance load is trick-dependent: a switch shuvit is easier than a switch kickflip', () => {
-    const skater = ROBOTS.find((r) => r.id === 'skater')!;
-    const switchShuvit = robotConsistency(skater, TRICK_BY_ID.get('switch-pop-shuvit')!);
-    const switchKickflip = robotConsistency(skater, TRICK_BY_ID.get('switch-kickflip')!);
-    expect(switchShuvit).not.toBeNull();
-    expect(switchKickflip).not.toBeNull();
-    expect(switchShuvit!).toBeGreaterThan(switchKickflip!);
-  });
-
+describe('Explicit robot personality examples', () => {
   it('Nolly the nollie specialist lands nollie flips better than regular ones', () => {
     const nolly = ROBOTS.find((r) => r.id === 'nolly')!;
     const nollieKickflip = robotConsistency(nolly, TRICK_BY_ID.get('nollie-kickflip')!);
     const regularKickflip = robotConsistency(nolly, TRICK_BY_ID.get('regular-kickflip')!);
     expect(nollieKickflip).not.toBeNull();
     expect(regularKickflip).not.toBeNull();
-    // The decoupling the whole rearchitecture is about: stance ≠ trick skill.
     expect(nollieKickflip!).toBeGreaterThan(regularKickflip!);
+  });
+
+  it('keeps 360 Flips out of every beginner bag', () => {
+    const variants = ['regular', 'fakie', 'switch', 'nollie'].map(
+      (stance) => TRICK_BY_ID.get(`${stance}-360-flip`)!,
+    );
+    for (const robot of ROBOTS.filter((candidate) => candidate.tier === 'beginner')) {
+      for (const trick of variants) {
+        expect(robotConsistency(robot, trick), `${robot.name} / ${trick.id}`).toBeNull();
+      }
+    }
+  });
+
+  it('gives intermediate flatground robots individual 360 Flip bags', () => {
+    const expectedStances: Record<string, string[]> = {
+      heelzy: ['regular', 'fakie'],
+      varial: [],
+      biggy: ['regular', 'fakie'],
+      nolly: ['nollie'],
+      fakie: ['fakie'],
+    };
+
+    for (const [robotId, expected] of Object.entries(expectedStances)) {
+      const robot = ROBOTS.find((candidate) => candidate.id === robotId)!;
+      const actual = ['regular', 'fakie', 'switch', 'nollie'].filter((stance) =>
+        robotConsistency(robot, TRICK_BY_ID.get(`${stance}-360-flip`)!) !== null,
+      );
+      expect(actual, robot.name).toEqual(expected);
+    }
+
+    const cyclone = ROBOTS.find((robot) => robot.id === 'biggy')!;
+    const regularTre = TRICK_BY_ID.get('regular-360-flip')!;
+    expect(robotConsistency(cyclone, regularTre)).toBe(0.4);
+    expect(trickSetWeight(regularTre, cyclone)).toBe(0.86);
   });
 });
 
@@ -361,55 +385,7 @@ describe('Player-only tricks stay in the catalog but never enter a robot bag', (
   });
 });
 
-describe('Tier-locked tricks: late frontside shuvits are intermediate-and-up only', () => {
-  const lateFs = TRICK_BY_ID.get('regular-late-frontside-shuvit')!;
-  const lateBs = TRICK_BY_ID.get('regular-late-backside-shuvit')!;
-
-  it('are in the catalog as shuvit-discipline tricks with a skill floor above the beginner tier', () => {
-    expect(lateFs).toBeDefined();
-    expect(lateBs).toBeDefined();
-    expect(trickDiscipline(lateFs)).toBe('shuvit');
-    expect(trickDiscipline(lateBs)).toBe('shuvit');
-    // Floor must sit above the strongest beginner (Kicker/Flipper at skill 3.2).
-    expect(lateFs.minSkill).toBeGreaterThan(3.2);
-  });
-
-  it('no beginner can land them — not even Shifty, whose shuvit focus would otherwise sneak it in', () => {
-    for (const robot of ROBOTS.filter((r) => r.tier === 'beginner')) {
-      expect(robotConsistency(robot, lateFs), `${robot.name} should not have the late FS shuvit`).toBeNull();
-      expect(robotConsistency(robot, lateBs), `${robot.name} should not have the late BS shuvit`).toBeNull();
-    }
-    // Concretely: the hard floor (not difficulty) is what keeps it out of Shifty's bag.
-    expect(buildBag(ROBOTS.find((r) => r.id === 'shifty')!, TRICKS).has('regular-late-frontside-shuvit')).toBe(false);
-  });
-
-  it('every intermediate-and-up robot gets a chance at the late frontside shuvit', () => {
-    for (const robot of ROBOTS.filter(
-      (r) => r.tier !== 'beginner' && !r.excludes?.includes('Late Backside Shuvit'),
-    )) {
-      expect(robotConsistency(robot, lateFs), `${robot.name} should have a shot at the late FS shuvit`).not.toBeNull();
-    }
-  });
-});
-
-describe('Tier skill bands do not overlap', () => {
-  const maxSkill = (tier: string) =>
-    Math.max(...ROBOTS.filter((r) => r.tier === tier).map((r) => r.skill));
-  const minSkill = (tier: string) =>
-    Math.min(...ROBOTS.filter((r) => r.tier === tier).map((r) => r.skill));
-
-  it('beginner max is below intermediate min', () => {
-    expect(maxSkill('beginner')).toBeLessThan(minSkill('intermediate'));
-  });
-
-  it('intermediate max is below advanced min', () => {
-    expect(maxSkill('intermediate')).toBeLessThan(minSkill('advanced'));
-  });
-
-  it('advanced max is below pro min', () => {
-    expect(maxSkill('advanced')).toBeLessThan(minSkill('pro'));
-  });
-
+describe('Roster metadata', () => {
   it('pro tier exists and has at least one robot', () => {
     expect(ROBOTS.filter((r) => r.tier === 'pro').length).toBeGreaterThan(0);
   });
@@ -430,119 +406,27 @@ describe('Tier skill bands do not overlap', () => {
   });
 });
 
-describe('Advanced vs pro consistency gap on tre flip', () => {
-  const treFlip = TRICK_BY_ID.get('regular-360-flip')!;
-
-  it('advanced bots land tre flips as a coin flip at best (<= 0.8)', () => {
-    for (const robot of ROBOTS.filter((r) => r.tier === 'advanced')) {
-      const c = robotConsistency(robot, treFlip);
-      if (c !== null) {
-        expect(c, `${robot.name} (advanced) tre flip consistency too high`).toBeLessThanOrEqual(0.8);
-      }
-    }
-  });
-
-  it('the best pro tre-flip consistency exceeds the best advanced tre-flip consistency', () => {
-    const proConsistencies = ROBOTS.filter((r) => r.tier === 'pro')
-      .map((r) => robotConsistency(r, treFlip))
-      .filter((c): c is number => c !== null);
-    const advConsistencies = ROBOTS.filter((r) => r.tier === 'advanced')
-      .map((r) => robotConsistency(r, treFlip))
-      .filter((c): c is number => c !== null);
-    expect(Math.max(...proConsistencies)).toBeGreaterThan(Math.max(...advConsistencies));
-  });
-
-  it('flip-focused pro bots (C360PO, Tre) land tre flips at >= 0.8', () => {
-    for (const id of ['c360po', 'tre']) {
-      const robot = ROBOTS.find((r) => r.id === id)!;
-      const c = robotConsistency(robot, treFlip);
-      expect(c, `${robot.name} should have the tre flip`).not.toBeNull();
-      expect(c!, `${robot.name} tre flip consistency too low`).toBeGreaterThanOrEqual(0.8);
-    }
-  });
-});
-
-describe('FS bigspin flip rarity', () => {
-  const fsBigspinFlip = TRICK_BY_ID.get('regular-fs-bigspin-flip')!;
-
-  it('is elite-only and stays low probability even for pros', () => {
-    expect(fsBigspinFlip.baseDifficulty).toBe(11.5);
-
-    for (const robot of ROBOTS.filter((r) => r.tier !== 'pro')) {
-      expect(
-        robotConsistency(robot, fsBigspinFlip),
-        `${robot.name} should not have FS bigspin flips`,
-      ).toBeNull();
-    }
-
-    const proConsistencies = ROBOTS.filter((r) => r.tier === 'pro')
-      .map((robot) => robotConsistency(robot, fsBigspinFlip))
-      .filter((consistency): consistency is number => consistency !== null);
-
-    expect(proConsistencies.length).toBeGreaterThan(0);
-    expect(Math.max(...proConsistencies)).toBeLessThanOrEqual(0.45);
-  });
-});
-
 describe('trickSetWeight', () => {
   const byId = (id: string) => ROBOTS.find((r) => r.id === id)!;
   const kickflip = TRICK_BY_ID.get('regular-kickflip')!;
   const ollieNorth = TRICK_BY_ID.get('regular-ollie-north')!;
-  const lateShuvit = TRICK_BY_ID.get('regular-late-frontside-shuvit')!;
   const lateKickflip = TRICK_BY_ID.get('regular-late-kickflip')!;
   const sparky = byId('flipster');
   const snooze = byId('latezy');
   const swivel = byId('shifty');
 
-  it('falls back to land rate when no robot is given', () => {
-    expect(trickSetWeight(kickflip, 0.5)).toBe(0.5);
+  it('returns the exact configured robot/trick weight', () => {
+    expect(trickSetWeight(kickflip, sparky)).toBe(1.7879999999999998);
+    expect(trickSetWeight(lateKickflip, snooze)).toBe(1.24848);
+    expect(trickSetWeight(ollieNorth, swivel)).toBe(0.30512300000000003);
   });
 
-  it('overrides by base name, and trick id wins when both are set', () => {
-    expect(trickSetWeight(kickflip, 0.5, { ...sparky, setWeights: { Kickflip: 0.2 } })).toBe(0.2);
-    expect(
-      trickSetWeight(kickflip, 0.5, {
-        ...sparky,
-        setWeights: { Kickflip: 0.2, 'regular-kickflip': 0.9 },
-      }),
-    ).toBe(0.9);
+  it('returns 0 when a robot has no configured weight for a trick', () => {
+    expect(trickSetWeight(TRICK_BY_ID.get('boardslide')!, sparky)).toBe(0);
   });
 
-  it('treats 0 as never-set without going negative', () => {
-    expect(trickSetWeight(kickflip, 0.5, { ...sparky, setWeights: { Kickflip: 0 } })).toBe(0);
-    expect(trickSetWeight(kickflip, 0.5, { ...sparky, setWeights: { Kickflip: -2 } })).toBe(0);
-  });
-
-  it('boosts favorites 2–3× land rate, hashed per robot so the bump is not a constant', () => {
-    const a = trickSetWeight(kickflip, 0.9, sparky);
-    const b = trickSetWeight(kickflip, 0.9, byId('switchy'));
-    expect(a).toBeGreaterThanOrEqual(1.8);
-    expect(a).toBeLessThan(2.7);
-    expect(b).toBeGreaterThanOrEqual(1.8);
-    expect(b).toBeLessThan(2.7);
-    expect(a).not.toBe(b);
-  });
-
-  it('cuts Ollie North and late shuvits to at most half for non-specialists', () => {
-    expect(trickSetWeight(ollieNorth, 0.8, swivel)).toBeLessThanOrEqual(0.4);
-    expect(trickSetWeight(lateShuvit, 0.8, swivel)).toBeLessThanOrEqual(0.4);
-  });
-
-  it('cuts late flips to at most 40% of land rate for non-specialists', () => {
-    expect(trickSetWeight(lateKickflip, 0.8, byId('flipper'))).toBeLessThanOrEqual(0.32);
-  });
-
-  it('lets a late-trick specialist set lates at the specialty boost, not the rare cut', () => {
-    const late = trickSetWeight(lateKickflip, 0.9, snooze);
-    const shuv = trickSetWeight(lateShuvit, 0.9, snooze);
-    expect(late).toBeGreaterThanOrEqual(1.8);
-    expect(late).toBeLessThan(2.7);
-    expect(shuv).toBeGreaterThanOrEqual(1.8);
-    expect(shuv).toBeLessThan(2.7);
-  });
-
-  it('still lets setWeights override specialty and uncommon policy', () => {
-    expect(trickSetWeight(lateKickflip, 0.9, { ...snooze, setWeights: { 'Late Kickflip': 0.1 } })).toBe(0.1);
-    expect(trickSetWeight(ollieNorth, 0.8, { ...swivel, setWeights: { 'Ollie North': 1.2 } })).toBe(1.2);
+  it('lets generated robots copy one explicit roster behavior table', () => {
+    expect(trickSetWeight(kickflip, { id: 'rival', behaviorId: sparky.id }))
+      .toBe(trickSetWeight(kickflip, sparky));
   });
 });

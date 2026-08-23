@@ -33,6 +33,8 @@ interface Props {
   onVoiceState?: (snapshot: GameSessionSnapshot | undefined) => void;
   /** Live game state for the shell's save-on-exit prompt. */
   onGameState?: (snapshot: GameSessionSnapshot) => void;
+  onComplete?: (snapshot: GameSessionSnapshot) => void;
+  onRestart?: () => void;
   /** Beta: show the want-to-learn star on defended tricks. */
   trickSaveEnabled?: boolean;
 }
@@ -90,6 +92,8 @@ export default function GameScreen({
   onExit,
   onVoiceState,
   onGameState,
+  onComplete,
+  onRestart,
   trickSaveEnabled,
 }: Props) {
   const [state, dispatch] = useReducer(
@@ -134,13 +138,21 @@ export default function GameScreen({
         tricksLanded: tricksLanded.current,
         trickAttempts: trickAttempts.current,
       });
+      onComplete?.({
+        state,
+        progress: {
+          tricksLanded: [...tricksLanded.current],
+          trickAttempts: [...trickAttempts.current],
+        },
+      });
     }
     if (state.phase === 'rps') {
+      if (recorded.current) onRestart?.();
       recorded.current = false;
       tricksLanded.current = [];
       trickAttempts.current = [];
     }
-  }, [state.phase, state.winner, state.letters.player, state.letters.robot, robot.id]);
+  }, [state, robot.id, onComplete, onRestart]);
 
   // Tell the shell when voice mode can take over (only on player turns).
   const canHandToVoice =

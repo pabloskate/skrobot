@@ -1,9 +1,11 @@
 import type { GameLogEntry, ProvenTrick, TrickStat } from '@/features/records';
 import { deriveProvenTricks, deriveTrickStats } from '@/features/records';
 import type { Robot, Tier } from '@/features/robots';
-import { consistencyCurve, isFlatgroundRobot, ROBOTS } from '@/features/robots';
+import { isFlatgroundRobot, ROBOTS } from '@/features/robots';
 import type { Trick } from '@/features/tricks';
 import { TRICK_BY_NAME, TRICKS } from '@/features/tricks';
+import { eloLadderSpot, skillToDisplayRating, skillToRawElo } from './skillElo';
+import { playerConsistencyCurve } from './skillCurve';
 
 /** Completed games (screen or voice) needed before the skate score unlocks. */
 export const SKATE_SCORE_UNLOCK_GAMES = 8;
@@ -56,8 +58,9 @@ const MAX_WEIGHT_PER_TRICK = 8;
 
 /**
  * Robot-equivalent skill: fit the player's per-trick make rates onto the same
- * consistency curve the robots ride (`consistencyCurve` over skill-difficulty
- * headroom) and solve for the skill that best explains the observed attempts.
+ * a smooth curve over skill-difficulty headroom and solve for the skill that best
+ * explains the observed attempts. This estimates the player only; robot behavior
+ * comes from explicit per-trick data.
  * Returns null when there isn't enough tracked attempt data to trust the fit.
  *
  * Attempts are selection-biased (players set tricks they like), but robot-chosen
@@ -91,7 +94,7 @@ export function fitRobotEquivalentSkill(stats: Record<string, TrickStat>): numbe
   for (let s = 1; s <= 10; s += 0.05) {
     let error = 0;
     for (const row of rows) {
-      const predicted = consistencyCurve(s - row.difficulty);
+      const predicted = playerConsistencyCurve(s - row.difficulty);
       error += row.weight * (row.rate - predicted) ** 2;
     }
     if (error < bestError) {
@@ -107,11 +110,15 @@ export function fitRobotEquivalentSkill(stats: Record<string, TrickStat>): numbe
 export interface SkateScore {
   /** 1-10, on the robots' skill scale. */
   skill: number;
+  /** Raw Bradley-Terry Elo, on the same 1500-anchored scale as the robot roster. */
+  rawElo: number;
+  /** Friendly 800–2400 display rating, comparable to `robotDisplayRating`. */
+  rating: number;
   /** Beginner / Intermediate / Advanced / Pro — the tier of the robot you ride like. */
   tier: Tier;
-  /** Flatground robot at or below your skill. */
+  /** Flatground robot at or below your measured Elo. */
   peer: Robot;
-  /** Next robot up the ladder, null at the top. */
+  /** Next robot up the measured ladder, null at the top. */
   next: Robot | null;
   gamesPlayed: number;
   /** Where the number came from: the attempt-based curve fit, or the bag frontier. */
@@ -124,6 +131,10 @@ export interface SkateScore {
  * Prefers the attempt-based robot-equivalent fit; falls back to the bag frontier
  * for logs recorded before attempt tracking. Derived fresh from the log every
  * time — the log's 200-game cap makes the score a rolling window of current form.
+ *
+ * The returned `skill` (1-10) is the browser-facing tuning number; the `rating`
+ * and `peer`/`next` are placed on the *calibrated* robot ladder (raw Elo), so the
+ * score is directly comparable to `robotDisplayRating` on the roster.
  */
 export function computeSkateScore(log: GameLogEntry[]): SkateScore | null {
   if (!skateScoreUnlocked(log)) return null;
@@ -133,9 +144,12 @@ export function computeSkateScore(log: GameLogEntry[]): SkateScore | null {
   const frontier = frontierSkill(TRICKS, proven);
   const skill = fit ?? frontier;
   if (skill === null) return null;
-  const spot = ladderSpot(skill);
+  const rawElo = skillToRawElo(skill);
+  const spot = eloLadderSpot(rawElo);
   return {
     skill,
+    rawElo,
+    rating: skillToDisplayRating(skill),
     tier: spot.peer.tier,
     peer: spot.peer,
     next: spot.next,

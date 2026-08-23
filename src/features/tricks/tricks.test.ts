@@ -15,14 +15,13 @@ describe('TRICK_BY_NAME', () => {
 });
 
 describe('Late Kickflip', () => {
-  it('is available in every flatground stance with the intended progression metadata', () => {
+  it('is available in every flatground stance with the intended difficulty metadata', () => {
     const variants = ['regular', 'fakie', 'switch', 'nollie'].map((stance) =>
       TRICK_BY_ID.get(`${stance}-late-kickflip`),
     );
 
     expect(variants.every(Boolean)).toBe(true);
     expect(variants.map((trick) => trick?.difficulty)).toEqual([7, 8, 9.5, 9]);
-    expect(variants.map((trick) => trick?.minSkill)).toEqual([6, 6, 6, 6]);
     expect(variants.every((trick) => trick && trickDiscipline(trick) === 'flip')).toBe(true);
   });
 

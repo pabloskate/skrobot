@@ -24,6 +24,9 @@ interface Props {
   onScreenMode?: (snapshot: GameSessionSnapshot) => void;
   /** Live game state for the shell's save-on-exit prompt. */
   onGameState?: (snapshot: GameSessionSnapshot) => void;
+  onComplete?: (snapshot: GameSessionSnapshot) => void;
+  onRestart?: () => void;
+  onVoiceFailure?: (reason: 'offline' | VoiceStartErrorCode | 'start_failed' | 'connection_lost') => void;
 }
 
 type Status = 'idle' | 'connecting' | 'live' | 'reconnecting' | 'ended' | 'error';
@@ -53,7 +56,18 @@ function Letters({ count, format }: { count: number; format: GameFormat }) {
   );
 }
 
-export default function VoiceGameScreen({ robot, pool, gameFormat, resume, onExit, onScreenMode, onGameState }: Props) {
+export default function VoiceGameScreen({
+  robot,
+  pool,
+  gameFormat,
+  resume,
+  onExit,
+  onScreenMode,
+  onGameState,
+  onComplete,
+  onRestart,
+  onVoiceFailure,
+}: Props) {
   const online = useOnlineStatus();
   const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -72,12 +86,17 @@ export default function VoiceGameScreen({ robot, pool, gameFormat, resume, onExi
   const progressRef = useRef<GameProgress>(
     resume?.progress ?? { tricksLanded: [], trickAttempts: [] },
   );
+  const onCompleteRef = useRef(onComplete);
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   const start = async () => {
     setError(null);
     setGate(null);
     if (!online) {
       setError('Voice mode needs internet. You can keep this game going on screen while offline.');
+      onVoiceFailure?.('offline');
       return;
     }
     // Seed from the current scoreboard state so a carried-over game (or a
@@ -92,6 +111,8 @@ export default function VoiceGameScreen({ robot, pool, gameFormat, resume, onExi
       // A rematch resets to the toss — drop any leftover attempt animations.
       if (s.phase === 'rps') setAttempts([]);
     };
+    controller.onComplete = (snapshot) => onCompleteRef.current?.(snapshot);
+    controller.onRestart = onRestart;
     controller.onRobotAttempt = (trick, landed) => {
       // No visuals while the phone is pocketed — don't let attempts pile up.
       if (pocketRef.current) return;
@@ -115,6 +136,7 @@ export default function VoiceGameScreen({ robot, pool, gameFormat, resume, onExi
           return [...prev.slice(-30), { who, text, final }];
         }),
       onError: setError,
+      onConnectionFailure: () => onVoiceFailure?.('connection_lost'),
     });
     sessionRef.current = session;
     try {
@@ -125,8 +147,10 @@ export default function VoiceGameScreen({ robot, pool, gameFormat, resume, onExi
       if (e instanceof VoiceStartError) {
         setGate(e.code);
         setError(null);
+        onVoiceFailure?.(e.code);
       } else {
         setError(e instanceof Error ? e.message : 'Could not start voice session');
+        onVoiceFailure?.('start_failed');
       }
       sessionRef.current = null;
     }

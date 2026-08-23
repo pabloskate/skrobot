@@ -82,13 +82,18 @@ export function buildRivalRobot(
   const delta = rivalDelta(records[RIVAL_ID]);
   const skill =
   Math.round(Math.min(MAX_RIVAL_SKILL, Math.max(MIN_RIVAL_SKILL, score.skill + delta)) * 10) / 10;
+  const spot = ladderSpot(skill);
+  const behaviorSource = spot.next && Math.abs(spot.next.skill - skill) < Math.abs(spot.peer.skill - skill)
+    ? spot.next
+    : spot.peer;
   return {
     id: RIVAL_ID,
+    behaviorId: behaviorSource.id,
     name: RIVAL_NAME,
-    tier: ladderSpot(skill).peer.tier,
+    tier: spot.peer.tier,
     tagline: 'Always one trick ahead',
     summary:
-      'Nemesis trains on your game log. It skates at your level plus a step — its bag is built from where you are and where you are headed. Beat it and it comes back stronger.',
+      'Nemesis trains on your game log. It copies the explicit bag of the closest roster rival above your current level. Beat it and it comes back stronger.',
     skill,
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     favorites: rivalFavorites(deriveProvenTricks(log)),

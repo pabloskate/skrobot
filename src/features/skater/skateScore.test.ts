@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { GameLogEntry, ProvenTrick, TrickAttempt } from '@/features/records';
-import { ROBOTS, isFlatgroundRobot } from '@/features/robots';
+import { ROBOTS, isFlatgroundRobot, rawEloToDisplayRating } from '@/features/robots';
 import { tricksFor } from '@/features/tricks';
+import { eloLadderSpot, skillToDisplayRating, skillToRawElo } from './skillElo';
 import {
   computeSkateScore,
   fitRobotEquivalentSkill,
@@ -118,7 +119,7 @@ describe('fitRobotEquivalentSkill', () => {
   });
 
   it('rates a consistent hard-trick player higher than a consistent easy-trick player', () => {
-    const make = (name: string, rate: number, attempts = 10) => ({
+    const make = (rate: number, attempts = 10) => ({
       attempts,
       makes: Math.round(rate * attempts),
       misses: attempts - Math.round(rate * attempts),
@@ -126,12 +127,12 @@ describe('fitRobotEquivalentSkill', () => {
       lastDate: '2026-07-01',
       lastRobotId: 'shifty',
     });
-    const easy = fitRobotEquivalentSkill({ Ollie: make('Ollie', 0.9), 'Pop Shuvit': make('Pop Shuvit', 0.85) })!;
+    const easy = fitRobotEquivalentSkill({ Ollie: make(0.9), 'Pop Shuvit': make(0.85) })!;
     const hard = fitRobotEquivalentSkill({
-      Kickflip: make('Kickflip', 0.9),
-      Heelflip: make('Heelflip', 0.85),
-      '360 Flip': make('360 Flip', 0.6),
-      Hardflip: make('Hardflip', 0.5),
+      Kickflip: make(0.9),
+      Heelflip: make(0.85),
+      '360 Flip': make(0.6),
+      Hardflip: make(0.5),
     })!;
     expect(hard).toBeGreaterThan(easy);
   });
@@ -181,5 +182,66 @@ describe('computeSkateScore', () => {
 
   it('is null when unlocked but with no trick evidence at all', () => {
     expect(computeSkateScore(logOf([], SKATE_SCORE_UNLOCK_GAMES))).toBeNull();
+  });
+
+  it('projects the skill onto the rating scale and brackets the measured ladder', () => {
+    const perGame: TrickAttempt[] = [
+      { trick: 'Ollie', landed: true },
+      { trick: 'Pop Shuvit', landed: true },
+      { trick: 'Frontside 180', landed: true },
+      { trick: 'Kickflip', landed: true },
+    ];
+    const score = computeSkateScore(logOf(perGame, SKATE_SCORE_UNLOCK_GAMES))!;
+    expect(score.rawElo).toBe(skillToRawElo(score.skill));
+    expect(score.rating).toBe(rawEloToDisplayRating(score.rawElo));
+    expect(score.peer.elo!).toBeLessThanOrEqual(score.rawElo);
+    if (score.next) expect(score.next.elo!).toBeGreaterThan(score.rawElo);
+    expect(score.tier).toBe(score.peer.tier);
+  });
+});
+
+describe('skillToRawElo', () => {
+  it('is monotonic and clamped to the calibrated table bounds', () => {
+    expect(skillToRawElo(0.5)).toBe(skillToRawElo(1));
+    expect(skillToRawElo(11)).toBe(skillToRawElo(10));
+    let prev = -Infinity;
+    for (let s = 1; s <= 10; s += 0.25) {
+      const elo = skillToRawElo(s);
+      expect(elo).toBeGreaterThanOrEqual(prev);
+      prev = elo;
+    }
+  });
+
+  it('matches the seeded bare-curve anchors in the middle band', () => {
+    expect(skillToRawElo(7)).toBe(1415);
+    expect(skillToRawElo(9)).toBe(2168);
+  });
+
+  it('maps onto the shared 800–2400 display rating', () => {
+    expect(skillToDisplayRating(7)).toBe(rawEloToDisplayRating(1415));
+    expect(skillToDisplayRating(10)).toBe(rawEloToDisplayRating(2770));
+  });
+});
+
+describe('eloLadderSpot', () => {
+  const ladder = ROBOTS.filter(isFlatgroundRobot);
+
+  it('places below-everything at the bottom robot with a next', () => {
+    const spot = eloLadderSpot(-1000);
+    expect(spot.peer.id).toBe(ladder[0].id);
+    expect(spot.next).not.toBeNull();
+  });
+
+  it('places above-everything at the top with no next', () => {
+    const spot = eloLadderSpot(10_000);
+    expect(spot.peer.id).toBe(ladder[ladder.length - 1].id);
+    expect(spot.next).toBeNull();
+  });
+
+  it('peer is at or below the raw Elo, next is strictly above', () => {
+    const spot = eloLadderSpot(1500);
+    expect(spot.peer.elo!).toBeLessThanOrEqual(1500);
+    expect(spot.next!.elo!).toBeGreaterThan(1500);
+    expect(spot.next!.elo!).toBeGreaterThanOrEqual(spot.peer.elo!);
   });
 });

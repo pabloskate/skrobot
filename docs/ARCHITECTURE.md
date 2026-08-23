@@ -22,9 +22,10 @@ If the answer is unclear, tighten the feature boundary before adding more code.
 | Billing | `src/features/billing/` | Beta quota UI plus dormant Stripe server helpers. |
 | Tricks | `src/features/tricks/` | Catalog, difficulty, metadata, picker/setup UI, and the default routed trick pool. Routed games currently use flatground only. |
 | Gallery | `src/features/gallery/` | Flatground trick gallery plus the player trick book: browse the catalog with stance filters, curated video tips, personal proven/learning state, and per-trick consistency stats. |
-| Robots | `src/features/robots/` | Roster, skill model, profile/select/avatar UI. Routed home currently exposes flatground robots only. |
-| Player skill / adaptive rival | `src/features/skater/` | Skate score (robot-equivalent curve fit + frontier fallback), robot-ladder placement, and the generated rival robot. All derived from the game log; nothing persisted. |
+| Robots | `src/features/robots/` | Roster metadata, explicit per-trick land-rate/set-weight tables, profile/select/avatar UI, and the browser-local editor routed at `/tune`. Routed home currently exposes flatground robots only. |
+| Player skill / adaptive rival | `src/features/skater/` | Skate score (player-only curve fit + frontier fallback), robot-ladder placement, and a generated rival that copies the closest roster behavior table. All derived from the game log; nothing persisted. |
 | Records | `src/features/records/` | LocalStorage W/L, game log, trick marks, and per-trick attempt stats until the D1 port. |
+| Product analytics | `src/features/analytics/` | Strict gameplay event contracts, anonymous installation identity, offline delivery, and D1 ingestion. |
 | Web/native install handoff | `src/features/install/` | App Store handoff, Android PWA instructions, and browser/WebView detection. |
 | Runtime infrastructure | `src/platform/server/` | Cloudflare env and bindings, D1, future logging/HTTP adapters. |
 | Shared primitives | `src/shared/` | Reserved for domain-neutral primitives only, such as online status. |
@@ -44,6 +45,7 @@ route is importing server-only feature code. This map is enforced by
 | `packages/animations` | React, package-local files | `src/*`, `skrobot-animations/*`, app/platform code |
 | `skrobot-animations` | package-local files, `@skrobot/animations` | `src/*`; reusable animation behavior belongs in `packages/animations` |
 | `auth` | `platform/server` from server files | Gameplay, screens, other features |
+| `analytics` | `platform/server` from server files | Gameplay and screen features; AppShell supplies lifecycle context through the public tracking API |
 | `billing` | `platform/server` from server files | Auth UI, gameplay, screens, other features |
 | `tricks` | none | Other features |
 | `gallery` | `tricks`, `records`, `robots`, `skater` | Other features |
@@ -109,6 +111,7 @@ Browser-initiated calls to first-party routes live in feature-owned API modules:
 
 - `src/features/auth/api.ts`
 - `src/features/voice/api.ts`
+- `src/features/analytics/api.ts`
 
 Leaf UI components should call those helpers instead of scattering
 `fetch('/api/...')` details through the tree. Add a feature `api.ts` when a new

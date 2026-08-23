@@ -39,6 +39,8 @@ const progress = {
   ],
 };
 
+const session = { id: 'game-session-1', startedAt: '2026-08-01T00:00:00.000Z' };
+
 beforeEach(() => {
   installLocalStorage();
 });
@@ -63,17 +65,18 @@ describe('isSaveWorthKeeping', () => {
 describe('saveGame / getSavedGame', () => {
   it('round-trips a mid-game save', () => {
     const state = midGame();
-    const saved = saveGame({ robotId: 'shifty', mode: 'screen', state, progress });
-    expect(saved?.version).toBe(2);
+    const saved = saveGame({ robotId: 'shifty', mode: 'screen', session, state, progress });
+    expect(saved?.version).toBe(3);
     expect(saved?.robotId).toBe('shifty');
     expect(getSavedGame()?.state.letters).toEqual({ player: 1, robot: 2 });
     expect(getSavedGame()?.state.used).toEqual(['kickflip']);
     expect(getSavedGame()?.progress).toEqual(progress);
+    expect(getSavedGame()?.session).toEqual(session);
   });
 
   it('round-trips the defense-only variant', () => {
     const state = midGame({ gameVariant: 'defense', phase: 'robotSet' });
-    saveGame({ robotId: 'shifty', mode: 'screen', state, progress });
+    saveGame({ robotId: 'shifty', mode: 'screen', session, state, progress });
     expect(getSavedGame()?.state.gameVariant).toBe('defense');
   });
 
@@ -90,7 +93,7 @@ describe('saveGame / getSavedGame', () => {
     );
 
     expect(getSavedGame()).toMatchObject({
-      version: 2,
+      version: 3,
       mode: 'voice',
       progress: { tricksLanded: [], trickAttempts: [] },
     });
@@ -98,13 +101,13 @@ describe('saveGame / getSavedGame', () => {
 
   it('does not persist rps or over states', () => {
     expect(
-      saveGame({ robotId: 'shifty', mode: 'screen', state: initialGameState, progress }),
+      saveGame({ robotId: 'shifty', mode: 'screen', session, state: initialGameState, progress }),
     ).toBeNull();
     expect(getSavedGame()).toBeNull();
   });
 
   it('clearSavedGame removes the slot', () => {
-    saveGame({ robotId: 'shifty', mode: 'voice', state: midGame(), progress });
+    saveGame({ robotId: 'shifty', mode: 'voice', session, state: midGame(), progress });
     clearSavedGame();
     expect(getSavedGame()).toBeNull();
   });

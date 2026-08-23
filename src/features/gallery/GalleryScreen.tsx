@@ -5,7 +5,7 @@ import type { IconType } from 'react-icons';
 import { TbChartBar, TbCheck, TbPlayerPlayFilled, TbSearch, TbStar, TbStarFilled } from 'react-icons/tb';
 import { getGameLog, getProvenTricks, getRecords, getTrickMarks, getTrickStats, setTrickMark } from '@/features/records';
 import type { Record_, TrickMark, TrickStat } from '@/features/records';
-import { ROBOT_BY_ID } from '@/features/robots';
+import { ROBOT_BY_ID, robotDisplayRating } from '@/features/robots';
 import type { Robot } from '@/features/robots';
 import { computeSkateScore, SKATE_SCORE_UNLOCK_GAMES } from '@/features/skater';
 import type { SkateScore } from '@/features/skater';
@@ -422,15 +422,17 @@ function statRows(stats: Record<string, TrickStat>): { name: string; stat: Trick
 
 function ladderPercent(score: SkateScore): number {
   const { peer, next } = score;
-  if (!next || next.skill <= peer.skill) return 100;
-  const pct = ((score.skill - peer.skill) / (next.skill - peer.skill)) * 100;
+  const peerRating = robotDisplayRating(peer) ?? 800;
+  const nextRating = next === null ? peerRating : (robotDisplayRating(next) ?? peerRating);
+  if (!next || nextRating <= peerRating) return 100;
+  const pct = ((score.rating - peerRating) / (nextRating - peerRating)) * 100;
   return Math.min(100, Math.max(0, pct));
 }
 
 /**
- * The skate score card: the 1-10 number, the robot the player rides like, and
- * the ladder rung above them — or the locked/needs-evidence states for players
- * still building a log.
+ * The skate score card: the rating (800–2400, on the robots' scale) the player
+ * earned, the robot they ride like, and the ladder rung above them — or the
+ * locked/needs-evidence states for players still building a log.
  */
 function ScoreCard({
   score,
@@ -476,11 +478,13 @@ function ScoreCard({
 
   const { peer, next } = score;
   const pct = ladderPercent(score);
+  const peerRating = robotDisplayRating(peer) ?? 800;
+  const nextRating = next === null ? null : (robotDisplayRating(next) ?? null);
   return (
     <section className="score-card" aria-label="Skate score">
       <span className="score-kicker">Skate score</span>
       <div className="score-row">
-        <span className="score-num">{score.skill.toFixed(1)}</span>
+        <span className="score-num">{score.rating}</span>
         <span className="score-tier">{score.tier}</span>
       </div>
       <p className="score-peer">
@@ -501,9 +505,9 @@ function ScoreCard({
         </div>
         <div className="ladder-labels">
           <span>
-            {peer.name} · {peer.skill}
+            {peer.name} · {peerRating}
           </span>
-          <span>{next ? `${next.name} · ${next.skill}` : 'Top'}</span>
+          <span>{next ? `${next.name} · ${nextRating}` : 'Top'}</span>
         </div>
       </div>
       <p className="score-src">

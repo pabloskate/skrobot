@@ -168,6 +168,24 @@ describe('orientTrickRotation', () => {
     expect(orientTrickRotation(resolveRiderMechanics('regular', 'switch'), raw))
       .toEqual(orientTrickRotation(resolveRiderMechanics('goofy', 'regular'), raw));
   });
+
+  it('nollie reverses board-only shuv yaw while preserving flip direction', () => {
+    const boardOnly = { ...raw, bodyYawDeg: 0 };
+    const natural = orientTrickRotation(resolveRiderMechanics('regular', 'regular'), boardOnly);
+    const nollie = orientTrickRotation(resolveRiderMechanics('regular', 'nollie'), boardOnly);
+
+    expect(nollie.flipDeg).toBe(natural.flipDeg);
+    expect(nollie.yawDeg).toBe(-natural.yawDeg);
+  });
+
+  it('nollie keeps board and body yaw together during body spins', () => {
+    const natural = orientTrickRotation(resolveRiderMechanics('regular', 'regular'), raw);
+    const nollie = orientTrickRotation(resolveRiderMechanics('regular', 'nollie'), raw);
+
+    expect(nollie.flipDeg).toBe(natural.flipDeg);
+    expect(nollie.yawDeg).toBe(natural.yawDeg);
+    expect(nollie.bodyYawDeg).toBe(natural.bodyYawDeg);
+  });
 });
 
 // ---------- Trick spec symmetries ----------
@@ -189,6 +207,17 @@ describe('specFor', () => {
     expect(specFor(trick('Impossible', 'switch')).roll).toBe(-360);
     expect(specFor(trick('Impossible', 'fakie')).roll).toBe(-360);
     expect(specFor(trick('Impossible', 'nollie')).roll).toBe(360);
+  });
+
+  it('pressure flip rotates like an inward heelflip, not a varial heelflip', () => {
+    const pressure = specFor(trick('Pressure Flip', 'regular'));
+    const inwardHeel = specFor(trick('Inward Heelflip', 'regular'));
+    const varialHeel = specFor(trick('Varial Heelflip', 'regular'));
+
+    expect(pressure.flipDir).toBe(inwardHeel.flipDir);
+    expect(pressure.yaw).toBe(inwardHeel.yaw);
+    expect(pressure.spinDir).toBe(inwardHeel.spinDir);
+    expect(pressure.spinDir).toBe(-varialHeel.spinDir);
   });
 
   // Mirror pairs must be identical specs up to the mirrored signs — anything
@@ -319,6 +348,17 @@ describe('computeFrame', () => {
           }
         }
       }
+    }
+  });
+
+  it('nollie body-spin tricks keep board and body yaw aligned', () => {
+    for (const base of BASES) {
+      const spec = specFor(trick(base, 'nollie'));
+      if (!spec.bodyYaw) continue;
+
+      const frame = computeFrame(ROLL_IN + FLIP_T * 0.9, spec, true, 'slam');
+      const rotation = orientTrickRotation(resolveRiderMechanics('regular', 'nollie'), frame.spin3d);
+      expect(Math.sign(rotation.yawDeg), base).toBe(Math.sign(rotation.bodyYawDeg));
     }
   });
 

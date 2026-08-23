@@ -2,7 +2,7 @@
 
 Mobile-first web game: play S.K.A.T.E. against robot opponents. The player skates
 for real and reports results; the robot's attempts are dice rolls weighted by a
-per-robot skill model. Has an on-screen mode and a hands-free voice mode (Gemini
+explicit per-robot/per-trick behavior. Has an on-screen mode and a hands-free voice mode (Gemini
 Live API) for playing with earbuds at the skatepark.
 
 ## Stack
@@ -53,15 +53,17 @@ src/
 │   ├── api/auth/         #   Magic-link auth routes (delegate to auth/server)
 │   ├── api/billing/      #   Dormant Stripe routes, disabled unless ENABLE_BILLING=true
 │   ├── api/me/           #   Current user + voice quota
+│   ├── tune/             #   /tune → robot behavior editor shell
 │   └── globals.css       #   all styling (class-based, mobile-first)
 ├── features/             # One folder per web feature; public API is index.ts
 │   ├── auth/             # Passwordless sign-in UI + server session/magic-link code
 │   ├── billing/          # Beta quota screen + dormant Stripe server helpers
 │   ├── tricks/           # Trick UI, catalog, difficulty, and metadata (routed app is flatground-only today)
-│   ├── robots/           # Robot UI, roster, and skill model (home exposes flatground robots today)
+│   ├── robots/           # Robot UI, roster, and explicit behavior tables (home exposes flatground robots today)
 │   ├── game/             # On-screen game UI, reducer, RPS, and attempt logic
 │   ├── voice/            # Voice mode: Gemini Live session, tools, audio; server/ = token mint
 │   ├── records/          # Player W/L + game log + trick marks (localStorage today, D1 candidate)
+│   ├── analytics/        # Privacy-safe product events, offline delivery, D1 ingestion
 │   ├── home/             # Landing screen / flatground robot choice
 │   ├── gallery/          # Flatground trick gallery + player trick book (stance filters, video tips, proven/claimed/learning)
 │   └── dice/             # Standalone random-trick roller
@@ -147,16 +149,11 @@ break one and `npm run lint` fails with a message pointing back here.
   (model rationale: docs/VOICE_MODE_PLAN.md §2).
 - `NEXT_PUBLIC_GEMINI_API_KEY` is a dev-only fallback that ships to the browser;
   production auth is the ephemeral-token route.
-- Robot "skill" is emergent: `src/features/robots/robots.ts#robotConsistency`.
-  A robot rides a set of
-  `disciplines` (the bag filter), and consistency is a smooth curve over
-  `skill - effectiveDifficulty`, where stance adds a load that depends on the
-  trick (`src/features/tricks/tricks.ts#stanceLoad`: a switch shuvit barely loads, a switch flip loads a
-  lot) softened by per-robot `stanceComfort`. Boosts: `favorites`, `focus`
-  disciplines, `signatureStance`. Because difficulty drives bag membership, the real
-  learning order is automatic: a robot can't have a kickflip without the shuvit/180
-  under it. Tune numbers in `robots.ts`/`tricks.ts`, not in the engine. Stance is
-  decoupled from trick on purpose (a robot can be better at nollie flips than regular
-  ones); the `nolly` robot is the reference example.
+- Robot behavior is fully explicit in `src/features/robots/behavior.ts`: every
+  robot/trick/stance land rate and set weight is authoritative. Missing land-rate
+  entries mean the trick is not in the bag; missing/zero set weights mean it is
+  never selected as a set. `robotConsistency` and `trickSetWeight` are direct
+  lookups only. Edit visually at `/tune`; do not add skill curves, stance rules,
+  favorite boosts, caps, exclusions, or modeled fallbacks.
 - After `next build`/`next dev`, Next may rewrite `tsconfig.json` includes — that's
   expected, don't fight it.

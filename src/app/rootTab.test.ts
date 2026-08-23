@@ -3,6 +3,7 @@ import {
   betaFeaturesEnabledFromSearch,
   hrefForRootTab,
   parseRootTab,
+  rosterOverrideEnabledFromSearch,
   searchFromRecord,
   searchWithRootTab,
 } from './rootTab';
@@ -31,6 +32,16 @@ describe('root tab URL params', () => {
     expect(betaFeaturesEnabledFromSearch('')).toBe(false);
     expect(betaFeaturesEnabledFromSearch('?version=1.3.0')).toBe(false);
     expect(betaFeaturesEnabledFromSearch('?version=beta')).toBe(true);
+  });
+
+  it('unlocks the whole roster only with ?override=true', () => {
+    expect(rosterOverrideEnabledFromSearch('')).toBe(false);
+    expect(rosterOverrideEnabledFromSearch('?tab=settings')).toBe(false);
+    expect(rosterOverrideEnabledFromSearch('?override=false')).toBe(false);
+    expect(rosterOverrideEnabledFromSearch('?override=1')).toBe(false);
+    expect(rosterOverrideEnabledFromSearch('?override=true')).toBe(true);
+    expect(rosterOverrideEnabledFromSearch('?tab=skate&override=true&version=beta')).toBe(true);
+    expect(rosterOverrideEnabledFromSearch({ override: 'true' })).toBe(true);
   });
 
   it('omits tab=skate from the URL and preserves other params', () => {

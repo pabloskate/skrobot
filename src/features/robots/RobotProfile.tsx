@@ -29,7 +29,7 @@ function level(value: number): 'high' | 'mid' | 'low' {
   return value >= 0.7 ? 'high' : value >= 0.45 ? 'mid' : 'low';
 }
 
-/** One pill per stance the robot can do a base in — how the stance model is made visible. */
+/** One pill per explicitly configured stance variant. */
 function StancePill({ stance, value }: { stance: Stance; value: number }) {
   const pct = Math.round(value * 100);
   const label = `${stance === 'regular' ? 'Regular' : STANCE_LABEL[stance]}: lands it about ${pct}% of the time`;
@@ -50,9 +50,8 @@ export default function RobotProfile({ robot, pool, onStart }: Props) {
   const [showTricks, setShowTricks] = useState(false);
   const bag = useMemo(() => buildBag(robot, pool), [robot, pool]);
 
-  // One row per base trick, but each row lists every stance the robot can do it
-  // in (with that stance's consistency) — so the stance model is visible instead
-  // of collapsed to the regular variant. Signature tricks float to the top, then
+  // One row per base trick, but each row lists every explicitly configured stance
+  // and exact consistency instead of collapsing to the regular variant. Signatures float to the top, then
   // most-consistent first (by the robot's best stance for that base).
   const repertoire = useMemo(() => {
     const byBase = new Map<

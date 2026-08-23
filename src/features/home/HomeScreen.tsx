@@ -25,6 +25,8 @@ interface Props {
   voiceEnabled?: boolean;
   /** When false, hide the Play-by-voice CTA (voice is beta-only). */
   voiceVisible?: boolean;
+  /** When true, every robot is pickable regardless of the unlock gate (?override=true). */
+  rosterOverrideEnabled?: boolean;
   /** When true, offer the adaptive challenge (adaptive is beta-only). */
   adaptiveMatchVisible?: boolean;
   /** A pre-threshold Adaptive save that must wait for the new unlock requirement. */
@@ -41,6 +43,7 @@ export default function HomeScreen({
   onPlayVoice,
   voiceEnabled = true,
   voiceVisible = true,
+  rosterOverrideEnabled = false,
   adaptiveMatchVisible = false,
   adaptiveSaveWaiting = false,
   continueMatch = null,
@@ -127,9 +130,9 @@ export default function HomeScreen({
       {!savedMatch && (
         <>
           <div className="hero-divider">
-            <span>or choose any robot</span>
+            <span>or choose a robot</span>
           </div>
-          <RobotSelect onPick={onPickRobot} />
+          <RobotSelect onPick={onPickRobot} override={rosterOverrideEnabled} />
         </>
       )}
     </div>
@@ -457,7 +460,7 @@ function AdaptiveHero({
       </div>
       <dl className="adaptive-matchup" aria-label="Adaptive matchup">
         <div className="adaptive-stat">
-          <dt>Your Skate Score</dt>
+          <dt>Your level</dt>
           <dd>
             <strong>{score.skill.toFixed(1)}</strong>
             <span>{score.tier}</span>

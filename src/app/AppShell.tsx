@@ -1,13 +1,15 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useState, useSyncExternalStore, type MouseEvent } from 'react';
+import { useEffect, useState, useSyncExternalStore, type MouseEvent } from 'react';
 import { TbClipboardList, TbMicrophone, TbSettings, TbSkateboard } from 'react-icons/tb';
 import { SignInScreen, SettingsScreen, useAuth } from '@/features/auth';
+import { gameAnalytics, subscribeAnalyticsDelivery } from '@/features/analytics';
+import type { TrackedGame } from '@/features/analytics';
 import { UpgradeScreen } from '@/features/billing';
 import { GalleryScreen } from '@/features/gallery';
 import { getGameLog, getRecords } from '@/features/records';
-import type { GameSessionSnapshot, SavedGame } from '@/features/game';
+import type { GameSessionIdentity, GameSessionSnapshot, SavedGame } from '@/features/game';
 import {
   GameScreen,
   GamePreferencesSection,
@@ -32,6 +34,7 @@ import {
   betaFeaturesEnabledFromSearch,
   hrefForRootTab,
   parseRootTab,
+  rosterOverrideEnabledFromSearch,
   subscribeToUrlChanges,
   syncRootTabUrl,
   type RootTab,
@@ -79,8 +82,8 @@ type Tab = RootTab;
 type Screen =
   | { id: 'home' }
   | ({ id: 'profile'; robot: Robot } & TrickPool)
-  | ({ id: 'game'; robot: Robot; resume?: GameSessionSnapshot } & TrickPool)
-  | ({ id: 'voice'; robot: Robot; resume?: GameSessionSnapshot } & TrickPool)
+  | ({ id: 'game'; robot: Robot; session: GameSessionIdentity; resume?: GameSessionSnapshot } & TrickPool)
+  | ({ id: 'voice'; robot: Robot; session: GameSessionIdentity; resume?: GameSessionSnapshot } & TrickPool)
   | { id: 'gallery' }
   | { id: 'settings' }
   | { id: 'signin'; next?: Screen; from?: Screen }
@@ -137,6 +140,7 @@ export default function AppShell({ initialSearch = '' }: { initialSearch?: strin
   const appInstallOffer = useAppInstallOffer(nativeApp);
   const search = useSyncExternalStore(subscribeToUrlChanges, () => window.location.search, () => initialSearch);
   const betaFeaturesEnabled = betaFeaturesEnabledFromSearch(search);
+  const rosterOverrideEnabled = rosterOverrideEnabledFromSearch(search);
   const urlTab = parseRootTab(search);
   const [detail, setDetail] = useState<Screen | null>(null);
   const screen = detail ?? TAB_ROOT_SCREEN[urlTab];
@@ -153,6 +157,24 @@ export default function AppShell({ initialSearch = '' }: { initialSearch?: strin
   const adaptiveSaveWaiting = Boolean(
     betaFeaturesEnabled && savedGame && isRivalId(savedGame.robotId) && !savedRobot,
   );
+
+  useEffect(() => subscribeAnalyticsDelivery(), []);
+
+  const surface = nativeApp ? 'native' : 'web';
+
+  const trackedGame = (match: Extract<Screen, { id: 'game' | 'voice' }>): TrackedGame => ({
+    session: match.session,
+    robotId: match.robot.id,
+    mode: match.id === 'game' ? 'screen' : 'voice',
+    gameFormat: match.resume?.state.gameFormat ?? gameFormat,
+    gameVariant: match.resume?.state.gameVariant ?? gameVariant,
+  });
+
+  const restartMatch = (match: Extract<Screen, { id: 'game' | 'voice' }>) => {
+    const next = { ...match, session: gameAnalytics.createSession(), resume: undefined };
+    gameAnalytics.started(trackedGame(next), surface);
+    go(next);
+  };
 
   const go = (next: Screen | ((current: Screen) => Screen)) => {
     setVoiceState(undefined);
@@ -176,12 +198,16 @@ export default function AppShell({ initialSearch = '' }: { initialSearch?: strin
 
   const leaveMatch = (opts: { save: boolean }) => {
     if ((screen.id === 'game' || screen.id === 'voice') && liveGame && opts.save) {
-      saveGame({
+      const saved = saveGame({
         robotId: screen.robot.id,
         mode: screen.id === 'voice' ? 'voice' : 'screen',
+        session: screen.session,
         state: liveGame.state,
         progress: liveGame.progress,
       });
+      if (saved) {
+        gameAnalytics.saved(trackedGame(screen), liveGame, surface);
+      }
     } else if (opts.save === false) {
       clearSavedGame();
     }
@@ -214,7 +240,11 @@ export default function AppShell({ initialSearch = '' }: { initialSearch?: strin
   const continueAfterSignIn = async () => {
     const data = await auth.refresh();
     if (!data.user) return;
-    go((current) => (current.id === 'signin' ? (current.next ?? current.from ?? rootScreen()) : current));
+    go((current) => {
+      const next = current.id === 'signin' ? (current.next ?? current.from ?? rootScreen()) : current;
+      if (next.id === 'voice' && !next.resume) gameAnalytics.started(trackedGame(next), surface);
+      return next;
+    });
   };
 
   const continueSavedGame = () => {
@@ -225,8 +255,11 @@ export default function AppShell({ initialSearch = '' }: { initialSearch?: strin
     const next = {
       ...defaultRoutedTrickPool(),
       robot: savedRobot,
+      session: savedGame.session,
       resume: { state: savedGame.state, progress: savedGame.progress },
     };
+    const resumedMode = betaFeaturesEnabled && savedGame.mode === 'voice' ? 'voice' : 'game';
+    gameAnalytics.resumed(trackedGame({ id: resumedMode, ...next }), savedGame.savedAt, surface);
     if (betaFeaturesEnabled && savedGame.mode === 'voice') {
       enterVoice({ id: 'voice', ...next }, { id: 'home' });
       return;
@@ -267,6 +300,7 @@ export default function AppShell({ initialSearch = '' }: { initialSearch?: strin
                     pool: screen.pool,
                     poolLabel: screen.poolLabel,
                     robot: screen.robot,
+                    session: screen.session,
                     resume: voiceState,
                   },
                   screen,
@@ -286,14 +320,23 @@ export default function AppShell({ initialSearch = '' }: { initialSearch?: strin
             <HomeScreen
               installBanner={<AppInstallBanner offer={appInstallOffer} />}
               onPickRobot={(robot) => go({ id: 'profile', ...defaultRoutedTrickPool(), robot })}
+              rosterOverrideEnabled={rosterOverrideEnabled}
               voiceVisible={betaFeaturesEnabled}
               adaptiveMatchVisible={betaFeaturesEnabled}
               adaptiveSaveWaiting={betaFeaturesEnabled && adaptiveSaveWaiting}
               voiceEnabled={online}
               onPlayVoice={
                 betaFeaturesEnabled
-                  ? (robot) =>
-                      enterVoice({ id: 'voice', ...defaultRoutedTrickPool(), robot }, { id: 'home' })
+                  ? (robot) => {
+                      const next = {
+                        id: 'voice' as const,
+                        ...defaultRoutedTrickPool(),
+                        robot,
+                        session: gameAnalytics.createSession(),
+                      };
+                      if (!auth.loading && auth.user) gameAnalytics.started(trackedGame(next), surface);
+                      enterVoice(next, { id: 'home' });
+                    }
                   : undefined
               }
               continueMatch={
@@ -325,7 +368,17 @@ export default function AppShell({ initialSearch = '' }: { initialSearch?: strin
               robot={screen.robot}
               pool={screen.pool}
               onStart={() =>
-                go({ id: 'game', pool: screen.pool, poolLabel: screen.poolLabel, robot: screen.robot })
+                {
+                  const next = {
+                    id: 'game' as const,
+                    pool: screen.pool,
+                    poolLabel: screen.poolLabel,
+                    robot: screen.robot,
+                    session: gameAnalytics.createSession(),
+                  };
+                  gameAnalytics.started(trackedGame(next), surface);
+                  go(next);
+                }
               }
             />
           )}
@@ -340,6 +393,8 @@ export default function AppShell({ initialSearch = '' }: { initialSearch?: strin
               onExit={back}
               onVoiceState={betaFeaturesEnabled ? setVoiceState : undefined}
               onGameState={setLiveGame}
+              onComplete={(snapshot) => gameAnalytics.completed(trackedGame(screen), snapshot, surface)}
+              onRestart={() => restartMatch(screen)}
               trickSaveEnabled
             />
           )}
@@ -352,6 +407,11 @@ export default function AppShell({ initialSearch = '' }: { initialSearch?: strin
               resume={screen.resume}
               onExit={back}
               onGameState={setLiveGame}
+              onComplete={(snapshot) => gameAnalytics.completed(trackedGame(screen), snapshot, surface)}
+              onRestart={() => restartMatch(screen)}
+              onVoiceFailure={(reason) =>
+                gameAnalytics.voiceConnectionFailed(trackedGame(screen), reason, surface)
+              }
               onScreenMode={(state) => go({ ...screen, id: 'game', resume: state })}
             />
           )}

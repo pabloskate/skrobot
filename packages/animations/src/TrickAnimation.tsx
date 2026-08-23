@@ -97,9 +97,9 @@ function specFor(trick: Trick): Spec {
       return { ...base, flips: 1, yaw: 180, flipDir: 1, spinDir: -1 };
     case 'Dolphin Flip':
       return { ...base, flips: 1, yaw: 180, flipDir: 1, spinDir: 1, forwardFlip: true };
-    case 'Pressure Flip':
     case 'Varial Heelflip':
       return { ...base, flips: 1, yaw: 180, flipDir: -1, spinDir: -1 };
+    case 'Pressure Flip':
     case 'Inward Heelflip':
       return { ...base, flips: 1, yaw: 180, flipDir: -1, spinDir: 1 };
     case '360 Flip':

@@ -53,6 +53,8 @@ export class VoiceGameController {
   tricksLanded: string[] = [];
   trickAttempts: TrickAttempt[] = [];
   onChange?: (state: GameState, progress: GameProgress) => void;
+  onComplete?: (snapshot: GameSessionSnapshot) => void;
+  onRestart?: () => void;
   /** Fired for every robot trick attempt (including retries) so the UI can animate it. */
   onRobotAttempt?: (trick: Trick, landed: boolean) => void;
 
@@ -93,6 +95,7 @@ export class VoiceGameController {
         tricksLanded: this.tricksLanded,
         trickAttempts: this.trickAttempts,
       });
+      this.onComplete?.({ state: this.state, progress: this.progress() });
     }
     this.onChange?.(this.state, this.progress());
   }
@@ -353,6 +356,7 @@ export class VoiceGameController {
     this.tricksLanded = [];
     this.trickAttempts = [];
     this.bag = buildBag(this.robot, this.pool);
+    this.onRestart?.();
     this.onChange?.(this.state, this.progress());
     return { summary: 'Fresh game started. Ask the player for their rock-paper-scissors throw.', ...this.snapshot() };
   }

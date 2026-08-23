@@ -21,6 +21,7 @@ web feature below is available without a native clone.
 These feature folders exist in the web app and must either be reachable through
 the loaded web app or explicitly noted as not routed yet:
 
+- `analytics` — privacy-safe product events queued offline and delivered through the same web runtime.
 - `auth` — passwordless sign-in UI, session state, logout.
 - `billing` — quota/upgrade screen and dormant Stripe API behavior.
 - `dice` — standalone random-trick roller; not currently routed by `AppShell`.
@@ -51,6 +52,7 @@ The native shell must load the same web app states defined by `AppShell`:
 
 Native WebView requests must hit the same first-party API surface as web:
 
+- `/api/analytics`
 - `/api/auth/callback`
 - `/api/auth/logout`
 - `/api/auth/request-link`

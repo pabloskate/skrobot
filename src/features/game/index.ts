@@ -34,6 +34,7 @@ export type { Rps, RpsOutcome } from './rps';
 export { RPS_CHOICES, BEATS, robotThrow, rpsOutcome } from './rps';
 export type {
   GameProgress,
+  GameSessionIdentity,
   GameSessionSnapshot,
   SavedGame,
   SavedGameMode,

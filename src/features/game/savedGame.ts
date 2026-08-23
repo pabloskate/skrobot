@@ -15,11 +15,17 @@ export interface GameSessionSnapshot {
   progress: GameProgress;
 }
 
+export interface GameSessionIdentity {
+  id: string;
+  startedAt: string;
+}
+
 export interface SavedGame {
-  version: 2;
+  version: 3;
   savedAt: string;
   robotId: string;
   mode: SavedGameMode;
+  session: GameSessionIdentity;
   state: GameState;
   progress: GameProgress;
 }
@@ -107,22 +113,35 @@ function parseSavedGame(value: unknown): SavedGame | null {
     savedAt?: unknown;
     robotId?: unknown;
     mode?: unknown;
+    session?: unknown;
     state?: unknown;
     progress?: unknown;
   };
-  if (v.version !== 1 && v.version !== 2) return null;
+  if (v.version !== 1 && v.version !== 2 && v.version !== 3) return null;
   if (typeof v.robotId !== 'string' || !v.robotId) return null;
   if (v.mode !== 'screen' && v.mode !== 'voice') return null;
   if (typeof v.savedAt !== 'string') return null;
   const state = rehydrateState(v.state as GameState);
   if (!state || !isSaveWorthKeeping(state)) return null;
+  const rawSession = v.session;
+  const session =
+    v.version === 3 &&
+    rawSession != null &&
+    typeof rawSession === 'object' &&
+    'id' in rawSession &&
+    typeof rawSession.id === 'string' &&
+    'startedAt' in rawSession &&
+    typeof rawSession.startedAt === 'string'
+      ? { id: rawSession.id, startedAt: rawSession.startedAt }
+      : { id: crypto.randomUUID(), startedAt: v.savedAt };
   return {
-    version: 2,
+    version: 3,
     savedAt: v.savedAt,
     robotId: v.robotId,
     mode: v.mode,
+    session,
     state,
-    progress: v.version === 2 ? rehydrateProgress(v.progress) : rehydrateProgress(null),
+    progress: v.version === 2 || v.version === 3 ? rehydrateProgress(v.progress) : rehydrateProgress(null),
   };
 }
 
@@ -151,6 +170,7 @@ export function getSavedGame(): SavedGame | null {
 export function saveGame(input: {
   robotId: string;
   mode: SavedGameMode;
+  session: GameSessionIdentity;
   state: GameState;
   progress: GameProgress;
 }): SavedGame | null {
@@ -159,10 +179,11 @@ export function saveGame(input: {
     return null;
   }
   const saved: SavedGame = {
-    version: 2,
+    version: 3,
     savedAt: new Date().toISOString(),
     robotId: input.robotId,
     mode: input.mode,
+    session: input.session,
     state: input.state,
     progress: rehydrateProgress(input.progress),
   };

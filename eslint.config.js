@@ -159,7 +159,7 @@ export default defineConfig([
   // feature needs a new dependency, update docs/ARCHITECTURE.md and this map
   // together so the boundary stays discoverable and enforced.
   {
-    files: ['src/features/{auth,billing,install,records,tricks}/**/*.{ts,tsx}'],
+    files: ['src/features/{analytics,auth,billing,install,records,tricks}/**/*.{ts,tsx}'],
     ignores: ['src/features/*/server/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': restrictedImports(noClientServerImports, noClientPlatformServerImports, noFeatureImports),

@@ -31,13 +31,6 @@ export interface Trick {
   difficulty: number;
   /** The base difficulty of the trick (difficulty without the stance load). */
   baseDifficulty: number;
-  /**
-   * Hard floor on the robot skill needed to land this trick at all — a tier lock
-   * that no focus/favorite boost can bypass. Undefined means no floor (the usual
-   * difficulty curve decides). Late shuvits set this so only intermediate-and-up
-   * robots get a shot. See `MIN_SKILL`.
-   */
-  minSkill?: number;
 }
 
 export interface TrickPool {
@@ -162,25 +155,6 @@ const FLATGROUND_FAMILY: Record<string, Family> = {
   // everything else flatground (kickflip & derivatives, varials, combos) is `flip`
 };
 
-/**
- * Hard skill floor for "tier-locked" tricks, keyed by base name. Unlike difficulty
- * (which a high-skill robot can overcome via the consistency curve, focus, and
- * favorites), this is an absolute gate: a robot below the floor never gets the
- * trick. Late shuvits are intermediate-and-up only — the lowest intermediate robot
- * sits at skill 5 and beginners top out around 3.2, so 4.5 cleanly splits the
- * tiers. Bases not listed have no floor.
- */
-const MIN_SKILL: Record<string, number> = {
-  'Late Backside Shuvit': 4.5,
-  'Late Frontside Shuvit': 4.5,
-  'Late Kickflip': 6,
-  'Backside 360 Kickflip': 7,
-  'FS Bigspin Flip': 8.4,
-  // BS bigspin heelflip is elite tech — high-pro skill only, and still low odds.
-  'BS Bigspin Heelflip': 8.5,
-  '360 Double Kickflip': 8.4,
-};
-
 /** Discipline for each grind/other base (flatground disciplines come from FAMILY). */
 const SPECIAL_DISCIPLINE: Record<string, Discipline> = {
   // grinds category, split into true grinds vs slides
@@ -302,15 +276,14 @@ function build(): Trick[] {
         category: 'flatground',
         difficulty: Math.min(10, Math.round((difficulty + load) * 10) / 10),
         baseDifficulty: difficulty,
-        minSkill: MIN_SKILL[base],
       });
     }
   }
   for (const [base, difficulty] of GRINDS) {
-    tricks.push({ id: slug(base), name: base, base, stance: 'regular', category: 'grinds', difficulty, baseDifficulty: difficulty, minSkill: MIN_SKILL[base] });
+    tricks.push({ id: slug(base), name: base, base, stance: 'regular', category: 'grinds', difficulty, baseDifficulty: difficulty });
   }
   for (const [base, difficulty] of OTHER) {
-    tricks.push({ id: slug(base), name: base, base, stance: 'regular', category: 'other', difficulty, baseDifficulty: difficulty, minSkill: MIN_SKILL[base] });
+    tricks.push({ id: slug(base), name: base, base, stance: 'regular', category: 'other', difficulty, baseDifficulty: difficulty });
   }
   return tricks;
 }
