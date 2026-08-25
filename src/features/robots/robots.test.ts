@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ROBOTS, buildBag, isFlatgroundRobot, robotConsistency, robotDisplayRating, trickSetWeight } from './robots';
 import { TRICKS, TRICK_BY_ID, trickDiscipline } from '@/features/tricks';
+import { DEFENSE_CONSISTENCY, ROBOT_CONSISTENCY, ROBOT_DEFENSE_SET_WEIGHTS, ROBOT_SET_WEIGHTS } from './behavior';
 
 describe('Robots repertoire and consistency math', () => {
   const byId = (id: string) => ROBOTS.find((r) => r.id === id)!;
@@ -315,6 +316,27 @@ describe('Robots repertoire and consistency math', () => {
     expect(dbl.has('regular-double-kickflip')).toBe(true);
     expect(dbl.has('regular-360-double-kickflip')).toBe(true);
     expect(dbl.has('switch-double-kickflip')).toBe(false);
+  });
+});
+
+describe('robot catalog integrity', () => {
+  it('keeps every favorite on a real base trick', () => {
+    const bases = new Set(TRICKS.map((trick) => trick.base));
+    for (const robot of ROBOTS) {
+      for (const favorite of robot.favorites) {
+        expect(bases.has(favorite), `${robot.id} favorite ${favorite}`).toBe(true);
+      }
+    }
+  });
+
+  it('keeps every behavior-table key on a real trick id', () => {
+    for (const table of [ROBOT_CONSISTENCY, ROBOT_SET_WEIGHTS, DEFENSE_CONSISTENCY, ROBOT_DEFENSE_SET_WEIGHTS]) {
+      for (const [robotId, behavior] of Object.entries(table)) {
+        for (const trickId of Object.keys(behavior)) {
+          expect(TRICK_BY_ID.has(trickId), `${robotId} behavior key ${trickId}`).toBe(true);
+        }
+      }
+    }
   });
 });
 

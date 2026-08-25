@@ -6,14 +6,9 @@
  * builds the adaptive rival: a generated opponent that skates one step ahead of
  * the player's current form. Everything is derived — nothing new is persisted.
  */
-export type { EloLadderSpot } from './skillElo';
-export { eloLadderSpot, skillToDisplayRating, skillToRawElo } from './skillElo';
-export type { LadderSpot, SkateScore } from './skateScore';
+export type { SkateScore } from './skateScore';
 export {
   computeSkateScore,
-  fitRobotEquivalentSkill,
-  frontierSkill,
-  ladderSpot,
   SKATE_SCORE_UNLOCK_GAMES,
   skateScoreUnlocked,
 } from './skateScore';
@@ -22,7 +17,5 @@ export {
   isRivalId,
   resolveRobot,
   RIVAL_ID,
-  RIVAL_NAME,
   rivalDelta,
-  rivalFavorites,
 } from './rivalBot';

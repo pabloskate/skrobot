@@ -3,8 +3,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { fetchMe, logoutSession, SIGNED_OUT, type MeResponse } from './api';
 
-export type { AuthTier, AuthUser, VoiceQuota } from './api';
-
 export function useAuth() {
   const [data, setData] = useState<MeResponse>(SIGNED_OUT);
   const [loading, setLoading] = useState(true);

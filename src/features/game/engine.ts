@@ -1,10 +1,10 @@
 import { trickSetWeight, type SetWeightRobot } from '@/features/robots';
 import type { Trick } from '@/features/tricks';
 
-export type Phase = 'rps' | 'playerSet' | 'robotCopy' | 'robotSet' | 'playerCopy' | 'over';
+type Phase = 'rps' | 'playerSet' | 'robotCopy' | 'robotSet' | 'playerCopy' | 'over';
 
 /** Sub-state for animated robot sequences. */
-export type Stage =
+type Stage =
   | 'thinking' // robot picking a trick to set
   | 'attempting' // robot mid-attempt
   | 'retry' // robot missed first try on its last letter, one more roll
@@ -18,7 +18,7 @@ export type Side = 'player' | 'robot';
 export type GameFormat = 'skate' | 'sk8';
 export type GameVariant = 'classic' | 'defense';
 
-export const GAME_LETTERS = {
+const GAME_LETTERS = {
   skate: ['S', 'K', 'A', 'T', 'E'],
   sk8: ['S', 'K', '8'],
 } as const;

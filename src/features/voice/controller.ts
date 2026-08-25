@@ -9,7 +9,7 @@ import {
   rollAttempt,
   rpsOutcome,
 } from '@/features/game';
-import { appendGameLog, recordResult } from '@/features/records';
+import { recordCompletedMatch } from '@/features/records';
 import type { TrickAttempt } from '@/features/records';
 import type { Robot } from '@/features/robots';
 import { buildBag } from '@/features/robots';
@@ -50,7 +50,7 @@ export class VoiceGameController {
   private prevTricksLanded: string[] | null = null;
   private prevTrickAttempts: TrickAttempt[] | null = null;
   private recorded = false;
-  tricksLanded: string[] = [];
+  trickIdsLanded: string[] = [];
   trickAttempts: TrickAttempt[] = [];
   onChange?: (state: GameState, progress: GameProgress) => void;
   onComplete?: (snapshot: GameSessionSnapshot) => void;
@@ -66,14 +66,14 @@ export class VoiceGameController {
     if (resume) {
       this.state = resume.state;
       this.recorded = resume.state.phase === 'over';
-      this.tricksLanded = [...resume.progress.tricksLanded];
+      this.trickIdsLanded = [...resume.progress.trickIdsLanded];
       this.trickAttempts = [...resume.progress.trickAttempts];
     }
   }
 
   private progress(): GameProgress {
     return {
-      tricksLanded: [...this.tricksLanded],
+      trickIdsLanded: [...this.trickIdsLanded],
       trickAttempts: [...this.trickAttempts],
     };
   }
@@ -84,15 +84,14 @@ export class VoiceGameController {
       this.recorded = true;
       clearSavedGame();
       const won = this.state.winner === 'player';
-      recordResult(this.robot.id, won);
-      appendGameLog({
+      recordCompletedMatch({
         date: new Date().toISOString(),
         robotId: this.robot.id,
         mode: 'voice',
         won,
         playerLetters: this.state.letters.player,
         robotLetters: this.state.letters.robot,
-        tricksLanded: this.tricksLanded,
+        trickIdsLanded: this.trickIdsLanded,
         trickAttempts: this.trickAttempts,
       });
       this.onComplete?.({ state: this.state, progress: this.progress() });
@@ -175,7 +174,7 @@ export class VoiceGameController {
 
   private saveUndo() {
     this.prevState = this.state;
-    this.prevTricksLanded = [...this.tricksLanded];
+    this.prevTricksLanded = [...this.trickIdsLanded];
     this.prevTrickAttempts = [...this.trickAttempts];
   }
 
@@ -183,7 +182,7 @@ export class VoiceGameController {
     if (!this.prevState) return { ok: false, summary: `Nothing to undo. ${this.nextStep()}` };
     this.state = this.prevState;
     this.prevState = null;
-    this.tricksLanded = this.prevTricksLanded ?? [];
+    this.trickIdsLanded = this.prevTricksLanded ?? [];
     this.trickAttempts = this.prevTrickAttempts ?? [];
     this.prevTricksLanded = null;
     this.prevTrickAttempts = null;
@@ -273,8 +272,8 @@ export class VoiceGameController {
         return { needsClarification: res.candidates.map((t) => t.name), ...this.snapshot() };
 
       this.saveUndo();
-      this.tricksLanded.push(res.trick.name);
-      this.trickAttempts.push({ trick: res.trick.name, landed: true });
+      this.trickIdsLanded.push(res.trick.id);
+      this.trickAttempts.push({ trickId: res.trick.id, landed: true });
       this.dispatch({ type: 'PLAYER_SET_LANDED', trick: res.trick });
       const robotCopy = this.runRobotCopy();
       return {
@@ -293,7 +292,7 @@ export class VoiceGameController {
     // miss. Resolution failure never blocks the game — the set passes either way.
     if (trickName) {
       const res = resolveTrick(trickName, this.pool);
-      if (res.kind === 'match') this.trickAttempts.push({ trick: res.trick.name, landed: false });
+      if (res.kind === 'match') this.trickAttempts.push({ trickId: res.trick.id, landed: false });
     }
     this.dispatch({ type: 'PLAYER_SET_MISSED' });
     const robotSet = this.runRobotSet();
@@ -314,12 +313,13 @@ export class VoiceGameController {
         ...this.snapshot(),
       };
     this.saveUndo();
-    const trickName = this.state.current!.name;
+    const currentTrick = this.state.current!;
+    const trickName = currentTrick.name;
     const events: RobotEvents = {};
-    this.trickAttempts.push({ trick: trickName, landed });
+    this.trickAttempts.push({ trickId: currentTrick.id, landed });
 
     if (landed) {
-      this.tricksLanded.push(trickName);
+      this.trickIdsLanded.push(currentTrick.id);
       this.dispatch({ type: 'PLAYER_COPY_LANDED' });
     } else {
       this.dispatch({ type: 'PLAYER_COPY_MISSED' });
@@ -353,7 +353,7 @@ export class VoiceGameController {
     this.prevTricksLanded = null;
     this.prevTrickAttempts = null;
     this.recorded = false;
-    this.tricksLanded = [];
+    this.trickIdsLanded = [];
     this.trickAttempts = [];
     this.bag = buildBag(this.robot, this.pool);
     this.onRestart?.();

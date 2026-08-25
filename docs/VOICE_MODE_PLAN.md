@@ -73,8 +73,8 @@ the feature-owned client helper in `src/features/voice/api.ts`.
   a per-user voice quota slot before minting.
 - Production and preview read `GEMINI_API_KEY` from Cloudflare Worker secrets /
   `.dev.vars`; `next dev` reads `.env.local`.
-- `NEXT_PUBLIC_GEMINI_API_KEY` is a dev-only browser fallback and must not be used
-  as the production auth path.
+- Local and production sessions both use `/api/live-token`; long-lived Gemini
+  API keys remain server-side in every environment.
 
 ## 3. Tool surface
 
@@ -172,9 +172,9 @@ True locked-phone-in-pocket play is **not reliably possible as a pure web app on
 - **v1 (web): "Pocket Mode"** — acquire a **Wake Lock** (screen stays on), render a
   dim, touch-locked, OLED-black overlay (giant letters + captions only), and tell the
   user to pocket the phone screen-on. Battery cost is modest with a black screen.
-- **v2 (if voice mode proves out): Capacitor wrapper** — native audio session with
-  background mode gives real lock-screen operation, plus AirPods stem-click hooks via
-  the Media Session API. Don't build this until the web version validates the gameplay.
+- **Historical v2 idea (superseded): Capacitor wrapper.** The implemented native
+  direction is the Expo WebView parity shell in `apps/mobile`. True background
+  audio would be explicit Expo-shell work only if voice usage justifies it.
 
 ## 6. UX flow
 
@@ -244,8 +244,8 @@ tuning, idle-timeout auto-end (~20 min silence), earcons, undo flow.
 Token endpoint deployed, per-robot personas, game history log + `get_records` tool,
 voice pick (Live API offers multiple voices — could map per robot tier), settings.
 
-**Phase 5 (contingent) — Capacitor wrapper** for true lock-screen play, if usage shows
-people actually want it.
+**Phase 5 (contingent) — Expo background-audio work** for true lock-screen play,
+only if usage shows people actually want it.
 
 ## 10. Open items (most verified against docs, June 2026)
 

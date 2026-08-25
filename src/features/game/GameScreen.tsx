@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { appendGameLog, recordResult } from '@/features/records';
+import { recordCompletedMatch } from '@/features/records';
 import type { TrickAttempt } from '@/features/records';
 import type { Robot } from '@/features/robots';
-import { buildBag, RobotAvatar } from '@/features/robots';
+import { buildBag, hasDefenseSets, RobotAvatar, trickDefenseSetWeight, trickSetWeight } from '@/features/robots';
 import type { Trick } from '@/features/tricks';
 import { TRICK_BY_ID, TrickPicker } from '@/features/tricks';
 import {
@@ -104,10 +104,15 @@ export default function GameScreen({
   const bag = useMemo(() => buildBag(robot, pool), [robot, pool]);
   // A resumed finished game was already recorded by the other mode.
   const recorded = useRef(resume?.state.phase === 'over');
-  const tricksLanded = useRef<string[]>([...(resume?.progress.tricksLanded ?? [])]);
+  const trickIdsLanded = useRef<string[]>([...(resume?.progress.trickIdsLanded ?? [])]);
   const trickAttempts = useRef<TrickAttempt[]>([...(resume?.progress.trickAttempts ?? [])]);
 
   const say = (template: string) => template.replaceAll('{R}', robot.name);
+
+  // Defense mode uses the robot's dedicated defense set table when it has one
+  // (the defense roster does); everything else sets from its classic table.
+  const setWeightFn =
+    state.gameVariant === 'defense' && hasDefenseSets(robot) ? trickDefenseSetWeight : trickSetWeight;
 
   // Robot picking a trick is still a simple timer; attempts are resolved by
   // the trick animation (the roll happens up front, the animation shows the
@@ -115,11 +120,11 @@ export default function GameScreen({
   useEffect(() => {
     if (state.phase !== 'robotSet' || state.stage !== 'thinking') return;
     const t = setTimeout(
-      () => dispatch({ type: 'ROBOT_SET_CHOICE', trick: chooseRobotTrick(bag, state.used, TRICK_BY_ID, robot) }),
+      () => dispatch({ type: 'ROBOT_SET_CHOICE', trick: chooseRobotTrick(bag, state.used, TRICK_BY_ID, robot, Math.random, setWeightFn) }),
       1400,
     );
     return () => clearTimeout(t);
-  }, [state.phase, state.stage, state.used, bag, robot]);
+  }, [state.phase, state.stage, state.used, bag, robot, setWeightFn]);
 
   // Persist W/L once per game.
   useEffect(() => {
@@ -127,21 +132,20 @@ export default function GameScreen({
       recorded.current = true;
       clearSavedGame();
       const won = state.winner === 'player';
-      recordResult(robot.id, won);
-      appendGameLog({
+      recordCompletedMatch({
         date: new Date().toISOString(),
         robotId: robot.id,
         mode: 'screen',
         won,
         playerLetters: state.letters.player,
         robotLetters: state.letters.robot,
-        tricksLanded: tricksLanded.current,
+        trickIdsLanded: trickIdsLanded.current,
         trickAttempts: trickAttempts.current,
       });
       onComplete?.({
         state,
         progress: {
-          tricksLanded: [...tricksLanded.current],
+          trickIdsLanded: [...trickIdsLanded.current],
           trickAttempts: [...trickAttempts.current],
         },
       });
@@ -149,7 +153,7 @@ export default function GameScreen({
     if (state.phase === 'rps') {
       if (recorded.current) onRestart?.();
       recorded.current = false;
-      tricksLanded.current = [];
+      trickIdsLanded.current = [];
       trickAttempts.current = [];
     }
   }, [state, robot.id, onComplete, onRestart]);
@@ -165,7 +169,7 @@ export default function GameScreen({
         ? {
             state,
             progress: {
-              tricksLanded: [...tricksLanded.current],
+              trickIdsLanded: [...trickIdsLanded.current],
               trickAttempts: [...trickAttempts.current],
             },
           }
@@ -177,7 +181,7 @@ export default function GameScreen({
     onGameState?.({
       state,
       progress: {
-        tricksLanded: [...tricksLanded.current],
+        trickIdsLanded: [...trickIdsLanded.current],
         trickAttempts: [...trickAttempts.current],
       },
     });
@@ -270,8 +274,8 @@ export default function GameScreen({
             className="btn-primary"
             onClick={() => {
               // A landed copy is a proven land in every mode (matches voice).
-              tricksLanded.current.push(state.current!.name);
-              trickAttempts.current.push({ trick: state.current!.name, landed: true });
+              trickIdsLanded.current.push(state.current!.id);
+              trickAttempts.current.push({ trickId: state.current!.id, landed: true });
               dispatch({ type: 'PLAYER_COPY_LANDED' });
             }}
           >
@@ -280,7 +284,7 @@ export default function GameScreen({
           <button
             className="btn-danger"
             onClick={() => {
-              trickAttempts.current.push({ trick: state.current!.name, landed: false });
+              trickAttempts.current.push({ trickId: state.current!.id, landed: false });
               dispatch({ type: 'PLAYER_COPY_MISSED' });
             }}
           >
@@ -319,8 +323,8 @@ export default function GameScreen({
           onClose={() => setPickerOpen(false)}
           onPick={(trick) => {
             setPickerOpen(false);
-            tricksLanded.current.push(trick.name);
-            trickAttempts.current.push({ trick: trick.name, landed: true });
+            trickIdsLanded.current.push(trick.id);
+            trickAttempts.current.push({ trickId: trick.id, landed: true });
             dispatch({ type: 'PLAYER_SET_LANDED', trick });
           }}
         />

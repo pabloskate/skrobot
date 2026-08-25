@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { ProvenTrick, TrickMark } from '@/features/records';
-import { TRICK_BY_ID, tricksFor } from '@/features/tricks';
+import { TRICK_BY_ID, TRICK_BY_NAME, tricksFor } from '@/features/tricks';
 import { buildTrickBook, computeBookView, inBag, learningQueue, nextUp } from './trickBook';
 
 const FLAT = tricksFor('flatground');
 
 const proven = (names: string[]): Record<string, ProvenTrick> =>
   Object.fromEntries(
-    names.map((name) => [name, { count: 1, lastDate: '2026-07-01', lastRobotId: 'shifty' }]),
+    names.map((name) => [TRICK_BY_NAME.get(name)?.id ?? name, { count: 1, lastDate: '2026-07-01', lastRobotId: 'shifty' }]),
   );
 
 describe('buildTrickBook', () => {
@@ -17,7 +17,7 @@ describe('buildTrickBook', () => {
     for (const entry of book.values()) expect(entry.state).toBe('none');
   });
 
-  it('proven (from the game log, by name) beats a player mark', () => {
+  it('proven game evidence by stable id beats a player mark', () => {
     const marks: Record<string, TrickMark> = { 'regular-kickflip': 'learning' };
     const book = buildTrickBook(FLAT, marks, proven(['Kickflip']));
     expect(book.get('regular-kickflip')).toMatchObject({ state: 'proven' });

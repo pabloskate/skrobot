@@ -41,15 +41,20 @@ export default function SignInScreen({ onDone, onCancel }: Props) {
 
         {sentTo ? (
           <>
-            <p className="note">Check {sentTo} for your magic link.</p>
-            {devLink && (
-              <a className="dev-link" href={devLink}>
-                Open local dev sign-in link
+            <p className="note">
+              {devLink
+                ? 'Local development skips email delivery. Use this one-time link to sign in.'
+                : `Check ${sentTo} for your magic link.`}
+            </p>
+            {devLink ? (
+              <a className="btn-primary dev-link" href={devLink}>
+                Sign in locally
               </a>
+            ) : (
+              <button className="btn-primary" onClick={onDone}>
+                I opened the link
+              </button>
             )}
-            <button className="btn-primary" onClick={onDone}>
-              I opened the link
-            </button>
           </>
         ) : (
           <form className="auth-form" onSubmit={submit}>

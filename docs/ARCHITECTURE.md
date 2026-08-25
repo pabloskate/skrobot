@@ -20,12 +20,12 @@ If the answer is unclear, tighten the feature boundary before adding more code.
 | Voice token mint | `src/features/voice/server/` | Server-only; imported directly only by `src/app/api/live-token`. |
 | Auth/session/quota | `src/features/auth/` | Client auth state in the barrel; server code under `server/`. |
 | Billing | `src/features/billing/` | Beta quota UI plus dormant Stripe server helpers. |
-| Tricks | `src/features/tricks/` | Catalog, difficulty, metadata, picker/setup UI, and the default routed trick pool. Routed games currently use flatground only. |
+| Tricks | `src/features/tricks/` | Catalog, difficulty, metadata, picker UI, and the default routed trick pool. Routed games currently use flatground only. |
 | Gallery | `src/features/gallery/` | Flatground trick gallery plus the player trick book: browse the catalog with stance filters, curated video tips, personal proven/learning state, and per-trick consistency stats. |
 | Robots | `src/features/robots/` | Roster metadata, explicit per-trick land-rate/set-weight tables, profile/select/avatar UI, and the browser-local editor routed at `/tune`. Routed home currently exposes flatground robots only. |
 | Player skill / adaptive rival | `src/features/skater/` | Skate score (player-only curve fit + frontier fallback), robot-ladder placement, and a generated rival that copies the closest roster behavior table. All derived from the game log; nothing persisted. |
 | Records | `src/features/records/` | LocalStorage W/L, game log, trick marks, and per-trick attempt stats until the D1 port. |
-| Product analytics | `src/features/analytics/` | Strict gameplay event contracts, anonymous installation identity, offline delivery, and D1 ingestion. |
+| Product analytics | `src/features/analytics/` | Strict gameplay event contracts, anonymous installation identity, offline delivery, D1 ingestion, and the owner-only aggregate dashboard at `/admin/analytics`. |
 | Web/native install handoff | `src/features/install/` | App Store handoff, Android PWA instructions, and browser/WebView detection. |
 | Runtime infrastructure | `src/platform/server/` | Cloudflare env and bindings, D1, future logging/HTTP adapters. |
 | Shared primitives | `src/shared/` | Reserved for domain-neutral primitives only, such as online status. |
@@ -36,8 +36,8 @@ If the answer is unclear, tighten the feature boundary before adding more code.
 ## Dependency Map
 
 Imports across web features must go through `@/features/<name>` unless an API
-route is importing server-only feature code. This map is enforced by
-`eslint.config.js`.
+route is importing server-only feature code. ESLint enforces the common cases;
+`src/architecture.test.ts` locks the exact graph and catches relative bypasses.
 
 | Feature | May depend on | Must not depend on |
 |---|---|---|
@@ -49,14 +49,13 @@ route is importing server-only feature code. This map is enforced by
 | `billing` | `platform/server` from server files | Auth UI, gameplay, screens, other features |
 | `tricks` | none | Other features |
 | `gallery` | `tricks`, `records`, `robots`, `skater` | Other features |
-| `records` | none | Other features |
+| `records` | `tricks` | Other features; the catalog dependency is limited to legacy display-name migration into stable trick IDs |
 | `robots` | `tricks`, `records`, `@skrobot/animations` | Screens, game, voice, auth, billing, skater |
 | `skater` | `tricks`, `records`, `robots` | Screens, game, voice, auth, billing |
 | `home` | `robots`, `records`, `skater` | Game/voice flow internals; non-flatground roster setup |
 | `install` | none | Other features; AppShell supplies native-shell context |
-| `dice` | `tricks` | Robot/game/record/auth concerns |
-| `game` | `tricks`, `robots`, `records`, `@skrobot/animations` | Voice, home, dice, auth, billing |
-| `voice` | `game`, `tricks`, `robots`, `records`, `auth`, `billing` | Home and dice screens |
+| `game` | `tricks`, `robots`, `records`, `@skrobot/animations` | Voice, home, auth, billing |
+| `voice` | `game`, `tricks`, `robots`, `records`, `auth`, `billing` | Home screens |
 | `platform/server` | platform-local modules only | Features, app UI, domain logic |
 | `shared` | shared-local modules only | Features, app, platform, domain logic |
 | `app` | feature barrels and platform; API routes may import `features/*/server/*` | Domain logic |

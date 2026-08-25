@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Trick } from '@/features/tricks'
+import { TRICKS } from '@/features/tricks'
+import { buildBag, DEFENSE_ROBOTS, trickDefenseSetWeight } from '@/features/robots'
 import {
   LETTERS,
   type GameState,
@@ -247,6 +249,36 @@ describe('gameReducer — defense only', () => {
     expect(finished.winner).toBe('player')
     expect(finished.letters.robot).toBe(3)
     expect(gameReducer(finished, { type: 'REMATCH' })).toEqual(createInitialGameState('sk8', 'defense'))
+  })
+})
+
+describe('defense set selection', () => {
+  it('draws only from the defense set table, never from easy filler', () => {
+    const fortress = DEFENSE_ROBOTS.find((r) => r.id === 'fortress')!
+    const bag = buildBag(fortress, TRICKS)
+    const picked = new Set<string>()
+    for (let i = 0; i < 400; i++) {
+      const pick = chooseRobotTrick(bag, [], new Map(TRICKS.map((t) => [t.id, t])), fortress,
+        Math.random, trickDefenseSetWeight)
+      expect(pick).not.toBeNull()
+      expect(pick!.base).not.toBe('Ollie')
+      expect(pick!.base).not.toBe('Ollie North')
+      picked.add(pick!.id)
+    }
+    // And its picks span a real bag, not one signature trick.
+    expect(picked.size).toBeGreaterThan(10)
+  })
+
+  it('falls back to classic weights for robots without a defense table', () => {
+    const gutsy = { id: 'sacker' } as never
+    const ollie = TRICKS.find((t) => t.id === 'regular-ollie')!
+    // trickDefenseSetWeight returns 0 for every classic robot trick...
+    expect(trickDefenseSetWeight(ollie, gutsy)).toBe(0)
+    // ...so chooseRobotTrick finds nothing settable and bails.
+    const bag = buildBag(gutsy, [ollie])
+    expect(
+      chooseRobotTrick(bag, [], new Map(TRICKS.map((t) => [t.id, t])), gutsy, Math.random, trickDefenseSetWeight),
+    ).toBeNull()
   })
 })
 

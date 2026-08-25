@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { GameLogEntry, ProvenTrick, TrickAttempt } from '@/features/records';
 import { ROBOTS, isFlatgroundRobot, rawEloToDisplayRating } from '@/features/robots';
-import { tricksFor } from '@/features/tricks';
+import { TRICK_BY_NAME, tricksFor } from '@/features/tricks';
 import { eloLadderSpot, skillToDisplayRating, skillToRawElo } from './skillElo';
 import {
   computeSkateScore,
@@ -13,24 +13,26 @@ import {
 } from './skateScore';
 
 const FLAT = tricksFor('flatground');
+const id = (name: string) => TRICK_BY_NAME.get(name)?.id ?? name;
 
 const proven = (names: string[]): Record<string, ProvenTrick> =>
   Object.fromEntries(
-    names.map((name) => [name, { count: 1, lastDate: '2026-07-01', lastRobotId: 'shifty' }]),
+    names.map((name) => [id(name), { count: 1, lastDate: '2026-07-01', lastRobotId: 'shifty' }]),
   );
 
 let gameCounter = 0;
 /** A completed-game log entry with the given trick attempts. */
-function game(attempts: TrickAttempt[], tricksLanded?: string[]): GameLogEntry {
+function game(attempts: TrickAttempt[], trickIdsLanded?: string[]): GameLogEntry {
   gameCounter += 1;
   return {
+    version: 2,
     date: `2026-07-${String((gameCounter % 28) + 1).padStart(2, '0')}`,
     robotId: 'shifty',
     mode: 'screen',
     won: true,
     playerLetters: 1,
     robotLetters: 5,
-    tricksLanded: tricksLanded ?? attempts.filter((a) => a.landed).map((a) => a.trick),
+    trickIdsLanded: trickIdsLanded ?? attempts.filter((a) => a.landed).map((a) => a.trickId),
     trickAttempts: attempts,
   };
 }
@@ -91,14 +93,14 @@ describe('ladderSpot', () => {
 describe('fitRobotEquivalentSkill', () => {
   it('returns null below the minimum tracked attempts', () => {
     const stats = {
-      Ollie: { attempts: 3, makes: 3, misses: 0, rate: 1, lastDate: '2026-07-01', lastRobotId: 'shifty' },
+      'regular-ollie': { attempts: 3, makes: 3, misses: 0, rate: 1, lastDate: '2026-07-01', lastRobotId: 'shifty' },
     };
     expect(fitRobotEquivalentSkill(stats)).toBeNull();
   });
 
-  it('skips trick names that are no longer in the catalog', () => {
+  it('skips trick ids that are no longer in the catalog', () => {
     const stats = {
-      'Deleted Trick': { attempts: 20, makes: 20, misses: 0, rate: 1, lastDate: '2026-07-01', lastRobotId: 'shifty' },
+      'deleted-trick': { attempts: 20, makes: 20, misses: 0, rate: 1, lastDate: '2026-07-01', lastRobotId: 'shifty' },
     };
     expect(fitRobotEquivalentSkill(stats)).toBeNull();
   });
@@ -106,10 +108,10 @@ describe('fitRobotEquivalentSkill', () => {
   it('places a beginner bag low on the scale', () => {
     // Lands easy tricks almost always, misses hard ones — classic beginner curve.
     const stats = {
-      Ollie: { attempts: 10, makes: 9, misses: 1, rate: 0.9, lastDate: '2026-07-01', lastRobotId: 'shifty' },
-      'Pop Shuvit': { attempts: 10, makes: 8, misses: 2, rate: 0.8, lastDate: '2026-07-01', lastRobotId: 'shifty' },
-      Kickflip: { attempts: 8, makes: 3, misses: 5, rate: 0.375, lastDate: '2026-07-01', lastRobotId: 'shifty' },
-      '360 Flip': { attempts: 6, makes: 0, misses: 6, rate: 0, lastDate: '2026-07-01', lastRobotId: 'shifty' },
+      'regular-ollie': { attempts: 10, makes: 9, misses: 1, rate: 0.9, lastDate: '2026-07-01', lastRobotId: 'shifty' },
+      'regular-pop-shuvit': { attempts: 10, makes: 8, misses: 2, rate: 0.8, lastDate: '2026-07-01', lastRobotId: 'shifty' },
+      'regular-kickflip': { attempts: 8, makes: 3, misses: 5, rate: 0.375, lastDate: '2026-07-01', lastRobotId: 'shifty' },
+      'regular-360-flip': { attempts: 6, makes: 0, misses: 6, rate: 0, lastDate: '2026-07-01', lastRobotId: 'shifty' },
     };
     const skill = fitRobotEquivalentSkill(stats)!;
     expect(skill).not.toBeNull();
@@ -127,12 +129,12 @@ describe('fitRobotEquivalentSkill', () => {
       lastDate: '2026-07-01',
       lastRobotId: 'shifty',
     });
-    const easy = fitRobotEquivalentSkill({ Ollie: make(0.9), 'Pop Shuvit': make(0.85) })!;
+    const easy = fitRobotEquivalentSkill({ 'regular-ollie': make(0.9), 'regular-pop-shuvit': make(0.85) })!;
     const hard = fitRobotEquivalentSkill({
-      Kickflip: make(0.9),
-      Heelflip: make(0.85),
-      '360 Flip': make(0.6),
-      Hardflip: make(0.5),
+      'regular-kickflip': make(0.9),
+      'regular-heelflip': make(0.85),
+      'regular-360-flip': make(0.6),
+      'regular-hardflip': make(0.5),
     })!;
     expect(hard).toBeGreaterThan(easy);
   });
@@ -141,7 +143,7 @@ describe('fitRobotEquivalentSkill', () => {
 describe('computeSkateScore', () => {
   it('is null while locked', () => {
     const log = logOf(
-      [{ trick: 'Ollie', landed: true }],
+      [{ trickId: 'regular-ollie', landed: true }],
       SKATE_SCORE_UNLOCK_GAMES - 1,
     );
     expect(computeSkateScore(log)).toBeNull();
@@ -149,10 +151,10 @@ describe('computeSkateScore', () => {
 
   it('fits from attempts once unlocked', () => {
     const perGame: TrickAttempt[] = [
-      { trick: 'Ollie', landed: true },
-      { trick: 'Pop Shuvit', landed: true },
-      { trick: 'Frontside 180', landed: true },
-      { trick: 'Kickflip', landed: true },
+      { trickId: 'regular-ollie', landed: true },
+      { trickId: 'regular-pop-shuvit', landed: true },
+      { trickId: 'regular-frontside-180', landed: true },
+      { trickId: 'regular-kickflip', landed: true },
     ];
     const score = computeSkateScore(logOf(perGame, SKATE_SCORE_UNLOCK_GAMES))!;
     expect(score).not.toBeNull();
@@ -166,13 +168,14 @@ describe('computeSkateScore', () => {
 
   it('falls back to the frontier for legacy logs without attempt tracking', () => {
     const legacy: GameLogEntry[] = Array.from({ length: SKATE_SCORE_UNLOCK_GAMES }, (_, i) => ({
+      version: 2 as const,
       date: `2026-07-0${i + 1}`,
       robotId: 'shifty',
       mode: 'screen' as const,
       won: true,
       playerLetters: 1,
       robotLetters: 5,
-      tricksLanded: ['Ollie', 'Pop Shuvit', 'Kickflip', 'Heelflip'],
+      trickIdsLanded: ['regular-ollie', 'regular-pop-shuvit', 'regular-kickflip', 'regular-heelflip'],
       // no trickAttempts — pre-tracking entries
     }));
     const score = computeSkateScore(legacy)!;
@@ -186,10 +189,10 @@ describe('computeSkateScore', () => {
 
   it('projects the skill onto the rating scale and brackets the measured ladder', () => {
     const perGame: TrickAttempt[] = [
-      { trick: 'Ollie', landed: true },
-      { trick: 'Pop Shuvit', landed: true },
-      { trick: 'Frontside 180', landed: true },
-      { trick: 'Kickflip', landed: true },
+      { trickId: 'regular-ollie', landed: true },
+      { trickId: 'regular-pop-shuvit', landed: true },
+      { trickId: 'regular-frontside-180', landed: true },
+      { trickId: 'regular-kickflip', landed: true },
     ];
     const score = computeSkateScore(logOf(perGame, SKATE_SCORE_UNLOCK_GAMES))!;
     expect(score.rawElo).toBe(skillToRawElo(score.skill));

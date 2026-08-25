@@ -23,9 +23,10 @@ Live API) for playing with earbuds at the skatepark.
 | `npm run build` | `next build` — typecheck + production build (catches type errors, not logic bugs) |
 | `npm test` | Vitest unit tests — the behavioral check for the rules engine, RPS, and trick resolver |
 | `npm run lint` | ESLint (flat config) — also enforces the architecture import boundaries below |
+| `npm run typecheck:web` | Full root TypeScript check, including tests omitted by `next build` |
 | `npm run typecheck:mobile` | Typecheck the Expo companion app |
 | `npm run typecheck:animations` | Typecheck the shared animation package and standalone playground |
-| `npm run check` | Full local confidence pass: lint boundaries, tests, package typechecks, then production build |
+| `npm run check` | Full local confidence pass: lint boundaries, all typechecks, tests, then production build |
 | `npm run mobile:start` | Start the Expo native shell from the repo root |
 | `npm run mobile:ios` | Start the Expo native shell on iOS simulator/device |
 | `npm run mobile:android` | Start the Expo native shell on Android emulator/device |
@@ -67,8 +68,7 @@ src/
 │   ├── skater/           # Player model: skate score (unlocks at 8 games, beta-gated), robot-ladder placement, adaptive rival robot
 │   ├── home/             # Landing screen / flatground robot choice
 │   ├── install/          # App Store handoff + Android PWA install guidance (web-only)
-│   ├── gallery/          # Flatground trick gallery + player trick book (search, stance filters, video tips, want-to-learn shelf, proven marks, consistency stats)
-│   └── dice/             # Standalone random-trick roller
+│   └── gallery/          # Flatground trick gallery + player trick book (search, stance filters, video tips, want-to-learn shelf, proven marks, consistency stats)
 ├── platform/             # Runtime infrastructure (Cloudflare env, D1 bindings)
 └── shared/               # Primitive domain-neutral helpers (online status, etc.)
 ```
@@ -80,8 +80,8 @@ Review checklist: `docs/ARCHITECTURE_REVIEW.md`.
 ### Rules (keep these invariants)
 
 Rules 1, 4, and 5 (import boundaries, dependency direction, and server/client
-separation) are enforced by `no-restricted-imports` in `eslint.config.js` —
-break one and `npm run lint` fails with a message pointing back here.
+separation) are enforced by `no-restricted-imports` in `eslint.config.js` and
+the exact graph test in `src/architecture.test.ts`.
 
 1. **Import features only through their barrel** (`@/features/<name>`), never deep
    paths. Each feature's `index.ts` is its public API and documents what the feature
@@ -94,7 +94,7 @@ break one and `npm run lint` fails with a message pointing back here.
    `src/features/game/engine.ts` is the pure reducer; tricks, robots, records,
    and voice resolver logic live in their owning feature folders. Mobile must not
    rebuild or import game/domain logic; it loads the same web app in a WebView.
-4. **Dependency direction:** `home`/`dice`/`game`/`voice`/`gallery` (screens) may
+4. **Dependency direction:** `home`/`game`/`voice`/`gallery` (screens) may
    depend on `tricks`/`robots`/`records` (domain data); domain features don't
    import screens. `gallery` also shows the player model (`skater`) in its Stats
    tab. `voice` also wraps `game`. The exact allowed feature graph lives in
@@ -116,7 +116,9 @@ break one and `npm run lint` fails with a message pointing back here.
   `eslint.config.js` to enforce it.
 - **Animation changes:** edit reusable robot/avatar/trick animation code in
   `packages/animations`; keep playground-only controls and fixture data in
-  `skrobot-animations`.
+  `skrobot-animations`. Verify the package invariants with `npm test`, then use
+  the playground Contact sheet to visually compare the affected trick family
+  and both rider stances. Details live in `skrobot-animations/AGENTS.md`.
 - **Rules/catalog/robot/voice resolver changes:** edit the owning feature under
   `src/features/*` and update tests that exercise the behavior through the web
   feature API.
@@ -130,8 +132,8 @@ break one and `npm run lint` fails with a message pointing back here.
   Top-level tabs (the selected game format, Tricks, and Settings) are root
   screens available to everyone (release 1.3.1 made the Tricks tab generally
   available); voice mode and the Adaptive challenge are beta-only and require
-  `?version=beta`. Sub-screens (profile, game, voice, signin,
-  upgrade) show a back button and hide the tab bar.
+  `?version=beta`. Sub-screens (profile, game, voice, signin) show a back button
+  and hide the tab bar.
 - **New API endpoint:** thin route under `src/app/api/`, logic in
   `features/<name>/server/`.
 - **Backend work (D1):** keep SQL migrations in `migrations/` and use the
@@ -143,8 +145,8 @@ break one and `npm run lint` fails with a message pointing back here.
 - The Live model id is pinned in `features/voice/live-model.ts` and shared by the
   browser session and the server token mint — they must match or tokens are rejected
   (model rationale: docs/VOICE_MODE_PLAN.md §2).
-- `NEXT_PUBLIC_GEMINI_API_KEY` is a dev-only fallback that ships to the browser;
-  production auth is the ephemeral-token route.
+- Voice authentication always uses the server-side `GEMINI_API_KEY` to mint an
+  ephemeral token; long-lived API keys must never be exposed to client code.
 - Robot behavior is fully explicit in `src/features/robots/behavior.ts`: every
   robot/trick/stance land rate and set weight is authoritative. Missing land-rate
   entries mean the trick is not in the bag; missing/zero set weights mean it is

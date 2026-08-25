@@ -4,7 +4,8 @@ import { useMemo, useState } from 'react';
 import type { Stance, Trick } from '@/features/tricks';
 import { trickDescription } from '@/features/tricks';
 import type { Robot } from './robots';
-import { buildBag } from './robots';
+import { buildBag, hasDefenseSets } from './robots';
+import { ROBOT_DEFENSE_SET_WEIGHTS } from './behavior';
 import RobotAvatar from './RobotAvatar';
 import RobotRating from './RobotRating';
 
@@ -29,12 +30,28 @@ function level(value: number): 'high' | 'mid' | 'low' {
   return value >= 0.7 ? 'high' : value >= 0.45 ? 'mid' : 'low';
 }
 
+function shareLevel(value: number): 'high' | 'mid' | 'low' {
+  return value >= 0.15 ? 'high' : value >= 0.08 ? 'mid' : 'low';
+}
+
 /** One pill per explicitly configured stance variant. */
 function StancePill({ stance, value }: { stance: Stance; value: number }) {
   const pct = Math.round(value * 100);
   const label = `${stance === 'regular' ? 'Regular' : STANCE_LABEL[stance]}: lands it about ${pct}% of the time`;
   return (
     <span className={`stance-pill stance-pill-${level(value)}`} title={label} aria-label={label}>
+      <span className="stance-pill-label">{STANCE_LABEL[stance]}</span>
+      <span className="stance-pill-pct">{pct}%</span>
+    </span>
+  );
+}
+
+/** Defense variant: one pill per stance the bot will SET, with its set share. */
+function DefenseSetPill({ stance, share }: { stance: Stance; share: number }) {
+  const pct = Math.round(share * 100);
+  const label = `${stance === 'regular' ? 'Regular' : STANCE_LABEL[stance]}: sets it about ${pct}% of the time`;
+  return (
+    <span className={`stance-pill stance-pill-${shareLevel(share)}`} title={label} aria-label={label}>
       <span className="stance-pill-label">{STANCE_LABEL[stance]}</span>
       <span className="stance-pill-pct">{pct}%</span>
     </span>
@@ -49,11 +66,44 @@ function StancePill({ stance, value }: { stance: Stance; value: number }) {
 export default function RobotProfile({ robot, pool, onStart }: Props) {
   const [showTricks, setShowTricks] = useState(false);
   const bag = useMemo(() => buildBag(robot, pool), [robot, pool]);
+  // Defense bots always land their own set, so land rates are meaningless.
+  // Their identity is their SET table: what they throw, and how often.
+  const defense = hasDefenseSets(robot);
 
   // One row per base trick, but each row lists every explicitly configured stance
   // and exact consistency instead of collapsing to the regular variant. Signatures float to the top, then
   // most-consistent first (by the robot's best stance for that base).
   const repertoire = useMemo(() => {
+    if (defense) {
+      const table = ROBOT_DEFENSE_SET_WEIGHTS[robot.behaviorId ?? robot.id] ?? {};
+      const total = Object.values(table).reduce((sum, w) => sum + w, 0);
+      const byBase = new Map<
+        string,
+        { base: string; rep: Trick; variants: { stance: Stance; consistency: number }[] }
+      >();
+      for (const trick of pool) {
+        const w = table[trick.id];
+        if (!w || w <= 0 || total <= 0) continue;
+        let entry = byBase.get(trick.base);
+        if (!entry) {
+          entry = { base: trick.base, rep: trick, variants: [] };
+          byBase.set(trick.base, entry);
+        }
+        entry.variants.push({ stance: trick.stance, consistency: w / total });
+        if (trick.difficulty < entry.rep.difficulty) entry.rep = trick;
+      }
+      const rows = [...byBase.values()];
+      for (const row of rows) {
+        row.variants.sort((a, b) => STANCE_ORDER.indexOf(a.stance) - STANCE_ORDER.indexOf(b.stance));
+      }
+      const best = (r: (typeof rows)[number]) => Math.max(...r.variants.map((v) => v.consistency));
+      return rows.sort((a, b) => {
+        const af = robot.favorites.includes(a.base) ? 1 : 0;
+        const bf = robot.favorites.includes(b.base) ? 1 : 0;
+        if (af !== bf) return bf - af;
+        return best(b) - best(a) || a.base.localeCompare(b.base);
+      });
+    }
     const byBase = new Map<
       string,
       { base: string; rep: Trick; variants: { stance: Stance; consistency: number }[] }
@@ -81,7 +131,7 @@ export default function RobotProfile({ robot, pool, onStart }: Props) {
       if (af !== bf) return bf - af;
       return best(b) - best(a) || a.base.localeCompare(b.base);
     });
-  }, [bag, pool, robot.favorites]);
+  }, [bag, pool, robot.favorites, robot.behaviorId, robot.id, defense]);
 
   return (
     <div className="container">
@@ -106,9 +156,13 @@ export default function RobotProfile({ robot, pool, onStart }: Props) {
 
       {showTricks && (
         <div className="panel robot-tricks">
-          <h3 className="section-title profile-tricks-title">Tricks {robot.name} can do</h3>
+          <h3 className="section-title profile-tricks-title">
+            {defense ? `Tricks ${robot.name} sets` : `Tricks ${robot.name} can do`}
+          </h3>
           <p className="muted small profile-tricks-sub">
-            Each tag is a stance they can do it in — and how often they land it that way.
+            {defense
+              ? 'Every set is a trick you have to land. Each tag is a stance they set it in — and how often they set it.'
+              : 'Each tag is a stance they can do it in — and how often they land it that way.'}
           </p>
           <ul className="repertoire-list">
             {repertoire.map(({ base, rep, variants }) => {
@@ -126,16 +180,24 @@ export default function RobotProfile({ robot, pool, onStart }: Props) {
                     </span>
                     <span className="repertoire-desc">{trickDescription(rep)}</span>
                     <div className="repertoire-stances">
-                      {variants.map((v) => (
-                        <StancePill key={v.stance} stance={v.stance} value={v.consistency} />
-                      ))}
+                      {variants.map((v) =>
+                        defense ? (
+                          <DefenseSetPill key={v.stance} stance={v.stance} share={v.consistency} />
+                        ) : (
+                          <StancePill key={v.stance} stance={v.stance} value={v.consistency} />
+                        ),
+                      )}
                     </div>
                   </div>
                 </li>
               );
             })}
             {repertoire.length === 0 && (
-              <li className="trick-empty">No tricks from this set are in {robot.name}&apos;s bag.</li>
+              <li className="trick-empty">
+                {defense
+                  ? `No tricks from this set are in ${robot.name}'s set table.`
+                  : `No tricks from this set are in ${robot.name}'s bag.`}
+              </li>
             )}
           </ul>
         </div>

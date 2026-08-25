@@ -14,7 +14,7 @@ import { computeSkateScore, ladderSpot } from './skateScore';
  */
 
 export const RIVAL_ID = 'rival';
-export const RIVAL_NAME = 'Nemesis';
+const RIVAL_NAME = 'Nemesis';
 
 export function isRivalId(id: string): boolean {
   return id === RIVAL_ID;
@@ -45,13 +45,12 @@ const FLATGROUND = tricksFor('flatground');
 
 /**
  * The rival's signature tricks: the cheapest base tricks just past the player's
- * proven bag — what they're chasing next. The favorites boost makes the rival
- * unusually strong at exactly those, so it pushes the player forward instead of
- * mirroring the bag they already own.
+ * proven bag — what they're chasing next. Favorites are presentation metadata;
+ * gameplay still comes only from the copied explicit roster behavior table.
  */
 export function rivalFavorites(proven: Record<string, ProvenTrick>, limit = 3): string[] {
   const provenBases = new Set(
-    FLATGROUND.filter((t) => proven[t.name] != null).map((t) => t.base),
+    FLATGROUND.filter((t) => proven[t.id] != null).map((t) => t.base),
   );
   const seen = new Set<string>();
   const picks: string[] = [];

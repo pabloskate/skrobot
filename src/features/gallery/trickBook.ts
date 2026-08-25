@@ -8,7 +8,7 @@ import type { Trick } from '@/features/tricks';
  * tricks they're working on — it feeds "next up" suggestions but doesn't count
  * as bagged.
  */
-export type BookState = 'proven' | 'learning' | 'none';
+type BookState = 'proven' | 'learning' | 'none';
 
 export interface BookEntry {
   state: BookState;
@@ -24,7 +24,7 @@ export function buildTrickBook(
 ): TrickBook {
   const book: TrickBook = new Map();
   for (const trick of tricks) {
-    const p = proven[trick.name];
+    const p = proven[trick.id];
     if (p) book.set(trick.id, { state: 'proven', proven: p });
     else if (marks[trick.id]) book.set(trick.id, { state: marks[trick.id] });
     else book.set(trick.id, { state: 'none' });
@@ -43,7 +43,7 @@ export interface BookView {
   learningCount: number;
   /** The Learning tab's queue: starred tricks first, then suggestions. */
   queue: LearningItem[];
-  /** Per-trick consistency from tracked game attempts, keyed by trick NAME.
+  /** Per-trick consistency from tracked game attempts, keyed by stable trick id.
    * Empty until games logged with attempt tracking exist. */
   stats: Record<string, TrickStat>;
 }

@@ -11,12 +11,15 @@ interface Props {
  * TrickAnimation. Slim robot with a rectangular head, visor, smooth curved
  * limbs, and accent-colored boots. `currentColor` keeps the SVG outline tied
  * to the app's palette via CSS. */
+import { readableAccent } from './robotColors';
+
 const STROKE = 'currentColor';
 const SW = 3;
 const LIMB_W = 5.5;
 
 export default function RobotAvatar({ robot, size = 96, pose = 'idle' }: Props) {
-  const { body, accent } = robot.avatar;
+  const { body } = robot.avatar;
+  const accent = readableAccent(robot.avatar.accent);
   const stoked = pose === 'stoked';
   const bailed = pose === 'bailed';
 

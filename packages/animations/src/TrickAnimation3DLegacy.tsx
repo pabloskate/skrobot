@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState, type ReactElement } from 'react';
 import type { RiderStance, Robot, Trick } from './types';
 import { orientTrickRotation, resolveRiderMechanics } from './stanceMechanics';
+import { readableAccent } from './robotColors';
 import {
   computeFrame,
   specFor,
@@ -617,6 +618,7 @@ export default function TrickAnimation3DLegacy({
   };
 
   const colors = robot.avatar;
+  const accent = readableAccent(colors.accent);
   const f = staticTime != null
     ? computeFrame(staticTime, spec, landed, resolvedFallVariant, shankProgress)
     : frame;
@@ -701,7 +703,7 @@ export default function TrickAnimation3DLegacy({
   const graphicEls: ReactElement[] = [];
   if (!seeingTop) {
     const bottomY = (x: number) => deckKickY(x) + DECK_THICKNESS / 2 + 0.2;
-    const graphicFill = shade(colors.accent, lambert(neg3(deckNormal)));
+    const graphicFill = shade(accent, lambert(neg3(deckNormal)));
     const stripeHalfW = 2.4;
     const poly = (key: string, pts: V3[], fill: string) => {
       graphicEls.push(
@@ -804,7 +806,7 @@ export default function TrickAnimation3DLegacy({
               stroke="currentColor"
               strokeWidth={2 * c.s}
             />
-            <circle cx={c.x} cy={c.y} r={1.8 * c.s} fill={colors.accent} />
+            <circle cx={c.x} cy={c.y} r={1.8 * c.s} fill={accent} />
           </g>
         ),
       });
@@ -881,15 +883,15 @@ export default function TrickAnimation3DLegacy({
   };
 
   let sidePrimStart = prims.length;
-  pushCapsule(prims, 'thighL', hipL3, kneeL3, 6.5, colors.accent, 1.2);
-  pushCapsule(prims, 'shinL', kneeL3, ankleL3, 6.5, colors.accent, 1.2);
-  pushDot(prims, 'kneeL', kneeL3, 3.6, colors.accent, 'currentColor', 1.2, 1, 0.4);
+  pushCapsule(prims, 'thighL', hipL3, kneeL3, 6.5, accent, 1.2);
+  pushCapsule(prims, 'shinL', kneeL3, ankleL3, 6.5, accent, 1.2);
+  pushDot(prims, 'kneeL', kneeL3, 3.6, accent, 'currentColor', 1.2, 1, 0.4);
   rememberNewPrims(sidePrimStart, leftLegPrimIndexes);
 
   sidePrimStart = prims.length;
-  pushCapsule(prims, 'thighR', hipR3, kneeR3, 6.5, colors.accent, 1.2);
-  pushCapsule(prims, 'shinR', kneeR3, ankleR3, 6.5, colors.accent, 1.2);
-  pushDot(prims, 'kneeR', kneeR3, 3.6, colors.accent, 'currentColor', 1.2, 1, 0.4);
+  pushCapsule(prims, 'thighR', hipR3, kneeR3, 6.5, accent, 1.2);
+  pushCapsule(prims, 'shinR', kneeR3, ankleR3, 6.5, accent, 1.2);
+  pushDot(prims, 'kneeR', kneeR3, 3.6, accent, 'currentColor', 1.2, 1, 0.4);
   rememberNewPrims(sidePrimStart, rightLegPrimIndexes);
 
   // Boots: compact skate stance (across the deck, slight forward rake), with a
@@ -1002,7 +1004,7 @@ export default function TrickAnimation3DLegacy({
     arm: { shoulder: V3; elbow: V3; hand: V3 },
     isNear: boolean,
   ) => {
-    const armFill = isNear ? colors.accent : darken(colors.accent, 0.16);
+    const armFill = isNear ? accent : darken(accent, 0.16);
     const pin = isNear ? 6 : -6;
     const clampSeg = (a: V3, b: V3) => {
       const raw = (project(a).depth + project(b).depth) / 2 + pin;
@@ -1033,7 +1035,7 @@ export default function TrickAnimation3DLegacy({
 
   // Neck + head — slightly less toeside yaw than the torso so the face looks
   // a bit down the street.
-  pushLine(prims, 'neck', Shead({ x: 7, y: -50, z: 0 }), Shead({ x: 7, y: -56, z: 0 }), colors.accent, { width: 3 });
+  pushLine(prims, 'neck', Shead({ x: 7, y: -50, z: 0 }), Shead({ x: 7, y: -56, z: 0 }), accent, { width: 3 });
   pushCapsule(prims, 'head', Shead({ x: 5, y: -65, z: 0 }), Shead({ x: 9, y: -65, z: 0 }), 22, colors.body, 2.5);
   // Put the visor and eye on the curved front surface of the head rather than
   // near its center. They now orbit visibly around the head during yaw. Fade
@@ -1096,14 +1098,14 @@ export default function TrickAnimation3DLegacy({
           cy={eyeLeft.y}
           rx={1.65 * eyeLeft.s}
           ry={1.3 * eyeLeft.s}
-          fill={colors.accent}
+          fill={accent}
         />
         <ellipse
           cx={eyeRight.x}
           cy={eyeRight.y}
           rx={1.65 * eyeRight.s}
           ry={1.3 * eyeRight.s}
-          fill={colors.accent}
+          fill={accent}
         />
       </g>
     ),
@@ -1111,7 +1113,7 @@ export default function TrickAnimation3DLegacy({
 
   // Antenna
   pushLine(prims, 'antenna', Shead({ x: 7, y: -76, z: 0 }), Shead({ x: 7, y: -84, z: 0 }), 'currentColor', { width: 2.5 });
-  pushDot(prims, 'antennaBall', Shead({ x: 7, y: -85.5, z: 0 }), 3, colors.accent, 'currentColor', 1.5, 1, 0.2);
+  pushDot(prims, 'antennaBall', Shead({ x: 7, y: -85.5, z: 0 }), 3, accent, 'currentColor', 1.5, 1, 0.2);
 
   prims.sort((a, b) => a.depth - b.depth);
 

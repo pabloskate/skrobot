@@ -1,4 +1,5 @@
 import type { AnalyticsEvent, AnalyticsEventInput, AnalyticsSurface } from './events';
+import type { AnalyticsRangeDays, AnalyticsSummary } from './summary';
 
 const INSTALLATION_KEY = 'skrobot.analytics.installation.v1';
 const QUEUE_KEY = 'skrobot.analytics.queue.v1';
@@ -84,4 +85,23 @@ export function subscribeAnalyticsDelivery(): () => void {
   window.addEventListener('online', flush);
   flush();
   return () => window.removeEventListener('online', flush);
+}
+
+export class AnalyticsSummaryError extends Error {
+  status: number;
+
+  constructor(status: number) {
+    super(status === 401 ? 'auth_required' : status === 403 ? 'forbidden' : 'summary_unavailable');
+    this.name = 'AnalyticsSummaryError';
+    this.status = status;
+  }
+}
+
+export async function fetchAnalyticsSummary(days: AnalyticsRangeDays, signal?: AbortSignal): Promise<AnalyticsSummary> {
+  const response = await fetch(`/api/analytics/summary?days=${days}`, {
+    credentials: 'same-origin',
+    signal,
+  });
+  if (!response.ok) throw new AnalyticsSummaryError(response.status);
+  return (await response.json()) as AnalyticsSummary;
 }

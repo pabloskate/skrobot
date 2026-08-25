@@ -19,7 +19,7 @@ export type Discipline =
   | 'oldschool';
 
 /** The flatground disciplines, in roughly the order they're learned. */
-export type Family = 'shuvit' | 'roll' | 'rotation' | 'flip';
+type Family = 'shuvit' | 'roll' | 'rotation' | 'flip';
 
 export interface Trick {
   id: string;
@@ -199,7 +199,7 @@ const SPECIAL_DISCIPLINE: Record<string, Discipline> = {
 };
 
 /** The flatground stance-sensitivity family of a base trick. */
-export function trickFamily(base: string): Family {
+function trickFamily(base: string): Family {
   return FLATGROUND_FAMILY[base] ?? 'flip';
 }
 
@@ -237,10 +237,6 @@ const STANCE_SENSITIVITY: Record<Family, number> = {
 const TRICK_STANCE_SENSITIVITY: Partial<Record<string, Partial<Record<Stance, number>>>> = {
   'Ollie North': { switch: 1.0, nollie: 1.0 },
 };
-
-export function stanceLoad(trick: Trick): number {
-  return stanceLoadFor(trick.base, trick.stance, trick.category);
-}
 
 function stanceLoadFor(base: string, stance: Stance, category: Category): number {
   if (stance === 'regular' || category !== 'flatground') return 0;

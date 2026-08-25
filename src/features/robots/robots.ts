@@ -1,9 +1,10 @@
 import type { Discipline, Trick } from '@/features/tricks';
-import { getTunedConsistency, getTunedSetWeight } from './tuning';
+import { ROBOT_DEFENSE_SET_WEIGHTS } from './behavior';
+import { getTunedConsistency, getTunedDefenseSetWeight, getTunedSetWeight } from './tuning';
 
 export type Tier = 'beginner' | 'intermediate' | 'advanced' | 'pro';
 
-export interface RpsTaunts {
+interface RpsTaunts {
   countdown: string[];
   win: string[];
   lose: string[];
@@ -641,7 +642,7 @@ const ROBOTS_UNSORTED: Robot[] = [
  * comparable within that routed flatground field; other-discipline robots have
  * not been assigned a misleading flatground rating.
  */
-export const ROBOT_ELO_BY_ID: Readonly<Partial<Record<string, number>>> = {
+const ROBOT_ELO_BY_ID: Readonly<Partial<Record<string, number>>> = {
   sacker: 167,
   fronty: 339,
   flipster: 409,
@@ -697,7 +698,169 @@ export const ROBOTS: Robot[] = ROBOTS_UNSORTED
     return a.skill - b.skill || a.name.localeCompare(b.name);
   });
 
-export const ROBOT_BY_ID = new Map(ROBOTS.map((r) => [r.id, r]));
+/**
+ * Defense-only roster: separate personas whose set weights are authored for
+ * the defense variant (draw mass concentrates on tricks that are hard for the
+ * player to land). Never part of the classic ladder or Elo calibration.
+ */
+const DEFENSE_ROBOTS_UNSORTED: Robot[] = [
+  // Beginner
+  {
+    id: 'speed-bump',
+    name: 'Speed Bump',
+    tier: 'beginner',
+    tagline: 'Small, always in the way',
+    summary:
+      'Speed Bump does not skate big — it just refuses to move out of your line. Its sets sit right at that awkward mid level: enough to trip you up if you stop paying attention.',
+    skill: 3.4,
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    favorites: ['Pop Shuvit', 'Frontside 180'],
+    avatar: { body: '#f2c14e', accent: '#7a5c1e', variant: 1 },
+    rpsTaunts: {
+      countdown: ['You first... oh wait, me first.', 'Bump set.'],
+      win: ['Bump goes first.', 'Right in your line.'],
+      lose: ['You rolled over me.', 'Flat bump.'],
+      tie: ['Bumped to a tie.', 'Over me again.'],
+    },
+  },
+  {
+    id: 'hurdle',
+    name: 'Hurdle',
+    tier: 'beginner',
+    tagline: 'Jump or eat pavement',
+    summary:
+      'Hurdle sets exactly one kind of trick: the ones you almost have. Nothing flashy, but every round asks a real question of your feet.',
+    skill: 3.8,
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    favorites: ['Heelflip'],
+    avatar: { body: '#9ad0ec', accent: '#22608e', variant: 2 },
+    rpsTaunts: {
+      countdown: ['Clear it if you can.', 'Hurdle one.'],
+      win: ['Hurdle sets.', 'Jump it clean.'],
+      lose: ['Clipped the hurdle.', 'You ate pavement.'],
+      tie: ['Hurdle two.', 'Clear it again.'],
+    },
+  },
+  // Intermediate
+  {
+    id: 'turnstile',
+    name: 'Turnstile',
+    tier: 'intermediate',
+    tagline: 'Spins you both ways',
+    summary:
+      'Turnstile lives out of fakie and loves nothing more than watching you rotate the wrong way. Half cabs, full cabs, fakie flips — direction is the whole test.',
+    skill: 5.0,
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    favorites: ['Backside 360', 'Kickflip'],
+    avatar: { body: '#c0b283', accent: '#54442b', variant: 3 },
+    rpsTaunts: {
+      countdown: ['Mind the rotation.', 'Spin through.'],
+      win: ['Turnstile sets.', 'Wrong way incoming.'],
+      lose: ['You jammed the turnstile.', 'Spun the wrong way.'],
+      tie: ['Rotate again.', 'Stuck mid-spin.'],
+    },
+  },
+  {
+    id: 'rampart',
+    name: 'Rampart',
+    tier: 'intermediate',
+    tagline: 'A wall of rotation',
+    summary:
+      'Rampart builds its sets like fortifications — bigspins, 360 shuvs, and enough spin to make you dizzy before you pop. Climb it or bounce off.',
+    skill: 5.3,
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    favorites: ['Bigspin', '360 Shuvit'],
+    avatar: { body: '#b8562f', accent: '#2e1d14', variant: 0 },
+    rpsTaunts: {
+      countdown: ['The wall is high today.', 'Scale it.'],
+      win: ['Rampart sets first.', 'Wall up.'],
+      lose: ['Breached the rampart.', 'Wall came down.'],
+      tie: ['Rebuild the wall.', 'Climb again.'],
+    },
+  },
+  // Advanced
+  {
+    id: 'barricade',
+    name: 'Barricade',
+    tier: 'advanced',
+    tagline: 'Roadblocked with spins',
+    summary:
+      'Barricade parks its whole bag across your path: tre-flip combos, 360 shuvs, bigspin everything. Every set is a detour through trick territory you do not warm up on.',
+    skill: 6.2,
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    favorites: ['360 Flip', 'FS Bigspin'],
+    avatar: { body: '#e8965a', accent: '#4a2c17', variant: 2 },
+    rpsTaunts: {
+      countdown: ['Roadblock ahead.', 'Detour denied.'],
+      win: ['Barricade sets.', 'No way through.'],
+      lose: ['You broke the barricade.', 'Roadblock cleared.'],
+      tie: ['Blocked again.', 'Set up the second wall.'],
+    },
+  },
+  {
+    id: 'sentinel',
+    name: 'Sentinel',
+    tier: 'advanced',
+    tagline: 'Watches you switch',
+    summary:
+      'Sentinel stands guard over the mirror stances. Its sets lean switch and nollie, because that is where most skaters wobble — and it knows it.',
+    skill: 6.5,
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    favorites: ['Kickflip', 'Frontside 180'],
+    avatar: { body: '#8ea9c1', accent: '#253241', variant: 1 },
+    rpsTaunts: {
+      countdown: ['Standing watch.', 'Guard up.'],
+      win: ['Sentinel observes.', 'Watch begins.'],
+      lose: ['Post abandoned.', 'You slipped past the watch.'],
+      tie: ['Still watching.', 'Shift change.'],
+    },
+  },
+  // Pro
+  {
+    id: 'aegis',
+    name: 'Aegis',
+    tier: 'pro',
+    tagline: 'Shield of hard flips',
+    summary:
+      'Aegis carries the heelflip family like armor — laser flips, 360 heels, bigspin heels. Good luck finding the gap in that coverage.',
+    skill: 7.8,
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    favorites: ['Laser Flip', 'BS Bigspin Heelflip'],
+    avatar: { body: '#d4af37', accent: '#1a1a2e', variant: 0 },
+    rpsTaunts: {
+      countdown: ['Raise the shield.', 'Deflect this.'],
+      win: ['Aegis holds.', 'Shield up.'],
+      lose: ['The shield cracks.', 'Gap found.'],
+      tie: ['Hold the line.', 'Shield tested.'],
+    },
+  },
+  {
+    id: 'fortress',
+    name: 'Fortress',
+    tier: 'pro',
+    tagline: 'Double flips behind walls',
+    summary:
+      'Fortress is the final defense: double flips, 360 doubles, and late tech, all delivered without mercy. Almost nobody matches a full game of its sets.',
+    skill: 8.2,
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    favorites: ['Double Kickflip', '360 Double Kickflip'],
+    avatar: { body: '#556270', accent: '#ff6b6b', variant: 3 },
+    rpsTaunts: {
+      countdown: ['The gates are closed.', 'Besiege me.'],
+      win: ['Fortress stands.', 'Walls hold.'],
+      lose: ['The fortress falls.', 'Breach reported.'],
+      tie: ['Siege continues.', 'Gates rattled.'],
+    },
+  },
+];
+
+/** Defense-only robots, ordered easiest → hardest within each tier. */
+export const DEFENSE_ROBOTS: Robot[] = [...DEFENSE_ROBOTS_UNSORTED].sort(
+  (a, b) => a.skill - b.skill || a.name.localeCompare(b.name),
+);
+
+/** Every robot that can appear in a saved game or record, classic or defense. */
+export const ROBOT_BY_ID = new Map([...ROBOTS, ...DEFENSE_ROBOTS].map((r) => [r.id, r]));
 
 const FLATGROUND_DISCIPLINES = new Set<Discipline>(['roll', 'shuvit', 'rotation', 'flip']);
 
@@ -734,56 +897,23 @@ export function trickSetWeight(trick: Trick, robot: SetWeightRobot): number {
   return getTunedSetWeight(robot.behaviorId ?? robot.id, trick.id) ?? 0;
 }
 
-const GENERIC_TAUNTS: RpsTaunts = {
-  countdown: ['Ready?', 'Here we go...', 'No take-backs.'],
-  win: ['I go first.', 'Winner sets.'],
-  lose: ['You set first.', 'Fine, you won.'],
-  tie: ['Tie. Again.', 'Dead heat.'],
-};
-
-/** Pick a robot's RPS taunt for a given moment. */
-export function getRpsTaunt(robot: Robot, moment: keyof RpsTaunts): string {
-  const lines = robot.rpsTaunts[moment] ?? GENERIC_TAUNTS[moment];
-  return lines[Math.floor(Math.random() * lines.length)];
+/** Exact configured defense-variant set-pick weight. Missing entries are never set. */
+export function trickDefenseSetWeight(trick: Trick, robot: SetWeightRobot): number {
+  return getTunedDefenseSetWeight(robot.behaviorId ?? robot.id, trick.id) ?? 0;
 }
 
-const ROBOT_VIBE: Record<string, string> = {
-  sacker: 'Send-it',
-  fronty: 'Shuvit-spec',
-  flipper: 'Flip-tech',
-  flipster: 'Flip-tech',
-  cabby: 'Send-it',
-  shifty: 'Shuvit-spec',
-  heelzy: 'Flip-tech',
-  varial: 'Flip-tech',
-  biggy: 'Spinner',
-  nolly: 'Nose-tech',
-  fakie: 'Technician',
-  jupiter: 'Spinner',
-  hesh: 'Flip-tech',
-  latezy: 'Shuvit-spec',
-  switchy: 'Switch-wizard',
-  hardy: 'Flip-tech',
-  caball: 'Spinner',
-  freely: 'Switch-wizard',
-  impy: 'Flip-tech',
-  c360po: 'Flip-tech',
-  laser: 'Flip-tech',
-  tre: 'Flip-tech',
-  double: 'Flip-tech',
-  baily: 'Send-it',
-  tictac: 'Send-it',
-  wally: 'Old-school',
-  lanky: 'Slider',
-  wallride: 'Transition',
-  droopy: 'Grinder',
-  spine: 'Transition',
-  skater: 'All-rounder',
-  smitty: 'Grinder',
-  drone: 'All-rounder',
-};
+/** Whether this robot has an authored defense set table (defense-roster robots do). */
+export function hasDefenseSets(robot: SetWeightRobot): boolean {
+  const id = robot.behaviorId ?? robot.id;
+  return Object.values(ROBOT_DEFENSE_SET_WEIGHTS[id] ?? {}).some((w) => w > 0);
+}
 
-/** Explicit profile label; it has no effect on gameplay. */
-export function robotVibe(robot: Robot): string {
-  return ROBOT_VIBE[robot.behaviorId ?? robot.id] ?? 'Technician';
+/**
+ * Roster for a game variant. Classic keeps the calibrated flatground ladder
+ * (with its beat-to-unlock gate); defense shows its own dedicated roster with
+ * every robot available immediately.
+ */
+export function rosterForVariant(variant: 'classic' | 'defense'): Robot[] {
+  if (variant === 'defense') return DEFENSE_ROBOTS;
+  return ROBOTS.filter(isFlatgroundRobot);
 }

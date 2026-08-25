@@ -717,7 +717,6 @@ export default function BlenderPrototype() {
       renderer.dispose();
     };
     // Scene boots once; playKey / trick changes are handled by the pose effect.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Push the latest trick/outcome into the running scene and rewind playback.

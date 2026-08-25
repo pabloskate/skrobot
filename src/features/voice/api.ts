@@ -10,10 +10,8 @@ export class VoiceStartError extends Error {
   }
 }
 
-/**
- * Auth: prefer an ephemeral token from /api/live-token (production); fall back to
- * NEXT_PUBLIC_GEMINI_API_KEY (dev only - never ship a real key in client code).
- */
+/** Auth always uses a server-minted ephemeral token. Long-lived API keys never
+ * enter the browser bundle, including during local development. */
 export async function getVoiceAuthKey(gameId: string): Promise<string> {
   try {
     const res = await fetch('/api/live-token', {
@@ -33,7 +31,5 @@ export async function getVoiceAuthKey(gameId: string): Promise<string> {
     /* no token endpoint configured */
   }
 
-  const devKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-  if (devKey) return devKey;
-  throw new Error('No auth available: set GEMINI_API_KEY for /api/live-token, or NEXT_PUBLIC_GEMINI_API_KEY for dev.');
+  throw new Error('No voice auth available: configure the server-side GEMINI_API_KEY for /api/live-token.');
 }

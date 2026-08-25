@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { TbChevronRight, TbDotsVertical, TbDownload, TbX } from 'react-icons/tb';
 import type { AppInstallOffer } from './useAppInstallOffer';
 
-export const IOS_APP_STORE_URL = 'https://apps.apple.com/app/id6455175396';
+const IOS_APP_STORE_URL = 'https://apps.apple.com/app/id6455175396';
 
 export default function AppInstallBanner({ offer }: { offer: AppInstallOffer }) {
   const [instructionsOpen, setInstructionsOpen] = useState(false);

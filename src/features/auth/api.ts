@@ -1,11 +1,11 @@
-export type AuthTier = 'free' | 'paid';
+type AuthTier = 'free' | 'paid';
 
-export interface AuthUser {
+interface AuthUser {
   email: string;
   tier: AuthTier;
 }
 
-export interface VoiceQuota {
+interface VoiceQuota {
   used: number;
   limit: number;
   unlimited: boolean;

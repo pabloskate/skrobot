@@ -44,10 +44,13 @@
     }
   ],
 
-  "send_email": [{ "name": "EMAIL" }],
+  // `remote` lets `npm run preview` use the real Email Service instead of the
+  // local no-op binding. Plain `next dev` deliberately exposes a dev link.
+  "send_email": [{ "name": "EMAIL", "remote": true }],
 
   "vars": {
-    "MAGIC_LINK_FROM": "skaterobot@customrouter.ai"
+    "MAGIC_LINK_FROM": "skaterobot@customrouter.ai",
+    "ANALYTICS_ADMIN_EMAIL": "me@therealpablo.com"
   }
 
   // Secrets:

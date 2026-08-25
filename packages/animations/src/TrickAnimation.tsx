@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react';
 import type { RiderStance, Robot, Trick } from './types';
 import { resolveRiderMechanics } from './stanceMechanics';
+import { readableAccent } from './robotColors';
 
 /**
  * Side-view animated robot attempt: roll in, pop the trick, then catch it and
@@ -1071,10 +1072,8 @@ export {
   knee,
   clampFootReach,
   darken,
-  SCENE_RENDERERS,
   randomFallVariant,
   randomShankProgress,
-  randomBackgroundSceneId,
   W,
   H,
   GROUND,
@@ -1106,9 +1105,13 @@ function clampFootReach(foot: Pt): Pt {
 /** Two-bone IK: knee position for a hip-to-foot leg.
  *  Always returns the solution where the knee protrudes toward the front
  *  (+x) so both legs read as bending the same way in a skate stance.
- *  Near full reach the artificial bend eases off so a pop snap can read as a
- *  straight leg instead of keeping the permanent KNEE_BEND_SCALE kink. */
-function knee(foot: Pt): Pt {
+ *  `bend` (default 1) picks the protrude side: +1 = board +x, -1 = board -x,
+ *  and fades the artificial bend through a straight knee at 0 — so a spun
+ *  body can bend knees the other way without ever crossing the hip-ankle
+ *  line into a broken pose. Near full reach the artificial bend eases off so
+ *  a pop snap can read as a straight leg instead of keeping the permanent
+ *  KNEE_BEND_SCALE kink. */
+function knee(foot: Pt, bend = 1): Pt {
   let { x: fx, y: fy } = clampFootReach(foot);
   const dist = Math.sqrt(fx * fx + fy * fy);
   const maxDist = THIGH + SHIN - 0.1;
@@ -1122,10 +1125,12 @@ function knee(foot: Pt): Pt {
   const baseAngle = Math.atan2(fy, fx);
   const k1 = { x: THIGH * Math.cos(baseAngle - angleB), y: THIGH * Math.sin(baseAngle - angleB) };
   const k2 = { x: THIGH * Math.cos(baseAngle + angleB), y: THIGH * Math.sin(baseAngle + angleB) };
-  const bent = k1.x >= k2.x ? k1 : k2;
+  const forward = k1.x >= k2.x ? k1 : k2;
+  const backward = forward === k1 ? k2 : k1;
+  const bent = bend >= 0 ? forward : backward;
   const straight = { x: fx / 2, y: fy / 2 };
   const reach = c / (THIGH + SHIN);
-  const bendScale = KNEE_BEND_SCALE * (1 - Math.pow(reach, 6));
+  const bendScale = KNEE_BEND_SCALE * (1 - Math.pow(reach, 6)) * Math.abs(bend);
   return {
     x: straight.x + (bent.x - straight.x) * bendScale,
     y: straight.y + (bent.y - straight.y) * bendScale,
@@ -1242,6 +1247,7 @@ export default function TrickAnimation({
   };
 
   const colors = robot.avatar;
+  const accent = readableAccent(colors.accent);
   const f = staticTime != null
     ? computeFrame(staticTime, spec, landed, resolvedFallVariant, shankProgress)
     : frame;
@@ -1272,7 +1278,7 @@ export default function TrickAnimation({
   // Board cosmetics — pure render, no physics. Deck fill flips with the board
   // so the dark griptape reads on the top side and the accent graphic on the
   // underside while it flips mid-air.
-  const deckFill = f.board.griptape ? 'currentColor' : colors.accent;
+  const deckFill = f.board.griptape ? 'currentColor' : accent;
   const WHEEL_X = 28;
 
   // For impossibles, pivot the board around the popping foot so the deck
@@ -1336,7 +1342,7 @@ export default function TrickAnimation({
               <line x1="0" y1="0" x2={flickKnee.x} y2={flickKnee.y} />
               <line x1={flickKnee.x} y1={flickKnee.y} x2={flickFoot.x} y2={flickFoot.y} />
             </g>
-            <circle cx={flickKnee.x} cy={flickKnee.y} r="3.6" fill={colors.accent} stroke="currentColor" strokeWidth="1.2" />
+            <circle cx={flickKnee.x} cy={flickKnee.y} r="3.6" fill={accent} stroke="currentColor" strokeWidth="1.2" />
             <rect x={flickFoot.x - 3} y={flickFoot.y - 3.5} width="13" height="7" rx="3.5" fill={colors.body} stroke="currentColor" strokeWidth="2" />
           </g>
         )}
@@ -1362,8 +1368,8 @@ export default function TrickAnimation({
           {/* Wheels */}
           <circle cx={-WHEEL_X} cy="8" r="5" fill="#fbfbf3" stroke="currentColor" strokeWidth="2" />
           <circle cx={WHEEL_X} cy="8" r="5" fill="#fbfbf3" stroke="currentColor" strokeWidth="2" />
-          <circle cx={-WHEEL_X} cy="8" r="1.8" fill={colors.accent} />
-          <circle cx={WHEEL_X} cy="8" r="1.8" fill={colors.accent} />
+          <circle cx={-WHEEL_X} cy="8" r="1.8" fill={accent} />
+          <circle cx={WHEEL_X} cy="8" r="1.8" fill={accent} />
         </g>
 
         {/* Skater */}
@@ -1374,7 +1380,7 @@ export default function TrickAnimation({
             y1={shoulder.y}
             x2={shoulder.x + Math.sin(farArmAngle) * 30}
             y2={shoulder.y + Math.cos(farArmAngle) * 30}
-            stroke={colors.accent}
+            stroke={accent}
             strokeWidth="6.5"
             strokeLinecap="round"
             opacity="0.4"
@@ -1400,21 +1406,21 @@ export default function TrickAnimation({
           <rect x="-10" y="-50" width="22" height="50" rx="11" fill={bodyFill} stroke="currentColor" strokeWidth="2.5" />
 
           {/* neck */}
-          <line x1="7" y1="-50" x2="7" y2="-56" stroke={colors.accent} strokeWidth="3" strokeLinecap="round" />
+          <line x1="7" y1="-50" x2="7" y2="-56" stroke={accent} strokeWidth="3" strokeLinecap="round" />
           {/* head */}
           <rect x="-6" y="-76" width="26" height="22" rx="8" fill={bodyFill} stroke="currentColor" strokeWidth="2.5" />
           {/* visor + eyes */}
           <rect x="0" y="-70" width="18" height="9" rx="4.5" fill="currentColor" opacity="0.85" />
-          <circle cx="6" cy="-65.5" r="2.1" fill={colors.accent} />
-          <circle cx="12" cy="-65.5" r="2.1" fill={colors.accent} />
+          <circle cx="6" cy="-65.5" r="2.1" fill={accent} />
+          <circle cx="12" cy="-65.5" r="2.1" fill={accent} />
           {/* antenna */}
           <line x1="7" y1="-76" x2="7" y2="-84" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-          <circle cx="7" cy="-85.5" r="3" fill={colors.accent} stroke="currentColor" strokeWidth="1.5" />
+          <circle cx="7" cy="-85.5" r="3" fill={accent} stroke="currentColor" strokeWidth="1.5" />
 
           {/* joints */}
-          <circle cx="0" cy="0" r="4.5" fill={colors.accent} stroke="currentColor" strokeWidth="1.5" />
-          {!hideLeftFlick && <circle cx={kneeL.x} cy={kneeL.y} r="3.6" fill={colors.accent} stroke="currentColor" strokeWidth="1.2" />}
-          {!hideRightFlick && <circle cx={kneeR.x} cy={kneeR.y} r="3.6" fill={colors.accent} stroke="currentColor" strokeWidth="1.2" />}
+          <circle cx="0" cy="0" r="4.5" fill={accent} stroke="currentColor" strokeWidth="1.5" />
+          {!hideLeftFlick && <circle cx={kneeL.x} cy={kneeL.y} r="3.6" fill={accent} stroke="currentColor" strokeWidth="1.2" />}
+          {!hideRightFlick && <circle cx={kneeR.x} cy={kneeR.y} r="3.6" fill={accent} stroke="currentColor" strokeWidth="1.2" />}
 
           {/* camera-near arm */}
           <line
@@ -1422,7 +1428,7 @@ export default function TrickAnimation({
             y1={shoulder.y}
             x2={shoulder.x + Math.sin(nearArmAngle) * 30}
             y2={shoulder.y + Math.cos(nearArmAngle) * 30}
-            stroke={colors.accent}
+            stroke={accent}
             strokeWidth="6.5"
             strokeLinecap="round"
           />

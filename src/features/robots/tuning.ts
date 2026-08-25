@@ -1,26 +1,34 @@
 import {
+  DEFENSE_CONSISTENCY,
   ROBOT_CONSISTENCY,
+  ROBOT_DEFENSE_SET_WEIGHTS,
   ROBOT_SET_WEIGHTS,
   type RobotBehaviorTable,
 } from './behavior';
 
-/** The only two editable behavior values a robot has. */
-export type TuningKind = 'consistency' | 'setWeight';
+/** The editable behavior values a robot has. */
+export type TuningKind = 'consistency' | 'setWeight' | 'defenseSetWeight';
 type TuningTable = RobotBehaviorTable;
 
 const STORAGE_KEYS: Record<TuningKind, string> = {
   consistency: 'skrobot.robot-consistency.explicit.v2',
   setWeight: 'skrobot.robot-setweights.explicit.v2',
+  defenseSetWeight: 'skrobot.robot-defenseweights.explicit.v2',
 };
 const TUNING_EVENT = 'skrobot:tuning-change';
 
-/** Complete committed behavior tables. Every roster robot has explicit data. */
-export const TUNED_CONSISTENCY = ROBOT_CONSISTENCY;
+/**
+ * Complete committed behavior tables. Every roster robot has explicit data;
+ * the defense roster's tables are merged into the same lookup paths.
+ */
+export const TUNED_CONSISTENCY: TuningTable = { ...ROBOT_CONSISTENCY, ...DEFENSE_CONSISTENCY };
 export const TUNED_SET_WEIGHTS = ROBOT_SET_WEIGHTS;
+const TUNED_DEFENSE_SET_WEIGHTS = ROBOT_DEFENSE_SET_WEIGHTS;
 
 const STATIC_TABLES: Record<TuningKind, TuningTable> = {
   consistency: TUNED_CONSISTENCY,
   setWeight: TUNED_SET_WEIGHTS,
+  defenseSetWeight: TUNED_DEFENSE_SET_WEIGHTS,
 };
 
 function readLocalTuning(kind: TuningKind): TuningTable {
@@ -58,6 +66,10 @@ export function getTunedConsistency(robotId: string, trickId: string): number | 
 
 export function getTunedSetWeight(robotId: string, trickId: string): number | undefined {
   return getTuned('setWeight', robotId, trickId);
+}
+
+export function getTunedDefenseSetWeight(robotId: string, trickId: string): number | undefined {
+  return getTuned('defenseSetWeight', robotId, trickId);
 }
 
 /** Set or clear a browser-local value. Clearing reverts to committed data. */

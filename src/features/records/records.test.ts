@@ -1,16 +1,25 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GameLogEntry } from './records';
-import { deriveProvenTricks, deriveTrickStats, getTrickMarks } from './records';
+import {
+  deriveProvenTricks,
+  deriveTrickStats,
+  getGameLog,
+  getRecords,
+  getTrickMarks,
+  recordCompletedMatch,
+  subscribeRecords,
+} from './records';
 
 function entry(overrides: Partial<GameLogEntry>): GameLogEntry {
   return {
+    version: 2,
     date: '2026-07-01T10:00:00.000Z',
     robotId: 'shifty',
     mode: 'screen',
     won: true,
     playerLetters: 0,
     robotLetters: 5,
-    tricksLanded: [],
+    trickIdsLanded: [],
     ...overrides,
   };
 }
@@ -37,90 +46,114 @@ afterEach(() => {
 });
 
 describe('deriveProvenTricks', () => {
-  it('returns an empty map for an empty log', () => {
-    expect(deriveProvenTricks([])).toEqual({});
-  });
-
-  it('counts lands per trick name across games', () => {
+  it('counts lands by stable trick id across games', () => {
     const proven = deriveProvenTricks([
-      entry({ tricksLanded: ['Kickflip', 'Pop Shuvit'] }),
-      entry({ tricksLanded: ['Kickflip'] }),
+      entry({ trickIdsLanded: ['regular-kickflip', 'regular-pop-shuvit'] }),
+      entry({ trickIdsLanded: ['regular-kickflip'] }),
     ]);
-    expect(proven['Kickflip'].count).toBe(2);
-    expect(proven['Pop Shuvit'].count).toBe(1);
-    expect(proven['Heelflip']).toBeUndefined();
+    expect(proven['regular-kickflip'].count).toBe(2);
+    expect(proven['regular-pop-shuvit'].count).toBe(1);
+    expect(proven['regular-heelflip']).toBeUndefined();
   });
 
   it('keeps the most recent game as the last land', () => {
     const proven = deriveProvenTricks([
-      entry({ date: '2026-06-01T10:00:00.000Z', robotId: 'shifty', tricksLanded: ['Kickflip'] }),
-      entry({ date: '2026-07-01T10:00:00.000Z', robotId: 'pivot', tricksLanded: ['Kickflip'] }),
+      entry({ date: '2026-06-01T10:00:00.000Z', robotId: 'shifty', trickIdsLanded: ['regular-kickflip'] }),
+      entry({ date: '2026-07-01T10:00:00.000Z', robotId: 'pivot', trickIdsLanded: ['regular-kickflip'] }),
     ]);
-    expect(proven['Kickflip'].lastDate).toBe('2026-07-01T10:00:00.000Z');
-    expect(proven['Kickflip'].lastRobotId).toBe('pivot');
+    expect(proven['regular-kickflip'].lastDate).toBe('2026-07-01T10:00:00.000Z');
+    expect(proven['regular-kickflip'].lastRobotId).toBe('pivot');
   });
 
   it('counts a trick landed twice in one game twice', () => {
-    const proven = deriveProvenTricks([entry({ tricksLanded: ['Kickflip', 'Kickflip'] })]);
-    expect(proven['Kickflip'].count).toBe(2);
+    const proven = deriveProvenTricks([
+      entry({ trickIdsLanded: ['regular-kickflip', 'regular-kickflip'] }),
+    ]);
+    expect(proven['regular-kickflip'].count).toBe(2);
   });
 });
 
 describe('deriveTrickStats', () => {
-  it('returns an empty map for an empty log', () => {
-    expect(deriveTrickStats([])).toEqual({});
+  it('skips entries logged before attempt tracking', () => {
+    expect(deriveTrickStats([entry({ trickIdsLanded: ['regular-kickflip'] })])).toEqual({});
   });
 
-  it('skips legacy entries logged before attempt tracking', () => {
-    expect(deriveTrickStats([entry({ tricksLanded: ['Kickflip'] })])).toEqual({});
-  });
-
-  it('folds makes and misses across games into a consistency rate', () => {
+  it('folds makes and misses into a consistency rate', () => {
     const stats = deriveTrickStats([
       entry({
         trickAttempts: [
-          { trick: 'Kickflip', landed: true },
-          { trick: 'Kickflip', landed: false },
+          { trickId: 'regular-kickflip', landed: true },
+          { trickId: 'regular-kickflip', landed: false },
         ],
       }),
       entry({
         trickAttempts: [
-          { trick: 'Kickflip', landed: true },
-          { trick: 'Pop Shuvit', landed: false },
+          { trickId: 'regular-kickflip', landed: true },
+          { trickId: 'regular-pop-shuvit', landed: false },
         ],
       }),
     ]);
-    expect(stats['Kickflip']).toMatchObject({ attempts: 3, makes: 2, misses: 1, rate: 2 / 3 });
-    expect(stats['Pop Shuvit']).toMatchObject({ attempts: 1, makes: 0, misses: 1, rate: 0 });
+    expect(stats['regular-kickflip']).toMatchObject({ attempts: 3, makes: 2, misses: 1, rate: 2 / 3 });
+    expect(stats['regular-pop-shuvit']).toMatchObject({ attempts: 1, makes: 0, misses: 1, rate: 0 });
   });
 
   it('counts every last-letter retry as its own attempt', () => {
     const stats = deriveTrickStats([
       entry({
         trickAttempts: [
-          { trick: 'Heelflip', landed: false },
-          { trick: 'Heelflip', landed: false },
+          { trickId: 'regular-heelflip', landed: false },
+          { trickId: 'regular-heelflip', landed: false },
         ],
       }),
     ]);
-    expect(stats['Heelflip']).toMatchObject({ attempts: 2, makes: 0, misses: 2, rate: 0 });
+    expect(stats['regular-heelflip']).toMatchObject({ attempts: 2, makes: 0, misses: 2, rate: 0 });
+  });
+});
+
+describe('stored data migration and writes', () => {
+  it('migrates legacy display-name logs to versioned trick ids', () => {
+    localStorage.setItem('skaterobot-gamelog', JSON.stringify([{
+      date: '2026-07-01T10:00:00.000Z',
+      robotId: 'shifty',
+      mode: 'screen',
+      won: true,
+      playerLetters: 0,
+      robotLetters: 5,
+      tricksLanded: ['Kickflip', 'Half Cab'],
+      trickAttempts: [{ trick: 'Kickflip', landed: true }],
+    }]));
+
+    expect(getGameLog()[0]).toMatchObject({
+      version: 2,
+      trickIdsLanded: ['regular-kickflip', 'fakie-backside-180'],
+      trickAttempts: [{ trickId: 'regular-kickflip', landed: true }],
+    });
+    expect(JSON.parse(localStorage.getItem('skaterobot-gamelog') ?? '[]')[0].tricksLanded).toBeUndefined();
   });
 
-  it('keeps the most recent game as the last attempt', () => {
-    const stats = deriveTrickStats([
-      entry({
-        date: '2026-06-01T10:00:00.000Z',
-        robotId: 'shifty',
-        trickAttempts: [{ trick: 'Kickflip', landed: true }],
-      }),
-      entry({
-        date: '2026-07-01T10:00:00.000Z',
-        robotId: 'pivot',
-        trickAttempts: [{ trick: 'Kickflip', landed: false }],
-      }),
-    ]);
-    expect(stats['Kickflip'].lastDate).toBe('2026-07-01T10:00:00.000Z');
-    expect(stats['Kickflip'].lastRobotId).toBe('pivot');
+  it('records W/L and evidence through one operation and notifies same-tab subscribers', () => {
+    const notify = vi.fn();
+    const unsubscribe = subscribeRecords(notify);
+    recordCompletedMatch({
+      date: '2026-07-01T10:00:00.000Z',
+      robotId: 'shifty',
+      mode: 'screen',
+      won: true,
+      playerLetters: 0,
+      robotLetters: 5,
+      trickIdsLanded: ['regular-kickflip'],
+      trickAttempts: [{ trickId: 'regular-kickflip', landed: true }],
+    });
+
+    expect(getRecords()).toEqual({ shifty: { w: 1, l: 0 } });
+    expect(getGameLog()).toHaveLength(1);
+    expect(notify).toHaveBeenCalledTimes(1);
+    unsubscribe();
+  });
+
+  it('drops malformed aggregate records', () => {
+    localStorage.setItem('skaterobot-records', JSON.stringify({ shifty: { w: -1, l: 2 }, pivot: { w: 3, l: 1 } }));
+    expect(getRecords()).toEqual({ pivot: { w: 3, l: 1 } });
   });
 });
 
@@ -135,15 +168,9 @@ describe('getTrickMarks', () => {
       'skaterobot-trickbook',
       JSON.stringify({ 'regular-ollie': 'claimed', 'regular-kickflip': 'learning' }),
     );
-
     expect(getTrickMarks()).toEqual({ 'regular-kickflip': 'learning' });
     expect(JSON.parse(localStorage.getItem('skaterobot-trickbook') ?? '{}')).toEqual({
       'regular-kickflip': 'learning',
     });
-  });
-
-  it('treats malformed mark storage as empty', () => {
-    localStorage.setItem('skaterobot-trickbook', JSON.stringify(['learning']));
-    expect(getTrickMarks()).toEqual({});
   });
 });

@@ -26,7 +26,7 @@ export interface PairResult {
   draws: number
 }
 
-export interface RobotRating {
+interface RobotRating {
   robot: Robot
   elo: number
   wins: number

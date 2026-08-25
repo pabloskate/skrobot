@@ -1,12 +1,11 @@
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { compileModsAsync } from '@expo/config-plugins';
+import type { ConfigPlugin } from '@expo/config-plugins';
 import { describe, expect, it } from 'vitest';
 
 const require = createRequire(import.meta.url);
-const withSkrobotNativeParity = require('../../apps/mobile/plugins/withSkrobotNativeParity') as (
-  config: Record<string, unknown>,
-) => Record<string, unknown>;
+const withSkrobotNativeParity = require('../../apps/mobile/plugins/withSkrobotNativeParity') as ConfigPlugin;
 
 describe('mobile native parity config plugin', () => {
   it('writes native cleartext and local WebView loading settings during introspection', async () => {

@@ -1,12 +1,12 @@
 import type { GameState } from './engine';
 import type { TrickAttempt } from '@/features/records';
-import { TRICK_BY_ID } from '@/features/tricks';
+import { TRICK_BY_ID, TRICK_BY_NAME } from '@/features/tricks';
 
 export type SavedGameMode = 'screen' | 'voice';
 
 /** Player evidence accumulated during a match, carried across saves and mode switches. */
 export interface GameProgress {
-  tricksLanded: string[];
+  trickIdsLanded: string[];
   trickAttempts: TrickAttempt[];
 }
 
@@ -21,7 +21,7 @@ export interface GameSessionIdentity {
 }
 
 export interface SavedGame {
-  version: 3;
+  version: 4;
   savedAt: string;
   robotId: string;
   mode: SavedGameMode;
@@ -88,22 +88,33 @@ function rehydrateState(raw: GameState): GameState | null {
 
 function rehydrateProgress(value: unknown): GameProgress {
   if (value == null || typeof value !== 'object' || Array.isArray(value)) {
-    return { tricksLanded: [], trickAttempts: [] };
+    return { trickIdsLanded: [], trickAttempts: [] };
   }
-  const raw = value as Partial<GameProgress>;
-  const tricksLanded = Array.isArray(raw.tricksLanded)
-    ? raw.tricksLanded.filter((name): name is string => typeof name === 'string')
+  const raw = value as Record<string, unknown>;
+  const currentIds = Array.isArray(raw.trickIdsLanded)
+    ? raw.trickIdsLanded.filter((id): id is string => typeof id === 'string' && id.length > 0)
     : [];
-  const trickAttempts = Array.isArray(raw.trickAttempts)
-    ? raw.trickAttempts.filter(
-        (attempt): attempt is TrickAttempt =>
-          attempt != null &&
-          typeof attempt === 'object' &&
-          typeof attempt.trick === 'string' &&
-          typeof attempt.landed === 'boolean',
-      )
+  const legacyIds = Array.isArray(raw.tricksLanded)
+    ? raw.tricksLanded.flatMap((name) => {
+        const trick = typeof name === 'string' ? TRICK_BY_NAME.get(name) : undefined;
+        return trick ? [trick.id] : [];
+      })
     : [];
-  return { tricksLanded, trickAttempts };
+  const trickAttempts: TrickAttempt[] = [];
+  if (Array.isArray(raw.trickAttempts)) {
+    for (const candidate of raw.trickAttempts) {
+      if (candidate == null || typeof candidate !== 'object') continue;
+      const attempt = candidate as Record<string, unknown>;
+      if (typeof attempt.landed !== 'boolean') continue;
+      if (typeof attempt.trickId === 'string' && attempt.trickId) {
+        trickAttempts.push({ trickId: attempt.trickId, landed: attempt.landed });
+        continue;
+      }
+      const trick = typeof attempt.trick === 'string' ? TRICK_BY_NAME.get(attempt.trick) : undefined;
+      if (trick) trickAttempts.push({ trickId: trick.id, landed: attempt.landed });
+    }
+  }
+  return { trickIdsLanded: currentIds.length > 0 ? currentIds : legacyIds, trickAttempts };
 }
 
 function parseSavedGame(value: unknown): SavedGame | null {
@@ -117,7 +128,7 @@ function parseSavedGame(value: unknown): SavedGame | null {
     state?: unknown;
     progress?: unknown;
   };
-  if (v.version !== 1 && v.version !== 2 && v.version !== 3) return null;
+  if (v.version !== 1 && v.version !== 2 && v.version !== 3 && v.version !== 4) return null;
   if (typeof v.robotId !== 'string' || !v.robotId) return null;
   if (v.mode !== 'screen' && v.mode !== 'voice') return null;
   if (typeof v.savedAt !== 'string') return null;
@@ -125,7 +136,7 @@ function parseSavedGame(value: unknown): SavedGame | null {
   if (!state || !isSaveWorthKeeping(state)) return null;
   const rawSession = v.session;
   const session =
-    v.version === 3 &&
+    (v.version === 3 || v.version === 4) &&
     rawSession != null &&
     typeof rawSession === 'object' &&
     'id' in rawSession &&
@@ -135,13 +146,13 @@ function parseSavedGame(value: unknown): SavedGame | null {
       ? { id: rawSession.id, startedAt: rawSession.startedAt }
       : { id: crypto.randomUUID(), startedAt: v.savedAt };
   return {
-    version: 3,
+    version: 4,
     savedAt: v.savedAt,
     robotId: v.robotId,
     mode: v.mode,
     session,
     state,
-    progress: v.version === 2 || v.version === 3 ? rehydrateProgress(v.progress) : rehydrateProgress(null),
+    progress: v.version === 2 || v.version === 3 || v.version === 4 ? rehydrateProgress(v.progress) : rehydrateProgress(null),
   };
 }
 
@@ -179,7 +190,7 @@ export function saveGame(input: {
     return null;
   }
   const saved: SavedGame = {
-    version: 3,
+    version: 4,
     savedAt: new Date().toISOString(),
     robotId: input.robotId,
     mode: input.mode,

@@ -1,16 +1,16 @@
 'use client';
 
-import { useRef, useState, useSyncExternalStore } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
 import { TbLock, TbMicrophone, TbX } from 'react-icons/tb';
-import { getGameLog, getRecords } from '@/features/records';
+import { useRecordsSnapshot } from '@/features/records';
 import { RobotAvatar, RobotSelect } from '@/features/robots';
 import type { Robot } from '@/features/robots';
 import { buildAdaptiveMatchState, type AdaptiveMatchState } from './adaptiveMatch';
 import { computeHero, type HeroState } from './homeHero';
 
 /** Minimal continue-card payload from AppShell (avoids home→game imports). */
-export interface ContinueMatch {
+interface ContinueMatch {
   robot: Robot;
   mode: 'screen' | 'voice';
   playerLetters: number;
@@ -25,6 +25,8 @@ interface Props {
   voiceEnabled?: boolean;
   /** When false, hide the Play-by-voice CTA (voice is beta-only). */
   voiceVisible?: boolean;
+  /** Current game variant: defense swaps in its own roster and skips ladder heroes. */
+  gameVariant?: 'classic' | 'defense';
   /** When true, every robot is pickable regardless of the unlock gate (?override=true). */
   rosterOverrideEnabled?: boolean;
   /** When true, offer the adaptive challenge (adaptive is beta-only). */
@@ -43,6 +45,7 @@ export default function HomeScreen({
   onPlayVoice,
   voiceEnabled = true,
   voiceVisible = true,
+  gameVariant = 'classic',
   rosterOverrideEnabled = false,
   adaptiveMatchVisible = false,
   adaptiveSaveWaiting = false,
@@ -50,11 +53,16 @@ export default function HomeScreen({
   onContinueGame,
   onDiscardContinue,
 }: Props) {
-  const snapshot = useSyncExternalStore(subscribeToRecordChanges, browserHomeSnapshot, serverHomeSnapshot);
+  const recordsSnapshot = useRecordsSnapshot();
+  const snapshot = useMemo<HomeSnapshot>(() => ({
+    hero: computeHero(recordsSnapshot.gameLog, recordsSnapshot.records),
+    adaptiveMatch: buildAdaptiveMatchState(recordsSnapshot.gameLog, recordsSnapshot.records),
+  }), [recordsSnapshot]);
   const [selectedChallenge, setSelectedChallenge] = useState<HomeChallenge>('standard');
   const [adaptiveWarningVisible, setAdaptiveWarningVisible] = useState(false);
   const adaptiveInputRef = useRef<HTMLInputElement>(null);
   const { hero, adaptiveMatch } = snapshot;
+  const defenseMode = gameVariant === 'defense';
   const adaptiveLocked = adaptiveMatch.status === 'needs_games';
   const challenge =
     !adaptiveMatchVisible || (adaptiveLocked && selectedChallenge === 'adaptive')
@@ -70,7 +78,7 @@ export default function HomeScreen({
       {installBanner}
       {savedMatch ? (
         <ContinueCard {...savedMatch} />
-      ) : (
+      ) : !defenseMode ? (
         <section
           className="challenge-section"
           aria-labelledby={adaptiveMatchVisible ? 'challenge-heading' : undefined}
@@ -126,13 +134,13 @@ export default function HomeScreen({
             )}
           </div>
         </section>
-      )}
+      ) : null}
       {!savedMatch && (
         <>
           <div className="hero-divider">
             <span>or choose a robot</span>
           </div>
-          <RobotSelect onPick={onPickRobot} override={rosterOverrideEnabled} />
+          <RobotSelect onPick={onPickRobot} variant={gameVariant} override={rosterOverrideEnabled} />
         </>
       )}
     </div>
@@ -504,40 +512,9 @@ function AdaptiveHero({
   );
 }
 
-// --- Cached localStorage snapshot (standard + adaptive state, one subscription) ---
+// --- Home projection of the records-owned snapshot ---------------------------
 
 interface HomeSnapshot {
   hero: HeroState;
   adaptiveMatch: AdaptiveMatchState;
-}
-
-const INITIAL_SNAPSHOT: HomeSnapshot = {
-  hero: computeHero([], {}),
-  adaptiveMatch: buildAdaptiveMatchState([], {}),
-};
-let homeCacheKey = '';
-let homeCache = INITIAL_SNAPSHOT;
-
-function serverHomeSnapshot(): HomeSnapshot {
-  return INITIAL_SNAPSHOT;
-}
-
-function browserHomeSnapshot(): HomeSnapshot {
-  const log = getGameLog();
-  const records = getRecords();
-  const key = JSON.stringify({ log, records });
-  if (key !== homeCacheKey) {
-    homeCacheKey = key;
-    homeCache = {
-      hero: computeHero(log, records),
-      adaptiveMatch: buildAdaptiveMatchState(log, records),
-    };
-  }
-  return homeCache;
-}
-
-function subscribeToRecordChanges(onStoreChange: () => void): () => void {
-  if (typeof window === 'undefined') return () => {};
-  window.addEventListener('storage', onStoreChange);
-  return () => window.removeEventListener('storage', onStoreChange);
 }

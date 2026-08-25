@@ -5,6 +5,11 @@ uses an anonymous installation ID and an offline queue; authenticated requests
 also receive the current internal user ID on the server. Events never include
 email, IP address, audio, captions, transcripts, trick names, or free-form text.
 
+The owner dashboard is available at `/admin/analytics`. Its aggregate API
+requires an authenticated account matching the server-side
+`ANALYTICS_ADMIN_EMAIL` Worker variable. Other signed-in accounts receive no
+analytics data.
+
 ## Event Contract
 
 | Event | Meaning |

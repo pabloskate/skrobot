@@ -9,6 +9,7 @@ const t = (name: string, base: string, stance: Stance = 'regular'): Trick => ({
   stance,
   category: 'flatground',
   difficulty: 5,
+  baseDifficulty: 5,
 })
 
 const pool: Trick[] = [

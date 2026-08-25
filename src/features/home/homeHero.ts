@@ -53,7 +53,8 @@ export function computeHero(log: GameLogEntry[], records: Record<string, Record_
   if (ladderLog.length === 0) return heroFromRecords(records) ?? { kind: 'welcome', robot: STARTER };
 
   const last = ladderLog[ladderLog.length - 1];
-  const robot = ROBOT_BY_ID.get(last.robotId) ?? STARTER;
+  // The hero is a classic-roster concept; defense-roster games don't move it.
+  const robot = FLATGROUND_ROBOTS.find((r) => r.id === last.robotId) ?? STARTER;
   if (!last.won) return { kind: 'rematch', robot, record: records[last.robotId] };
   return heroAfterWin(robot, records);
 }

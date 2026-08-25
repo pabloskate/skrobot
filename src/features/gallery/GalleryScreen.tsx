@@ -3,14 +3,14 @@
 import { useMemo, useState, useSyncExternalStore } from 'react';
 import type { IconType } from 'react-icons';
 import { TbChartBar, TbCheck, TbPlayerPlayFilled, TbSearch, TbStar, TbStarFilled } from 'react-icons/tb';
-import { getGameLog, getProvenTricks, getRecords, getTrickMarks, getTrickStats, setTrickMark } from '@/features/records';
+import { setTrickMark, useRecordsSnapshot } from '@/features/records';
 import type { Record_, TrickMark, TrickStat } from '@/features/records';
 import { ROBOT_BY_ID, robotDisplayRating } from '@/features/robots';
 import type { Robot } from '@/features/robots';
 import { computeSkateScore, SKATE_SCORE_UNLOCK_GAMES } from '@/features/skater';
 import type { SkateScore } from '@/features/skater';
 import type { Stance, Trick } from '@/features/tricks';
-import { TRICK_BY_NAME, TRICKS, grade, trickDescription, trickMatchesSearch, tricksFor } from '@/features/tricks';
+import { TRICK_BY_ID, TRICKS, grade, trickDescription, trickMatchesSearch, tricksFor } from '@/features/tricks';
 import GalleryTrickAnimation from './GalleryTrickAnimation';
 import { tipForTrick, tipPlayerSrc, tipThumbnailUrl, type TipVideo } from './tips';
 import { computeBookView, inBag } from './trickBook';
@@ -81,10 +81,6 @@ function chooseStance(next: Stance): void {
   stanceListeners.forEach((notify) => notify());
 }
 
-// --- Gallery data store: localStorage-backed, shared via useSyncExternalStore
-// (same pattern as HomeScreen's hero) so SSR renders the empty view and
-// same-tab mark toggles re-render without a page event.
-
 /** Everything the three tabs render, derived from localStorage in one pass. */
 interface GalleryData extends BookView {
   gamesPlayed: number;
@@ -92,57 +88,11 @@ interface GalleryData extends BookView {
   records: Record<string, Record_>;
 }
 
-const INITIAL_DATA: GalleryData = {
-  ...computeBookView(FLATGROUND_TRICKS, {}, {}),
-  gamesPlayed: 0,
-  score: null,
-  records: {},
-};
-
-let dataCacheKey = '';
-let dataCache = INITIAL_DATA;
-
-const dataListeners = new Set<() => void>();
-
-function serverDataSnapshot(): GalleryData {
-  return INITIAL_DATA;
-}
-
-function browserDataSnapshot(): GalleryData {
-  const marks = getTrickMarks();
-  const proven = getProvenTricks();
-  const stats = getTrickStats();
-  const log = getGameLog();
-  const records = getRecords();
-  const key = JSON.stringify({ marks, proven, stats, log, records });
-  if (key !== dataCacheKey) {
-    dataCacheKey = key;
-    dataCache = {
-      ...computeBookView(FLATGROUND_TRICKS, marks, proven, stats),
-      gamesPlayed: log.length,
-      score: computeSkateScore(log),
-      records,
-    };
-  }
-  return dataCache;
-}
-
-function subscribeToDataChanges(onStoreChange: () => void): () => void {
-  if (typeof window === 'undefined') return () => {};
-  dataListeners.add(onStoreChange);
-  window.addEventListener('storage', onStoreChange);
-  return () => {
-    dataListeners.delete(onStoreChange);
-    window.removeEventListener('storage', onStoreChange);
-  };
-}
-
 /** none ↔ learning. Proven is game evidence and never cycles. */
 function cycleMark(trickId: string, entry: BookEntry | undefined): void {
   if (entry?.state === 'proven') return;
   const next: TrickMark | null = entry?.state === 'learning' ? null : 'learning';
   setTrickMark(trickId, next);
-  dataListeners.forEach((notify) => notify());
 }
 
 function TipThumb({ tip }: { tip: TipVideo }) {
@@ -367,7 +317,7 @@ function LearningTab({
     <div className="gallery-pane">
       <LearningHero
         item={hero}
-        stat={data.stats[hero.trick.name]}
+        stat={data.stats[hero.trick.id]}
         onWatch={onWatch}
         onShowStats={onShowStats}
       />
@@ -384,7 +334,7 @@ function LearningTab({
                 key={item.trick.id}
                 item={item}
                 entry={data.book.get(item.trick.id)}
-                stat={data.stats[item.trick.name]}
+                stat={data.stats[item.trick.id]}
                 onWatch={onWatch}
               />
             ))}
@@ -409,9 +359,9 @@ function LearningTab({
 // --- Stats tab ---------------------------------------------------------------
 
 /** All tricks with tracked attempts, most-tried first; ties broken by weakest rate. */
-function statRows(stats: Record<string, TrickStat>): { name: string; stat: TrickStat }[] {
+function statRows(stats: Record<string, TrickStat>): { trickId: string; name: string; stat: TrickStat }[] {
   return Object.entries(stats)
-    .map(([name, stat]) => ({ name, stat }))
+    .map(([trickId, stat]) => ({ trickId, name: TRICK_BY_ID.get(trickId)?.name ?? trickId, stat }))
     .sort(
       (a, b) =>
         b.stat.attempts - a.stat.attempts ||
@@ -455,10 +405,10 @@ function ScoreCard({
             Play {remaining} more game{remaining === 1 ? '' : 's'} of S.K.A.T.E. to unlock your
             skate score and see which robot you skate like.
           </p>
-          <div className="score-progress" aria-hidden="true">
+          <div className="gallery-score-progress" aria-hidden="true">
             <span style={{ width: `${pct}%` }} />
           </div>
-          <p className="score-progress-note">
+          <p className="gallery-score-progress-note">
             {gamesPlayed} of {SKATE_SCORE_UNLOCK_GAMES} games complete
           </p>
         </section>
@@ -483,7 +433,7 @@ function ScoreCard({
   return (
     <section className="score-card" aria-label="Skate score">
       <span className="score-kicker">Skate score</span>
-      <div className="score-row">
+      <div className="gallery-score-row">
         <span className="score-num">{score.rating}</span>
         <span className="score-tier">{score.tier}</span>
       </div>
@@ -555,15 +505,15 @@ function StatsTab({ data, onBrowseBag }: { data: GalleryData; onBrowseBag: () =>
               {rows.length} trick{rows.length === 1 ? '' : 's'} tried
             </p>
             <ul className="stats-list">
-              {rows.map(({ name, stat }) => {
+              {rows.map(({ trickId, name, stat }) => {
                 const pct = Math.round(stat.rate * 100);
-                const trick = TRICK_BY_NAME.get(name);
+                const trick = TRICK_BY_ID.get(trickId);
                 const learning = trick
                   ? data.book.get(trick.id)?.state === 'learning'
                   : false;
                 const barTone = pct < 30 ? 'stat-bar-low' : pct < 65 ? 'stat-bar-mid' : '';
                 return (
-                  <li key={name} className="stat-row">
+                  <li key={trickId} className="stat-row">
                     <span className="stat-row-head">
                       <span className="stat-name">
                         {name}
@@ -622,7 +572,18 @@ export default function GalleryScreen() {
   const [bookFilter, setBookFilter] = useState<BookFilter>('all');
   const [activeVideo, setActiveVideo] = useState<Trick | null>(null);
   const stance = useSyncExternalStore(subscribeToStance, browserStanceSnapshot, serverStanceSnapshot);
-  const data = useSyncExternalStore(subscribeToDataChanges, browserDataSnapshot, serverDataSnapshot);
+  const recordsSnapshot = useRecordsSnapshot();
+  const data = useMemo<GalleryData>(() => ({
+    ...computeBookView(
+      FLATGROUND_TRICKS,
+      recordsSnapshot.marks,
+      recordsSnapshot.proven,
+      recordsSnapshot.stats,
+    ),
+    gamesPlayed: recordsSnapshot.gameLog.length,
+    score: computeSkateScore(recordsSnapshot.gameLog),
+    records: recordsSnapshot.records,
+  }), [recordsSnapshot]);
 
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -748,7 +709,7 @@ export default function GalleryScreen() {
                 const tip = tipForTrick(t);
                 const desc = trickDescription(t);
                 const entry = data.book.get(t.id);
-                const stat = data.stats[t.name];
+                const stat = data.stats[t.id];
                 return (
                   <li key={t.id}>
                     <div className={`trick-card ${inBag(entry) ? 'trick-card-bagged' : ''}`}>

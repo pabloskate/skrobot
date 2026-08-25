@@ -1,6 +1,6 @@
 import { getDb } from '@/platform/server/db';
 
-export type UserTier = 'free' | 'paid';
+type UserTier = 'free' | 'paid';
 
 export interface UserRow {
   id: string;
@@ -15,7 +15,7 @@ export interface PublicUser {
   tier: UserTier;
 }
 
-export interface VoiceQuota {
+interface VoiceQuota {
   used: number;
   limit: number;
   unlimited: boolean;
@@ -112,7 +112,7 @@ export async function getCurrentUser(request: Request): Promise<UserRow | null> 
   return user ?? null;
 }
 
-export async function getVoiceQuota(user: UserRow): Promise<VoiceQuota> {
+async function getVoiceQuota(user: UserRow): Promise<VoiceQuota> {
   if (user.tier === 'paid') return { used: 0, limit: FREE_VOICE_LIMIT, unlimited: true };
 
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();

@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState, type ReactElement } from 'react';
 import type { RiderStance, Robot, Trick } from './types';
 import { orientTrickRotation, resolveRiderMechanics } from './stanceMechanics';
+import { readableAccent } from './robotColors';
 import {
   computeFrame,
   specFor,
@@ -547,7 +548,14 @@ const ANKLE_LIFT = 2.2;
 const STANCE_BODY_YAW = 40;
 /** Degrees the head stays toward travel relative to the torso yaw. */
 const HEAD_LOOK_FORWARD = 16;
-
+/** Fraction of a half spin (180) the torso/shoulders rotate. The legs take
+ *  the whole spin with the deck, but a real rider keeps the upper body
+ *  twisted partway open — you land a frontside 180 riding fakie without
+ *  your chest facing backwards. */
+const TORSO_SPIN_FOLLOW = 0.55;
+/** Fraction of a half spin the head rotates — the eyes stay mostly on
+ *  where you're going, looking over the leading shoulder. */
+const HEAD_SPIN_FOLLOW = 0.25;
 function skaterPoint(local: V3, bodyRotDeg: number, bodyYawDeg: number, hip: V3): V3 {
   let q: V3 = { x: local.x, y: local.y - BODY_PIVOT_Y, z: local.z };
   q = rotZ(q, bodyRotDeg);
@@ -666,6 +674,7 @@ export default function TrickAnimation3D({
   };
 
   const colors = robot.avatar;
+  const accent = readableAccent(colors.accent);
   const f = staticTime != null
     ? computeFrame(staticTime, spec, landed, resolvedFallVariant, shankProgress)
     : frame;
@@ -684,11 +693,23 @@ export default function TrickAnimation3D({
   const restingHeadYaw = -(STANCE_BODY_YAW - HEAD_LOOK_FORWARD) * mechanics.orientationSign;
   const yawDeg3d = orientedRotation.yawDeg;
   const bodyYawDeg3d = orientedRotation.bodyYawDeg + restingBodyYaw;
+  // Split the spin across the body: legs (planted in board space) follow the
+  // full rotation with the deck. The upper body depends on spin direction —
+  // a frontside chest is already open toward travel, so the shoulders take
+  // the SHORT way (well under 180°) and the head barely turns. A backside
+  // landing follows the full deck rotation so its torso, gaze, and legs all
+  // face the same side. Full 360 spins also bring the whole body around.
+  const halfSpin = spec.bodyYaw % 360 !== 0;
+  const backside = spec.spinDir === 1;
+  const torsoSpinFollow = !halfSpin || backside ? 1 : TORSO_SPIN_FOLLOW;
+  const headSpinFollow = !halfSpin || backside ? 1 : HEAD_SPIN_FOLLOW;
+  const torsoYawDeg3d = orientedRotation.bodyYawDeg * torsoSpinFollow
+    + restingBodyYaw;
   // Head looks a bit more down-street while upright. Once the body folds in a
   // fall, that yaw delta is applied after rotZ around the foot pivot and
   // swings the head off the neck — blend it out so head/torso stay attached.
   const uprightP = clamp01(1 - Math.abs(f.body.rot) / 55);
-  const headYawDeg3d = orientedRotation.bodyYawDeg
+  const headYawDeg3d = orientedRotation.bodyYawDeg * headSpinFollow
     + restingHeadYaw * uprightP
     + restingBodyYaw * (1 - uprightP);
   const rawFlightP = (f.t - ROLL_IN) / FLIP_T;
@@ -750,7 +771,7 @@ export default function TrickAnimation3D({
   const graphicEls: ReactElement[] = [];
   if (!seeingTop) {
     const bottomY = (x: number) => deckKickY(x) + DECK_THICKNESS / 2 + 0.2;
-    const graphicFill = shade(colors.accent, lambert(neg3(deckNormal)));
+    const graphicFill = shade(accent, lambert(neg3(deckNormal)));
     const stripeHalfW = 2.4;
     const poly = (key: string, pts: V3[], fill: string) => {
       graphicEls.push(
@@ -865,7 +886,7 @@ export default function TrickAnimation3D({
             />
             <line className="trick-anim-3d__wheel-spoke" x1={c.x - ca} y1={c.y - sa} x2={c.x + ca} y2={c.y + sa} strokeWidth={1.3 * c.s} />
             <line className="trick-anim-3d__wheel-spoke" x1={c.x + sa} y1={c.y - ca} x2={c.x - sa} y2={c.y + ca} strokeWidth={1.3 * c.s} />
-            <circle cx={c.x} cy={c.y} r={1.8 * c.s} fill={colors.accent} />
+            <circle cx={c.x} cy={c.y} r={1.8 * c.s} fill={accent} />
           </g>
         ),
       });
@@ -891,6 +912,9 @@ export default function TrickAnimation3D({
   // ----- Skater -----
   const hip: V3 = { x: f.body.x, y: f.body.y, z: 0 };
   const S = (local: V3) => skaterPoint(local, f.body.rot, bodyYawDeg3d, hip);
+  // Torso + arms follow a body spin only partway (see TORSO_SPIN_FOLLOW);
+  // the legs stay on the full bodyYawDeg3d so the feet ride the deck.
+  const Storso = (local: V3) => skaterPoint(local, f.body.rot, torsoYawDeg3d, hip);
   // Head keeps a bit more travel-facing yaw than the torso.
   const Shead = (local: V3) => skaterPoint(local, f.body.rot, headYawDeg3d, hip);
   // Board-space feet/knees/boots: undo the resting body yaw so they stay planted.
@@ -916,8 +940,16 @@ export default function TrickAnimation3D({
   const rightFoot = rightFootChannel;
   const leftFlickZ = mechanics.flickFoot === 'left' ? flickZ : 0;
   const rightFlickZ = mechanics.flickFoot === 'right' ? flickZ : 0;
-  const kneeL = knee(leftFoot);
-  const kneeR = knee(rightFoot);
+  // The IK bends knees toward the board's +x (nose). Rotate the bend with the
+  // body spin so knees straighten as the body passes sideways. Frontside then
+  // re-bends the opposite way; backside folds back toward the legacy 3D knee
+  // direction, which gives its landing the natural silhouette.
+  const rotatingKneeBend = Math.cos(rad(orientedRotation.bodyYawDeg));
+  const kneeBendBlend = backside && halfSpin
+    ? Math.abs(rotatingKneeBend)
+    : rotatingKneeBend;
+  const kneeL = knee(leftFoot, kneeBendBlend);
+  const kneeR = knee(rightFoot, kneeBendBlend);
   const hipL3 = S({ x: 0, y: 0, z: -HIP_Z });
   const hipR3 = S({ x: 0, y: 0, z: HIP_Z });
   // Shin ends at the ankle (slightly above the sole) so the boot cuff reads
@@ -942,15 +974,15 @@ export default function TrickAnimation3D({
   };
 
   let sidePrimStart = prims.length;
-  pushCapsule(prims, 'thighL', hipL3, kneeL3, 6.5, colors.accent, 1.2);
-  pushCapsule(prims, 'shinL', kneeL3, ankleL3, 6.5, colors.accent, 1.2);
-  pushDot(prims, 'kneeL', kneeL3, 3.6, colors.accent, 'currentColor', 1.2, 1, 0.4);
+  pushCapsule(prims, 'thighL', hipL3, kneeL3, 6.5, accent, 1.2);
+  pushCapsule(prims, 'shinL', kneeL3, ankleL3, 6.5, accent, 1.2);
+  pushDot(prims, 'kneeL', kneeL3, 3.6, accent, 'currentColor', 1.2, 1, 0.4);
   rememberNewPrims(sidePrimStart, leftLegPrimIndexes);
 
   sidePrimStart = prims.length;
-  pushCapsule(prims, 'thighR', hipR3, kneeR3, 6.5, colors.accent, 1.2);
-  pushCapsule(prims, 'shinR', kneeR3, ankleR3, 6.5, colors.accent, 1.2);
-  pushDot(prims, 'kneeR', kneeR3, 3.6, colors.accent, 'currentColor', 1.2, 1, 0.4);
+  pushCapsule(prims, 'thighR', hipR3, kneeR3, 6.5, accent, 1.2);
+  pushCapsule(prims, 'shinR', kneeR3, ankleR3, 6.5, accent, 1.2);
+  pushDot(prims, 'kneeR', kneeR3, 3.6, accent, 'currentColor', 1.2, 1, 0.4);
   rememberNewPrims(sidePrimStart, rightLegPrimIndexes);
 
   // Boots: compact skate stance (across the deck, slight forward rake), with a
@@ -986,14 +1018,26 @@ export default function TrickAnimation3D({
   // depth can incorrectly hide regular's right/tail leg. Only regular gets
   // this explicit foreground cue. Goofy keeps its original projected depth;
   // applying the same override there collapses both stances into one pose.
-  const NATURAL_TAIL_LEG_DEPTH_BOOST = 12;
-  const forceRegularTailLegNear = riderStance === 'regular' && spec.stance !== 'switch';
-  if (forceRegularTailLegNear) {
-    const tailLegPrimIndexes = mechanics.tailFoot === 'left'
+  // Once a 180 spins the body past sideways, though, the tail leg genuinely
+  // IS the far leg — forcing it in front then crosses the legs into a
+  // contorted landing instead of the clean switch-like stance pose.
+  const LEG_DEPTH_BOOST = 12;
+  const spunFacingAway = Math.abs(orientedRotation.bodyYawDeg) >= 90;
+  const forceRegularTailLegNear = riderStance === 'regular'
+    && spec.stance !== 'switch'
+    && !spunFacingAway;
+  // After a backside half-spin the stance has rotated through 180°, making
+  // the nose-side leg the stable foreground leg. Pin that whole leg group in
+  // front so compression cannot swap its painter order with the tail leg at
+  // the last moment before touchdown.
+  const forceBacksideNoseLegNear = backside && halfSpin && spunFacingAway;
+  if (forceRegularTailLegNear || forceBacksideNoseLegNear) {
+    const nearFoot = forceBacksideNoseLegNear ? mechanics.noseFoot : mechanics.tailFoot;
+    const nearLegPrimIndexes = nearFoot === 'left'
       ? leftLegPrimIndexes
       : rightLegPrimIndexes;
-    for (const index of tailLegPrimIndexes) {
-      prims[index].depth += NATURAL_TAIL_LEG_DEPTH_BOOST;
+    for (const index of nearLegPrimIndexes) {
+      prims[index].depth += LEG_DEPTH_BOOST;
     }
   }
 
@@ -1020,9 +1064,9 @@ export default function TrickAnimation3D({
       z: sideZ * 1.5,
     };
     return {
-      shoulder: S(shoulderLocal),
-      elbow: S(elbowLocal),
-      hand: S(handLocal),
+      shoulder: Storso(shoulderLocal),
+      elbow: Storso(elbowLocal),
+      hand: Storso(handLocal),
     };
   };
   // Natural regular gets a readable resting-arm cue before the pop: the
@@ -1032,28 +1076,19 @@ export default function TrickAnimation3D({
   const regularArmCue = riderStance === 'regular' && spec.stance !== 'switch'
     ? clamp01(1 - f.t / ROLL_IN)
     : 0;
-  // Mid-flight balance carriage: arms spread and elbows fold as the rider
-  // rises, then relax into the catch. Symmetric ± terms inside the mirrored
-  // parens keep the goofy mirror exact.
-  const flightArmLift = rawFlightP >= 0 && rawFlightP <= 1
-    ? Math.sin(clamp01(rawFlightP) * Math.PI)
-    : 0;
   const leftArmAngle = baseBodySign * (
     (mechanics.frontArm === 'left' ? f.armFront : f.armBack)
     + regularArmCue * 0.3
-    + flightArmLift * 0.38
   );
   const rightArmAngle = baseBodySign * (
     (mechanics.frontArm === 'right' ? f.armFront : f.armBack)
     - regularArmCue * 0.5
-    - flightArmLift * 0.38
   );
   // Wider than the trunk's half-width (see the torso capsule below) so the
   // arms hang clear of the silhouette instead of being swallowed by it.
   const SHOULDER_Z = 12;
-  const armBend = 0.24 * (1 + 1.5 * flightArmLift);
-  const armL = armGeometry(leftArmAngle, -SHOULDER_Z, -armBend);
-  const armR = armGeometry(rightArmAngle, SHOULDER_Z, armBend);
+  const armL = armGeometry(leftArmAngle, -SHOULDER_Z, -0.24);
+  const armR = armGeometry(rightArmAngle, SHOULDER_Z, 0.24);
   // Near/far from shoulder depth only — shoulders don't swing during the
   // crouch, so this stays stable (unlike averaging in the moving forearm,
   // which used to flicker). Do NOT key off toeside: goofy's toeside faces
@@ -1063,8 +1098,8 @@ export default function TrickAnimation3D({
 
   // Torso depth anchor used to keep the far arm behind / near arm in front
   // even when a swinging forearm's average depth briefly crosses the body.
-  const torsoTop = S({ x: 1, y: -39, z: 0 });
-  const torsoBot = S({ x: 1, y: -11, z: 0 });
+  const torsoTop = Storso({ x: 1, y: -39, z: 0 });
+  const torsoBot = Storso({ x: 1, y: -11, z: 0 });
   const torsoDepth = (project(torsoTop).depth + project(torsoBot).depth) / 2;
 
   const drawArm = (
@@ -1072,7 +1107,7 @@ export default function TrickAnimation3D({
     arm: { shoulder: V3; elbow: V3; hand: V3 },
     isNear: boolean,
   ) => {
-    const armFill = isNear ? colors.accent : darken(colors.accent, 0.16);
+    const armFill = isNear ? accent : darken(accent, 0.16);
     const pin = isNear ? 6 : -6;
     const clampSeg = (a: V3, b: V3) => {
       const raw = (project(a).depth + project(b).depth) / 2 + pin;
@@ -1093,10 +1128,6 @@ export default function TrickAnimation3D({
     const foreStart = prims.length;
     pushCapsule(prims, `${key}Fore`, arm.elbow, arm.hand, 6.25, armFill, 1.2);
     prims[foreStart].depth = foreDepth;
-    // Hand cap shares the forearm's depth so it can't split off mid-swing.
-    const handStart = prims.length;
-    pushDot(prims, `${key}Hand`, arm.hand, 3, colors.accent, 'currentColor', 1.1);
-    prims[handStart].depth = foreDepth;
   };
   drawArm('armL', armL, !rightArmIsNear);
   drawArm('armR', armR, rightArmIsNear);
@@ -1107,7 +1138,7 @@ export default function TrickAnimation3D({
 
   // Neck + head — slightly less toeside yaw than the torso so the face looks
   // a bit down the street.
-  pushLine(prims, 'neck', Shead({ x: 7, y: -50, z: 0 }), Shead({ x: 7, y: -56, z: 0 }), colors.accent, { width: 3 });
+  pushLine(prims, 'neck', Shead({ x: 7, y: -50, z: 0 }), Shead({ x: 7, y: -56, z: 0 }), accent, { width: 3 });
   pushCapsule(prims, 'head', Shead({ x: 5, y: -65, z: 0 }), Shead({ x: 9, y: -65, z: 0 }), 22, colors.body, 2.5);
   // Put the visor and eye on the curved front surface of the head rather than
   // near its center. They now orbit visibly around the head during yaw. Fade
@@ -1170,14 +1201,14 @@ export default function TrickAnimation3D({
           cy={eyeLeft.y}
           rx={1.65 * eyeLeft.s}
           ry={1.3 * eyeLeft.s}
-          fill={colors.accent}
+          fill={accent}
         />
         <ellipse
           cx={eyeRight.x}
           cy={eyeRight.y}
           rx={1.65 * eyeRight.s}
           ry={1.3 * eyeRight.s}
-          fill={colors.accent}
+          fill={accent}
         />
       </g>
     ),
@@ -1185,7 +1216,7 @@ export default function TrickAnimation3D({
 
   // Antenna
   pushLine(prims, 'antenna', Shead({ x: 7, y: -76, z: 0 }), Shead({ x: 7, y: -84, z: 0 }), 'currentColor', { width: 2.5 });
-  pushDot(prims, 'antennaBall', Shead({ x: 7, y: -85.5, z: 0 }), 3, colors.accent, 'currentColor', 1.5, 1, 0.2);
+  pushDot(prims, 'antennaBall', Shead({ x: 7, y: -85.5, z: 0 }), 3, accent, 'currentColor', 1.5, 1, 0.2);
 
   prims.sort((a, b) => a.depth - b.depth);
 
@@ -1310,9 +1341,12 @@ export default function TrickAnimation3D({
       { dy: 20, dz: 32, len: 34, back: 92 },
     ];
     streakConfigs.forEach((cfg, i) => {
-      const xTip = f.board.x - cfg.back;
+      // Streaks trail BEHIND the board, so they mirror with travel direction:
+      // fakie (dir=-1) rides the other way and would otherwise show streaks
+      // streaming in front of the nose, reading as forward travel.
+      const xTip = f.board.x - spec.dir * cfg.back;
       const a = project({ x: xTip, y: f.board.y + cfg.dy, z: cfg.dz });
-      const b = project({ x: xTip + cfg.len, y: f.board.y + cfg.dy, z: cfg.dz });
+      const b = project({ x: xTip + spec.dir * cfg.len, y: f.board.y + cfg.dy, z: cfg.dz });
       flightStreaks.push(
         <line
           key={`streak${i}`}

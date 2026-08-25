@@ -3,7 +3,7 @@ import { deriveProvenTricks, deriveTrickStats } from '@/features/records';
 import type { Robot, Tier } from '@/features/robots';
 import { isFlatgroundRobot, ROBOTS } from '@/features/robots';
 import type { Trick } from '@/features/tricks';
-import { TRICK_BY_NAME, TRICKS } from '@/features/tricks';
+import { TRICK_BY_ID, TRICKS } from '@/features/tricks';
 import { eloLadderSpot, skillToDisplayRating, skillToRawElo } from './skillElo';
 import { playerConsistencyCurve } from './skillCurve';
 
@@ -25,7 +25,7 @@ export function frontierSkill(
   proven: Record<string, ProvenTrick>,
 ): number | null {
   const difficulties = tricks
-    .filter((t) => proven[t.name] != null)
+    .filter((t) => proven[t.id] != null)
     .map((t) => t.difficulty)
     .sort((a, b) => b - a);
   if (difficulties.length < 3) return null;
@@ -70,9 +70,9 @@ const MAX_WEIGHT_PER_TRICK = 8;
 export function fitRobotEquivalentSkill(stats: Record<string, TrickStat>): number | null {
   const rows: { difficulty: number; rate: number; weight: number }[] = [];
   let totalAttempts = 0;
-  for (const [name, stat] of Object.entries(stats)) {
-    const trick = TRICK_BY_NAME.get(name);
-    if (!trick) continue; // renamed/removed catalog entries can't be scored
+  for (const [trickId, stat] of Object.entries(stats)) {
+    const trick = TRICK_BY_ID.get(trickId);
+    if (!trick) continue; // removed catalog entries remain recorded but cannot be scored
     totalAttempts += stat.attempts;
     rows.push({
       difficulty: trick.difficulty,

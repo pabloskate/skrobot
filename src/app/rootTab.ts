@@ -1,10 +1,10 @@
 /** Top-level tabs shown in the bottom navigation bar. */
 export type RootTab = 'skate' | 'tricks' | 'settings';
 
-export const ROOT_TAB_PARAM = 'tab';
-export const VERSION_PARAM = 'version';
-export const OVERRIDE_PARAM = 'override';
-export const URL_CHANGE_EVENT = 'skrobot-url';
+const ROOT_TAB_PARAM = 'tab';
+const VERSION_PARAM = 'version';
+const OVERRIDE_PARAM = 'override';
+const URL_CHANGE_EVENT = 'skrobot-url';
 
 const BETA_VERSION = 'beta';
 

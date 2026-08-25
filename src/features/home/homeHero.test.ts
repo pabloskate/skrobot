@@ -12,7 +12,8 @@ function logEntry(overrides: Partial<GameLogEntry>): GameLogEntry {
     won: true,
     playerLetters: 0,
     robotLetters: 5,
-    tricksLanded: [],
+    version: 2,
+    trickIdsLanded: [],
     ...overrides,
   };
 }

@@ -9,7 +9,7 @@ export function normalizeUrl(value: string, fallback: string): string {
   }
 }
 
-export function appOrigin(appUrl: string): string {
+function appOrigin(appUrl: string): string {
   return new URL(appUrl).origin;
 }
 

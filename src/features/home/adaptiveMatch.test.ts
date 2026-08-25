@@ -5,22 +5,23 @@ import { buildAdaptiveMatchState } from './adaptiveMatch';
 
 function game(index: number, attempts: TrickAttempt[]): GameLogEntry {
   return {
+    version: 2,
     date: `2026-08-${String(index + 1).padStart(2, '0')}T00:00:00.000Z`,
     robotId: 'shifty',
     mode: 'screen',
     won: true,
     playerLetters: 1,
     robotLetters: 5,
-    tricksLanded: attempts.filter((attempt) => attempt.landed).map((attempt) => attempt.trick),
+    trickIdsLanded: attempts.filter((attempt) => attempt.landed).map((attempt) => attempt.trickId),
     trickAttempts: attempts,
   };
 }
 
 const CALIBRATION_ATTEMPTS: TrickAttempt[] = [
-  { trick: 'Ollie', landed: true },
-  { trick: 'Pop Shuvit', landed: true },
-  { trick: 'Frontside 180', landed: true },
-  { trick: 'Kickflip', landed: false },
+  { trickId: 'regular-ollie', landed: true },
+  { trickId: 'regular-pop-shuvit', landed: true },
+  { trickId: 'regular-frontside-180', landed: true },
+  { trickId: 'regular-kickflip', landed: false },
 ];
 
 function calibratedLog(): GameLogEntry[] {

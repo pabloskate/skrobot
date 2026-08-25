@@ -84,7 +84,7 @@ export default function VoiceGameScreen({
   const pocketRef = useRef(false);
   const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const progressRef = useRef<GameProgress>(
-    resume?.progress ?? { tricksLanded: [], trickAttempts: [] },
+    resume?.progress ?? { trickIdsLanded: [], trickAttempts: [] },
   );
   const onCompleteRef = useRef(onComplete);
   useEffect(() => {

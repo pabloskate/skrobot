@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { TRICK_BY_ID, TRICK_BY_NAME, TRICKS, trickDescription, trickDiscipline, trickMatchesSearch } from './tricks';
 
 describe('TRICK_BY_NAME', () => {
-  it('has a unique display name for every trick (game records key attempts by name)', () => {
+  it('has a unique display name for every trick (needed for legacy record migration)', () => {
     expect(TRICK_BY_NAME.size).toBe(TRICKS.length);
   });
 

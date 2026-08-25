@@ -42,6 +42,7 @@ interface SendEmail {
 }
 
 interface CloudflareEnv {
+  ANALYTICS_ADMIN_EMAIL?: string;
   DB?: D1Database;
   EMAIL?: SendEmail;
   ENABLE_BILLING?: string;

@@ -32,10 +32,10 @@ function midGame(overrides: Partial<GameState> = {}): GameState {
 }
 
 const progress = {
-  tricksLanded: ['Kickflip'],
+  trickIdsLanded: ['regular-kickflip'],
   trickAttempts: [
-    { trick: 'Kickflip', landed: true },
-    { trick: 'Heelflip', landed: false },
+    { trickId: 'regular-kickflip', landed: true },
+    { trickId: 'regular-heelflip', landed: false },
   ],
 };
 
@@ -66,7 +66,7 @@ describe('saveGame / getSavedGame', () => {
   it('round-trips a mid-game save', () => {
     const state = midGame();
     const saved = saveGame({ robotId: 'shifty', mode: 'screen', session, state, progress });
-    expect(saved?.version).toBe(3);
+    expect(saved?.version).toBe(4);
     expect(saved?.robotId).toBe('shifty');
     expect(getSavedGame()?.state.letters).toEqual({ player: 1, robot: 2 });
     expect(getSavedGame()?.state.used).toEqual(['kickflip']);
@@ -93,9 +93,32 @@ describe('saveGame / getSavedGame', () => {
     );
 
     expect(getSavedGame()).toMatchObject({
-      version: 3,
+      version: 4,
       mode: 'voice',
-      progress: { tricksLanded: [], trickAttempts: [] },
+      progress: { trickIdsLanded: [], trickAttempts: [] },
+    });
+  });
+
+  it('migrates legacy name-based progress to stable trick ids', () => {
+    localStorage.setItem(
+      'skaterobot-saved-game',
+      JSON.stringify({
+        version: 3,
+        savedAt: '2026-08-01T00:00:00.000Z',
+        robotId: 'shifty',
+        mode: 'screen',
+        session,
+        state: midGame(),
+        progress: {
+          tricksLanded: ['Kickflip'],
+          trickAttempts: [{ trick: 'Heelflip', landed: false }],
+        },
+      }),
+    );
+
+    expect(getSavedGame()?.progress).toEqual({
+      trickIdsLanded: ['regular-kickflip'],
+      trickAttempts: [{ trickId: 'regular-heelflip', landed: false }],
     });
   });
 

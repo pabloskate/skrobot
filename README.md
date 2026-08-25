@@ -17,9 +17,8 @@ cp .env.example .env.local   # add keys (see comments inside)
 npm run dev                  # http://localhost:3000
 ```
 
-Voice mode needs a Gemini key: either `GEMINI_API_KEY` (server-side, used by the
-`/api/live-token` mint — preferred) or `NEXT_PUBLIC_GEMINI_API_KEY` (dev-only
-browser fallback).
+Voice mode uses `GEMINI_API_KEY` server-side to mint an ephemeral token through
+`/api/live-token`; long-lived API keys are never read by client code.
 
 ## Ship
 

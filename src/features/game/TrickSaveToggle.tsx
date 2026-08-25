@@ -13,7 +13,7 @@ import type { Trick } from '@/features/tricks';
  * proven in games are in the bag and can't be "wanted".
  */
 export default function TrickSaveToggle({ trick }: { trick: Trick }) {
-  const [proven] = useState(() => Boolean(getProvenTricks()[trick.name]));
+  const [proven] = useState(() => Boolean(getProvenTricks()[trick.id]));
   const [saved, setSaved] = useState(() => getTrickMarks()[trick.id] === 'learning');
 
   if (proven) return null;

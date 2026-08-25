@@ -8,6 +8,4 @@
  * the top of their queue. Video metadata is gallery-owned curation, not trick
  * data.
  */
-export type { TipVideo } from './tips';
-export { TIP_VIDEOS, tipForTrick } from './tips';
 export { default as GalleryScreen } from './GalleryScreen';

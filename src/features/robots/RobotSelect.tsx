@@ -1,30 +1,31 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { getRecords } from '@/features/records';
+import { useRecordsSnapshot } from '@/features/records';
 import type { Robot, Tier } from './robots';
-import { isFlatgroundRobot, ROBOTS, TIERS } from './robots';
+import { DEFENSE_ROBOTS, rosterForVariant, TIERS } from './robots';
 import RobotAvatar from './RobotAvatar';
 import RobotRating from './RobotRating';
-import type { Record_ } from '@/features/records';
 
 const TIER_TAB_KEY = 'skrobot.robotTier';
 
 interface Props {
   onPick: (robot: Robot) => void;
+  /** Game variant: defense shows its own dedicated roster with no unlock gate. */
+  variant?: 'classic' | 'defense';
   /** Unlock every robot regardless of the beat-the-previous gate (?override=true). */
   override?: boolean;
 }
 
-export default function RobotSelect({ onPick, override = false }: Props) {
-  const [records, setRecords] = useState<Record<string, Record_>>({});
+export default function RobotSelect({ onPick, variant = 'classic', override = false }: Props) {
+  const defense = variant === 'defense';
+  const { records } = useRecordsSnapshot();
   const [tier, setTier] = useState<Tier>(TIERS[0].tier);
   const trackRef = useRef<HTMLDivElement>(null);
   const [thumb, setThumb] = useState<{ x: number; w: number } | null>(null);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      setRecords(getRecords());
       const saved = window.localStorage.getItem(TIER_TAB_KEY);
       if (TIERS.some((t) => t.tier === saved)) setTier(saved as Tier);
     });
@@ -55,7 +56,9 @@ export default function RobotSelect({ onPick, override = false }: Props) {
     }
   };
 
-  const tierRobots = ROBOTS.filter((robot) => robot.tier === tier && isFlatgroundRobot(robot));
+  const tierRobots = defense
+    ? DEFENSE_ROBOTS.filter((robot) => robot.tier === tier)
+    : rosterForVariant('classic').filter((robot) => robot.tier === tier);
 
   return (
     <>
@@ -81,14 +84,26 @@ export default function RobotSelect({ onPick, override = false }: Props) {
           </button>
         ))}
       </div>
+      {defense && (
+        <p className="muted small" role="note">
+          Defense mode: every robot is unlocked and each one only sets tricks. Land a set to give
+          that robot a letter.
+        </p>
+      )}
       <section role="tabpanel">
         <div className="robot-grid">
           {tierRobots.map((robot, index) => {
             const previousRobot = tierRobots[index - 1];
             const rec = records[robot.id];
             const defeated = (rec?.w ?? 0) > 0;
+            // The defense roster has no progression gate: every robot is
+            // pickable immediately.
             const unlocked =
-              override || defeated || !previousRobot || (records[previousRobot.id]?.w ?? 0) > 0;
+              defense ||
+              override ||
+              defeated ||
+              !previousRobot ||
+              (records[previousRobot.id]?.w ?? 0) > 0;
 
             return (
               <button

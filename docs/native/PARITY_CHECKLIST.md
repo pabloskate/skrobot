@@ -14,7 +14,7 @@ web feature below is available without a native clone.
 - `apps/mobile/app.json` must keep the `skrobot` URL scheme so native magic links return to the shell.
 - `apps/mobile/app.json` must define stable iOS and Android identifiers for repeatable device validation.
 - `apps/mobile/eas.json` must define development/internal build profiles for the native shell.
-- `src/mobile-parity/*.test.ts` must guard the shell, link routing, plugin output, and no-clone invariant.
+- `tests/mobile-parity/*.test.ts` must guard the shell, link routing, plugin output, and no-clone invariant.
 
 ## Feature Inventory
 
@@ -24,7 +24,6 @@ the loaded web app or explicitly noted as not routed yet:
 - `analytics` — privacy-safe product events queued offline and delivered through the same web runtime.
 - `auth` — passwordless sign-in UI, session state, logout.
 - `billing` — quota/upgrade screen and dormant Stripe API behavior.
-- `dice` — standalone random-trick roller; not currently routed by `AppShell`.
 - `game` — S.K.A.T.E. rules and on-screen game mode.
 - `gallery` — flatground trick gallery with stance filters and optional curated video tips.
 - `home` — landing hero and flatground robot roster entry point.
@@ -53,6 +52,7 @@ The native shell must load the same web app states defined by `AppShell`:
 Native WebView requests must hit the same first-party API surface as web:
 
 - `/api/analytics`
+- `/api/analytics/summary`
 - `/api/auth/callback`
 - `/api/auth/logout`
 - `/api/auth/request-link`

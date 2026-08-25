@@ -1,23 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import type { GameLogEntry, TrickAttempt } from '@/features/records';
 import { buildBag, ROBOT_BY_ID } from '@/features/robots';
-import { tricksFor } from '@/features/tricks';
+import { TRICK_BY_NAME, tricksFor } from '@/features/tricks';
 import { buildRivalRobot, isRivalId, resolveRobot, RIVAL_ID, rivalDelta, rivalFavorites } from './rivalBot';
 import { SKATE_SCORE_UNLOCK_GAMES } from './skateScore';
 
 const FLAT = tricksFor('flatground');
+const id = (name: string) => TRICK_BY_NAME.get(name)?.id ?? name;
 
 let gameCounter = 0;
 function game(attempts: TrickAttempt[]): GameLogEntry {
   gameCounter += 1;
   return {
+    version: 2,
     date: `2026-08-${String((gameCounter % 28) + 1).padStart(2, '0')}`,
     robotId: 'shifty',
     mode: 'screen',
     won: true,
     playerLetters: 1,
     robotLetters: 5,
-    tricksLanded: attempts.filter((a) => a.landed).map((a) => a.trick),
+    trickIdsLanded: attempts.filter((a) => a.landed).map((a) => a.trickId),
     trickAttempts: attempts,
   };
 }
@@ -25,11 +27,11 @@ function game(attempts: TrickAttempt[]): GameLogEntry {
 /** An 8-game log where the player lands basics and some kickflips. */
 function beginnerLog(): GameLogEntry[] {
   const perGame: TrickAttempt[] = [
-    { trick: 'Ollie', landed: true },
-    { trick: 'Pop Shuvit', landed: true },
-    { trick: 'Frontside 180', landed: true },
-    { trick: 'Kickflip', landed: true },
-    { trick: 'Heelflip', landed: false },
+    { trickId: 'regular-ollie', landed: true },
+    { trickId: 'regular-pop-shuvit', landed: true },
+    { trickId: 'regular-frontside-180', landed: true },
+    { trickId: 'regular-kickflip', landed: true },
+    { trickId: 'regular-heelflip', landed: false },
   ];
   return Array.from({ length: SKATE_SCORE_UNLOCK_GAMES }, () => game(perGame));
 }
@@ -63,7 +65,7 @@ describe('rivalFavorites', () => {
     // Player has ollie/180s/shuvits — kickflip should be the very next chase.
     const provenNames = ['Ollie', 'Pop Shuvit', 'Frontside Shuvit', 'Frontside 180', 'Backside 180'];
     const proven = Object.fromEntries(
-      provenNames.map((name) => [name, { count: 1, lastDate: '2026-08-01', lastRobotId: 'shifty' }]),
+      provenNames.map((name) => [id(name), { count: 1, lastDate: '2026-08-01', lastRobotId: 'shifty' }]),
     );
     const favorites = rivalFavorites(proven);
     // Cheapest unproven bases: ollie north (2), then kickflip (3), then heelflip (4).
@@ -103,11 +105,11 @@ describe('buildRivalRobot', () => {
   it('never exceeds the top of the roster', () => {
     // A pro-level log: lands tre flips and hardflips consistently.
     const proGame: TrickAttempt[] = [
-      { trick: '360 Flip', landed: true },
-      { trick: 'Hardflip', landed: true },
-      { trick: 'Kickflip', landed: true },
-      { trick: 'Laser Flip', landed: true },
-      { trick: 'Impossible', landed: true },
+      { trickId: 'regular-360-flip', landed: true },
+      { trickId: 'regular-hardflip', landed: true },
+      { trickId: 'regular-kickflip', landed: true },
+      { trickId: 'regular-laser-flip', landed: true },
+      { trickId: 'regular-impossible', landed: true },
     ];
     const log = Array.from({ length: SKATE_SCORE_UNLOCK_GAMES }, () => game(proGame));
     const rival = buildRivalRobot(log, { [RIVAL_ID]: { w: 30, l: 0 } })!;

@@ -78,7 +78,9 @@ export async function requestLink(
     : `${origin}/api/auth/callback?token=${encodeURIComponent(token)}`;
   const env = await getOptionalCloudflareEnv();
 
-  if (env?.EMAIL) {
+  // The local send_email emulator accepts messages without delivering them.
+  // Expose the callback directly in next dev; preview/production use Email.
+  if (env?.EMAIL && process.env.NODE_ENV === 'production') {
     if (!env.MAGIC_LINK_FROM) throw new Error('missing_magic_link_from');
     await env.EMAIL.send({
       to: email,

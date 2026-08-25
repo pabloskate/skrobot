@@ -6,9 +6,8 @@ import { TbClipboardList, TbMicrophone, TbSettings, TbSkateboard } from 'react-i
 import { SignInScreen, SettingsScreen, useAuth } from '@/features/auth';
 import { gameAnalytics, subscribeAnalyticsDelivery } from '@/features/analytics';
 import type { TrackedGame } from '@/features/analytics';
-import { UpgradeScreen } from '@/features/billing';
 import { GalleryScreen } from '@/features/gallery';
-import { getGameLog, getRecords } from '@/features/records';
+import { useRecordsSnapshot } from '@/features/records';
 import type { GameSessionIdentity, GameSessionSnapshot, SavedGame } from '@/features/game';
 import {
   GameScreen,
@@ -86,8 +85,7 @@ type Screen =
   | ({ id: 'voice'; robot: Robot; session: GameSessionIdentity; resume?: GameSessionSnapshot } & TrickPool)
   | { id: 'gallery' }
   | { id: 'settings' }
-  | { id: 'signin'; next?: Screen; from?: Screen }
-  | { id: 'upgrade'; from?: Screen };
+  | { id: 'signin'; next?: Screen; from?: Screen };
 
 type ScreenId = Screen['id'];
 
@@ -111,7 +109,7 @@ function isRootScreen(screen: Screen): boolean {
 /** Maps a screen to the tab that owns it (for the bottom nav highlight). */
 function tabForScreen(screen: Screen): Tab {
   if (screen.id === 'gallery') return 'tricks';
-  if (screen.id === 'settings' || screen.id === 'signin' || screen.id === 'upgrade') return 'settings';
+  if (screen.id === 'settings' || screen.id === 'signin') return 'settings';
   return 'skate';
 }
 
@@ -121,8 +119,7 @@ function titleForScreen(screen: Screen): string {
   if (screen.id === 'voice') return `🎙 ${screen.robot.name}`;
   if (screen.id === 'gallery') return 'Trick Gallery';
   if (screen.id === 'settings') return 'Settings';
-  if (screen.id === 'signin') return 'Sign in';
-  return 'Upgrade';
+  return 'Sign in';
 }
 
 const rootScreen = (): Screen => ({ id: 'home' });
@@ -131,6 +128,7 @@ export default function AppShell({ initialSearch = '' }: { initialSearch?: strin
   const auth = useAuth();
   const gameFormat = useGameFormat();
   const gameVariant = useGameVariant();
+  const recordsSnapshot = useRecordsSnapshot();
   const online = useOnlineStatus();
   const nativeApp = useSyncExternalStore(
     subscribeToNativeApp,
@@ -150,7 +148,9 @@ export default function AppShell({ initialSearch = '' }: { initialSearch?: strin
   const savedGame = useSyncExternalStore(subscribeSavedGame, browserSavedSnapshot, serverSavedSnapshot);
   // Roster lookup, with the adaptive rival resolved from current form (it
   // adapts between games — a resumed save meets the rival as it skates today).
-  const resolvedSavedRobot = savedGame ? resolveRobot(savedGame.robotId, getGameLog(), getRecords()) : undefined;
+  const resolvedSavedRobot = savedGame
+    ? resolveRobot(savedGame.robotId, recordsSnapshot.gameLog, recordsSnapshot.records)
+    : undefined;
   const savedRobot = savedGame && isRivalId(savedGame.robotId) && !betaFeaturesEnabled
     ? undefined
     : resolvedSavedRobot;
@@ -224,7 +224,7 @@ export default function AppShell({ initialSearch = '' }: { initialSearch?: strin
       return;
     }
     if (screen.id === 'profile') goRoot('skate');
-    else if (screen.id === 'signin' || screen.id === 'upgrade') {
+    else if (screen.id === 'signin') {
       const from = screen.from ?? { id: 'settings' as const };
       if (isRootScreen(from)) goRoot(tabForScreen(from));
       else go(from);
@@ -320,6 +320,7 @@ export default function AppShell({ initialSearch = '' }: { initialSearch?: strin
             <HomeScreen
               installBanner={<AppInstallBanner offer={appInstallOffer} />}
               onPickRobot={(robot) => go({ id: 'profile', ...defaultRoutedTrickPool(), robot })}
+              gameVariant={gameVariant}
               rosterOverrideEnabled={rosterOverrideEnabled}
               voiceVisible={betaFeaturesEnabled}
               adaptiveMatchVisible={betaFeaturesEnabled}
@@ -416,7 +417,6 @@ export default function AppShell({ initialSearch = '' }: { initialSearch?: strin
             />
           )}
           {screen.id === 'signin' && <SignInScreen onDone={continueAfterSignIn} onCancel={back} />}
-          {screen.id === 'upgrade' && <UpgradeScreen onCancel={back} />}
         </div>
       </main>
 

@@ -1,18 +1,23 @@
 /**
  * Records feature — player W/L records and the per-game log.
- * Currently localStorage-backed; this is the first candidate to move to D1
- * when the backend lands (see CLAUDE.md "Backend roadmap").
+ * Currently localStorage-backed behind a versioned, reactive public API; this
+ * is the first client-persistence candidate to move to D1.
  */
-export type { Record_, GameLogEntry, TrickAttempt, TrickMark, ProvenTrick, TrickStat } from './records';
+export type {
+  Record_,
+  GameLogEntry,
+  TrickAttempt,
+  TrickMark,
+  ProvenTrick,
+  TrickStat,
+} from './records';
 export {
   getRecords,
-  recordResult,
-  getGameLog,
-  appendGameLog,
+  recordCompletedMatch,
   getTrickMarks,
   setTrickMark,
   getProvenTricks,
   deriveProvenTricks,
-  getTrickStats,
   deriveTrickStats,
 } from './records';
+export { useRecordsSnapshot } from './useRecordsSnapshot';

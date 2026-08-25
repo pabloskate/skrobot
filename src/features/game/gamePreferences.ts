@@ -15,7 +15,7 @@ const STANCE_KEY = 'skaterobot-player-stance';
 const STANCE_CHANGE_EVENT = 'skrobot-player-stance';
 const DEFAULT_STANCE: PlayerStance = 'regular';
 
-export function getGameFormat(): GameFormat {
+function getGameFormat(): GameFormat {
   if (typeof window === 'undefined') return DEFAULT_FORMAT;
   try {
     return localStorage.getItem(KEY) === 'sk8' ? 'sk8' : DEFAULT_FORMAT;
@@ -33,7 +33,7 @@ export function setGameFormat(format: GameFormat): void {
   }
 }
 
-export function subscribeGameFormat(onStoreChange: () => void): () => void {
+function subscribeGameFormat(onStoreChange: () => void): () => void {
   if (typeof window === 'undefined') return () => {};
   const onStorage = (event: StorageEvent) => {
     if (event.key === KEY || event.key == null) onStoreChange();
@@ -50,7 +50,7 @@ export function useGameFormat(): GameFormat {
   return useSyncExternalStore(subscribeGameFormat, getGameFormat, () => DEFAULT_FORMAT);
 }
 
-export function getGameVariant(): GameVariant {
+function getGameVariant(): GameVariant {
   if (typeof window === 'undefined') return DEFAULT_VARIANT;
   try {
     return localStorage.getItem(VARIANT_KEY) === 'defense' ? 'defense' : 'classic';
@@ -68,7 +68,7 @@ export function setGameVariant(variant: GameVariant): void {
   }
 }
 
-export function subscribeGameVariant(onStoreChange: () => void): () => void {
+function subscribeGameVariant(onStoreChange: () => void): () => void {
   if (typeof window === 'undefined') return () => {};
   const onStorage = (event: StorageEvent) => {
     if (event.key === VARIANT_KEY || event.key == null) onStoreChange();
@@ -103,7 +103,7 @@ export function setPlayerStance(stance: PlayerStance): void {
   }
 }
 
-export function subscribePlayerStance(onStoreChange: () => void): () => void {
+function subscribePlayerStance(onStoreChange: () => void): () => void {
   if (typeof window === 'undefined') return () => {};
   const onStorage = (event: StorageEvent) => {
     if (event.key === STANCE_KEY || event.key == null) onStoreChange();
