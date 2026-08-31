@@ -144,7 +144,7 @@ function parseSavedGame(value: unknown): SavedGame | null {
     'startedAt' in rawSession &&
     typeof rawSession.startedAt === 'string'
       ? { id: rawSession.id, startedAt: rawSession.startedAt }
-      : { id: crypto.randomUUID(), startedAt: v.savedAt };
+      : { id: randomId(), startedAt: v.savedAt };
   return {
     version: 4,
     savedAt: v.savedAt,
@@ -233,3 +233,4 @@ export function subscribeSavedGame(onStoreChange: () => void): () => void {
     window.removeEventListener(CHANGE_EVENT, onStoreChange);
   };
 }
+import { randomId } from '@/shared/randomId';

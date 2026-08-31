@@ -1,5 +1,6 @@
 import type { LiveServerMessage, Session } from '@google/genai';
 import { EndSensitivity, GoogleGenAI, Modality, StartSensitivity } from '@google/genai';
+import { randomId } from '@/shared/randomId';
 import { getVoiceAuthKey } from './api';
 import { MicCapture, SpeakerQueue } from './audio';
 import type { VoiceGameController } from './controller';
@@ -24,7 +25,7 @@ export class VoiceSession {
   private closedByUser = false;
   private isSessionOpen = false;
   private starterTurnSent = false;
-  private gameId = crypto.randomUUID();
+  private gameId = randomId();
   private captionBuf = { you: '', robot: '' };
   private prevLetters = { player: 0, robot: 0 };
 

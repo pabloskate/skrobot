@@ -1,3 +1,4 @@
+import { randomId } from '@/shared/randomId';
 import type { AnalyticsEvent, AnalyticsEventInput, AnalyticsSurface } from './events';
 import type { AnalyticsRangeDays, AnalyticsSummary } from './summary';
 
@@ -29,11 +30,11 @@ function installationId(): string {
   try {
     const existing = localStorage.getItem(INSTALLATION_KEY);
     if (existing) return existing;
-    const id = crypto.randomUUID();
+    const id = randomId();
     localStorage.setItem(INSTALLATION_KEY, id);
     return id;
   } catch {
-    return crypto.randomUUID();
+    return randomId();
   }
 }
 
@@ -41,7 +42,7 @@ export function trackAnalyticsEvent(input: AnalyticsEventInput, surface: Analyti
   if (typeof window === 'undefined') return;
   const event: AnalyticsEvent = {
     ...input,
-    eventId: crypto.randomUUID(),
+    eventId: randomId(),
     installationId: installationId(),
     occurredAt: new Date().toISOString(),
     surface,
