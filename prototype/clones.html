@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>S.K.A.T.E. — Clones (UX Prototype)</title>
+<style>
+  :root{
+    --purple:#6431d8; --purple-dark:#4f23b0; --purple-soft:#ece5fb;
+    --ink:#221a4e; --muted:#6b6786;
+    --bg:#f3f2f6; --panel:#ffffff; --panel2:#f3f2f6; --line:#e4e1ee;
+    --text:var(--ink); --dim:var(--muted); --accent:var(--purple); --accent-ink:#ffffff;
+    --good:#2da866; --bad:#e0455c;
+    --r:14px; --shadow:0 2px 8px rgba(34,26,78,.08),0 8px 24px rgba(34,26,78,.06);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  body{
+    background:#dedbe7;color:var(--text);
+    font-family:'Montserrat',system-ui,-apple-system,sans-serif;
+    display:flex;justify-content:center;padding:16px;
+  }
+  .phone{
+    width:100%;max-width:420px;height:min(880px,94vh);min-height:600px;
+    background:var(--bg);border-radius:32px;border:1px solid var(--line);
+    overflow:hidden;display:flex;flex-direction:column;position:relative;
+    box-shadow:0 30px 80px rgba(34,26,78,.25);
+  }
+  /* ---------- chrome ---------- */
+  main{flex:1;overflow-y:auto;overscroll-behavior:contain;border-radius:32px}
+  .screen{display:none;animation:fade .22s ease}
+  .screen.active{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  nav{
+    display:flex;border-top:1px solid var(--line);background:var(--panel);
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  nav button{
+    flex:1;background:none;border:none;color:var(--dim);font-size:11px;font-weight:600;
+    padding:10px 0 14px;display:flex;flex-direction:column;gap:3px;align-items:center;cursor:pointer;
+  }
+  nav button .ic{font-size:20px;line-height:1}
+  nav button.on{color:var(--purple)}
+  section.pad{padding:20px}
+
+  h2.title{font-size:22px;margin-bottom:4px}
+  p.sub{color:var(--dim);font-size:13.5px;line-height:1.45}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px;box-shadow:var(--shadow)}
+  .btn{
+    display:block;width:100%;border:none;border-radius:12px;padding:15px;font-size:15.5px;
+    font-weight:700;cursor:pointer;background:var(--purple);color:#fff;
+    transition:transform .08s ease, opacity .15s;
+  }
+  .btn:active{transform:scale(.98)}
+  .btn.ghost{background:var(--panel);color:var(--ink);border:1px solid var(--line)}
+  .btn[disabled]{opacity:.35;pointer-events:none}
+  .btn + .btn{margin-top:10px}
+  .backlink{background:none;border:none;color:var(--dim);font-size:14px;cursor:pointer;padding:14px 20px 0;text-align:left}
+  .pill{font-size:11px;font-weight:700;padding:4px 10px;border-radius:99px;background:var(--panel2);border:1px solid var(--line);color:var(--dim)}
+  .pill.gold{background:var(--purple-soft);border-color:rgba(100,49,216,.35);color:var(--purple)}
+
+  /* ---------- gate ---------- */
+  .reqs{margin-top:18px;display:flex;flex-direction:column;gap:10px}
+  .req{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .req .chk{width:26px;height:26px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;background:var(--panel2);color:var(--dim)}
+  .req.done .chk{background:var(--good);color:#fff}
+  .req b{display:block;font-size:14px}
+  .req small{color:var(--dim);font-size:12px}
+  .hero-avatar{display:flex;justify-content:center;margin:26px 0 6px}
+
+  /* ---------- designer ---------- */
+  .robot-avatar{color:var(--robot-ink,#23232e);display:block}
+  .avatar-stage{
+    background:linear-gradient(180deg,#faf9fc 0%,var(--purple-soft) 100%);
+    border:1px solid var(--line);border-radius:var(--r);padding:14px;display:flex;justify-content:center;
+  }
+  .field label{display:block;font-size:12px;font-weight:700;color:var(--dim);letter-spacing:.05em;text-transform:uppercase;margin:18px 0 8px}
+  input[type=text]{
+    width:100%;background:var(--panel);border:1px solid var(--line);color:var(--text);
+    border-radius:12px;padding:14px;font-size:16px;outline:none;
+  }
+  input[type=text]:focus{border-color:var(--purple)}
+  .swatches{display:flex;gap:10px;flex-wrap:wrap}
+  .sw{width:42px;height:42px;border-radius:12px;border:2px solid var(--line);cursor:pointer}
+  .sw.sel{border-color:#fff;box-shadow:0 0 0 2.5px var(--purple)}
+  .presets{display:flex;gap:8px;flex-wrap:wrap}
+  .preset{
+    background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:99px;
+    padding:8px 14px;font-size:13px;cursor:pointer;font-weight:600;
+  }
+  .preset.sel{border-color:var(--purple);color:var(--purple);background:var(--purple-soft)}
+
+  .statbar{margin-top:8px}
+  .statbar .row{display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px}
+  .statbar .row b{color:var(--purple)}
+  .track{height:7px;border-radius:99px;background:#eae7f3;overflow:hidden}
+  .fill{height:100%;border-radius:99px;background:linear-gradient(90deg,#8b5cf6,var(--purple))}
+
+  /* ---------- community ---------- */
+  .sortrow{display:flex;gap:8px;margin:14px 0}
+  .sortrow button{
+    flex:1;background:var(--panel);border:1px solid var(--line);color:var(--dim);
+    font-size:12.5px;font-weight:700;padding:9px 0;border-radius:99px;cursor:pointer;
+  }
+  .sortrow button.on{color:var(--purple);border-color:rgba(100,49,216,.5);background:var(--purple-soft)}
+  .clonecard{
+    display:flex;align-items:center;gap:13px;background:var(--panel);
+    border:1px solid var(--line);border-radius:var(--r);padding:13px;margin-bottom:10px;
+    cursor:pointer;transition:border-color .15s;box-shadow:var(--shadow);
+  }
+  .clonecard:active{border-color:var(--purple)}
+  .clonecard .meta{flex:1;min-width:0}
+  .clonecard b.name{font-size:15.5px}
+  .clonecard .owner{font-size:12px;color:var(--dim);margin-top:2px}
+  .clonecard .rec{font-size:12px;margin-top:5px;color:var(--dim)}
+  .clonecard .rec b{color:var(--text)}
+  .diffdots{letter-spacing:2px;font-size:10px}
+  .diffdots i{font-style:normal;color:#d6d2e4}
+  .diffdots i.on{color:var(--purple)}
+
+  /* ---------- detail / match ---------- */
+  .bigstats{display:flex;gap:10px;margin-top:16px}
+  .bigstats .bs{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center;box-shadow:var(--shadow)}
+  .bigstats .bs b{font-size:19px;display:block}
+  .bigstats .bs span{font-size:11px;color:var(--dim)}
+  .vs{display:flex;align-items:center;justify-content:space-around;padding:34px 0 10px}
+  .vs .who{text-align:center;font-size:13px;font-weight:700}
+  .vs .who small{display:block;color:var(--dim);font-weight:500;font-size:11px;margin-top:2px}
+  .vs .vsdot{font-size:22px;font-weight:900;color:var(--purple)}
+  .explain{
+    margin-top:14px;background:var(--purple-soft);border-radius:12px;padding:12px 14px;
+    font-size:12.5px;line-height:1.5;color:var(--ink);
+  }
+  .scorebar{
+    margin-top:12px;display:flex;align-items:center;justify-content:space-between;
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 14px;
+    box-shadow:var(--shadow);
+  }
+  .letters{display:flex;gap:4px}
+  .lt{
+    width:22px;height:26px;border-radius:6px;background:#eae7f3;color:#c9c4dc;
+    font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;
+  }
+  .lt.hit{background:var(--bad);color:#fff}
+  .sb-label{font-size:11px;font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+  .stage{
+    margin-top:12px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
+    padding:16px;min-height:170px;box-shadow:var(--shadow);
+  }
+  .stage .step-title{font-size:15px;font-weight:800;margin-bottom:4px}
+  .stage .step-sub{font-size:13px;color:var(--dim);line-height:1.5}
+  .stage .big-trick{
+    margin:14px 0;text-align:center;background:var(--purple-soft);border-radius:12px;
+    padding:18px;font-size:21px;font-weight:800;color:var(--purple);
+  }
+  .btnrow{display:flex;gap:10px;margin-top:14px}
+  .btnrow .btn{margin-top:0}
+  .trickgrid{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .tg{
+    background:var(--panel2);border:1px solid var(--line);border-radius:99px;
+    padding:9px 14px;font-size:13px;font-weight:700;color:var(--ink);cursor:pointer;
+  }
+  .tg.sel{background:var(--purple);color:#fff;border-color:var(--purple)}
+  .rpsrow{display:flex;gap:10px;margin-top:14px}
+  .rps{
+    flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:12px;
+    font-size:30px;padding:16px 0;cursor:pointer;
+  }
+  .outcome{margin:14px 0;padding:12px;border-radius:12px;font-size:13.5px;font-weight:700;line-height:1.45}
+  .outcome.good{background:rgba(45,168,102,.12);color:var(--good)}
+  .outcome.badx{background:rgba(224,69,92,.1);color:var(--bad)}
+  .outcome.neutral{background:var(--panel2);color:var(--ink)}
+  .stage .btn-primary,.stage .btn-danger,.stage .btn-ghost{min-width:0;font-size:15px}
+  .stage > .btn-primary,.stage > .btn-danger,.stage > .btn-ghost{width:100%;margin-top:12px}
+  .btnrow .btn-primary,.btnrow .btn-danger,.btnrow .btn-ghost{width:auto;margin-top:0;flex:1}
+  .result-banner{text-align:center;padding:18px 0 4px;display:none}
+  .result-banner b{font-size:24px}
+  .result-banner.won b{color:var(--good)} .result-banner.lost b{color:var(--bad)}
+
+  .toast{
+    position:absolute;left:16px;right:16px;bottom:86px;background:var(--ink);
+    color:#fff;border-radius:12px;padding:13px 16px;font-size:13.5px;z-index:50;
+    opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none;
+  }
+  .toast.show{opacity:1;transform:none}
+
+  .modal-back{
+    position:absolute;inset:0;background:rgba(34,26,78,.45);z-index:60;display:none;
+    align-items:center;justify-content:center;padding:28px;
+  }
+  .modal-back.open{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:24px;width:100%}
+  .modal h3{font-size:18px;margin-bottom:8px}
+  .modal p{font-size:13.5px;color:var(--dim);line-height:1.5}
+
+  .sharelink{
+    margin-top:12px;background:var(--purple-soft);border:1px dashed rgba(100,49,216,.4);border-radius:10px;
+    padding:11px 13px;font-size:12.5px;font-family:ui-monospace,monospace;color:var(--purple);
+    display:flex;justify-content:space-between;align-items:center;cursor:pointer;
+  }
+
+  /* ===== real app classes (copy of src/app/globals.css) ===== */
+  .topbar{background:var(--purple);color:#fff;display:flex;align-items:center;gap:12px;padding:16px 20px;position:sticky;top:0;z-index:10}
+  .back-btn{background:none;border:none;color:#fff;font-size:26px;line-height:1;cursor:pointer;padding:2px 6px;border-radius:8px}
+  .topbar h1{font-size:18px;font-weight:800;margin:0}
+  .muted{color:var(--muted);font-size:14px;line-height:1.5}
+  .panel{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:24px 20px;margin-top:16px}
+  .panel.center{display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px;position:relative;overflow:hidden}
+  .panel-title{margin:0;font-size:22px;font-weight:800}
+  .section-title{font-size:18px;font-weight:700;margin:22px 4px 10px}
+  .btn-primary,.btn-danger,.btn-ghost{border:none;border-radius:999px;padding:14px 28px;font-size:16px;font-weight:700;cursor:pointer;transition:transform .08s ease,box-shadow .15s ease;min-width:220px;font-family:inherit}
+  .btn-primary{background:var(--purple);color:#fff;box-shadow:0 4px 14px rgba(100,49,216,.4)}
+  .btn-primary:active{transform:scale(.97)}
+  .btn-danger{background:#fdeef1;color:var(--danger)}
+  .btn-ghost{background:none;color:var(--muted);min-width:0}
+  /* skate score card */
+  .score-card{margin-bottom:16px;padding:18px 16px;border-radius:var(--radius);background:#fff;box-shadow:var(--shadow)}
+  .score-kicker{display:block;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--purple)}
+  .gallery-score-row{display:flex;align-items:baseline;gap:10px;margin-top:6px}
+  .score-num{font-size:40px;font-weight:800;line-height:1}
+  .score-tier{border-radius:999px;padding:3px 9px;background:#e4f5ec;color:var(--green);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.06em}
+  .score-peer{margin:8px 0 0;color:var(--ink);font-size:13px}
+  .score-peer strong{color:var(--purple-dark);font-weight:800}
+  .ladder{margin-top:12px}
+  .ladder-track{position:relative;height:8px;border-radius:999px;background:var(--bg)}
+  .ladder-fill{position:absolute;left:0;top:0;bottom:0;border-radius:999px;background:linear-gradient(90deg,var(--purple),#9b7bf0)}
+  .ladder-dot{position:absolute;top:50%;width:16px;height:16px;border-radius:50%;background:#fff;border:4px solid var(--purple);transform:translate(-50%,-50%)}
+  .ladder-labels{display:flex;justify-content:space-between;margin-top:8px;font-size:11px;color:var(--muted)}
+  .score-src{margin:10px 0 0;color:#9b97ad;font-size:11px}
+  /* consistency rows */
+  .stats-block{margin-bottom:16px;padding:14px;border-radius:var(--radius);background:#fff;box-shadow:var(--shadow)}
+  .stats-block h3{margin:0 0 10px;font-size:13px;font-weight:800}
+  .stat-row{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+  .stat-row-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+  .stat-name{display:inline-flex;align-items:center;gap:6px;color:var(--ink);font-size:13px;font-weight:700}
+  .stat-numbers{flex-shrink:0;color:var(--muted);font-size:12px;font-weight:600;white-space:nowrap}
+  .stat-bar{height:6px;overflow:hidden;border-radius:999px;background:var(--bg)}
+  .stat-bar-fill{display:block;height:100%;border-radius:999px;background:var(--purple)}
+  /* record chip */
+  .vs-chip{display:inline-flex;align-items:baseline;gap:4px;border:1px solid #e2def0;border-radius:999px;padding:6px 11px;background:var(--bg);color:var(--ink);font-size:12px;font-weight:700}
+  .vs-w{color:var(--green);font-weight:800}.vs-l{color:var(--danger);font-weight:800}
+  /* matchup stat grid */
+  .adaptive-matchup{width:100%;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:16px 0 0;border-top:1px solid rgba(124,118,156,.18);border-bottom:1px solid rgba(124,118,156,.18)}
+  .adaptive-stat{display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 6px;text-align:center}
+  .adaptive-stat+.adaptive-stat{border-left:1px solid rgba(124,118,156,.18)}
+  .adaptive-stat dt{color:var(--muted);font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase}
+  .adaptive-stat dd{margin:0}
+  .adaptive-stat dd strong{font-size:19px;font-weight:900}
+  /* in-game scoreboard */
+  .scoreboard{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 18px;display:flex;flex-direction:column;gap:8px;margin-top:16px}
+  .score-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .score-name{font-weight:700;font-size:15px}
+  .letters{display:flex;gap:6px}
+  .letter{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font-weight:800;font-size:15px;background:var(--bg);color:#c8c4d8}
+  .letter-on{background:var(--purple);color:#fff}
+  /* robot card */
+  .robot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,150px),1fr));gap:12px;margin-top:14px}
+  .robot-card{position:relative;background:var(--card);border:none;border-radius:var(--radius);box-shadow:var(--shadow);padding:18px 12px 14px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;font-family:inherit}
+  .robot-disc{width:80px;height:80px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:6px}
+  .robot-name{font-size:16px;font-weight:800}
+  .robot-tagline{color:var(--muted);font-size:12px;text-align:center}
+  .robot-record{margin-top:auto;width:100%;padding-top:10px;border-top:1px solid rgba(34,26,78,.08);font-size:12px;color:var(--muted);text-align:center}
+  .robot-record strong{color:var(--ink);font-weight:800}
+  /* small pill */
+  .stance-pill{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;font-size:12px;background:var(--purple-soft)}
+  .stance-pill b{font-weight:800}
+  /* clone detail layout */
+  .pad{padding:20px 16px 32px}
+  .clone-head{display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px;padding-top:4px}
+  .clone-head .robot-avatar{margin-bottom:4px}
+  .clone-meta-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px}
+  .stats-block-head{display:flex;align-items:center;justify-content:space-between}
+  .btn-block{display:block;width:100%;margin-top:10px}
+</style>
+</head>
+<body>
+<div class="phone">
+  <main id="main">
+
+    <!-- ============ GATE ============ -->
+    <div class="screen" id="screen-gate">
+      <button class="backlink" onclick="go('community')">← Back to clones</button>
+      <section class="pad">
+        <div class="hero-avatar" id="gateAvatar"></div>
+        <h2 class="title" style="text-align:center">You're ready to clone yourself</h2>
+        <p class="sub" style="text-align:center;margin-top:6px">
+          Your clone skates with your real consistency — every trick you land at your
+          real rate. Publish it and skaters worldwide can challenge it.
+        </p>
+        <div class="reqs">
+          <div class="req done"><div class="chk">✓</div><div><b>Play 10 games</b><small>You've played 14 — nice.</small></div></div>
+          <div class="req done"><div class="chk">✓</div><div><b>Skate score unlocked</b><small>Your score: 7.2</small></div></div>
+          <div class="req done"><div class="chk">✓</div><div><b>Bag of tricks tracked</b><small>9 tricks with consistency data</small></div></div>
+        </div>
+        <br>
+        <button class="btn" onclick="go('design')">Build my clone →</button>
+      </section>
+    </div>
+
+    <!-- ============ DESIGNER ============ -->
+    <div class="screen" id="screen-design">
+      <button class="backlink" onclick="go('gate')">← Cancel</button>
+      <section class="pad">
+        <h2 class="title">Design your clone</h2>
+        <p class="sub">Its skating is already locked in — from your stats. This part is just looks.</p>
+
+        <div class="field"><label>Preview</label></div>
+        <div class="avatar-stage" id="designAvatar"></div>
+
+        <div class="field"><label>Name your clone</label>
+          <input type="text" id="cloneName" placeholder="e.g. Kickflip Pablo" maxlength="20"
+                 oninput="state.clone.name=this.value; syncUI()">
+        </div>
+
+        <div class="field"><label>Quick look</label>
+          <div class="presets" id="presets"></div>
+        </div>
+
+        <div class="field"><label>Body</label><div class="swatches" id="swBody"></div></div>
+        <div class="field"><label>Accent (limbs, eyes, boots)</label><div class="swatches" id="swAccent"></div></div>
+
+        <div class="card statbar">
+          <div style="font-size:12px;font-weight:800;color:var(--dim);letter-spacing:.05em;text-transform:uppercase;margin-bottom:4px">Clone behavior — derived from you</div>
+          <p class="sub" style="margin-bottom:10px">Not tunable. It misses like you miss.</p>
+          <div id="derivedStats"></div>
+        </div>
+
+        <br>
+        <button class="btn" id="publishBtn" disabled onclick="confirmPublish()">Publish my clone</button>
+      </section>
+    </div>
+
+    <!-- ============ MY CLONE ============ -->
+    <div class="screen" id="screen-myclone">
+      <section class="pad">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <h2 class="title" id="mcTitle">My clone</h2>
+          <span class="pill gold">LIVE</span>
+        </div>
+        <p class="sub" id="mcSub">Public in the clone community.</p>
+
+        <div class="avatar-stage" style="margin-top:16px" id="myCloneAvatar"></div>
+
+        <div class="bigstats">
+          <div class="bs"><b id="mcChal">0</b><span>challenges</span></div>
+          <div class="bs"><b id="mcWL">–</b><span>clone record</span></div>
+          <div class="bs"><b id="mcDiff">–</b><span>toughness</span></div>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <div style="font-size:12px;font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">Latest activity</div>
+          <div id="mcFeed" style="margin-top:8px;font-size:13px;line-height:1.8;color:var(--dim)">
+            No one has challenged your clone yet. Share the link!
+          </div>
+        </div>
+
+        <div class="sharelink" onclick="copyLink(this)"><span>skaterobot.app/c/@pablo</span><span>📋 copy</span></div>
+
+        <br>
+        <button class="btn ghost" onclick="go('design')">Edit look</button>
+        <button class="btn ghost" onclick="unpublish()">Unpublish clone</button>
+      </section>
+    </div>
+
+    <!-- ============ COMMUNITY ============ -->
+    <div class="screen" id="screen-community">
+      <section class="pad">
+        <h2 class="title">Clone community</h2>
+        <p class="sub">Bots built from real skaters' stats. Beat them all.</p>
+
+        <button class="btn ghost" id="myCloneBtn" style="margin-top:16px" onclick="profileTab()"></button>
+
+        <div class="sortrow">
+          <button data-sort="tough" class="on" onclick="setSort(this,'tough')">Toughest</button>
+          <button data-sort="active" onclick="setSort(this,'active')">Most played</button>
+          <button data-sort="new" onclick="setSort(this,'new')">Newest</button>
+        </div>
+
+        <div id="cloneList" class="robot-grid"></div>
+      </section>
+    </div>
+
+    <!-- ============ CLONE DETAIL ============ -->
+    <div class="screen" id="screen-detail">
+      <header class="topbar">
+        <button class="back-btn" onclick="go('community')" aria-label="Back">←</button>
+        <h1>Clone</h1>
+      </header>
+      <section class="pad">
+        <div class="clone-head">
+          <div id="detailAvatar"></div>
+          <h2 class="panel-title" id="dTitle"></h2>
+          <p class="muted" id="dOwner"></p>
+        </div>
+
+        <section class="score-card" aria-label="Skate score">
+          <span class="score-kicker">Skate score</span>
+          <div class="gallery-score-row">
+            <span class="score-num" id="dScore"></span>
+            <span class="score-tier" id="dTier"></span>
+          </div>
+          <p class="score-src" id="dScoreSrc"></p>
+        </section>
+
+        <div class="clone-meta-row">
+          <span class="vs-chip" id="dRecChip"></span>
+          <span class="stance-pill">Signature <b id="dSig"></b></span>
+        </div>
+
+        <section class="stats-block" aria-label="Known bag">
+          <div class="stats-block-head">
+            <h3>Known bag</h3>
+            <button class="stance-pill" id="bagToggle" onclick="toggleBag()"></button>
+          </div>
+          <div id="dBag"></div>
+        </section>
+
+        <button class="btn-primary btn-block" onclick="startMatch()">Challenge this clone</button>
+        <p class="muted" style="text-align:center;margin-top:10px;font-size:12px">Game of S.K.A.T.E. — flatground</p>
+      </section>
+    </div>
+
+    <!-- ============ MATCH ============ -->
+    <div class="screen" id="screen-match">
+      <header class="topbar">
+        <button class="back-btn" onclick="finishMatch()" aria-label="Back">←</button>
+        <h1>Game of S.K.A.T.E.</h1>
+      </header>
+      <section class="pad">
+        <p class="muted" style="font-size:12.5px">
+          RPS decides who sets. If the setter lands, the other must match or take
+          a letter. First to all 5 letters loses — the clone lands at its owner's real rates.
+        </p>
+
+        <div class="scoreboard" aria-label="Score">
+          <div class="score-row">
+            <span class="score-name" id="mOppName"></span>
+            <div class="letters" id="themLettersBox"></div>
+          </div>
+          <div class="score-row">
+            <span class="score-name">You</span>
+            <div class="letters" id="youLetters"></div>
+          </div>
+        </div>
+
+        <div class="result-banner" id="resultBanner"><b></b><p class="muted" id="resultSub" style="margin-top:4px"></p></div>
+        <div class="stage" id="stage"></div>
+        <br>
+        <button class="btn-primary" style="display:none" id="rematchBtn" onclick="startMatch()">Rematch</button>
+        <button class="btn-ghost" style="display:none" id="doneBtn" onclick="finishMatch()">Back to clone</button>
+      </section>
+    </div>
+
+  </main>
+
+  <!-- bottom nav -->
+  <nav id="tabbar">
+    <button class="on" onclick="go('community')"><span class="ic">👥</span>Community</button>
+  </nav>
+
+  <div class="toast" id="toast"></div>
+
+  <div class="modal-back" id="modalBack">
+    <div class="modal">
+      <h3>Publish your clone?</h3>
+      <p id="modalText"></p>
+      <p style="margin-top:10px;font-size:12px">You can unpublish anytime. Only your consistency numbers go public — never your personal info.</p>
+      <br>
+      <button class="btn" onclick="doPublish()">Publish</button>
+      <button class="btn ghost" onclick="document.getElementById('modalBack').classList.remove('open')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================= state ================= */
+const state = {
+  tab:'community',
+  hasClone:false,
+  clone:{ name:'', body:'#7ec8e3', accent:'#e05c7a' },
+  sort:'tough',
+  detailId:null,
+  bagRevealed:false,
+  myRecord:{w:0,l:0},
+};
+
+const playerBag = [
+  {trick:'Ollie', rate:96},{trick:'Kickflip', rate:74},{trick:'Heelflip', rate:61},
+  {trick:'Varial flip', rate:43},{trick:'360 shuv', rate:58},{trick:'Tre flip', rate:22},
+];
+
+const clonesData = [
+  {id:'nightshift',name:'Nightshift',owner:'@marco',loc:'Oakland',body:'#3b4252',accent:'#ef4444',
+   diff:5,sig:'Tre flip',score:'8.1',played:214,w:88,new:2,
+   bag:[['Ollie',97],['Kickflip',88],['Heelflip',84],['Varial flip',71],['360 shuv',90],['Tre flip',64]]},
+  {id:'cold',name:'Copenhagen Cold',owner:'@freja',loc:'Copenhagen',body:'#60a5fa',accent:'#f1f5f9',
+   diff:3,sig:'Heelflip',score:'6.4',played:167,w:41,new:6,
+   bag:[['Ollie',95],['Kickflip',72],['Heelflip',78],['Varial flip',38],['360 shuv',61],['Tre flip',12]]},
+  {id:'grom',name:'Grom Bot Jr.',owner:'@lil.kai',loc:'Age 12',body:'#4ade80',accent:'#facc15',
+   diff:1,sig:'Ollie north',score:'4.2',played:302,w:74,new:1,
+   bag:[['Ollie',92],['Kickflip',48],['Heelflip',31],['Varial flip',15],['360 shuv',44],['Tre flip',4]]},
+  {id:'serpent',name:'Switch Serpent',owner:'@yuri',loc:'São Paulo',body:'#a78bfa',accent:'#22d3ee',
+   diff:4,sig:'Switch kickflip',score:'7.5',played:96,w:29,new:9,
+   bag:[['Ollie',94],['Kickflip',69],['Heelflip',66],['Varial flip',52],['360 shuv',73],['Tre flip',30]]},
+  {id:'machine',name:'Heelflip Machine',owner:'@denny',loc:'Berlin',body:'#f97316',accent:'#0ea5e9',
+   diff:2,sig:'Heelflip',score:'5.3',played:143,w:62,new:4,
+   bag:[['Ollie',98],['Kickflip',55],['Heelflip',91],['Varial flip',22],['360 shuv',57],['Tre flip',8]]},
+];
+
+const palette = ['#7ec8e3','#e05c7a','#f97316','#4ade80','#22d3ee','#60a5fa','#a78bfa','#facc15','#f1f5f9','#3b4252'];
+
+/* ================= robot avatar (transcribed from packages/animations/src/RobotAvatar.tsx) ================= */
+const ROBOT_INK='#23232e';
+const ACCENT_DARK_LUM=0.19, ACCENT_TARGET_LUM=0.45;
+function _lum(hex){const [r,g,b]=hex.replace('#','').match(/[0-9a-f]{2}/gi).map(x=>parseInt(x,16)/255);
+  const lin=c=>(c<=0.04045?c/12.92:Math.pow((c+0.055)/1.055,2.4));
+  return 0.2126*lin(r)+0.7152*lin(g)+0.0722*lin(b);}
+function _hsl(hex){const [r,g,b]=hex.replace('#','').match(/[0-9a-f]{2}/gi).map(x=>parseInt(x,16)/255);
+  const max=Math.max(r,g,b),min=Math.min(r,g,b);let h=0,s=0;const l=(max+min)/2;
+  if(max!==min){const d=max-min;s=l>0.5?d/(2-max-min):d/(max+min);
+    if(max===r)h=(g-b)/d+(g<b?6:0);else if(max===g)h=(b-r)/d+2;else h=(r-g)/d+4;h*=60;}
+  return {h,s};}
+function _hslHex(h,s,l){const f=n=>{const k=(n+h/30)%12;
+    return l-s*Math.min(l,1-l)*Math.max(-1,Math.min(k-3,Math.min(9-k,1)));};
+  return '#'+[f(0),f(8),f(4)].map(v=>Math.round(v*255).toString(16).padStart(2,'0')).join('');}
+function readableAccent(accent){
+  if(_lum(accent)>=ACCENT_DARK_LUM)return accent;
+  const {h,s}=_hsl(accent);
+  for(let l=50;l<=96;l+=2){const c=_hslHex(h,s,l/100);if(_lum(c)>=ACCENT_TARGET_LUM)return c;}
+  return _hslHex(h,s,0.96);}
+function robotSVG(r,size=96){
+  const av=r.avatar||{body:r.body,accent:r.accent};
+  const body=av.body, accent=readableAccent(av.accent), S='currentColor';
+  const outlinedPath=(d,w=5.5)=>`<path d="${d}" stroke="${S}" stroke-width="${w+2}" stroke-linecap="round" fill="none"/><path d="${d}" stroke="${accent}" stroke-width="${w-1}" stroke-linecap="round" fill="none"/>`;
+  const backArmPath=d=>`<path d="${d}" stroke="${accent}" stroke-width="4.5" stroke-linecap="round" fill="none" opacity="0.35"/>`;
+  const hand={fill:accent,stroke:S,'stroke-width':1.5};
+  const armPaths={frontL:'M38 40 Q24 54 22 68',frontR:'M58 40 Q72 54 74 68',backL:'M38 40 Q30 52 28 66',backR:'M58 40 Q66 52 68 66',handL:[22,68],handR:[74,68]};
+  return `<svg class="robot-avatar" width="${size}" height="${size}" viewBox="0 -5 100 106" role="img">
+    <g transform="translate(2 0) scale(0.95)">
+      ${backArmPath(armPaths.backL)}${backArmPath(armPaths.backR)}
+      ${outlinedPath('M42 64 Q36 78 34 92')}${outlinedPath('M54 64 Q60 78 62 92')}
+      <g>${outlinedPath(armPaths.frontL)}${outlinedPath(armPaths.frontR)}
+        <circle cx="${armPaths.handL[0]}" cy="${armPaths.handL[1]}" r="4" fill="${hand.fill}" stroke="${hand.stroke}" stroke-width="${hand['stroke-width']}"/>
+        <circle cx="${armPaths.handR[0]}" cy="${armPaths.handR[1]}" r="4" fill="${hand.fill}" stroke="${hand.stroke}" stroke-width="${hand['stroke-width']}"/></g>
+      <rect x="28" y="89" width="12" height="7" rx="3.5" fill="${accent}" stroke="${S}" stroke-width="2"/>
+      <rect x="56" y="89" width="12" height="7" rx="3.5" fill="${accent}" stroke="${S}" stroke-width="2"/>
+      <g>
+        <line x1="48" y1="32" x2="48" y2="36" stroke="${S}" stroke-width="2.5" stroke-linecap="round"/>
+        <rect x="36" y="36" width="24" height="28" rx="9" fill="${body}" stroke="${S}" stroke-width="3"/>
+        <rect x="34" y="12" width="28" height="20" rx="7" fill="${body}" stroke="${S}" stroke-width="3"/>
+        <rect x="38" y="16" width="20" height="7" rx="3.5" fill="${S}" opacity="0.85"/>
+        <circle cx="43" cy="19.5" r="2" fill="${accent}"/><circle cx="53" cy="19.5" r="2" fill="${accent}"/>
+        <line x1="48" y1="12" x2="48" y2="6" stroke="${S}" stroke-width="2.5" stroke-linecap="round"/>
+        <circle cx="48" cy="4.5" r="3.5" fill="${accent}" stroke="${S}" stroke-width="1.5"/>
+      </g>
+    </g>
+    <g transform="translate(18 86)">
+      <path d="M0 0 q4 6 12 6 h40 q8 0 12 -6" stroke="${S}" stroke-width="3" fill="none" stroke-linecap="round"/>
+      <circle cx="16" cy="10" r="3.8" fill="#c8c8c8" stroke="${S}" stroke-width="2.5"/>
+      <circle cx="48" cy="10" r="3.8" fill="#c8c8c8" stroke="${S}" stroke-width="2.5"/>
+    </g>
+  </svg>`;
+}
+
+/* ================= helpers ================= */
+const $=id=>document.getElementById(id);
+function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),2400);}
+function copyLink(el){navigator.clipboard?.writeText('skaterobot.app/c/@pablo');toast('Share link copied — send it to friends 🛹');}
+function go(name){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  $('screen-'+name).classList.add('active');
+  $('main').scrollTop=0;
+}
+function profileTab(){
+  if(state.hasClone){syncMyClone();go('myclone');}
+  else {syncGate();go('gate');}
+}
+function setSort(btn,key){state.sort=key;document.querySelectorAll('.sortrow button').forEach(b=>b.classList.toggle('on',b===btn));renderList();}
+
+/* ================= gate ================= */
+function syncGate(){
+  $('gateAvatar').innerHTML=robotSVG({name:'you',avatar:{body:'#93a0b4',accent:'#e05c7a'}},130);
+}
+
+/* ================= designer ================= */
+function buildDesigner(){
+  $('designAvatar').innerHTML=robotSVG({name:state.clone.name||'clone',avatar:{body:state.clone.body,accent:state.clone.accent}},150);
+  const mk=(pal,key)=>$( 'sw'+key ).innerHTML=pal.map(p=>
+    `<div class="sw ${state.clone[key.toLowerCase()]===p?'sel':''}" style="background:${p}" onclick="setColor('${key}','${p}')"></div>`).join('');
+  mk(palette,'Body');mk(palette,'Accent');
+  const presets=[['Classic','#7ec8e3','#e05c7a'],['Sunset','#f97316','#facc15'],['Ice','#60a5fa','#22d3ee'],['Grape','#a78bfa','#e05c7a']];
+  $('presets').innerHTML=presets.map((p,i)=>`<button class="preset ${JSON.stringify([state.clone.body,state.clone.accent])===JSON.stringify(p.slice(1))?'sel':''}" onclick='applyPreset(${i})'>${p[0]}</button>`).join('');
+  window._presets=presets;
+  renderDerived();
+}
+function applyPreset(i){const p=window._presets[i];state.clone.body=p[1];state.clone.accent=p[2];buildDesigner();}
+function setColor(key,val){state.clone[key.toLowerCase()]=val;buildDesigner();}
+function renderDerived(){
+  $('derivedStats').innerHTML=playerBag.slice(0,5).map(t=>{
+    const v=t.rate;
+    return `<div class="row"><span>${t.trick}</span><b>${v}% land</b></div>
+      <div class="track"><div class="fill" style="width:${v}%"></div></div>`;
+  }).join('');
+}
+function confirmPublish(){
+  $('modalText').innerHTML=`<b style="color:var(--text)">“${esc(state.clone.name)}”</b> will appear in the public clone community with your exact consistency stats. Anyone can challenge it.`;
+  $('modalBack').classList.add('open');
+}
+function doPublish(){
+  $('modalBack').classList.remove('open');
+  state.hasClone=true;
+  syncMyClone();syncBanner();
+  toast('Clone published! It’s live in the community.');
+  go('myclone');
+}
+function unpublish(){
+  state.hasClone=false;syncBanner();syncUI();
+  toast('Clone unpublished.');go('community');
+}
+function esc(s){return s.replace(/</g,'&lt;');}
+
+/* ================= my clone ================= */
+let mcStats={chal:0,w:0,l:0};
+function syncMyClone(){
+  $('mcTitle').textContent=state.clone.name||'My clone';
+  $('myCloneAvatar').innerHTML=robotSVG({name:state.clone.name,avatar:{body:state.clone.body,accent:state.clone.accent}},150);
+  $('mcChal').textContent=mcStats.chal;
+  $('mcWL').textContent=mcStats.chal?`${mcStats.w}W–${mcStats.l}L`:'–';
+  $('mcDiff').textContent=mcStats.chal?Math.round(mcStats.l/Math.max(1,mcStats.chal)*100)+'%':'–';
+}
+function syncBanner(){
+  const btn=$('myCloneBtn');
+  if(state.hasClone){
+    btn.className='btn';
+    btn.innerHTML=`🤖 My clone <span style="font-weight:400">— ${esc(state.clone.name)}</span>`;
+  }else{
+    btn.className='btn ghost';
+    btn.innerHTML=`🧬 Clone yourself <span class="pill gold" style="margin-left:6px">NEW</span>`;
+  }
+}
+
+/* ================= community list ================= */
+function toughScore(c){return c.diff*100+(c.played? (1-c.w/c.played)*300:300);}
+function renderList(){
+  let list=[...clonesData];
+  if(state.sort==='tough')list.sort((a,b)=>toughScore(b)-toughScore(a));
+  if(state.sort==='active')list.sort((a,b)=>b.played-a.played);
+  if(state.sort==='new')list.sort((a,b)=>b.new-a.new);
+  $('cloneList').innerHTML=list.map(c=>`
+    <button class="robot-card" onclick="openDetail('${c.id}')">
+      <span class="robot-disc" style="background:${c.body}24">
+        ${robotSVG(c,60)}
+      </span>
+      <span class="robot-name">${c.name}</span>
+      <span class="stance-pill" style="font-size:11px"><b style="color:var(--purple)">★ ${c.score}</b></span>
+      <span class="robot-tagline">${c.owner} · ${c.loc}</span>
+      <span class="robot-record"><strong>${c.w}W</strong> – <strong>${c.played-c.w}L</strong></span>
+    </button>`).join('');
+}
+function openDetail(id){
+  state.detailId=id;const c=clonesData.find(x=>x.id===id);
+  $('detailAvatar').innerHTML=robotSVG(c,112);
+  $('dTitle').textContent=c.name;
+  $('dOwner').textContent=`A clone of ${c.owner} · ${c.loc}`;
+  const s=parseFloat(c.score);
+  const tier=s>=8?'Pro':s>=7?'Advanced':s>=5?'Intermediate':s>=3?'Rookie':'Novice';
+  $('dScore').textContent=c.score;
+  $('dTier').textContent=tier;
+  const beaten=c.played?Math.round((c.played-c.w)/c.played*100):0;
+  $('dScoreSrc').textContent=`${c.played} challenges · ${beaten}% beaten`;
+  $('dRecChip').innerHTML=`<span class="vs-w">${c.w}W</span> – <span class="vs-l">${c.played-c.w}L</span>`;
+  $('dSig').textContent=c.sig;
+  renderBag();
+  go('detail');
+}
+function renderBag(){
+  const c=clonesData.find(x=>x.id===state.detailId);
+  $('bagToggle').textContent=state.bagRevealed?'hide rates':'reveal rates';
+  $('dBag').innerHTML= state.bagRevealed
+    ? c.bag.map(t=>`<div class="stat-row"><div class="stat-row-head"><span class="stat-name">${t[0]}</span><span class="stat-numbers">${t[1]}%</span></div>
+        <span class="stat-bar"><span class="stat-bar-fill" style="width:${t[1]}%"></span></span></div>`).join('')
+    : `<div style="display:flex;flex-wrap:wrap;gap:8px">${c.bag.map(t=>`<span class="stance-pill">${t[0]}</span>`).join('')}</div>
+      <p class="muted" style="margin-top:10px;font-size:12px">Play against this clone to see its exact land rates.</p>`;
+}
+function toggleBag(){state.bagRevealed=!state.bagRevealed;renderBag();}
+
+/* ================= match sim ================= */
+let match=null;
+function renderScore(){
+  const mk=letters=>'SKATE'.split('').map((ch,i)=>`<div class="letter ${i<letters.length?'letter-on':''}">${ch}</div>`).join('');
+  $('youLetters').innerHTML=mk(match.youLetters);
+  $('themLettersBox').innerHTML=mk(match.themLetters);
+}
+const stage=()=>document.getElementById('stage');
+function startMatch(){
+  const c=clonesData.find(x=>x.id===state.detailId);
+  match={opp:c,youLetters:'',themLetters:'',round:0,setter:null,curTrick:null};
+  $('mOppName').textContent=c.name;
+  $('resultBanner').style.display='none';
+  $('rematchBtn').style.display='none';$('doneBtn').style.display='none';
+  go('match');renderScore();
+  renderRPS();
+}
+
+/* ---- phase 1: RPS for first set (like the real game) ---- */
+function renderRPS(){
+  stage().innerHTML=`<div class="step-title">Rock, paper, scissors</div>
+    <div class="step-sub">Winner of RPS sets the first trick.</div>
+    <div id="rpsResult"></div>
+    <div class="rpsrow">
+      <button class="rps" onclick="rpsPick('🪨','rock')">🪨</button>
+      <button class="rps" onclick="rpsPick('📄','paper')">📄</button>
+      <button class="rps" onclick="rpsPick('✂️','scissors')">✂️</button>
+    </div>`;
+}
+function rpsPick(emoji,you){
+  const opts=['rock','paper','scissors'],em={rock:'🪨',paper:'📄',scissors:'✂️'};
+  const idx=opts.indexOf(you), cidx=Math.floor(Math.random()*3);
+  const res=(idx-cidx+3)%3; // 0 tie, 1 win, 2 loss
+  match.setter = res===1?'you':'them';
+  $('rpsResult').innerHTML=`<div class="outcome ${res===1?'good':res===2?'badx':'neutral'}">
+      You: ${emoji} · ${match.opp.name}: ${em[opts[cidx]]}<br>${res===0?'Tie — go again.':`<span style="font-size:15px">You ${res===1?'WIN':'lose'}!</span>`}</div>
+    <button class="btn-primary" onclick="beginRound()">${res===0?'Throw again':'Start game'}</button>`;
+  document.querySelectorAll('.rpsrow').forEach(e=>e.remove());
+  if(res===0)setTimeout(renderRPS,50); // fresh throws on tie
+}
+
+/* ---- round loop ---- */
+function beginRound(){
+  match.round++;match.curTrick=null;
+  if(match.setter==='you')renderYouSet();
+  else renderCloneSet();
+}
+function pickCloneTrick(){
+  // weighted by its bag rates so hard tricks show up less
+  const bag=match.opp.bag,total=bag.reduce((s,b)=>s+b[1],0);
+  let r=Math.random()*total;
+  for(const b of bag){r-=b[1];if(r<=0)return b[0];}
+  return bag[0][0];
+}
+function cloneRate(trick){
+  return match.opp.bag.find(b=>b[0].toLowerCase()===trick.toLowerCase())?.[1] ?? 40;
+}
+/* your turn to set */
+function renderYouSet(){
+  stage().innerHTML=`<div class="step-title">Round ${match.round} — you're setting</div>
+    <div class="step-sub">Call a trick from your bag, then report how it went.</div>
+    <div class="trickgrid">${playerBag.map(t=>`<button class="tg" data-t="${t.trick}" onclick="pickTrick('${t.trick}')">${t.trick} <span style="color:var(--dim)">${t.rate}%</span></button>`).join('')}</div>
+    <div id="setArea"></div>`;
+}
+function pickTrick(t){match.curTrick=t;
+  document.querySelectorAll('.tg').forEach(b=>b.classList.toggle('sel',b.dataset.t===t));
+  document.getElementById('setArea').innerHTML=`
+    <div class="big-trick">${t}</div>
+    <div class="btnrow">
+      <button class="btn-primary" onclick="resolveYourSet(true)">🛹 Landed it</button>
+      <button class="btn-danger" onclick="resolveYourSet(false)">❌ Bailed</button>
+    </div>`;
+}
+function resolveYourSet(landed){
+  if(!landed){
+    stage().innerHTML=outBlock('neutral',`You bailed your own <b>${match.curTrick}</b>. No letters — but ${match.opp.name} sets next.`);
+    nextBtn();return;
+  }
+  const rate=cloneRate(match.curTrick);
+  stage().innerHTML=outBlock('neutral',`Clean! Now <b>${match.opp.name}</b> has to match your <b>${match.curTrick}</b>…`)
+    +`<button class="btn-primary" onclick="cloneAnswers(${rate})">See if it lands it</button>`;
+}
+function cloneAnswers(rate){
+  const landed=Math.random()*100<rate;
+  if(landed){
+    stage().innerHTML=outBlock('badx',`🤖 <b>${match.opp.name}</b> matched your ${match.curTrick}. Nothing given.`)+nextBtn('Your turn again');
+  }else{
+    match.themLetters+='SKATE'[match.themLetters.length];renderScore();
+    stage().innerHTML=outBlock('good',`💥 It bailed! <b>${match.opp.name}</b> takes the letter “${match.themLetters.slice(-1)}”.`)+
+      (checkWin()||nextBtn('Keep setting'));
+  }
+}
+/* clone's turn to set */
+function renderCloneSet(){
+  match.curTrick=pickCloneTrick();
+  const rate=cloneRate(match.curTrick);
+  stage().innerHTML=`<div class="step-title">Round ${match.round} — 🤖 ${match.opp.name} is setting</div>
+    <div class="step-sub">It calls a trick from its bag and attempts it.</div>
+    <div class="big-trick">${match.curTrick}</div>
+    <button class="btn-primary" onclick="cloneSets(${rate})">Watch its attempt</button>`;
+}
+function cloneSets(rate){
+  const landed=Math.random()*100<rate;
+  if(!landed){
+    stage().innerHTML=outBlock('neutral',`🤖 <b>${match.opp.name}</b> bailed its own trick. No letters — you set next.`)+nextBtn();
+  }else{
+    stage().innerHTML=outBlock('neutral',`It stuck the <b>${match.curTrick}</b>. Now you have to match it or take a letter.`)+
+      `<div class="big-trick">${match.curTrick}</div>
+       <div class="btnrow">
+        <button class="btn-primary" onclick="youAnswer(false)">🛹 I landed it</button>
+        <button class="btn-danger" onclick="youAnswer(true)">❌ I bailed</button>
+       </div>`;
+  }
+}
+function youAnswer(bailed){
+  if(bailed){
+    match.youLetters+='SKATE'[match.youLetters.length];renderScore();
+    stage().innerHTML=outBlock('badx',`Ouch. You take the letter “${match.youLetters.slice(-1)}”.`)
+      +(checkWin()||nextBtn(`${match.opp.name} keeps setting`));
+  }else{
+    stage().innerHTML=outBlock('good',`🔥 Matched! Nothing given.`)+nextBtn(`Your turn to set`);
+  }
+}
+/* helpers */
+function outBlock(kind,text){return `<div class="outcome ${kind}">${text}</div>`;}
+function nextBtn(label='Next round'){
+  return `<button class="btn-ghost" onclick="swapSetter()">${label} →</button>`;
+}
+function swapSetter(){match.setter=match.setter==='you'?'them':'you';beginRound();}
+function checkWin(){
+  if(match.themLetters==='SKATE'){endMatch(true);return true;}
+  if(match.youLetters==='SKATE'){endMatch(false);return true;}
+  return false;
+}
+function endMatch(youWon){
+  const c=match.opp,rb=$('resultBanner');rb.style.display='block';
+  c.played++;
+  if(youWon){
+    rb.className='result-banner won';rb.querySelector('b').textContent='YOU WON! 🏆';
+    $('resultSub').textContent=`${c.name} spelled S.K.A.T.E.`;
+    state.myRecord.w++;mcStats.chal++;mcStats.w++;
+    addActivity(`<span class="loss">Lost</span> to @pablo just now`);
+  }else{
+    rb.className='result-banner lost';rb.querySelector('b').textContent='DEFEATED';
+    $('resultSub').textContent=`${c.name} got you. Rematch?`;
+    state.myRecord.l++;mcStats.chal++;mcStats.l++;c.w++;
+    addActivity(`<span class="win">Won</span> against @pablo just now`);
+  }
+  stage().innerHTML='';
+  $('rematchBtn').style.display='block';$('doneBtn').style.display='block';
+  $('main').scrollTop=0;renderList();syncBanner();
+}
+function finishMatch(){go(state.detailId?'detail':'community');}
+function addActivity(html){
+  if(mcStats.chal===1)$('mcFeed').innerHTML='';
+  $('mcFeed').insertAdjacentHTML('afterbegin',`<div>${html}</div>`);
+}
+
+/* ================= boot ================= */
+function syncUI(){
+  buildDesigner();
+  $('publishBtn').disabled=!state.clone.name.trim();
+  if(!state.clone.name.trim())$('publishBtn').textContent='Name your clone first';
+  else $('publishBtn').textContent='Publish my clone';
+  if(state.hasClone)syncBanner();
+}
+syncGate();syncBanner();renderList();syncUI();
+go('community');
+</script>
+</body>
+</html>

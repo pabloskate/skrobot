@@ -1,3 +1,4 @@
+import { randomId } from '@/shared/randomId';
 import { trackAnalyticsEvent } from './api';
 import type {
   AnalyticsGameContext,
@@ -44,7 +45,7 @@ function eventContext(game: TrackedGame): AnalyticsGameContext {
 /** Product-level game event semantics. AppShell only supplies lifecycle callbacks and screen context. */
 export const gameAnalytics = {
   createSession(): AnalyticsGameSession {
-    return { id: crypto.randomUUID(), startedAt: new Date().toISOString() };
+    return { id: randomId(), startedAt: new Date().toISOString() };
   },
 
   started(game: TrackedGame, surface: AnalyticsSurface): void {
