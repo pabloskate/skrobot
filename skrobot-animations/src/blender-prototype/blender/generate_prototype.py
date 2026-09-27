@@ -10,11 +10,10 @@ The script writes editable .blend sources beside itself and web-ready GLBs to
 ``skrobot-animations/public/blender-prototype``. It deliberately has no input
 from the production animation package: this is a removable vertical slice.
 
-Proportions and palette are transcribed from
-``packages/animations/src/TrickAnimation3D.tsx`` so the prototype reads as the
-same character as the shipped 3D robots: rounded capsule limbs, a big visored
-head, flat cartoon fills, and a kicked maple deck. Lengths below are written in
-that file's SVG art units; :func:`V` converts them into Blender space.
+The Second Session characters are original hard-surface toy robots: oversized
+helmet shells, inset display faces, articulated mechanical limbs and vulcanized
+skate shoes. Only the palette and joint contract come from the original bots.
+All mesh coordinates are art units, converted into Blender space by V().
 """
 
 from __future__ import annotations
@@ -73,6 +72,10 @@ PALETTE = {
     "ply": "#cdaa74",
     "wheel": "#fbfbf3",
     "truck": "#61708a",
+    "ivory": "#f4eedf",
+    "rubber": "#192737",
+    "visor": "#102c3b",
+    "light": "#d7fcf3",
 }
 
 
@@ -106,12 +109,7 @@ def clear_scene() -> None:
 
 
 def material(name: str, hex_color: str, *, roughness: float = 0.62) -> bpy.types.Material:
-    """Flat, unlit-leaning material.
-
-    The viewer re-shades every surface with a toon ramp, so the only thing that
-    has to survive the glTF round trip is the base color. Metallic stays at 0
-    and roughness high so anything opening the .blend sees the same flat look.
-    """
+    """Export palette colors; the viewer assigns enamel/rubber/glass finishes."""
     color = linear_rgba(hex_color)
     mat = bpy.data.materials.new(name)
     mat.diffuse_color = color
@@ -329,7 +327,7 @@ def ellipsoid(
 
 
 # ---------------------------------------------------------------------------
-# Robot proportions (TrickAnimation.tsx / TrickAnimation3D.tsx)
+# Joint dimensions shared with the existing motion contract
 # ---------------------------------------------------------------------------
 
 THIGH = 35.0
@@ -339,16 +337,6 @@ LIFT = 65.0  # hip above the deck's mid-plane
 
 HIP_Z = 2.4
 FOOT_Z = 2.6
-# Every figure below is the matching literal in TrickAnimation3D.tsx: the 2D
-# renderer draws strokes by width, so a capsule "width 20" is radius 10 here.
-# Eyeballing these against a screenshot goes wrong fast — the shipped camera is
-# a different projection, so read the source, don't measure the picture.
-SHOULDER_Z = 12.0
-LIMB_R = 3.25  # legs: capsule width 6.5
-ARM_R = 3.125  # arms: capsule width 6.25
-TORSO_R = 10.0  # capsule width 20
-HEAD_R = 11.0  # capsule width 22
-BOOT_R = 3.0  # capsule width 5.2, thickened so the boot reads against the grip
 UPPER_ARM = 15.0
 FOREARM = 14.0
 ANKLE_LIFT = 2.2
@@ -554,95 +542,137 @@ def build_board(materials: dict[str, bpy.types.Material]) -> tuple[bpy.types.Obj
     return root, wheels
 
 
-def build_robot(materials: dict[str, bpy.types.Material]) -> dict[str, bpy.types.Object]:
-    body = materials["body"]
-    accent = materials["accent"]
-    ink = materials["ink"]
+def shell(name, center, size, mat, parent, bevel=2.0):
+    """Beveled solid in art coordinates; modifiers are baked into the GLB."""
+    bpy.ops.mesh.primitive_cube_add(size=1)
+    obj = bpy.context.object
+    obj.name = name
+    obj.dimensions = (size[0] * U, size[2] * U, size[1] * U)
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    modifier = obj.modifiers.new("Soft machined corners", "BEVEL")
+    modifier.width = bevel * U
+    modifier.segments = 5
+    bpy.ops.object.modifier_apply(modifier=modifier.name)
+    for polygon in obj.data.polygons:
+        polygon.use_smooth = True
+    modifier = obj.modifiers.new("Panel normals", "WEIGHTED_NORMAL")
+    modifier.keep_sharp = True
+    modifier.weight = 40
+    bpy.ops.object.modifier_apply(modifier=modifier.name)
+    obj.data.materials.append(mat)
+    parent_local(obj, parent)
+    obj.location = V(*center)
+    return obj
 
+
+def build_robot(materials: dict[str, bpy.types.Material]) -> dict[str, bpy.types.Object]:
+    body, accent, ink = (materials[k] for k in ("body", "accent", "ink"))
+    ivory, rubber, visor, light = (materials[k] for k in ("ivory", "rubber", "visor", "light"))
     root = empty("RobotRig")
     pelvis = empty("Rig.Pelvis", parent=root)
-    # Static stance turn lives on its own node so the animation can keep
-    # writing plain lean values to Rig.Torso.
-    stance = empty("Rig.Stance", parent=pelvis, rotation=(0.0, 0.0, math.radians(-STANCE_BODY_YAW)))
+    stance = empty("Rig.Stance", parent=pelvis, rotation=(0, 0, math.radians(-STANCE_BODY_YAW)))
     torso = empty("Rig.Torso", parent=stance)
+    joints = {"root": root, "pelvis": pelvis, "torso": torso}
 
-    joints: dict[str, bpy.types.Object] = {
-        "root": root,
-        "pelvis": pelvis,
-        "torso": torso,
-    }
-
-    capsule_between("Body.Torso", (1.0, -11.0, 0.0), (1.0, -39.0, 0.0), TORSO_R, body, parent=torso)
-
-    neck = empty("Rig.Neck", parent=torso, location=V(7.0, -50.0, 0.0))
-    capsule_between("Body.Neck", (0.0, 0.0, 0.0), (0.0, -6.0, 0.0), 1.5, accent, parent=neck)
-
-    head = empty(
-        "Rig.Head",
-        parent=neck,
-        location=V(0.0, -6.0, 0.0),
-        rotation=(0.0, 0.0, math.radians(HEAD_LOOK_FORWARD)),
-    )
+    # Layered chassis: a floating chest plate over a dark flexible waist.
+    shell("Chassis.Waist", (0, -4, 0), (16, 12, 20), rubber, torso, 4)
+    shell("Chassis.Main", (0, -25, 0), (23, 33, 29), body, torso, 7)
+    shell("Chassis.Chest", (11, -26, 0), (4, 23, 24), ivory, torso, 3)
+    shell("Chassis.Battery", (-12, -24, 0), (7, 23, 20), accent, torso, 3)
+    for z in (-5, 0, 5):
+        shell(f"Detail.BackVent.{z}", (-15.7, -25, z), (0.7, 11, 1.4), rubber, torso, 0.5)
+    shell("Detail.ChestBadge", (13.5, -28, 0), (1.2, 10, 10), accent, torso, 2.5)
+    shell("Detail.BadgeSlash", (14.2, -28, 0), (0.7, 5.5, 2.2), ivory, torso, 0.5)
+    for z in (-7, -3, 1):
+        shell(f"Detail.BatteryLed.{z}", (13.3, -18, z), (0.7, 1.7, 2), light, torso, 0.5)
+    for z in (-10, 10):
+        sphere_at(f"Detail.ChestRivet.{z}", (12.8, -34, z), 0.9, ink, parent=torso)
+    neck = empty("Rig.Neck", parent=torso, location=V(0, -44, 0))
+    capsule_between("Joint.Neck", (0, 3, 0), (0, -5, 0), 4, rubber, parent=neck)
+    head = empty("Rig.Head", parent=neck, location=V(0, -6, 0))
     joints["head"] = head
-    # Head capsule is centred on the neck axis; the 2D art's x=5..9 span is
-    # measured from the hip, and Rig.Head already carries that x=7 offset.
-    capsule_between("Body.Head", (-2.0, -9.0, 0.0), (2.0, -9.0, 0.0), HEAD_R, body, parent=head)
-    # Visor. The 2D art paints a band roughly 60% of the head wide and 30% tall,
-    # inset from the silhouette on every side. In 3D that has to be sculpted,
-    # not placed: this ellipsoid is mostly buried inside the skull and only the
-    # cap that out-reaches the head's own surface shows, which is what gives the
-    # lens-shaped patch. Widening it means growing it until it breaches further
-    # around the curve — a small, forward-pushed blob reads as a snout instead.
-    ellipsoid("Body.Visor", (5.0, -9.5, 0.0), (8.6, 6.5, 9.0), ink, parent=head)
-    # Eyes are squashed on the depth axis so they read as dots painted on the
-    # visor. Full spheres bulge out under a three-quarter camera and turn the
-    # face into a bug's.
-    ellipsoid("Eye.L", (13.1, -9.5, -3.2), (1.0, 1.3, 1.65), accent, parent=head)
-    ellipsoid("Eye.R", (13.1, -9.5, 3.2), (1.0, 1.3, 1.65), accent, parent=head)
-    capsule_between("Body.Antenna", (0.0, -20.0, 0.0), (0.0, -28.0, 0.0), 1.25, ink, parent=head)
-    sphere_at("Body.AntennaBall", (0.0, -29.5, 0.0), 3.0, accent, parent=head)
 
-    # Arms hang off the torso; both swing in the (yawed) body plane.
+    # A broad rounded helmet with an actual recessed face assembly. The front
+    # is local +X; generous cheek walls keep it readable from every angle.
+    shell("Helmet.Shell", (0, -13, 0), (29, 32, 39), body, head, 8)
+    shell("Helmet.FaceGasket", (13.4, -11, 0), (5, 23, 33), rubber, head, 6)
+    shell("Helmet.Display", (16, -11, 0), (1.7, 19, 29), visor, head, 4.5)
+    shell("Helmet.Brow", (13.2, -24, 0), (8, 4, 32), body, head, 1.8)
+    shell("Helmet.Chin", (11.6, 1, 0), (8, 4, 27), ivory, head, 1.8)
+    # Display glints are physical inlays, intentionally restrained.
+    shell("Detail.DisplayGlint", (17, -17.5, -8), (0.4, 1, 7), light, head, 0.4)
+    for sign in (-1, 1):
+        ellipsoid(f"Helmet.EarGasket.{sign}", (0, -11, sign*19), (7, 8, 2.5), rubber, parent=head)
+        ellipsoid(f"Helmet.EarCap.{sign}", (0, -11, sign*21), (5.8, 6.5, 1.7), accent, parent=head)
+        shell(f"Detail.EarSlot.{sign}", (0, -11, sign*22.5), (1.8, 7, 0.6), ivory, head, 0.5)
+
+    # Four profiles share the engineered chassis, with their own silhouette
+    # and face. Variant groups are switched in the viewer alongside palette.
+    for variant in range(4):
+        profile = empty(f"Variant.{variant}", parent=head)
+        for sign in (-1, 1):
+            eye = shell(f"Face.Eye.{variant}.{sign}", (17.2, -11.5, sign*6.5),
+                        (0.8, 6.5 if variant != 2 else 3.3, 4.4), accent, profile, 1.6)
+            if variant == 2:
+                eye.rotation_euler.x = sign * math.radians(13)
+        shell(f"Face.Mouth.{variant}", (17.2, -4.7, 0), (0.6, 1.3, 4.8), light, profile, 0.5)
+        if variant == 0:
+            capsule_between("Swivel.Aerial", (-4, -27, -9), (-6, -39, -11), 1.3, rubber, parent=profile)
+            sphere_at("Swivel.Signal", (-6, -40, -11), 3.5, accent, parent=profile)
+            shell("Swivel.CrownStripe", (0, -29.2, 1), (16, 1.8, 5), ivory, profile, 0.8)
+        elif variant == 1:
+            shell("Scuffy.CapBrim", (14, -26, 0), (19, 3.5, 39), accent, profile, 1.5)
+            shell("Scuffy.CapPatch", (2, -29, 0), (12, 2, 12), accent, profile, 1)
+        elif variant == 2:
+            for z in (-6, 0, 6):
+                shell(f"Gutsy.CrownRib.{z}", (-1, -29.5, z), (20, 4, 2.5), accent, profile, 1)
+            shell("Gutsy.NoseGuard", (17.8, -6, 0), (2, 6, 2.5), ivory, profile, 0.9)
+        else:
+            for sign in (-1, 1):
+                capsule_between(f"Nosy.Aerial.{sign}", (-2, -25, sign*13), (-2, -35, sign*18), 1.4, rubber, parent=profile)
+                sphere_at(f"Nosy.Signal.{sign}", (-2, -36, sign*18), 2.8, accent, parent=profile)
+
     for side, sign in (("Front", 1.0), ("Back", -1.0)):
-        shoulder = empty(f"Rig.Shoulder.{side}", parent=torso, location=V(4.0, -37.0, sign * SHOULDER_Z))
-        elbow = empty(f"Rig.Elbow.{side}", parent=shoulder, location=V(0.0, UPPER_ARM, 0.0))
-        capsule_between(f"Body.UpperArm.{side}", (0.0, 0.0, 0.0), (0.0, UPPER_ARM, 0.0), ARM_R, accent, parent=shoulder)
-        capsule_between(f"Body.Forearm.{side}", (0.0, 0.0, 0.0), (0.0, FOREARM, 0.0), ARM_R, accent, parent=elbow)
+        shoulder = empty(f"Rig.Shoulder.{side}", parent=torso, location=V(0, -33, sign*18))
+        elbow = empty(f"Rig.Elbow.{side}", parent=shoulder, location=V(0, UPPER_ARM+3, 0))
+        sphere_at(f"Joint.Shoulder.{side}", (0, 0, 0), 5, rubber, parent=shoulder)
+        shell(f"Arm.ShoulderCap.{side}", (0, 1, sign*2), (11, 10, 10), accent, shoulder, 3.5)
+        capsule_between(f"Joint.UpperArm.{side}", (0, 5, 0), (0, UPPER_ARM+3, 0), 3, rubber, parent=shoulder)
+        shell(f"Arm.Sleeve.{side}", (0, 9, 0), (8, 10, 8), body, shoulder, 2.5)
+        sphere_at(f"Joint.Elbow.{side}", (0, 0, 0), 4.4, ink, parent=elbow)
+        shell(f"Arm.Forearm.{side}", (0, 9, 0), (10, 14, 10), accent, elbow, 3)
+        shell(f"Arm.Cuff.{side}", (0, 16, 0), (10.5, 3, 10.5), ivory, elbow, 1)
+        shell(f"Hand.Palm.{side}", (0, 22, 0), (9, 10, 8), rubber, elbow, 3)
+        shell(f"Hand.Knuckles.{side}", (2, 23, 0), (7, 6, 8.5), body, elbow, 2)
+        sphere_at(f"Hand.Thumb.{side}", (4, 19, -sign*4), 2.5, rubber, parent=elbow)
         joints[f"shoulder.{side}"] = shoulder
         joints[f"elbow.{side}"] = elbow
 
-    # Legs stay in board space (no stance yaw) so the boots keep sitting on the
-    # rails while the upper body is turned toward the camera.
     for side, sign in (("Nose", 1.0), ("Tail", -1.0)):
-        hip = empty(f"Rig.Hip.{side}", parent=pelvis, location=V(0.0, 0.0, sign * HIP_Z))
-        knee = empty(f"Rig.Knee.{side}", parent=hip, location=V(0.0, THIGH, 0.0))
-        ankle = empty(f"Rig.Ankle.{side}", parent=knee, location=V(0.0, SHIN - ANKLE_LIFT, 0.0))
+        hip = empty(f"Rig.Hip.{side}", parent=pelvis, location=V(0, 0, sign*HIP_Z))
+        knee = empty(f"Rig.Knee.{side}", parent=hip, location=V(0, THIGH, 0))
+        ankle = empty(f"Rig.Ankle.{side}", parent=knee, location=V(0, SHIN-ANKLE_LIFT, 0))
         foot = empty(f"Rig.Foot.{side}", parent=ankle)
-        capsule_between(f"Body.Thigh.{side}", (0.0, 0.0, 0.0), (0.0, THIGH, 0.0), LIMB_R, accent, parent=hip)
-        capsule_between(f"Body.Shin.{side}", (0.0, 0.0, 0.0), (0.0, SHIN - ANKLE_LIFT, 0.0), LIMB_R, accent, parent=knee)
-        sphere_at(f"Body.Knee.{side}", (0.0, 0.0, 0.0), 3.6, accent, parent=knee)
-        # Boot: short cuff at the ankle plus a heel-to-toe sole raked toeside.
-        capsule_between(
-            f"Body.BootCuff.{side}",
-            (0.0, 0.0, 0.0),
-            (1.2, ANKLE_LIFT + 0.6, TOE_SIDE * 0.6),
-            BOOT_R - 0.3,
-            body,
-            parent=foot,
-        )
-        capsule_between(
-            f"Body.BootSole.{side}",
-            (-2.0, ANKLE_LIFT + 0.6, TOE_SIDE * -2.6),
-            (4.4, ANKLE_LIFT + 0.6, TOE_SIDE * 4.2),
-            BOOT_R,
-            body,
-            parent=foot,
-        )
+        sphere_at(f"Joint.Hip.{side}", (0, 1, 0), 4.5, rubber, parent=hip)
+        capsule_between(f"Joint.ThighRod.{side}", (0, 4, 0), (0, THIGH, 0), 2.8, ink, parent=hip)
+        shell(f"Leg.Thigh.{side}", (0, 16, 0), (9, 23, 10), accent, hip, 3)
+        sphere_at(f"Joint.Knee.{side}", (0, 0, 0), 5.5, rubber, parent=knee)
+        shell(f"Leg.KneePad.{side}", (4, 1, 0), (5, 9, 10), ivory, knee, 2)
+        capsule_between(f"Joint.ShinRod.{side}", (0, 3, 0), (0, SHIN-ANKLE_LIFT, 0), 2.6, ink, parent=knee)
+        shell(f"Leg.Shin.{side}", (0, 16, 0), (8, 21, 9), body, knee, 2.5)
+        shell(f"Leg.ShinInset.{side}", (4, 16, 0), (1, 12, 4), accent, knee, 0.4)
+        # Real shoes across the board: cream sole, dark foxing, toe cap/laces.
+        shell(f"Shoe.Sole.{side}", (1, 3, -3), (12, 3, 20), ivory, foot, 1.2)
+        shell(f"Shoe.Foxing.{side}", (1, 1, -3), (12.3, 1.5, 20.3), rubber, foot, 0.6)
+        shell(f"Shoe.Upper.{side}", (0, -2, -3), (11, 7, 18), body, foot, 2.5)
+        shell(f"Shoe.Toe.{side}", (0, -1, -10), (10.6, 5, 5), ivory, foot, 1.8)
+        shell(f"Shoe.Collar.{side}", (0, -5, 1), (10, 4, 8), accent, foot, 1.5)
+        for z in (-6, -3, 0):
+            shell(f"Detail.Lace.{side}.{z}", (0, -5.6, z), (7, 0.9, 1), ivory, foot, 0.35)
         joints[f"hip.{side}"] = hip
         joints[f"knee.{side}"] = knee
         joints[f"ankle.{side}"] = ankle
         joints[f"foot.{side}"] = foot
-
     return joints
 
 

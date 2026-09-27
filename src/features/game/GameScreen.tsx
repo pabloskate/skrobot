@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { recordCompletedMatch } from '@/features/records';
 import type { TrickAttempt } from '@/features/records';
 import type { Robot } from '@/features/robots';
@@ -14,10 +14,13 @@ import {
   gameReducer,
   rollAttempt,
 } from './engine';
-import type { GameFormat, GameState, GameVariant, Side } from './engine';
+import type { GameAction, GameFormat, GameState, GameVariant, Side } from './engine';
+import { getTrickTracking, setTrickTracking, useTrickTracking } from './gamePreferences';
 import type { GameSessionSnapshot } from './savedGame';
 import { clearSavedGame } from './savedGame';
+import { isTrackingGame, progressForLog, setAttemptNeedsTrick } from './trickTracking';
 import RpsPanel from './RpsPanel';
+import TrackingStatusChip from './TrackingStatusChip';
 import TrickAnimation from './TrickAnimation';
 import TrickSaveToggle from './TrickSaveToggle';
 
@@ -41,6 +44,9 @@ interface Props {
 
 // ---------- Scoreboard ----------
 
+/** Shared empty set for picker modes where every trick in the pool is pickable. */
+const NO_USED = new Set<string>();
+
 function LetterRow({ count, flash, format }: { count: number; flash: boolean; format: GameFormat }) {
   return (
     <div className="letters">
@@ -56,7 +62,7 @@ function LetterRow({ count, flash, format }: { count: number; flash: boolean; fo
   );
 }
 
-function Scoreboard({ state, robot }: { state: GameState; robot: Robot }) {
+function Scoreboard({ state, robot, trackingEligible }: { state: GameState; robot: Robot; trackingEligible: boolean }) {
   // "Adjust state during render" pattern: remember the last letter counts so the
   // side that just took a letter gets the pop animation.
   const [prev, setPrev] = useState(state.letters);
@@ -77,6 +83,7 @@ function Scoreboard({ state, robot }: { state: GameState; robot: Robot }) {
         <span className="score-name">You</span>
         <LetterRow count={state.letters.player} flash={flash === 'player'} format={state.gameFormat} />
       </div>
+      <TrackingStatusChip trackingEligible={trackingEligible} />
     </div>
   );
 }
@@ -100,12 +107,37 @@ export default function GameScreen({
     gameReducer,
     resume?.state ?? createInitialGameState(gameFormat, gameVariant),
   );
-  const [pickerOpen, setPickerOpen] = useState(false);
+  // Which question the trick picker is asking: a landed set becomes the trick
+  // to copy; a missed set only feeds stats (tracked games have no anonymous pass).
+  const [pickerMode, setPickerMode] = useState<'landed' | 'missed' | null>(null);
+  const tracking = useTrickTracking();
   const bag = useMemo(() => buildBag(robot, pool), [robot, pool]);
   // A resumed finished game was already recorded by the other mode.
   const recorded = useRef(resume?.state.phase === 'over');
   const trickIdsLanded = useRef<string[]>([...(resume?.progress.trickIdsLanded ?? [])]);
   const trickAttempts = useRef<TrickAttempt[]>([...(resume?.progress.trickAttempts ?? [])]);
+  const trackingEligible = useRef(resume?.progress.trackingEligible ?? true);
+  const [eligible, setEligible] = useState(resume?.progress.trackingEligible ?? true);
+  const dispatchGame = useCallback((action: GameAction) => {
+    if (action.type === 'REMATCH') {
+      trackingEligible.current = true;
+      setEligible(true);
+    } else if (state.phase !== 'over' && !getTrickTracking()) {
+      trackingEligible.current = false;
+      setEligible(false);
+    }
+    dispatch(action);
+  }, [state.phase]);
+  // Tracking state captured as the game ends ("adjust state during render",
+  // same pattern as Scoreboard): the over-screen receipt must describe the
+  // game just played even if the player flips the chip on the over screen.
+  const [trackedAtRecord, setTrackedAtRecord] = useState<boolean | null>(null);
+  if (state.phase === 'over' && state.winner && trackedAtRecord === null) {
+    setTrackedAtRecord(isTrackingGame(eligible));
+  }
+  if (state.phase === 'rps' && trackedAtRecord !== null) {
+    setTrackedAtRecord(null);
+  }
 
   const say = (template: string) => template.replaceAll('{R}', robot.name);
 
@@ -120,18 +152,23 @@ export default function GameScreen({
   useEffect(() => {
     if (state.phase !== 'robotSet' || state.stage !== 'thinking') return;
     const t = setTimeout(
-      () => dispatch({ type: 'ROBOT_SET_CHOICE', trick: chooseRobotTrick(bag, state.used, TRICK_BY_ID, robot, Math.random, setWeightFn) }),
+      () => dispatchGame({ type: 'ROBOT_SET_CHOICE', trick: chooseRobotTrick(bag, state.used, TRICK_BY_ID, robot, Math.random, setWeightFn) }),
       1400,
     );
     return () => clearTimeout(t);
-  }, [state.phase, state.stage, state.used, bag, robot, setWeightFn]);
+  }, [state.phase, state.stage, state.used, bag, robot, setWeightFn, dispatchGame]);
 
-  // Persist W/L once per game.
+  // Persist W/L once per game; trick evidence only when tracking is on.
   useEffect(() => {
     if (state.phase === 'over' && state.winner && !recorded.current) {
       recorded.current = true;
       clearSavedGame();
       const won = state.winner === 'player';
+      const evidence = progressForLog({
+        trickIdsLanded: trickIdsLanded.current,
+        trickAttempts: trickAttempts.current,
+        trackingEligible: trackingEligible.current,
+      });
       recordCompletedMatch({
         date: new Date().toISOString(),
         robotId: robot.id,
@@ -139,14 +176,15 @@ export default function GameScreen({
         won,
         playerLetters: state.letters.player,
         robotLetters: state.letters.robot,
-        trickIdsLanded: trickIdsLanded.current,
-        trickAttempts: trickAttempts.current,
+        trickIdsLanded: evidence.trickIdsLanded,
+        trickAttempts: evidence.trickAttempts,
       });
       onComplete?.({
         state,
         progress: {
           trickIdsLanded: [...trickIdsLanded.current],
           trickAttempts: [...trickAttempts.current],
+          trackingEligible: trackingEligible.current,
         },
       });
     }
@@ -155,6 +193,7 @@ export default function GameScreen({
       recorded.current = false;
       trickIdsLanded.current = [];
       trickAttempts.current = [];
+      trackingEligible.current = true;
     }
   }, [state, robot.id, onComplete, onRestart]);
 
@@ -171,6 +210,7 @@ export default function GameScreen({
             progress: {
               trickIdsLanded: [...trickIdsLanded.current],
               trickAttempts: [...trickAttempts.current],
+              trackingEligible: trackingEligible.current,
             },
           }
         : undefined,
@@ -183,6 +223,7 @@ export default function GameScreen({
       progress: {
         trickIdsLanded: [...trickIdsLanded.current],
         trickAttempts: [...trickAttempts.current],
+        trackingEligible: trackingEligible.current,
       },
     });
   }, [state, onGameState]);
@@ -194,7 +235,9 @@ export default function GameScreen({
   const robotAnim = state.stage === 'attempting' || state.stage === 'retry' || state.stage === 'thinking' ? 'anim-wobble' : '';
 
   return (
-    <div className={`container game ${state.gameVariant === 'defense' ? 'defense-game' : ''}`}>
+    <div
+      className={`container game ${state.gameVariant === 'defense' ? 'defense-game' : ''}${state.phase === 'rps' ? ' game-rps' : ''}`}
+    >
       {state.gameVariant === 'defense' && (
         <div className="defense-mode-banner" role="status" aria-label="Defense only mode">
           <span className="defense-mode-mark" aria-hidden="true">
@@ -207,10 +250,10 @@ export default function GameScreen({
         </div>
       )}
 
-      {state.phase !== 'rps' && <Scoreboard state={state} robot={robot} />}
+      {state.phase !== 'rps' && <Scoreboard state={state} robot={robot} trackingEligible={eligible} />}
 
       {state.phase === 'rps' && (
-        <RpsPanel robot={robot} onDone={(playerFirst) => dispatch({ type: 'START', playerFirst })} />
+        <RpsPanel robot={robot} gameFormat={state.gameFormat} onDone={(playerFirst) => dispatchGame({ type: 'START', playerFirst })} />
       )}
 
       {state.phase === 'playerSet' && (
@@ -218,10 +261,16 @@ export default function GameScreen({
           {state.note && <p className="note">{say(state.note)}</p>}
           <h2 className="panel-title">Your turn to set</h2>
           <p className="muted">Go skate! Then come back and tell me how it went.</p>
-          <button className="btn-primary" onClick={() => setPickerOpen(true)}>
+          <button className="btn-primary" onClick={() => setPickerMode('landed')}>
             I landed a trick
           </button>
-          <button className="btn-ghost" onClick={() => dispatch({ type: 'PLAYER_SET_MISSED' })}>
+          <button
+            className="btn-ghost"
+            onClick={() =>
+              // Tracked games have no anonymous pass — the miss names its trick.
+              setAttemptNeedsTrick(false, tracking) ? setPickerMode('missed') : dispatchGame({ type: 'PLAYER_SET_MISSED' })
+            }
+          >
             Couldn't land one — pass
           </button>
         </div>
@@ -239,7 +288,7 @@ export default function GameScreen({
               bag={bag}
               alwaysLand={state.gameVariant === 'defense' && state.phase === 'robotSet'}
               onResult={({ landed, knewIt }) =>
-                dispatch(
+                dispatchGame(
                   state.phase === 'robotCopy'
                     ? { type: 'ROBOT_COPY_RESULT', landed, knewIt }
                     : { type: 'ROBOT_SET_RESULT', landed },
@@ -253,7 +302,7 @@ export default function GameScreen({
           )}
           <RobotStatus state={state} say={say} />
           {(state.stage === 'landed' || state.stage === 'missed' || state.stage === 'cant') && (
-            <button className="btn-primary" onClick={() => dispatch({ type: 'CONTINUE' })}>
+            <button className="btn-primary" onClick={() => dispatchGame({ type: 'CONTINUE' })}>
               {continueLabel(state)}
             </button>
           )}
@@ -276,7 +325,7 @@ export default function GameScreen({
               // A landed copy is a proven land in every mode (matches voice).
               trickIdsLanded.current.push(state.current!.id);
               trickAttempts.current.push({ trickId: state.current!.id, landed: true });
-              dispatch({ type: 'PLAYER_COPY_LANDED' });
+              dispatchGame({ type: 'PLAYER_COPY_LANDED' });
             }}
           >
             Landed it 🤘
@@ -285,7 +334,7 @@ export default function GameScreen({
             className="btn-danger"
             onClick={() => {
               trickAttempts.current.push({ trickId: state.current!.id, landed: false });
-              dispatch({ type: 'PLAYER_COPY_MISSED' });
+              dispatchGame({ type: 'PLAYER_COPY_MISSED' });
             }}
           >
             Missed it
@@ -306,7 +355,14 @@ export default function GameScreen({
               ? `${robot.name} spelled ${lettersForFormat(state.gameFormat).join('.')} — rust in pieces.`
               : 'Run it back? Every robot has off days.'}
           </p>
-          <button className="btn-primary" onClick={() => dispatch({ type: 'REMATCH' })}>
+          {trackedAtRecord !== null && (
+            <p className={`game-receipt ${trackedAtRecord ? 'game-receipt-on' : ''}`}>
+              {trackedAtRecord
+                ? '✓ This game counted toward your trick stats.'
+                : 'Trick tracking was off — only the result counted.'}
+            </p>
+          )}
+          <button className="btn-primary" onClick={() => dispatchGame({ type: 'REMATCH' })}>
             Rematch
           </button>
           <button className="btn-ghost" onClick={onExit}>
@@ -315,18 +371,43 @@ export default function GameScreen({
         </div>
       )}
 
-      {pickerOpen && (
+      {pickerMode && (
         <TrickPicker
-          title="What did you land?"
+          title={pickerMode === 'landed' ? 'What did you land?' : 'What were you trying?'}
           pool={pool}
-          usedIds={usedIds}
-          onClose={() => setPickerOpen(false)}
+          // A missed set never entered play, so already-set tricks stay pickable —
+          // bailing on one is still a real attempt (matches voice-mode resolution).
+          usedIds={pickerMode === 'landed' ? usedIds : NO_USED}
+          onClose={() => setPickerMode(null)}
           onPick={(trick) => {
-            setPickerOpen(false);
-            trickIdsLanded.current.push(trick.id);
-            trickAttempts.current.push({ trickId: trick.id, landed: true });
-            dispatch({ type: 'PLAYER_SET_LANDED', trick });
+            setPickerMode(null);
+            if (pickerMode === 'landed') {
+              trickIdsLanded.current.push(trick.id);
+              trickAttempts.current.push({ trickId: trick.id, landed: true });
+              dispatchGame({ type: 'PLAYER_SET_LANDED', trick });
+            } else {
+              trickAttempts.current.push({ trickId: trick.id, landed: false });
+              dispatchGame({ type: 'PLAYER_SET_MISSED' });
+            }
           }}
+          footer={
+            pickerMode === 'missed' ? (
+              <p className="picker-note">
+                Trick tracking is on — this miss counts toward your consistency stats.
+                <button
+                  type="button"
+                  className="picker-note-action"
+                  onClick={() => {
+                    setTrickTracking(false);
+                    setPickerMode(null);
+                    dispatchGame({ type: 'PLAYER_SET_MISSED' });
+                  }}
+                >
+                  Turn off tracking and just pass
+                </button>
+              </p>
+            ) : undefined
+          }
         />
       )}
     </div>

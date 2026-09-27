@@ -5,6 +5,9 @@ import {
   clearSavedGame,
   gameReducer,
   lettersForFormat,
+  isTrackingGame,
+  progressForLog,
+  setAttemptNeedsTrick,
   robotThrow,
   rollAttempt,
   rpsOutcome,
@@ -49,7 +52,9 @@ export class VoiceGameController {
   private prevState: GameState | null = null;
   private prevTricksLanded: string[] | null = null;
   private prevTrickAttempts: TrickAttempt[] | null = null;
+  private prevTrackingEligible: boolean | null = null;
   private recorded = false;
+  trackingEligible = true;
   trickIdsLanded: string[] = [];
   trickAttempts: TrickAttempt[] = [];
   onChange?: (state: GameState, progress: GameProgress) => void;
@@ -68,6 +73,7 @@ export class VoiceGameController {
       this.recorded = resume.state.phase === 'over';
       this.trickIdsLanded = [...resume.progress.trickIdsLanded];
       this.trickAttempts = [...resume.progress.trickAttempts];
+      this.trackingEligible = resume.progress.trackingEligible;
     }
   }
 
@@ -75,15 +81,20 @@ export class VoiceGameController {
     return {
       trickIdsLanded: [...this.trickIdsLanded],
       trickAttempts: [...this.trickAttempts],
+      trackingEligible: this.trackingEligible,
     };
   }
 
   private dispatch(a: GameAction) {
+    if (this.state.phase !== 'over' && !isTrackingGame(this.trackingEligible)) this.trackingEligible = false;
     this.state = gameReducer(this.state, a);
     if (this.state.phase === 'over' && this.state.winner && !this.recorded) {
       this.recorded = true;
       clearSavedGame();
       const won = this.state.winner === 'player';
+      // Trick tracking off → the game still counts toward the record but
+      // persists no per-trick evidence (same gate as the on-screen mode).
+      const evidence = progressForLog(this.progress());
       recordCompletedMatch({
         date: new Date().toISOString(),
         robotId: this.robot.id,
@@ -91,8 +102,8 @@ export class VoiceGameController {
         won,
         playerLetters: this.state.letters.player,
         robotLetters: this.state.letters.robot,
-        trickIdsLanded: this.trickIdsLanded,
-        trickAttempts: this.trickAttempts,
+        trickIdsLanded: evidence.trickIdsLanded,
+        trickAttempts: evidence.trickAttempts,
       });
       this.onComplete?.({ state: this.state, progress: this.progress() });
     }
@@ -176,6 +187,7 @@ export class VoiceGameController {
     this.prevState = this.state;
     this.prevTricksLanded = [...this.trickIdsLanded];
     this.prevTrickAttempts = [...this.trickAttempts];
+    this.prevTrackingEligible = this.trackingEligible;
   }
 
   undo(): { ok: boolean; summary: string } {
@@ -184,8 +196,10 @@ export class VoiceGameController {
     this.prevState = null;
     this.trickIdsLanded = this.prevTricksLanded ?? [];
     this.trickAttempts = this.prevTrickAttempts ?? [];
+    this.trackingEligible = this.prevTrackingEligible ?? true;
     this.prevTricksLanded = null;
     this.prevTrickAttempts = null;
+    this.prevTrackingEligible = null;
     this.onChange?.(this.state, this.progress());
     return { ok: true, summary: `Reverted the last report. ${this.letterScore()} ${this.nextStep()}` };
   }
@@ -287,13 +301,22 @@ export class VoiceGameController {
       };
     }
 
-    this.saveUndo();
-    // Best-effort stats: if the model told us what they were trying, record the
-    // miss. Resolution failure never blocks the game — the set passes either way.
-    if (trickName) {
-      const res = resolveTrick(trickName, this.pool);
-      if (res.kind === 'match') this.trickAttempts.push({ trickId: res.trick.id, landed: false });
+    // Resolve before mutating state or undo history. Tracked misses require the
+    // same trick attribution as the screen picker, including already-used sets.
+    const res = trickName ? resolveTrick(trickName, this.pool) : null;
+    if (setAttemptNeedsTrick(false)) {
+      if (!res || res.kind === 'none') {
+        return {
+          error: 'Trick tracking is on. Ask which trick the player missed; a matching trick is required before passing the set.',
+          ...this.snapshot(),
+        };
+      }
+      if (res.kind === 'ambiguous') {
+        return { needsClarification: res.candidates.map((t) => t.name), ...this.snapshot() };
+      }
     }
+    this.saveUndo();
+    if (res?.kind === 'match') this.trickAttempts.push({ trickId: res.trick.id, landed: false });
     this.dispatch({ type: 'PLAYER_SET_MISSED' });
     const robotSet = this.runRobotSet();
     return {
@@ -352,9 +375,11 @@ export class VoiceGameController {
     this.prevState = null;
     this.prevTricksLanded = null;
     this.prevTrickAttempts = null;
+    this.prevTrackingEligible = null;
     this.recorded = false;
     this.trickIdsLanded = [];
     this.trickAttempts = [];
+    this.trackingEligible = true;
     this.bag = buildBag(this.robot, this.pool);
     this.onRestart?.();
     this.onChange?.(this.state, this.progress());

@@ -90,6 +90,11 @@ describe('buildRivalRobot', () => {
   it('skates at the player score plus the delta', () => {
     const rival = buildRivalRobot(beginnerLog(), {})!;
     expect(rival).not.toBeNull();
+    expect(rival.skateStyle).toEqual({
+      popHeight: 1.04,
+      rotationSpeed: 1.06,
+      flickStrength: 1.08,
+    });
     // Beginner log ⇒ score in the 2-5 band; rival sits 0.5 above, roster-floored.
     expect(rival.skill).toBeGreaterThan(2);
     expect(rival.skill).toBeLessThan(6);

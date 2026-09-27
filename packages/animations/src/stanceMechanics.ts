@@ -96,3 +96,19 @@ export function orientTrickRotation(
     bodyYawDeg: mechanics.bodyYawDegrees - mechanics.orientationSign * rotation.bodyYawDeg,
   };
 }
+
+/**
+ * How far out the flicking foot is across the deck: 0 on its channel, 1 at
+ * full reach. Driven by the board's flip progress.
+ *
+ * A kickflip is the front toe dragging off the heelside rail, a heelflip the
+ * heel kicking off the toeside rail — that drag is what starts the roll. So
+ * the foot is most of the way out while the board turns its first quarter,
+ * stays clear while it rolls, and comes back over the bolts for the catch.
+ * (Peaking at mid-flip left the foot over the deck as it rolled through it.)
+ */
+export function flickExtension(rotation: number): number {
+  const out = 1 - (1 - Math.min(1, Math.max(0, rotation / 0.22))) ** 3;
+  const back = Math.min(1, Math.max(0, (rotation - 0.5) / 0.36));
+  return out * (1 - back * back * (3 - 2 * back));
+}

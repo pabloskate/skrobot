@@ -6,7 +6,7 @@ import {
   type GameFormat,
   type GameState,
 } from '@/features/game'
-import { buildBag, type Robot } from '@/features/robots'
+import { buildBag, trickSetWeight, type Robot, type SetWeightRobot } from '@/features/robots'
 import { TRICK_BY_ID, type Trick } from '@/features/tricks'
 
 export interface SimulatedGame {
@@ -15,6 +15,9 @@ export interface SimulatedGame {
   playerLetters: number
   robotLetters: number
   actions: number
+  /** Physical attempts, including misses and final-letter retries; excludes UI transitions. */
+  playerAttempts: number
+  robotAttempts: number
 }
 
 export interface PairResult {
@@ -48,6 +51,9 @@ export interface SimulateGameOptions {
   format?: GameFormat
   playerFirst?: boolean
   maxActions?: number
+  /** Offline calibration/audit overrides; roster simulations use authored weights. */
+  playerSetWeight?: (trick: Trick, robot: SetWeightRobot) => number
+  robotSetWeight?: (trick: Trick, robot: SetWeightRobot) => number
 }
 
 export interface TournamentOptions {
@@ -94,7 +100,8 @@ export function simulateRobotGame(
   )
 }
 
-function simulateRobotGameWithBags(
+/** Explicit bags let offline audits compare authored tables without changing live tuning. */
+export function simulateRobotGameWithBags(
   player: Robot,
   robot: Robot,
   playerBag: Map<string, number>,
@@ -109,16 +116,19 @@ function simulateRobotGameWithBags(
     playerFirst: options.playerFirst ?? random() < 0.5,
   })
   let actions = 1
+  let playerAttempts = 0
+  let robotAttempts = 0
 
   while (state.phase !== 'over' && actions < maxActions) {
     switch (state.phase) {
       case 'playerSet': {
-        const trick = chooseRobotTrick(playerBag, state.used, TRICK_BY_ID, player, random)
+        const trick = chooseRobotTrick(playerBag, state.used, TRICK_BY_ID, player, random, options.playerSetWeight ?? trickSetWeight)
         if (!trick) {
           state = gameReducer(state, { type: 'PLAYER_SET_MISSED' })
           break
         }
         const attempt = rollAttempt(playerBag, trick.id, random)
+        playerAttempts += 1
         state = gameReducer(
           state,
           attempt.landed ? { type: 'PLAYER_SET_LANDED', trick } : { type: 'PLAYER_SET_MISSED' },
@@ -129,6 +139,7 @@ function simulateRobotGameWithBags(
       case 'robotCopy':
         if (state.stage === 'attempting' || state.stage === 'retry') {
           const attempt = rollAttempt(robotBag, state.current!.id, random)
+          robotAttempts += 1
           state = gameReducer(state, { type: 'ROBOT_COPY_RESULT', ...attempt })
         } else {
           state = continueResolvedAnimation(state)
@@ -139,10 +150,11 @@ function simulateRobotGameWithBags(
         if (state.stage === 'thinking') {
           state = gameReducer(state, {
             type: 'ROBOT_SET_CHOICE',
-            trick: chooseRobotTrick(robotBag, state.used, TRICK_BY_ID, robot, random),
+            trick: chooseRobotTrick(robotBag, state.used, TRICK_BY_ID, robot, random, options.robotSetWeight ?? trickSetWeight),
           })
         } else if (state.stage === 'attempting') {
           const attempt = rollAttempt(robotBag, state.current!.id, random)
+          robotAttempts += 1
           state = gameReducer(state, { type: 'ROBOT_SET_RESULT', landed: attempt.landed })
         } else {
           state = continueResolvedAnimation(state)
@@ -151,6 +163,7 @@ function simulateRobotGameWithBags(
 
       case 'playerCopy': {
         const attempt = rollAttempt(playerBag, state.current!.id, random)
+        playerAttempts += 1
         state = gameReducer(state, {
           type: attempt.landed ? 'PLAYER_COPY_LANDED' : 'PLAYER_COPY_MISSED',
         })
@@ -171,6 +184,8 @@ function simulateRobotGameWithBags(
     playerLetters: state.letters.player,
     robotLetters: state.letters.robot,
     actions,
+    playerAttempts,
+    robotAttempts,
   }
 }
 

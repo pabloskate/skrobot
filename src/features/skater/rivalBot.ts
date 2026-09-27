@@ -97,6 +97,7 @@ export function buildRivalRobot(
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     favorites: rivalFavorites(deriveProvenTricks(log)),
     avatar: { body: '#2b2d42', accent: '#ef233c', variant: 3 },
+    skateStyle: { popHeight: 1.04, rotationSpeed: 1.06, flickStrength: 1.08 },
     rpsTaunts: {
       countdown: ['I have been studying your game log.', 'Calculating your weaknesses...'],
       win: ['Nemesis sets first. Naturally.', 'I adapt. You set next.'],

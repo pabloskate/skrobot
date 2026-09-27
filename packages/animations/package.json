@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./trick-animation-3d.css": "./src/TrickAnimation3D.css"
+    "./trick-animation-3d.css": "./src/TrickAnimation3D.css",
+    "./push-off-animation.css": "./src/PushOffAnimation.css"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit"

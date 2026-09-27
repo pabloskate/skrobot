@@ -27,8 +27,6 @@ interface Props {
   voiceVisible?: boolean;
   /** Current game variant: defense swaps in its own roster and skips ladder heroes. */
   gameVariant?: 'classic' | 'defense';
-  /** When true, every robot is pickable regardless of the unlock gate (?override=true). */
-  rosterOverrideEnabled?: boolean;
   /** When true, offer the adaptive challenge (adaptive is beta-only). */
   adaptiveMatchVisible?: boolean;
   /** A pre-threshold Adaptive save that must wait for the new unlock requirement. */
@@ -46,7 +44,6 @@ export default function HomeScreen({
   voiceEnabled = true,
   voiceVisible = true,
   gameVariant = 'classic',
-  rosterOverrideEnabled = false,
   adaptiveMatchVisible = false,
   adaptiveSaveWaiting = false,
   continueMatch = null,
@@ -140,7 +137,7 @@ export default function HomeScreen({
           <div className="hero-divider">
             <span>or choose a robot</span>
           </div>
-          <RobotSelect onPick={onPickRobot} variant={gameVariant} override={rosterOverrideEnabled} />
+          <RobotSelect onPick={onPickRobot} variant={gameVariant} />
         </>
       )}
     </div>

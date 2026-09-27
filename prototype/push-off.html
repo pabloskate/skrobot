@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>S.K.A.T.E. — Game start v3 “Push Off” (Design)</title>
+<style>
+@font-face{
+  font-family:'Montserrat';
+  src:url('../public/fonts/montserrat-latin.woff2') format('woff2');
+  font-style:normal;font-weight:400 800;font-display:swap;
+}
+:root{
+  --purple:#6431d8;--purple-dark:#4f23b0;--purple-soft:#ece5fb;
+  --ink:#221a4e;--muted:#6b6786;--bg:#f3f2f6;--card:#fff;
+  --green:#2da866;--robot-ink:#23232e;
+  --shadow:0 2px 8px rgba(34,26,78,.08),0 8px 24px rgba(34,26,78,.06);
+  --ease-pop:cubic-bezier(.2,1.45,.4,1);
+  --grip:
+    radial-gradient(130% 70% at 50% 115%,rgba(20,6,70,.45),transparent 62%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.15' numOctaves='2' seed='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.08 0 0 0 0 0.02 0 0 0 0 0.25 0 0 0 1.25 -0.52'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.4' numOctaves='1' seed='9' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1.1 -0.62'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:'Montserrat',system-ui,-apple-system,sans-serif;color:var(--ink);background:#e7e4ef}
+button{font-family:inherit;color:inherit}
+
+/* =====================================================================
+   Design doc page chrome
+   ===================================================================== */
+.doc{max-width:1240px;margin:0 auto;padding:44px 28px 96px}
+.eyebrow{margin:0;font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--purple)}
+.doc-head h1{margin:8px 0 0;font-size:52px;font-weight:900;letter-spacing:-1px;line-height:1}
+.doc-head p{margin:12px 0 0;max-width:660px;color:var(--muted);font-size:17px;line-height:1.5;font-weight:500}
+.hero{display:grid;grid-template-columns:410px minmax(0,1fr);gap:56px;align-items:start;margin-top:36px}
+.phone{width:410px;height:864px;padding:10px;border-radius:50px;background:#17131f;box-shadow:0 40px 90px rgba(34,26,78,.3),inset 0 0 0 2px #2c2638}
+.side{display:flex;flex-direction:column;gap:20px}
+.card{background:var(--card);border-radius:20px;box-shadow:var(--shadow);padding:22px 24px}
+.card h3{margin:0 0 14px;font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.ctl-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}
+.ctl-row:last-child{margin-bottom:0}
+.ctl-label{width:100%;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:2px}
+.chip{display:inline-flex;align-items:center;gap:6px;border:0;border-radius:999px;background:var(--bg);padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;color:var(--ink);transition:background .15s,color .15s,transform .08s}
+.chip:hover{background:var(--purple-soft)}
+.chip:active{transform:scale(.96)}
+.chip.on{background:var(--purple);color:#fff}
+.chip .robot-avatar{width:26px;height:26px;margin:-6px -2px -6px -6px;color:var(--robot-ink)}
+.chip.primary{background:var(--purple);color:#fff;padding:10px 20px}
+.scrub{display:flex;align-items:center;gap:12px;width:100%}
+.scrub input{flex:1;accent-color:var(--purple)}
+.scrub output{min-width:52px;font-size:13px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--ink);text-align:right}
+.changes{margin:0;padding:0;list-style:none;counter-reset:c}
+.changes li{position:relative;padding:0 0 16px 40px;font-size:14.5px;line-height:1.5;color:var(--muted);font-weight:500}
+.changes li:last-child{padding-bottom:0}
+.changes li::before{counter-increment:c;content:counter(c);position:absolute;left:0;top:-1px;width:26px;height:26px;border-radius:9px;background:var(--purple-soft);color:var(--purple);font-size:13px;font-weight:800;display:grid;place-items:center}
+.changes b{color:var(--ink);font-weight:800}
+.changes code,.build code{font-size:12.5px;background:var(--bg);padding:1px 6px;border-radius:6px;color:var(--purple-dark);font-weight:600}
+.section-title{margin:84px 0 6px;font-size:28px;font-weight:900;letter-spacing:-.3px}
+.section-sub{margin:0 0 28px;color:var(--muted);font-size:15px;font-weight:500}
+.board{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:18px}
+.frame{margin:0}
+.frame figcaption{margin-top:12px}
+.frame figcaption b{display:block;font-size:13.5px;font-weight:800}
+.frame figcaption span{display:block;margin-top:3px;font-size:12.5px;line-height:1.45;color:var(--muted);font-weight:500}
+.mini{--s:.462;width:calc(390px * var(--s));height:calc(844px * var(--s));border-radius:22px;overflow:hidden;box-shadow:0 18px 40px rgba(34,26,78,.22)}
+.mini .screen{transform:scale(var(--s));transform-origin:0 0;border-radius:0}
+.build{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px}
+.build ul{margin:0;padding-left:18px}
+.build li{font-size:14px;line-height:1.55;color:var(--muted);font-weight:500;margin-bottom:8px}
+.build li b{color:var(--ink)}
+
+/* =====================================================================
+   Phone screen
+   ===================================================================== */
+.screen{position:relative;width:390px;height:844px;border-radius:40px;overflow:hidden;background:var(--bg);isolation:isolate;user-select:none;-webkit-user-select:none}
+.statusbar{position:absolute;z-index:50;top:0;left:0;right:0;height:47px;display:flex;align-items:center;justify-content:space-between;padding:6px 26px 0 30px;color:#fff;font-size:15px;font-weight:700;pointer-events:none}
+.statusbar i{display:inline-block;width:25px;height:12px;border-radius:4px;border:1.5px solid rgba(255,255,255,.85);position:relative}
+.statusbar i::after{content:'';position:absolute;inset:1.5px 5px 1.5px 1.5px;border-radius:2px;background:#fff}
+
+/* ---------- Underlays: what the overlay covers (Throw Down result) and reveals (the game) ---------- */
+.under{position:absolute;inset:0;display:flex;flex-direction:column}
+.under[hidden]{display:none}
+.topbar{background:var(--purple);color:#fff;padding:47px 20px 14px;box-shadow:0 2px 12px rgba(34,26,78,.25);display:flex;align-items:center;gap:12px}
+.topbar span{font-size:26px;line-height:1;padding:2px 6px}
+.topbar b{font-size:22px;font-weight:800;letter-spacing:.3px}
+.under-rps .field{position:relative;flex:1;background-color:var(--purple);background-image:var(--grip)}
+.under-rps .turf{position:absolute;inset:0 0 auto 0;height:38%;clip-path:polygon(0 0,100% 0,100% calc(100% - 34px),0 100%);background:linear-gradient(180deg,var(--turf-top),var(--turf-bottom))}
+.under-rps .cope{position:absolute;left:-6%;width:112%;top:calc(38% - 24.5px);height:15px;transform:rotate(-4.98deg);background:linear-gradient(180deg,#fff,#e3e1ec 35%,#b3afc4 80%,#8f8aa6);border-top:3px solid var(--robot-ink);border-bottom:3px solid var(--robot-ink)}
+.under-rps .res{position:absolute;left:0;right:0;bottom:30px;text-align:center;color:#fff}
+.under-rps .res small{display:block;font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;opacity:.72}
+.under-rps .res strong{display:block;margin:6px 0 20px;font-size:36px;font-weight:900}
+.under-rps .res span{display:inline-block;width:330px;padding:18px;border-radius:999px;background:#fff;color:var(--purple);font-size:17px;font-weight:800}
+.under-game .body{flex:1;padding:20px 16px}
+.g-card{background:#fff;border-radius:16px;box-shadow:var(--shadow);padding:16px 18px}
+.g-row{display:flex;align-items:center;justify-content:space-between;padding:4px 0}
+.g-row b{font-size:15px;font-weight:700}
+.g-letters{display:flex;gap:6px}
+.g-letters i{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;font-style:normal;font-weight:800;font-size:16px;background:var(--bg);color:#c8c4d8}
+.g-track{margin-top:8px;padding-top:9px;border-top:1px solid #f0eef6;text-align:center;font-size:12px;font-weight:600;color:var(--muted)}
+.g-track::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:6px}
+.g-panel{margin-top:16px;display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center;padding:24px 20px}
+.g-note{margin:0;background:var(--purple-soft);color:var(--purple-dark);font-weight:600;font-size:14px;padding:8px 14px;border-radius:999px}
+.g-panel h2{margin:0;font-size:22px;font-weight:800}
+.g-panel p{margin:0;color:var(--muted)}
+.g-btn{border-radius:999px;padding:14px 28px;min-width:220px;background:var(--purple);color:#fff;font-weight:700;box-shadow:0 4px 14px rgba(100,49,216,.4)}
+.g-ghost{font-weight:700;color:var(--muted);font-size:15px}
+.g-panel .robot-avatar{color:var(--robot-ink)}
+
+/* ---------- Push Off overlay ---------- */
+.drop{
+  position:absolute;inset:0;z-index:20;overflow:hidden;cursor:pointer;
+  background-color:var(--purple);background-image:var(--grip);
+  /* Wipes up from the bottom along the coping's tilt, picking up where the toss left off. */
+  animation:drop-wipe .3s cubic-bezier(.25,.8,.3,1) both,drop-out .3s ease var(--t-exit) both;
+}
+@keyframes drop-wipe{
+  from{clip-path:polygon(0 100%,100% calc(100% - 34px),100% 100%,0 100%)}
+  to{clip-path:polygon(0 -40px,100% -74px,100% 100%,0 100%)}
+}
+@keyframes drop-out{from{opacity:1;transform:none}to{opacity:0;transform:scale(1.05);visibility:hidden}}
+.drop-light{position:absolute;inset:0;background:radial-gradient(70% 26% at 50% 40%,rgba(255,255,255,.14),transparent 70%)}
+.drop-world{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.rider{color:var(--robot-ink)}
+.trail{fill:none;stroke:#fff;stroke-linecap:round;stroke-width:3.5}
+
+.drop-title{position:absolute;top:196px;left:0;right:0;display:flex;flex-direction:column;align-items:center}
+.drop-lets{position:relative;z-index:2;margin:0 0 -12px -150px;filter:drop-shadow(0 4px 0 rgba(20,6,70,.28));animation:tape-in .38s var(--ease-pop) var(--d) both}
+.drop-lets span{display:block;padding:8px 20px 7px;background:linear-gradient(180deg,#fffaf0,#f6ecd4);color:var(--robot-ink);font-size:16px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;transform:rotate(-7deg);clip-path:polygon(3% 0,97% 0,100% 20%,97% 42%,100% 64%,97.5% 84%,99.5% 100%,1% 100%,3.5% 80%,0 60%,3% 40%,0 18%)}
+@keyframes tape-in{from{opacity:0;transform:scale(1.8) rotate(10deg)}to{opacity:1;transform:none}}
+/* The whole row flinches when the ollie lands. */
+.drop-tiles{display:flex;gap:10px;animation:jolt .28s ease-out var(--land) both}
+@keyframes jolt{0%{transform:none}30%{transform:translateY(6px) scaleY(.96)}65%{transform:translateY(-2px)}100%{transform:none}}
+.drop-slot{position:relative;width:60px;height:60px;border-radius:19px;border:2px dashed rgba(255,255,255,.3);animation:rise .3s ease .12s both}
+.drop-tile{
+  position:absolute;inset:-2px;
+  display:grid;place-items:center;width:60px;height:60px;border-radius:19px;border:4.5px solid #fff;background:var(--tint);
+  color:var(--robot-ink);font-size:32px;font-weight:900;line-height:1;position:relative;overflow:hidden;
+  box-shadow:0 3px 0 rgba(20,6,70,.28),0 10px 18px rgba(20,6,70,.35);
+  transform:rotate(var(--rot));animation:tile-slam .26s var(--ease-pop) var(--d) both;
+}
+.drop-tile::after{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.6),rgba(255,255,255,0) 42%)}
+/* Impact lands at 40% (~0.1 s) so the sticker hits on the wheel's clack. */
+@keyframes tile-slam{
+  0%{opacity:0;transform:translateY(-26px) rotate(calc(var(--rot) * 4)) scale(1.8)}
+  40%{opacity:1;transform:rotate(var(--rot)) scale(.9)}
+  100%{transform:rotate(var(--rot))}
+}
+
+.drop-head{position:absolute;left:0;right:0;top:618px;display:flex;flex-direction:column;align-items:center;text-align:center;padding:0 18px}
+.drop-head b{display:block;font-size:44px;font-weight:900;line-height:1.02;letter-spacing:.5px;text-transform:uppercase;white-space:nowrap;color:#fff;-webkit-text-stroke:10px var(--robot-ink);paint-order:stroke fill;filter:drop-shadow(0 5px 0 rgba(20,6,70,.3));animation:slam .34s var(--ease-pop) var(--d) both}
+.drop-head b + b{animation-delay:calc(var(--d) + .08s);color:#ffd166}
+@keyframes slam{0%{opacity:0;transform:scale(2.1) rotate(-4deg)}60%{opacity:1;transform:scale(.94)}100%{transform:none}}
+.drop-sub{margin:14px 0 0;max-width:320px;font-size:15px;font-weight:700;line-height:1.4;color:var(--ink);animation:rise .35s ease var(--d) both}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.drop-skip{position:absolute;right:16px;bottom:22px;font-size:12px;font-weight:700;color:rgba(34,26,78,.5);letter-spacing:.04em;animation:rise .3s ease .6s both}
+
+/* Beat-sheet frames are paused at a timestamp; nothing plays on its own. */
+.frozen{pointer-events:none}
+@media (max-width:1100px){.hero{grid-template-columns:1fr}.phone{margin:0 auto}.board{grid-template-columns:repeat(3,minmax(0,1fr))}.build{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="doc">
+  <header class="doc-head">
+    <p class="eyebrow">Skate Robot · Game start v3</p>
+    <h1>Push Off</h1>
+    <p>Flatground is flatground. The robot pushes off across a sidewalk and every crack clacks under its wheels, and each clack slams in one of the game's letters. Then it ollies, tail-stops in the middle of the screen, and the screen says who sets first.</p>
+  </header>
+
+  <section class="hero">
+    <div class="phone"><div id="live"></div></div>
+    <div class="side">
+      <div class="card">
+        <h3>Play with it</h3>
+        <div class="ctl-row" id="ctl-who"><div class="ctl-label">Sets first</div></div>
+        <div class="ctl-row" id="ctl-robots"><div class="ctl-label">Opponent</div></div>
+        <div class="ctl-row" id="ctl-format"><div class="ctl-label">Game</div></div>
+        <div class="ctl-row" id="ctl-speed"><div class="ctl-label">Speed</div></div>
+        <div class="ctl-row"><div class="ctl-label">Scrub</div>
+          <div class="scrub"><input id="scrub" type="range" min="0" max="1" step="0.001" value="0"><output id="scrub-out">0.00s</output></div>
+        </div>
+        <div class="ctl-row" id="ctl-actions"></div>
+      </div>
+      <div class="card">
+        <h3>What happens</h3>
+        <ol class="changes">
+          <li><b>Two pushes on flat ground.</b> Each push is a dip, then a surge of speed. After that it's a small physics sim: rolling resistance slows it a little, and the camera leads it so there's room ahead.</li>
+          <li><b>The cracks keep the beat.</b> Each wheel clacks as it rolls over a sidewalk joint, and the board dips a pixel. Each front-wheel clack slams in the next letter, so the letters speed up as the robot does. An S.K.8 game gets three.</li>
+          <li><b>An ollie, the first trick anyone learns.</b> It crouches, the nose snaps up, and it levels out at the top. The jump follows real ballistic height, and the wheels don't clack while it's in the air. “Let's” tapes on at the peak, and the letter row flinches when it lands.</li>
+          <li><b>Tail stop.</b> It rocks back onto the tail and drags to a stop, kicking up dust behind it and leaving a scuff on the concrete. The camera settles first, so the robot slides into the center of the screen. Then the nose drops and the front wheels clack down.</li>
+          <li><b>It says what to do next.</b> “Sparky sets first. Land Sparky's trick back or take a letter.” The robot hops into <code>stoked</code> when it sets first and stays <code>idle</code> when you do. It gets no new body parts.</li>
+          <li><b>Tap anywhere to skip.</b> At the end it fades into the game underneath.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <h2 class="section-title">Beat sheet</h2>
+  <p class="section-sub">The robot sets first here. Every frame is the same simulation paused at its timestamp, so these are exactly what plays.</p>
+  <div class="board" id="board"></div>
+
+  <h2 class="section-title">How it maps to the code</h2>
+  <p class="section-sub">This replaces the inside of <code>GameStartAnimation</code> and keeps its props and contract. The motion is a small pure module that can be tested.</p>
+  <div class="build">
+    <div class="card">
+      <h3>Keeps</h3>
+      <ul>
+        <li><b>Props:</b> <code>robot</code>, <code>playerFirst</code>, <code>onComplete</code>. It still mounts from <code>RpsPanel</code> when you press Start.</li>
+        <li><b><code>RobotAvatar</code> poses:</b> <code>idle</code> and <code>stoked</code> only, with the same drawing. The ollie and tail stop are rotations of it, not new art.</li>
+        <li><b>Engine:</b> the <code>START</code> dispatch is unchanged, so the game's own “You won the toss” note still greets you underneath.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Adds</h3>
+      <ul>
+        <li><b><code>pushOff.ts</code></b>: a fixed-step integrator that returns a timeline (position, height, speed, crack clacks, camera). Tests can pin “one letter per front-wheel clack, no clacks in the air, stops centered, finishes under 3.5 s”.</li>
+        <li><b>One SVG plus <code>requestAnimationFrame</code></b>, transforms only. The type and stickers are CSS.</li>
+        <li><b>A <code>letters</code> prop</b> from <code>lettersForFormat</code>. The ollie waits for the last letter, so S.K.8 games are shorter.</li>
+        <li><b>Tap to skip</b>, and reduced motion shows the settled frame for 1.2 s, then fades.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+const SVGNS='http://www.w3.org/2000/svg';
+const INK='#23232e';
+
+/* ================= robot avatar (transcribed from packages/animations/src/RobotAvatar.tsx) ================= */
+const ACCENT_DARK_LUM=0.19, ACCENT_TARGET_LUM=0.45;
+function _lum(hex){const [r,g,b]=hex.replace('#','').match(/[0-9a-f]{2}/gi).map(x=>parseInt(x,16)/255);
+  const lin=c=>(c<=0.04045?c/12.92:Math.pow((c+0.055)/1.055,2.4));return 0.2126*lin(r)+0.7152*lin(g)+0.0722*lin(b);}
+function _hsl(hex){const [r,g,b]=hex.replace('#','').match(/[0-9a-f]{2}/gi).map(x=>parseInt(x,16)/255);
+  const max=Math.max(r,g,b),min=Math.min(r,g,b);let h=0,s=0;const l=(max+min)/2;
+  if(max!==min){const d=max-min;s=l>0.5?d/(2-max-min):d/(max+min);
+    if(max===r)h=(g-b)/d+(g<b?6:0);else if(max===g)h=(b-r)/d+2;else h=(r-g)/d+4;h*=60;}return {h,s};}
+function _hslHex(h,s,l){const f=n=>{const k=(n+h/30)%12;return l-s*Math.min(l,1-l)*Math.max(-1,Math.min(k-3,Math.min(9-k,1)));};
+  return '#'+[f(0),f(8),f(4)].map(v=>Math.round(v*255).toString(16).padStart(2,'0')).join('');}
+function readableAccent(a){if(_lum(a)>=ACCENT_DARK_LUM)return a;const {h,s}=_hsl(a);
+  for(let l=50;l<=96;l+=2){const c=_hslHex(h,s,l/100);if(_lum(c)>=ACCENT_TARGET_LUM)return c;}return _hslHex(h,s,.96);}
+function mixHex(a,b,t){const p=h=>h.replace('#','').match(/[0-9a-f]{2}/gi).map(x=>parseInt(x,16));const A=p(a),B=p(b);
+  return '#'+A.map((v,i)=>Math.round(v*t+B[i]*(1-t)).toString(16).padStart(2,'0')).join('');}
+
+function robotInner(r,pose='idle'){
+  const body=r.avatar.body, accent=readableAccent(r.avatar.accent), S='currentColor';
+  const outlined=(d,w=5.5)=>`<path d="${d}" stroke="${S}" stroke-width="${w+2}" stroke-linecap="round" fill="none"/><path d="${d}" stroke="${accent}" stroke-width="${w-1}" stroke-linecap="round" fill="none"/>`;
+  const backArm=d=>`<path d="${d}" stroke="${accent}" stroke-width="4.5" stroke-linecap="round" fill="none" opacity="0.35"/>`;
+  const a=pose==='stoked'
+    ?{frontL:'M38 40 Q26 26 24 12',frontR:'M58 40 Q70 26 72 12',backL:'M38 40 Q30 28 28 16',backR:'M58 40 Q66 28 68 16',hl:[24,12],hr:[72,12]}
+    :{frontL:'M38 40 Q24 54 22 68',frontR:'M58 40 Q72 54 74 68',backL:'M38 40 Q30 52 28 66',backR:'M58 40 Q66 52 68 66',hl:[22,68],hr:[74,68]};
+  const dot=([cx,cy])=>`<circle cx="${cx}" cy="${cy}" r="4" fill="${accent}" stroke="${S}" stroke-width="1.5"/>`;
+  return `<g transform="translate(2 0) scale(0.95)">`+
+    backArm(a.backL)+backArm(a.backR)+outlined('M42 64 Q36 78 34 92')+outlined('M54 64 Q60 78 62 92')+
+    outlined(a.frontL)+outlined(a.frontR)+dot(a.hl)+dot(a.hr)+
+    `<rect x="28" y="89" width="12" height="7" rx="3.5" fill="${accent}" stroke="${S}" stroke-width="2"/>
+     <rect x="56" y="89" width="12" height="7" rx="3.5" fill="${accent}" stroke="${S}" stroke-width="2"/>
+     <line x1="48" y1="32" x2="48" y2="36" stroke="${S}" stroke-width="2.5" stroke-linecap="round"/>
+     <rect x="36" y="36" width="24" height="28" rx="9" fill="${body}" stroke="${S}" stroke-width="3"/>
+     <rect x="34" y="12" width="28" height="20" rx="7" fill="${body}" stroke="${S}" stroke-width="3"/>
+     <rect x="38" y="16" width="20" height="7" rx="3.5" fill="${S}" opacity="0.85"/>
+     <circle cx="43" cy="19.5" r="2" fill="${accent}"/><circle cx="53" cy="19.5" r="2" fill="${accent}"/>
+     <line x1="48" y1="12" x2="48" y2="6" stroke="${S}" stroke-width="2.5" stroke-linecap="round"/>
+     <circle cx="48" cy="4.5" r="3.5" fill="${accent}" stroke="${S}" stroke-width="1.5"/></g>
+    <g transform="translate(18 86)">
+      <path d="M0 0 q4 6 12 6 h40 q8 0 12 -6" stroke="${S}" stroke-width="3" fill="none" stroke-linecap="round"/>
+      <circle cx="16" cy="10" r="3.8" fill="#c8c8c8" stroke="${S}" stroke-width="2.5"/>
+      <circle cx="48" cy="10" r="3.8" fill="#c8c8c8" stroke="${S}" stroke-width="2.5"/></g>`;
+}
+const robotSVG=(r,size=96,pose='idle')=>`<svg class="robot-avatar" width="${size}" height="${size}" viewBox="0 -5 100 106" role="img" aria-label="${r.name}">${robotInner(r,pose)}</svg>`;
+
+/* ================= data ================= */
+const ROBOTS=[
+  {id:'sparky',name:'Sparky',avatar:{body:'#4f86f7',accent:'#f7c948'}},
+  {id:'magnet',name:'Magnet',avatar:{body:'#ff9f1c',accent:'#2ec4b6'}},
+  {id:'clamp',name:'Clamp',avatar:{body:'#d6457a',accent:'#9be564'}},
+  {id:'nosy',name:'Nosy',avatar:{body:'#f6a5c0',accent:'#3a2e4d'}},
+  {id:'boomerang',name:'Boomerang',avatar:{body:'#6a8caf',accent:'#f0c987'}},
+];
+const FORMATS={skate:['S','K','A','T','E'],sk8:['S','K','8']};
+const TINTS=['#ffd166','#a5e8c6','#ffb3c7'];
+
+/* ================= stage =================
+   Screen px at 390 wide. Side view of a sidewalk: the robot rides at depth GY,
+   the slab meets the wall at SEAM, and joints are drawn in a gentle
+   perspective so the near edge of the slab slides past faster than the far
+   edge. */
+const CX=195, GY=566, SEAM=540, VPY=GY-1500, S=1.3;
+const ROWS=[SEAM,646,764,900];
+const depth=y=>(y-VPY)/(GY-VPY);
+/* Avatar geometry in rider space (origin = where the wheels touch the ground),
+   before the stage scale S. The tail tip sits above and behind the back wheel. */
+const WHEEL=17.9, TAIL_TIP=[-35.84,-15.48];
+
+/* ================= physics =================
+   Point mass on flat ground. Pushes are force pulses; rolling resistance is
+   constant plus a little drag. The ollie waits for the last letter's clack,
+   flies ballistically (no resistance, no clacks), rolls out a beat, then
+   tail-stops: the tail drags with a hard constant brake. */
+const PHYS={dt:1/480,MU:24,DRAG:.12,PUSHES:[{t:.16,dv:330,dur:.15},{t:.44,dv:290,dur:.15}],
+  JOINT:96,J0:52,G:2800,AIR:.42,CROUCH:.09,ROLL_OUT:.08,SLIDE:1750,TAIL:-30,LEAD:.1,LEAD_TAU:.22};
+function pushAcc(t){let a=0;for(const p of PHYS.PUSHES){const u=(t-p.t)/p.dur;if(u>=0&&u<=1)a+=p.dv*Math.PI/(2*p.dur)*Math.sin(Math.PI*u);}return a;}
+function simulate(letters){
+  const {dt,MU,DRAG,JOINT,J0,G,AIR,CROUCH,ROLL_OUT,SLIDE,PUSHES}=PHYS;
+  const lastPush=PUSHES[PUSHES.length-1];
+  let t=0,x=0,v=0,h=0,vy=0,phase='roll',tPop=null,tLand=null,tSlide=null,tStop=null,xSlide=null;
+  const X=[],H=[],V=[],crossF=[],crossB=[];
+  const J=xx=>Math.floor((xx-J0)/JOINT);
+  while(t<6){
+    if(tPop===null&&crossF.length>=letters)tPop=Math.max(crossF[letters-1]+CROUCH,lastPush.t+lastPush.dur+.1);
+    if(phase==='roll'&&tPop!==null&&t>=tPop){phase='air';vy=G*AIR/2;}
+    let a=pushAcc(t);
+    if((phase==='roll'||phase==='land')&&v>0)a-=MU+DRAG*v;
+    if(phase==='slide')a=-SLIDE;
+    const f0=J(x+WHEEL),b0=J(x-WHEEL);
+    v+=a*dt;
+    if(phase==='slide'&&v<=0){v=0;tStop=t;phase='stop';}
+    x+=v*dt;
+    if(phase==='air'){vy-=G*dt;h+=vy*dt;if(h<=0){h=0;phase='land';tLand=t;}}
+    if(phase==='land'&&t>=tLand+ROLL_OUT){phase='slide';tSlide=t;xSlide=x;}
+    if(phase!=='air'){if(J(x+WHEEL)>f0)crossF.push(t);if(J(x-WHEEL)>b0)crossB.push(t);}
+    X.push(x);H.push(h);V.push(v);t+=dt;
+    if(tStop!==null&&t>tStop+2.4)break;
+  }
+  return {X,H,V,crossF,crossB,tPop,tLand,tSlide,tStop,xSlide,xStop:X[X.length-1],letterTimes:crossF.slice(0,letters)};
+}
+/* Where the robot sits on screen. It leads left of center with speed (room
+   ahead), then during the slide it glides back to dead center, progress
+   measured by distance so the camera stops exactly when the wheels do and
+   never backs up. */
+function withCamera(sim){
+  const {dt,LEAD,LEAD_TAU}=PHYS,n=sim.X.length,cam=new Float64Array(n);
+  const iSlide=Math.round(sim.tSlide/dt),D=sim.xStop-sim.xSlide;
+  let vs=0,s0=CX;
+  for(let i=0;i<n;i++){
+    let sx;
+    if(i<iSlide){vs+=(sim.V[i]-vs)*dt/LEAD_TAU;sx=CX-LEAD*vs;s0=sx;}
+    else{const p=Math.min(1,(sim.X[i]-sim.xSlide)/D);sx=s0+(CX-s0)*(1-Math.pow(1-p,1.25));}
+    cam[i]=sim.X[i]-sx;
+  }
+  sim.cam=cam;return sim;
+}
+
+/* ================= feedback (prototype stand-ins) ================= */
+let soundOn=true,actx=null,roll=null;
+function ac(){try{actx=actx||new (window.AudioContext||window.webkitAudioContext)();}catch(e){}return actx;}
+function blip(freq,{dur=.07,type='triangle',gain=.08,when=0}={}){
+  if(!soundOn||!ac())return;const t=actx.currentTime+when,o=actx.createOscillator(),g=actx.createGain();
+  o.type=type;o.frequency.setValueAtTime(freq,t);g.gain.setValueAtTime(gain,t);g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+  o.connect(g).connect(actx.destination);o.start(t);o.stop(t+dur+.02);}
+function noise(len,{freq=1800,q=1,gain=.25,type='bandpass',shape=5,sweep=null}={}){
+  if(!soundOn||!ac())return;const t=actx.currentTime,b=actx.createBuffer(1,actx.sampleRate*len,actx.sampleRate),d=b.getChannelData(0);
+  for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,shape);
+  const s=actx.createBufferSource(),f=actx.createBiquadFilter(),g=actx.createGain();s.buffer=b;f.type=type;f.Q.value=q;f.frequency.setValueAtTime(freq,t);
+  if(sweep)f.frequency.exponentialRampToValueAtTime(sweep,t+len);g.gain.value=gain;
+  s.connect(f).connect(g).connect(actx.destination);s.start(t);}
+const tick=g=>noise(.035,{freq:2600,q:1.4,gain:g,shape:8});
+function clack(gain=.25){noise(.06,{freq:1800,gain});blip(140,{dur:.08,type:'sine',gain:gain*.6});}
+const scrape=len=>noise(len,{freq:900,q:1.6,gain:.45,shape:1.2,sweep:420});
+function rollStart(){if(!soundOn||!ac()||roll)return;const b=actx.createBuffer(1,actx.sampleRate*2,actx.sampleRate),d=b.getChannelData(0);
+  for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;const s=actx.createBufferSource(),f=actx.createBiquadFilter(),g=actx.createGain();
+  s.buffer=b;s.loop=true;f.type='lowpass';f.frequency.value=520;g.gain.value=0;s.connect(f).connect(g).connect(actx.destination);s.start();roll={s,g};}
+function rollGain(v){if(roll)roll.g.gain.setTargetAtTime(Math.min(.2,v/3000),actx.currentTime,.03);}
+function rollStop(){if(roll){try{roll.s.stop();}catch(e){}roll=null;}}
+
+/* ================= scene ================= */
+const ease=u=>u<0?0:u>1?1:u*u*(3-2*u);
+const clamp01=u=>u<0?0:u>1?1:u;
+let uid=0;
+function mountScene(root,{robot,playerFirst,letters}){
+  const sim=withCamera(simulate(letters.length)),{dt,AIR,CROUCH}=PHYS;
+  const T={tPop:sim.tPop,tApex:sim.tPop+AIR/2,tLand:sim.tLand,tSlide:sim.tSlide,tStop:sim.tStop};
+  T.tHead=T.tSlide+.1;T.tSub=T.tHead+.3;T.tHop=T.tStop+.3;
+  T.tExit=T.tHead+1.2;T.tEnd=T.tExit+.3;
+  const slabBack=mixHex(robot.avatar.body,'#eeedf3',.07),slabFront=mixHex(robot.avatar.body,'#d2cfdc',.12);
+  const turfTop=mixHex(robot.avatar.body,'#fbfaff',.14),turfBottom=mixHex(robot.avatar.body,'#e7e4f0',.36);
+  const who=playerFirst?'You':robot.name;
+  const sub=playerFirst?`Land any trick. ${robot.name} has to match it.`:`Land ${robot.name}’s trick back or take a letter.`;
+  const note=playerFirst?'You won the toss — you set first!':`${robot.name} won the toss and sets first.`;
+  const JOINTS=7,DUST=7,id=`po${++uid}`;
+  const groove=`<path stroke="rgba(34,26,78,.28)" stroke-width="2.4" stroke-linecap="round"/><path stroke="rgba(255,255,255,.6)" stroke-width="1.2" stroke-linecap="round"/>`;
+
+  root.innerHTML=`
+  <div class="screen" style="--turf-top:${turfTop};--turf-bottom:${turfBottom}">
+    <div class="statusbar"><span>9:41</span><i></i></div>
+    <div class="under under-rps">
+      <div class="field"><div class="turf"></div><div class="cope"></div>
+        <div class="res"><small>${playerFirst?'You won the throw':robot.name+' won the throw'}</small><strong>${who} ${playerFirst?'set':'sets'} first.</strong><span>Start game</span></div></div>
+    </div>
+    <div class="under under-game" hidden>
+      <div class="topbar"><span>←</span><b>${robot.name}</b></div>
+      <div class="body">
+        <div class="g-card">
+          <div class="g-row"><b>${robot.name}</b><span class="g-letters">${letters.map(l=>`<i>${l}</i>`).join('')}</span></div>
+          <div class="g-row"><b>You</b><span class="g-letters">${letters.map(l=>`<i>${l}</i>`).join('')}</span></div>
+          <div class="g-track">Tracking your tricks for consistency stats</div>
+        </div>
+        <div class="g-card g-panel">${playerFirst
+          ?`<p class="g-note">${note}</p><h2>Your turn to set</h2><p>Go skate! Then come back and tell me how it went.</p><span class="g-btn">I landed a trick</span><span class="g-ghost">Couldn’t land one — pass</span>`
+          :`<p class="g-note">${note}</p>${robotSVG(robot,130,'idle')}<h2>${robot.name} is picking a trick…</h2>`}</div>
+      </div>
+    </div>
+    <div class="drop" style="--t-exit:${T.tExit}s" role="img" aria-label="Let's skate. ${who} ${playerFirst?'set':'sets'} first.">
+      <div class="drop-light"></div>
+      <svg class="drop-world" viewBox="0 0 390 844" aria-hidden="true">
+        <defs>
+          <linearGradient id="${id}-slab" gradientUnits="userSpaceOnUse" x1="0" y1="${SEAM}" x2="0" y2="844">
+            <stop offset="0" stop-color="${slabBack}"/><stop offset="1" stop-color="${slabFront}"/>
+          </linearGradient>
+          <linearGradient id="${id}-ao" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="rgba(20,6,70,.24)"/><stop offset="1" stop-color="rgba(20,6,70,0)"/>
+          </linearGradient>
+          <pattern id="${id}-speckle" class="speckle" width="200" height="200" patternUnits="userSpaceOnUse">
+            <image width="200" height="200" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' seed='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.2 0 0 0 0 0.18 0 0 0 0 0.3 0 0 0 .9 -0.38'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"/>
+          </pattern>
+        </defs>
+        <rect x="-10" y="${SEAM}" width="410" height="${854-SEAM}" fill="url(#${id}-slab)"/>
+        <g class="cells" fill="rgba(34,26,78,.045)">${'<path/>'.repeat(JOINTS*(ROWS.length-1))}</g>
+        <rect x="-10" y="${SEAM}" width="410" height="${854-SEAM}" fill="url(#${id}-speckle)" opacity=".55"/>
+        <rect x="-10" y="${SEAM}" width="410" height="26" fill="url(#${id}-ao)"/>
+        <g class="rows">${ROWS.slice(1,-1).map(y=>`<g><path stroke="rgba(34,26,78,.28)" stroke-width="2.4" d="M-10 ${y} H400"/><path stroke="rgba(255,255,255,.6)" stroke-width="1.2" d="M-10 ${y+2} H400"/></g>`).join('')}</g>
+        <g class="joints">${`<g>${groove}</g>`.repeat(JOINTS)}</g>
+        <line x1="-10" y1="${SEAM}" x2="400" y2="${SEAM}" stroke="${INK}" stroke-width="3"/>
+        <path class="scuff" fill="none" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>
+        <g class="trails"><path class="trail"/><path class="trail"/><path class="trail"/></g>
+        <ellipse class="rider-shadow" cx="0" cy="${GY+1}" rx="44" ry="5.5" fill="rgba(20,6,70,.26)"/>
+        <g class="rider">
+          <g class="rider-flex"><svg class="robot-avatar" x="-56" y="-117.4" width="112" height="118.72" viewBox="0 -5 100 106"></svg></g>
+        </g>
+        <g class="dust" fill="#fff">${'<circle/>'.repeat(DUST)}</g>
+      </svg>
+      <div class="drop-title">
+        <div class="drop-lets" style="--d:${T.tApex-.1}s"><span>Let’s</span></div>
+        <div class="drop-tiles" style="--land:${T.tLand}s">${letters.map((l,i)=>`<span class="drop-slot"><span class="drop-tile" style="--d:${(sim.letterTimes[i]-.1).toFixed(3)}s;--tint:${TINTS[i%3]};--rot:${[-5,3,-2,4,-3][i%5]}deg">${l}</span></span>`).join('')}</div>
+      </div>
+      <div class="drop-head" style="--d:${T.tHead}s">
+        <b>${who}</b><b>${playerFirst?'set first':'sets first'}</b>
+        <p class="drop-sub" style="--d:${T.tSub}s">${sub}</p>
+      </div>
+      <span class="drop-skip">Tap to skip</span>
+    </div>
+  </div>`;
+
+  const $=s=>root.querySelector(s);
+  const el={under1:$('.under-rps'),under2:$('.under-game'),rider:$('.rider'),flex:$('.rider-flex'),bot:$('.rider .robot-avatar'),
+    shadow:$('.rider-shadow'),speckle:$('.speckle'),joints:[...root.querySelectorAll('.joints > g')],cells:[...root.querySelectorAll('.cells path')],
+    scuff:$('.scuff'),trails:[...root.querySelectorAll('.trail')],dust:[...root.querySelectorAll('.dust circle')]};
+  let pose=null,anims=[];
+  const setPose=p=>{if(p!==pose){pose=p;el.bot.innerHTML=robotInner(robot,p);}};
+  const n=sim.X.length,idx=t=>Math.max(0,Math.min(n-1,Math.floor(t/dt)));
+  const clacks=[...sim.crossF,...sim.crossB].sort((a,b)=>a-b);
+  const f=v=>v.toFixed(2);
+  // Where the tail tip sits (rider space) once the board is rocked back onto it.
+  const tailAt=deg=>{const r=deg*Math.PI/180,dx=TAIL_TIP[0]+WHEEL,dy=TAIL_TIP[1];
+    return [-WHEEL+dx*Math.cos(r)-dy*Math.sin(r),dx*Math.sin(r)+dy*Math.cos(r)];};
+  const tailDown=tailAt(PHYS.TAIL);
+  // Dust scraped up by the tail: world-anchored, so it's left behind as the robot slides on.
+  const puffs=Array.from({length:DUST},(_,j)=>{const tb=T.tSlide+.06+j*(T.tStop-T.tSlide-.06)/DUST,ib=idx(tb);
+    return {tb,x:sim.X[ib]+tailDown[0],drift:30+(j%3)*22,rise:12+(j*7)%14,r:2.4+(j%3)*1.2};});
+
+  function renderAt(t){
+    const i=idx(t),x=sim.X[i],h=sim.H[i],v=sim.V[i],cam=sim.cam[i];
+    const P=(xw,y)=>CX+(xw-cam-CX)*S*depth(y);
+
+    // Sidewalk: slabs in a gentle perspective, alternate slabs a touch darker; speckle scrolls with the ground.
+    const jFirst=Math.floor((cam+CX-220-PHYS.J0)/PHYS.JOINT);
+    el.joints.forEach((g,k)=>{const xw=PHYS.J0+(jFirst+k)*PHYS.JOINT,a=P(xw,SEAM),b=P(xw,854),[gr,lip]=g.children;
+      gr.setAttribute('d',`M${f(a)} ${SEAM} L${f(b)} 854`);lip.setAttribute('d',`M${f(a+1.8)} ${SEAM+2} L${f(b+2.2)} 854`);});
+    el.cells.forEach((c,q)=>{const k=q%JOINTS,r=Math.floor(q/JOINTS),j=jFirst+k;
+      if((j+r)%2){c.setAttribute('d','');return;}
+      const x0=PHYS.J0+j*PHYS.JOINT,x1=x0+PHYS.JOINT,y0=ROWS[r],y1=ROWS[r+1];
+      c.setAttribute('d',`M${f(P(x0,y0))} ${y0} L${f(P(x1,y0))} ${y0} L${f(P(x1,y1))} ${y1} L${f(P(x0,y1))} ${y1} Z`);});
+    el.speckle.setAttribute('patternTransform',`translate(${f(-cam*S)} 0)`);
+
+    // Body mechanics, all in rider space (origin at the wheels' contact point).
+    let sq=0,lean=0,nose=0,hop=0,bump=0;
+    for(const p of PHYS.PUSHES){
+      const u=(t-(p.t-.1))/.1;if(u>0&&u<=1)sq=Math.max(sq,.1*ease(u));            // dip before the push
+      const w=(t-p.t)/p.dur;if(w>0&&w<1){sq=Math.min(sq,-.04*Math.sin(Math.PI*w));lean=4*Math.sin(Math.PI*w);} // drive forward
+    }
+    for(const c of clacks){const u=(t-c)/.05;if(u>0&&u<1)bump=Math.max(bump,1.3*Math.sin(Math.PI*u));}
+    const tp=t-T.tPop;
+    if(tp>-CROUCH&&tp<=0)sq=.14*ease(1+tp/CROUCH);                                   // load the pop
+    if(tp>0&&tp<AIR){
+      if(tp<.06)nose=-18*ease(tp/.06);else if(tp<.24)nose=-18*(1-ease((tp-.06)/.18));else nose=3*Math.sin(Math.PI*(tp-.24)/(AIR-.24));
+      sq=tp<.08?-.05:.07*Math.sin(Math.PI*clamp01((tp-.08)/(AIR-.14)));               // extend, then tuck
+    }
+    const tl=t-T.tLand;if(tl>=0&&tl<.24)sq=Math.max(sq,.16*(1-tl/.24)*Math.cos(tl*9));   // land
+    const ts=t-T.tSlide,td=t-T.tStop;
+    if(ts>=0){                                                                          // tail stop: rock back onto the tail, drag, drop the nose
+      const down=ease(ts/.09),up=td>0?clamp01(td/.16):0;
+      nose=PHYS.TAIL*down*(1-up*up)+(up>0&&up<1?2.5*Math.sin(Math.PI*up):0);
+      if(t<T.tStop)bump=-.6*Math.abs(Math.sin(t*170));                                 // tail chatter
+      if(td>.12&&td<.3)sq=Math.max(sq,.08*Math.sin(Math.PI*(td-.12)/.18));             // front wheels land
+    }
+    if(!playerFirst&&t>=T.tHop){
+      const u=(t-T.tHop)/.42;
+      if(u<1)hop=-24*Math.sin(Math.PI*u);else if(u<1.4)sq=Math.max(sq,.1*(1-(u-1)/.4));
+    }else if(playerFirst&&t>T.tHop+.1){hop=-2.5*Math.sin((t-T.tHop-.1)*4.2);}
+    setPose(!playerFirst&&t>=T.tHop+.1?'stoked':'idle');
+
+    const sx=P(x,GY);
+    el.rider.setAttribute('transform',`translate(${f(sx)} ${f(GY-h*S+bump)}) scale(${S}) rotate(${f(nose)} ${-WHEEL} 0) rotate(${f(lean)})`);
+    el.flex.setAttribute('transform',`translate(0 ${f(hop)}) scale(${(1+sq*.45).toFixed(3)} ${(1-sq).toFixed(3)})`);
+    el.shadow.setAttribute('cx',f(sx-(nose<-8?8:0)*S));el.shadow.setAttribute('rx',f(44*(1-h/160)*(1+hop/60)));
+    el.shadow.setAttribute('opacity',f(clamp01(1-h/130+hop/60)));
+
+    // Speed lines: the rider's recent path, so they arc with the ollie.
+    const a=clamp01((v-300)/300),lines=[[26,.9],[52,1],[80,.7]];
+    el.trails.forEach((tr,j)=>{
+      if(a<=0||t>T.tLand){tr.setAttribute('d','');return;}
+      const [ht,len]=lines[j],pts=[];
+      for(let q=2;q<=10;q++){const ii=Math.max(0,i-Math.round(q*len*38/10));pts.push(`${f(P(sim.X[ii],GY)-34*S)} ${f(GY-(sim.H[ii]+ht)*S)}`);}
+      tr.setAttribute('d','M'+pts.join(' L '));tr.setAttribute('opacity',f(a*.55));
+    });
+
+    // The tail leaves a short scuff on the concrete.
+    if(ts>.06){const xs=sim.X[idx(T.tSlide+.06)]+tailDown[0],xe=Math.min(x,sim.xStop)+tailDown[0];
+      el.scuff.setAttribute('d',`M${f(P(xs,GY))} ${GY-.5} L${f(P(xe,GY))} ${GY-.5}`);el.scuff.setAttribute('opacity','.16');}
+    else el.scuff.setAttribute('d','');
+
+    el.dust.forEach((c,j)=>{const g=puffs[j],u=(t-g.tb)/.55;
+      if(u<0||u>1){c.setAttribute('r',0);return;}const e=1-Math.pow(1-u,2);
+      c.setAttribute('cx',f(P(g.x-g.drift*e*.4,GY)));c.setAttribute('cy',f(GY-2-g.rise*e*S));
+      c.setAttribute('r',f((g.r+u*6)*S));c.setAttribute('opacity',f((1-u)*.75));});
+
+    el.under1.hidden=t>=.32;el.under2.hidden=t<.32;
+    anims.forEach(an=>{an.currentTime=Math.max(0,t*1000);});
+    return {v,h};
+  }
+  const ready=new Promise(res=>requestAnimationFrame(()=>{
+    anims=root.getAnimations({subtree:true});anims.forEach(an=>an.pause());res();
+  }));
+  return {renderAt,ready,T,sim,tEnd:T.tEnd,tExit:T.tExit};
+}
+
+/* ================= live player (one master clock drives the sim and the CSS) ================= */
+const state={robot:ROBOTS[0],playerFirst:false,format:'skate',speed:1};
+let scene=null,raf=0,t0=0,tNow=0,playing=false,fired=new Set();
+const scrub=document.getElementById('scrub'),scrubOut=document.getElementById('scrub-out');
+
+async function build(){
+  cancelAnimationFrame(raf);rollStop();playing=false;
+  const root=document.getElementById('live');
+  scene=mountScene(root,{...state,letters:FORMATS[state.format]});
+  root.querySelector('.drop').addEventListener('click',()=>{if(playing&&tNow<scene.tExit)seek(scene.tExit,true);});
+  scrub.max=scene.tEnd.toFixed(3);
+  await scene.ready;scene.renderAt(0);
+  buildBoard();
+}
+function play(from=0){
+  cancelAnimationFrame(raf);fired=new Set();playing=true;tNow=from;t0=performance.now()-from*1000/state.speed;
+  if(from<scene.T.tStop)rollStart();
+  const step=now=>{
+    tNow=(now-t0)/1000*state.speed;
+    const {v,h}=scene.renderAt(Math.min(tNow,scene.tEnd));
+    scrub.value=Math.min(tNow,scene.tEnd);scrubOut.textContent=Math.min(tNow,scene.tEnd).toFixed(2)+'s';
+    cues(tNow,v,h);
+    if(tNow<scene.tEnd)raf=requestAnimationFrame(step);else{playing=false;rollStop();}
+  };
+  raf=requestAnimationFrame(step);
+}
+function seek(t,resume){t0=performance.now()-t*1000/state.speed;tNow=t;if(!resume){cancelAnimationFrame(raf);playing=false;scene.renderAt(t);}}
+function cues(t,v,h){
+  const T=scene.T,sim=scene.sim,once=(k,at,fn)=>{if(t>=at&&!fired.has(k)){fired.add(k);fn();}};
+  rollGain(t<T.tSlide&&h===0?v:0);
+  sim.crossF.forEach((c,i)=>{if(c<T.tSlide)once('f'+i,c,()=>tick(.2));});
+  sim.crossB.forEach((c,i)=>{if(c<T.tSlide)once('b'+i,c,()=>tick(.13));});
+  sim.letterTimes.forEach((c,i)=>once('l'+i,c,()=>blip(620+i*90,{dur:.06})));
+  once('pop',T.tPop,()=>clack(.32));
+  once('land',T.tLand,()=>{clack(.36);blip(80,{dur:.16,type:'sine',gain:.16});});
+  once('tail',T.tSlide+.07,()=>{clack(.24);scrape(T.tStop-T.tSlide-.04);});
+  once('stop',T.tStop,()=>rollStop());
+  once('nose',T.tStop+.14,()=>clack(.2));
+  once('head',T.tHead,()=>[523,659,784].forEach((fq,i)=>blip(fq,{when:i*.07,dur:.14,gain:.07})));
+}
+
+/* ================= beat sheet ================= */
+async function buildBoard(){
+  const board=document.getElementById('board');board.innerHTML='';
+  const T=scene.T,L=scene.sim.letterTimes;
+  const frames=[
+    {t:PHYS.PUSHES[0].t+.08,title:'1 · Push',text:'A dip, then a surge. The camera starts leading so there’s room ahead.'},
+    {t:L[Math.min(2,L.length-1)]+.06,title:'2 · Cracks',text:'Every front-wheel clack over a joint slams in the next letter.'},
+    {t:T.tApex,title:'3 · Ollie',text:'Nose snaps up, levels at the peak. “Let’s” tapes on up top.'},
+    {t:T.tSlide+.16,title:'4 · Tail stop',text:'Rocks back onto the tail and drags. Dust stays behind, and the tail leaves a scuff.'},
+    {t:T.tHead+.75,title:'5 · Sets first',text:'Stopped dead center. The nose drops, then it hops into stoked.'},
+    {t:T.tExit+.16,title:'6 · Into the game',text:'It fades into the game, where the engine’s toss note is waiting.'},
+  ];
+  for(const fr of frames){
+    const fig=document.createElement('figure');fig.className='frame';
+    fig.innerHTML=`<div class="mini frozen"></div><figcaption><b>${fr.title} <span style="display:inline;color:var(--muted);font-weight:700">${fr.t.toFixed(2)}s</span></b><span>${fr.text}</span></figcaption>`;
+    board.appendChild(fig);
+    const m=mountScene(fig.querySelector('.mini'),{...state,playerFirst:false,letters:FORMATS[state.format]});
+    await m.ready;m.renderAt(fr.t);
+  }
+}
+
+/* ================= controls ================= */
+function chip(parent,html,on,onClick,cls=''){
+  const b=document.createElement('button');b.type='button';b.className='chip'+(on?' on':'')+(cls?' '+cls:'');b.innerHTML=html;
+  b.addEventListener('click',()=>onClick(b));document.getElementById(parent).appendChild(b);return b;}
+const group=(parent,items,get,set)=>items.forEach(([v,label])=>chip(parent,label,get()===v,b=>{
+  set(v);document.querySelectorAll(`#${parent} .chip`).forEach(c=>c.classList.toggle('on',c===b));}));
+group('ctl-who',[[true,'You'],[false,'Robot']],()=>state.playerFirst,v=>{state.playerFirst=v;build().then(()=>play());});
+group('ctl-robots',ROBOTS.map(r=>[r.id,`${robotSVG(r,26)}${r.name}`]),()=>state.robot.id,v=>{state.robot=ROBOTS.find(r=>r.id===v);build().then(()=>play());});
+group('ctl-format',[['skate','S.K.A.T.E.'],['sk8','S.K.8']],()=>state.format,v=>{state.format=v;build().then(()=>play());});
+group('ctl-speed',[[1,'1×'],[.5,'½×'],[.25,'¼×']],()=>state.speed,v=>{state.speed=v;if(playing)play(tNow);});
+chip('ctl-actions','▶ Replay',false,()=>play(0),'primary');
+chip('ctl-actions','Sound on',true,b=>{soundOn=!soundOn;b.classList.toggle('on',soundOn);b.textContent=soundOn?'Sound on':'Sound off';if(!soundOn)rollStop();});
+scrub.addEventListener('input',()=>{rollStop();seek(+scrub.value,false);scrubOut.textContent=(+scrub.value).toFixed(2)+'s';});
+
+/* #who=robot|you&robot=clamp&format=sk8&t=1.2 */
+{
+  const q=new URLSearchParams(location.hash.slice(1));
+  if(q.get('who')==='you')state.playerFirst=true;
+  const r=ROBOTS.find(x=>x.id===q.get('robot'));if(r)state.robot=r;
+  if(FORMATS[q.get('format')])state.format=q.get('format');
+  document.querySelectorAll('#ctl-who .chip').forEach((c,i)=>c.classList.toggle('on',(i===0)===state.playerFirst));
+  document.querySelectorAll('#ctl-robots .chip').forEach((c,i)=>c.classList.toggle('on',ROBOTS[i]===state.robot));
+  document.querySelectorAll('#ctl-format .chip').forEach((c,i)=>c.classList.toggle('on',(i===0)===(state.format==='skate')));
+  build().then(()=>{const t=q.get('t');if(t!==null){seek(+t,false);scrub.value=+t;scrubOut.textContent=(+t).toFixed(2)+'s';}else play(0);});
+}
+</script>
+</body>
+</html>

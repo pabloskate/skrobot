@@ -28,9 +28,13 @@ export {
   type Pt,
 } from './TrickAnimation';
 export { default as TrickAnimation3D } from './TrickAnimation3D';
+/** From-scratch look (new robot, skate plaza, crane camera) on the same physics. */
+export { default as TrickScene } from './scene/TrickScene';
 /** Frozen pre-rework snapshot of the 3D renderer, for side-by-side comparison. */
 export { default as TrickAnimation3DLegacy } from './TrickAnimation3DLegacy';
 export { default as RobotAvatar } from './RobotAvatar';
+export { default as PushOffAnimation } from './PushOffAnimation';
+export { readableAccent } from './robotColors';
 export {
   orientTrickRotation,
   resolveRiderMechanics,
@@ -39,4 +43,9 @@ export {
   type RiderMechanics,
 } from './stanceMechanics';
 export { rpsSound, rpsVibrate, type RpsSound } from './rpsFeedback';
-export type { Robot, Trick, Stance, RiderStance, BodySide } from './types';
+export {
+  DEFAULT_SKATE_STYLE,
+  SKATE_STYLE_BOUNDS,
+  resolveSkateStyle,
+} from './skateStyle';
+export type { Robot, Trick, Stance, RiderStance, BodySide, SkateStyle } from './types';

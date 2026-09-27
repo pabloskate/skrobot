@@ -871,6 +871,7 @@ main {
   align-items: center;
   gap: 4px;
   cursor: pointer;
+  touch-action: manipulation;
   transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
 
@@ -890,56 +891,11 @@ main {
   box-shadow: 0 2px 6px rgba(34, 26, 78, 0.16);
 }
 
-.robot-card:hover:not(:disabled) {
-  transform: translateY(-3px);
-  box-shadow: 0 6px 16px rgba(34, 26, 78, 0.12), 0 12px 32px rgba(34, 26, 78, 0.1);
-}
-
-.robot-card--locked {
-  cursor: default;
-  background: #f6f4fc;
-  border: 1.5px dashed rgba(34, 26, 78, 0.16);
-  box-shadow: none;
-}
-
-.robot-card--locked > :not(.robot-locked-icon, .robot-unlock-copy) {
-  opacity: 0.45;
-  filter: grayscale(0.7);
-}
-
-/* Mystery silhouette: the robot is teased, not revealed. */
-.robot-card--locked .robot-avatar {
-  filter: brightness(0) opacity(0.4);
-}
-
-.robot-locked-icon {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: var(--purple-soft);
-  color: var(--purple-dark);
-}
-
-.robot-locked-icon svg {
-  width: 14px;
-  height: 14px;
-}
-
-.robot-unlock-copy {
-  margin-top: auto;
-  width: 100%;
-  padding: 8px 10px;
-  border-radius: 999px;
-  background: var(--purple-soft);
-  color: var(--purple-dark);
-  font-size: 11px;
-  font-weight: 800;
-  text-align: center;
+@media (hover: hover) and (pointer: fine) {
+  .robot-card:hover:not(:disabled) {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 16px rgba(34, 26, 78, 0.12), 0 12px 32px rgba(34, 26, 78, 0.1);
+  }
 }
 
 .robot-card:focus-visible {
@@ -1156,6 +1112,53 @@ main {
   font-size: 15px;
 }
 
+/* Tracking status: the scoreboard's quiet footer. ON whispers (muted, always
+   the same spot); OFF is the exception and gets the warm, louder treatment. */
+.tracking-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 2px 0 0;
+  padding: 9px 0 1px;
+  border: none;
+  border-top: 1px solid #f0eef6;
+  background: none;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.tracking-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.tracking-status-off {
+  color: #b45a12;
+  font-weight: 700;
+}
+
+.tracking-status-off .tracking-status-dot {
+  background: #b45a12;
+}
+
+/* Game-over receipt: one line answering "did that count toward my stats?" */
+.game-receipt {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.game-receipt-on {
+  color: var(--green);
+}
+
 .letters {
   display: flex;
   gap: 6px;
@@ -1189,260 +1192,822 @@ main {
   100% { transform: scale(1); }
 }
 
-/* ---------- RPS ---------- */
+/* ---------- RPS: "Throw Down" ---------- */
 
-.rps-row {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 12px;
+/* The toss owns the screen: while it's up, the game column stretches from the
+   topbar to the bottom of the visible viewport so the arena can fill it. */
+body:has(.rps-arena) {
+  min-height: 100dvh;
 }
 
-.rps-btn {
+body > div:has(.rps-arena),
+body > div:has(.rps-arena) > main,
+main:has(.rps-arena) > .screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.container.game-rps {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 0;
+}
+
+/* --rps-split is where the coping sits (share of arena height). The winner's
+   turf takes ground by moving it; hands and the center badge ride along. */
+.rps-arena {
+  --rps-split: 46%;
+  --rps-slant: calc(min(100vw, 500px) * 0.0872); /* tan(4.98°), matches --rps-tilt */
+  --rps-tilt: -4.98deg;
+  --rps-hand: clamp(88px, 15.5dvh, 134px);
+  --rps-bot-size: clamp(84px, 14.5dvh, 124px);
+  --rps-sticker: clamp(74px, 11.5dvh, 98px);
+  --rps-beat: 450ms;
+  --rps-ease-out: cubic-bezier(0.2, 0.9, 0.25, 1.08);
+  --rps-ease-pop: cubic-bezier(0.2, 1.45, 0.4, 1);
+  position: relative;
+  flex: 1;
+  min-height: 500px;
+  overflow: hidden;
+  isolation: isolate;
+  color: #fff;
+  /* Your turf: purple grip tape. */
+  background-color: var(--purple);
+  background-image:
+    radial-gradient(130% 70% at 50% 115%, rgba(20, 6, 70, 0.45), transparent 62%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.15' numOctaves='2' seed='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.08 0 0 0 0 0.02 0 0 0 0 0.25 0 0 0 1.25 -0.52'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.4' numOctaves='1' seed='9' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1.1 -0.62'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.rps-arena[data-winner='you'] {
+  --rps-split: 38%;
+}
+
+.rps-arena[data-winner='bot'] {
+  --rps-split: 55%;
+}
+
+.rps-arena[data-phase='resolved'] {
+  animation: rps-shake 0.32s ease 0.38s;
+}
+
+.rps-arena[data-phase='tie'] {
+  animation: rps-shake 0.32s ease 0.18s;
+}
+
+/* Robot turf: concrete tinted with the robot's body color (set inline). */
+.rps-turf-bot {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: var(--rps-split);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--rps-slant)), 0 100%);
+  background:
+    radial-gradient(90% 60% at 30% 10%, rgba(255, 255, 255, 0.7), transparent 70%),
+    linear-gradient(180deg, var(--rps-turf-top) 0%, var(--rps-turf-bottom) 100%);
+  transition: height 0.6s var(--rps-ease-out) 0.25s;
+}
+
+.rps-turf-bot::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.55;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' seed='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.2 0 0 0 0 0.18 0 0 0 0 0.3 0 0 0 .9 -0.38'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Steel coping along the slanted edge. */
+.rps-coping {
+  position: absolute;
+  z-index: 3;
+  top: calc(var(--rps-split) - var(--rps-slant) / 2 - 7.5px);
+  left: -6%;
+  width: 112%;
+  height: 15px;
+  transform: rotate(var(--rps-tilt));
+  background: linear-gradient(180deg, #fff 0%, #e3e1ec 35%, #b3afc4 80%, #8f8aa6 100%);
+  border-top: 3px solid var(--robot-ink);
+  border-bottom: 3px solid var(--robot-ink);
+  box-shadow: 0 9px 14px rgba(20, 6, 70, 0.38);
+  transition: top 0.6s var(--rps-ease-out) 0.25s;
+}
+
+/* Robot + speech bubble */
+.rps-bot-figure {
+  position: absolute;
+  top: 26px;
+  left: 12px;
+  width: var(--rps-bot-size);
+  height: var(--rps-bot-size);
+}
+
+.rps-bot-bob {
+  width: 100%;
+  height: 100%;
+  transform-origin: 50% 92%;
+}
+
+.rps-bot-bob .robot-avatar {
+  display: block;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 8px 10px rgba(34, 26, 78, 0.16));
+}
+
+.rps-arena[data-phase='idle'] .rps-bot-bob,
+.rps-arena[data-phase='tie'] .rps-bot-bob {
+  animation: rps-idle-bob 1.6s ease-in-out infinite;
+}
+
+.rps-bot-bob.is-beat {
+  animation: rps-squash var(--rps-beat) cubic-bezier(0.3, 0.8, 0.4, 1);
+}
+
+.rps-arena[data-winner='bot'] .rps-bot-bob {
+  animation: rps-hop 0.55s var(--rps-ease-pop) 0.3s both;
+}
+
+.rps-arena[data-winner='you'] .rps-bot-bob {
+  animation: rps-bail 0.65s var(--rps-ease-pop) 0.3s both;
+}
+
+.rps-bubble {
+  position: absolute;
+  top: 34px;
+  right: 16px;
+  left: calc(26px + var(--rps-bot-size));
+  margin: 0;
+  padding: 10px 14px 11px;
+  background: #fff;
+  color: var(--ink);
+  border: 2.5px solid var(--robot-ink);
+  border-radius: 18px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.32;
+  box-shadow: 0 4px 0 rgba(34, 26, 78, 0.1), 0 10px 20px rgba(34, 26, 78, 0.1);
+  transform-origin: 0 30px;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  animation: rps-say 0.4s var(--rps-ease-pop) both;
+}
+
+.rps-arena[data-phase='resolved'] .rps-bubble,
+.rps-arena[data-phase='tie'] .rps-bubble {
+  animation-delay: 0.55s;
+}
+
+/* Fill-mode "both" would pin the pop-in's final frame, so drop it to fade out. */
+.rps-arena[data-phase='counting'] .rps-bubble {
+  opacity: 0;
+  transform: scale(0.85);
+  animation: none;
+}
+
+.rps-bubble::before {
+  content: '';
+  position: absolute;
+  top: 20px;
+  left: -9.5px;
+  width: 15px;
+  height: 15px;
+  background: #fff;
+  border-bottom: 2.5px solid var(--robot-ink);
+  border-left: 2.5px solid var(--robot-ink);
+  border-radius: 0 0 0 4px;
+  transform: rotate(45deg);
+}
+
+.rps-bubble-name {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--rps-bot-name);
+}
+
+/* Hands: position (rides the coping) > motion (beat pumps) > glyph (reveal, win, lose). */
+.rps-hand {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  width: var(--rps-hand);
+  height: var(--rps-hand);
+  margin-left: calc(var(--rps-hand) / -2);
+  pointer-events: none;
+  transition: top 0.6s var(--rps-ease-out) 0.25s;
+}
+
+.rps-hand-bot {
+  top: calc(var(--rps-split) - var(--rps-slant) / 2 - 12px - var(--rps-hand));
+}
+
+.rps-hand-you {
+  top: calc(var(--rps-split) - var(--rps-slant) / 2 + 12px);
+}
+
+.rps-hand-motion,
+.rps-hand-glyph {
+  width: 100%;
+  height: 100%;
+}
+
+.rps-hand-glyph {
+  transition: transform 0.45s var(--rps-ease-pop) 0.32s, filter 0.45s ease 0.32s, opacity 0.45s ease 0.32s;
+}
+
+.rps-hand svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  color: var(--robot-ink);
+  filter: drop-shadow(0 7px 0 rgba(20, 6, 70, 0.2));
+}
+
+/* The robot's hand points down at you. */
+.rps-hand-bot svg {
+  transform: rotate(180deg);
+  filter: drop-shadow(0 -7px 0 rgba(20, 6, 70, 0.14));
+}
+
+.rps-arena[data-phase='idle'] .rps-hand-you .rps-hand-motion {
+  animation: rps-sway 2.6s ease-in-out infinite;
+}
+
+.rps-arena[data-phase='idle'] .rps-hand-bot .rps-hand-motion {
+  animation: rps-sway 2.6s ease-in-out -1.3s infinite;
+}
+
+.rps-hand-you .rps-hand-motion.is-beat {
+  animation: rps-pump-you var(--rps-beat) cubic-bezier(0.25, 0.8, 0.3, 1);
+}
+
+.rps-hand-bot .rps-hand-motion.is-beat {
+  animation: rps-pump-bot var(--rps-beat) cubic-bezier(0.25, 0.8, 0.3, 1);
+}
+
+.rps-hand-glyph.is-reveal {
+  animation: rps-throw-pop 0.4s var(--rps-ease-pop);
+}
+
+.rps-arena[data-phase='tie'] .rps-hand-you .rps-hand-glyph.is-reveal {
+  animation: rps-clash-you 0.6s var(--rps-ease-pop);
+}
+
+.rps-arena[data-phase='tie'] .rps-hand-bot .rps-hand-glyph.is-reveal {
+  animation: rps-clash-bot 0.6s var(--rps-ease-pop);
+}
+
+.rps-hand-you.is-winner .rps-hand-glyph {
+  transform: translateY(-14px) scale(1.14);
+}
+
+.rps-hand-bot.is-winner .rps-hand-glyph {
+  transform: translateY(14px) scale(1.14);
+}
+
+.rps-hand-you.is-loser .rps-hand-glyph,
+.rps-hand-bot.is-loser .rps-hand-glyph {
+  filter: saturate(0.25) brightness(0.92);
+  opacity: 0.72;
+}
+
+.rps-hand-you.is-loser .rps-hand-glyph {
+  transform: translateY(14px) scale(0.78) rotate(9deg);
+}
+
+.rps-hand-bot.is-loser .rps-hand-glyph {
+  transform: translateY(-14px) scale(0.78) rotate(-9deg);
+}
+
+.rps-hand.is-winner::before {
+  content: '';
+  position: absolute;
+  inset: -26%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 65%);
+  animation: rps-glow 0.5s ease 0.4s both;
+}
+
+/* Center of the coping: VS badge, the beat word, then the rule on a strip of tape. */
+.rps-center {
+  position: absolute;
+  z-index: 5;
+  top: calc(var(--rps-split) - var(--rps-slant) / 2 - 70px);
+  right: 0;
+  left: 0;
+  height: 140px;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  transition: top 0.6s var(--rps-ease-out) 0.25s;
+}
+
+.rps-center > * {
+  grid-area: 1 / 1;
+}
+
+.rps-vs {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: var(--robot-ink);
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  transform: rotate(var(--rps-tilt));
+  box-shadow: 0 0 0 4px #fff, 0 0 0 7px var(--purple), 0 10px 20px rgba(20, 6, 70, 0.35);
+}
+
+.rps-count-word {
+  font-size: 48px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: #fff;
+  -webkit-text-stroke: 10px var(--robot-ink);
+  paint-order: stroke fill;
+  transform: rotate(-6deg);
+  filter: drop-shadow(0 6px 0 rgba(20, 6, 70, 0.4));
+  animation: rps-slam 0.3s var(--rps-ease-pop);
+}
+
+.rps-count-word.is-shoot {
+  font-size: 58px;
+  color: #ffd166;
+}
+
+.rps-tape-wrap {
+  filter: drop-shadow(0 5px 0 rgba(20, 6, 70, 0.28)) drop-shadow(0 12px 14px rgba(20, 6, 70, 0.25));
+  animation: rps-tape-in 0.4s var(--rps-ease-pop) 0.5s both;
+}
+
+.rps-arena[data-phase='tie'] .rps-tape-wrap {
+  animation-delay: 0.25s;
+}
+
+.rps-tape {
+  display: block;
+  padding: 10px 26px 9px;
+  background: linear-gradient(180deg, #fffaf0, #f6ecd4);
+  color: var(--robot-ink);
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transform: rotate(var(--rps-tilt));
+  clip-path: polygon(2.5% 0, 97.5% 0, 100% 18%, 97% 38%, 100% 58%, 97.5% 80%, 99.5% 100%, 1% 100%, 3% 82%, 0 62%, 2.5% 42%, 0 20%);
+}
+
+/* Tray: the thumb zone on the grip tape. */
+.rps-tray {
+  position: absolute;
+  z-index: 6;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: 0 20px calc(26px + env(safe-area-inset-bottom));
+  text-align: center;
+}
+
+.rps-tray-pick {
+  animation: rps-tray-up 0.4s var(--rps-ease-pop) both;
+}
+
+.rps-arena[data-phase='tie'] .rps-tray-pick {
+  animation-delay: 0.55s;
+}
+
+.rps-tray-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 16px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.rps-tray-label::before,
+.rps-tray-label::after {
+  content: '';
+  flex: 1;
+  height: 1.5px;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.rps-stickers {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+}
+
+.rps-tray-hint {
+  margin: 16px 0 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.rps-throw-rock {
+  --rps-tint: #ffd166;
+  --rps-rot: -6deg;
+}
+
+.rps-throw-paper {
+  --rps-tint: #a5e8c6;
+  --rps-rot: 3deg;
+}
+
+.rps-throw-scissors {
+  --rps-tint: #ffb3c7;
+  --rps-rot: -2deg;
+}
+
+.rps-sticker {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  width: 96px;
-  padding: 16px 8px 12px;
-  background: var(--card);
+  gap: 9px;
+  padding: 0;
   border: 0;
-  border-radius: 18px;
+  background: none;
   cursor: pointer;
-  transition: transform 0.1s ease, background 0.12s ease, box-shadow 0.15s ease;
+  outline: none;
+  transform: rotate(var(--rps-rot));
+  transition: transform 0.22s cubic-bezier(0.3, 1.6, 0.5, 1);
+  -webkit-tap-highlight-color: transparent;
 }
 
-.rps-btn-icon {
-  font-size: 36px;
-  line-height: 1;
+.rps-sticker-face {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: var(--rps-sticker);
+  height: var(--rps-sticker);
+  border: 5px solid #fff;
+  border-radius: 32%;
+  background: var(--rps-tint);
+  overflow: hidden;
+  box-shadow: 0 3px 0 rgba(20, 6, 70, 0.28), 0 12px 20px rgba(20, 6, 70, 0.38);
 }
 
-.rps-btn:hover {
-  transform: translateY(-2px);
-  background: var(--purple-soft);
-  box-shadow: 0 6px 16px rgba(100, 49, 216, 0.18);
+.rps-sticker-face::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0) 40%);
+  pointer-events: none;
 }
 
-.rps-btn:active {
-  transform: translateY(0) scale(0.97);
+.rps-sticker-face svg,
+.rps-locked-face svg {
+  display: block;
+  width: 76%;
+  height: 76%;
+  color: var(--robot-ink);
 }
 
-.rps-btn:focus-visible {
-  outline: 2px solid var(--purple);
-  outline-offset: 2px;
+.rps-sticker-name {
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
-.rps-btn-label {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--ink);
+.rps-sticker kbd {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  z-index: 1;
+  display: none;
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  background: var(--robot-ink);
+  color: #fff;
+  font: 800 12px/25px 'Montserrat', system-ui, sans-serif;
+  box-shadow: 0 0 0 2.5px #fff;
 }
 
-.rps-countdown {
+@media (hover: hover) and (pointer: fine) {
+  .rps-sticker kbd {
+    display: block;
+  }
+
+  .rps-sticker:hover {
+    transform: rotate(0deg) translateY(-7px) scale(1.05);
+  }
+}
+
+.rps-sticker:active {
+  transform: rotate(0deg) scale(0.93);
+}
+
+.rps-sticker:focus-visible .rps-sticker-face {
+  box-shadow: 0 0 0 3px var(--purple), 0 0 0 6px #fff;
+}
+
+.rps-tray-count {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
-}
-
-.rps-countdown-word {
-  font-size: 32px;
-  font-weight: 900;
-  color: var(--purple);
-  min-height: 44px;
-  animation: rps-pop 0.28s ease;
+  gap: 18px;
+  padding-bottom: 26px;
+  animation: rps-tray-up 0.3s ease both;
 }
 
 .rps-locked {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px 6px 10px;
-  background: var(--purple-soft);
+  gap: 12px;
+  padding: 7px 20px 7px 7px;
   border-radius: 999px;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--purple-dark);
-  animation: rps-fade-in 0.2s ease;
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.2);
 }
 
-.rps-locked-label {
-  font-weight: 600;
-  color: var(--muted);
-}
-
-.rps-locked-icon {
-  font-size: 18px;
-  line-height: 1;
-}
-
-.rps-duel {
-  display: flex;
-  align-items: center;
-  gap: 28px;
-}
-
-.rps-duel-side {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-}
-
-.rps-fist {
+.rps-locked-face {
   display: grid;
   place-items: center;
-  width: 64px;
-  height: 64px;
-  font-size: 36px;
+  width: 46px;
+  height: 46px;
+  border: 3px solid #fff;
+  border-radius: 15px;
+  background: var(--rps-tint);
 }
 
-.rps-robot-fist {
-  display: grid;
-  place-items: center;
-  width: 80px;
-  height: 80px;
-}
-
-.rps-result {
+.rps-locked-text {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 14px;
-  animation: rps-fade-in 0.2s ease;
-  outline: none;
+  align-items: flex-start;
+  line-height: 1.15;
 }
 
-.rps-headline {
-  font-size: 26px;
-  font-weight: 900;
-  letter-spacing: 0.2px;
-  margin: 0;
-  animation: rps-pop 0.3s ease;
-}
-
-.rps-headline-win {
-  color: var(--green);
-}
-
-.rps-headline-lose {
-  color: var(--danger);
-}
-
-.rps-headline-tie {
-  color: var(--muted);
-}
-
-.rps-result.rps-tie .rps-reveal {
-  animation: rps-shake 0.4s ease;
-}
-
-.rps-reveal {
-  display: flex;
-  align-items: center;
-  gap: 28px;
-}
-
-.rps-reveal > div {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  transition: opacity 0.2s ease, transform 0.2s ease;
-}
-
-.rps-icon {
-  display: grid;
-  place-items: center;
-  width: 64px;
-  height: 64px;
-  font-size: 36px;
-  transition: transform 0.2s ease;
-}
-
-.rps-reveal-pop {
-  animation: rps-reveal-pop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-.rps-badge {
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 0.8px;
-  color: #fff;
-  background: var(--green);
-  padding: 2px 7px;
-  border-radius: 999px;
-  animation: rps-fade-in 0.3s ease 0.1s both;
-}
-
-.rps-winner .rps-icon {
-  transform: scale(1.08);
-}
-
-.rps-loser {
-  opacity: 0.55;
-}
-
-.rps-loser .rps-icon {
-  transform: scale(0.92);
-}
-
-.rps-who {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--muted);
-}
-
-.rps-vs {
-  font-size: 14px;
+.rps-locked-text small {
+  font-size: 11px;
   font-weight: 800;
-  color: var(--muted);
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  letter-spacing: 0.6px;
+  color: rgba(255, 255, 255, 0.66);
 }
 
-.rps-outcome-text {
+.rps-locked-text b {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.rps-pips {
+  display: flex;
+  gap: 9px;
+}
+
+.rps-pips i {
+  width: 36px;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.2);
+  transition: background 0.1s;
+}
+
+.rps-pips i.is-on {
+  background: #fff;
+}
+
+.rps-pips i.is-on:last-child {
+  background: #ffd166;
+}
+
+.rps-tray-result {
+  animation: rps-tray-up 0.45s var(--rps-ease-pop) 0.6s both;
+}
+
+.rps-result-eyebrow {
   margin: 0;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--ink);
-  text-align: center;
-  max-width: 280px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.72);
 }
 
-@keyframes rps-bounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
+.rps-result-head {
+  margin: 6px 0 20px;
+  font-size: 36px;
+  font-weight: 900;
+  line-height: 1.02;
+  letter-spacing: -0.4px;
 }
 
-.rps-bounce {
-  animation: rps-bounce 0.9s ease infinite;
+.rps-start {
+  position: relative;
+  width: 100%;
+  max-width: 330px;
+  padding: 18px 28px;
+  border: 0;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--purple);
+  font-size: 17px;
+  font-weight: 800;
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow: 0 6px 0 rgba(20, 6, 70, 0.3), 0 14px 26px rgba(20, 6, 70, 0.32);
+  transition: transform 0.08s ease;
 }
 
-@keyframes rps-pop {
-  0% { transform: scale(0.8); opacity: 0.6; }
-  50% { transform: scale(1.1); }
-  100% { transform: scale(1); opacity: 1; }
+.rps-start:active:not(:disabled) {
+  transform: translateY(3px);
 }
 
-@keyframes rps-reveal-pop {
-  0% { transform: scale(0.3) rotate(-10deg); opacity: 0; }
-  70% { transform: scale(1.15) rotate(2deg); }
-  100% { transform: scale(1) rotate(0); opacity: 1; }
+.rps-start:disabled {
+  cursor: default;
+}
+
+.rps-start:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 4px;
+}
+
+/* Fills while the auto-start timer runs (AUTO_START_MS in RpsPanel). */
+.rps-start-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  background: var(--purple-soft);
+  animation: rps-fill 3.2s linear 1s forwards;
+}
+
+.rps-start-label {
+  position: relative;
+}
+
+@media (min-width: 520px) {
+  .rps-arena {
+    margin-bottom: 24px;
+    border-radius: 0 0 28px 28px;
+  }
+}
+
+@media (max-height: 720px) {
+  .rps-arena[data-winner='you'] {
+    --rps-split: 41%;
+  }
+
+  .rps-arena[data-winner='bot'] {
+    --rps-split: 53%;
+  }
+
+  .rps-bubble {
+    font-size: 13px;
+  }
+
+  .rps-tray-label {
+    margin-bottom: 12px;
+  }
+
+  .rps-tray-hint {
+    display: none;
+  }
+
+  .rps-result-head {
+    margin-bottom: 16px;
+    font-size: 30px;
+  }
 }
 
 @keyframes rps-shake {
-  0%, 100% { transform: translateX(0); }
-  20% { transform: translateX(-8px); }
-  40% { transform: translateX(8px); }
-  60% { transform: translateX(-6px); }
-  80% { transform: translateX(6px); }
+  0%, 100% { transform: none; }
+  20% { transform: translate(-5px, 2px); }
+  40% { transform: translate(5px, -2px); }
+  60% { transform: translate(-3px, 1px); }
+  80% { transform: translate(2px, 0); }
 }
 
-@keyframes rps-fade-in {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+@keyframes rps-idle-bob {
+  0%, 100% { transform: translateY(0) rotate(-1deg); }
+  50% { transform: translateY(-6px) rotate(1.5deg); }
+}
+
+@keyframes rps-squash {
+  0% { transform: none; }
+  25% { transform: scale(1.07, 0.9); }
+  60% { transform: scale(0.97, 1.05) translateY(-6px); }
+  100% { transform: none; }
+}
+
+@keyframes rps-hop {
+  0% { transform: none; }
+  40% { transform: translateY(-22px) rotate(-3deg); }
+  70% { transform: scale(1.06, 0.93); }
+  100% { transform: none; }
+}
+
+@keyframes rps-bail {
+  0% { transform: translateY(-14px) rotate(-28deg); opacity: 0.3; }
+  60% { transform: rotate(5deg); }
+  100% { transform: none; }
+}
+
+@keyframes rps-say {
+  from { opacity: 0; transform: scale(0.6) rotate(-4deg); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes rps-sway {
+  0%, 100% { transform: rotate(-3deg); }
+  50% { transform: rotate(3deg) translateY(-3px); }
+}
+
+@keyframes rps-pump-you {
+  0% { transform: none; }
+  30% { transform: translateY(18px) rotate(-7deg); }
+  58% { transform: translateY(-12px) rotate(2deg); }
+  100% { transform: none; }
+}
+
+@keyframes rps-pump-bot {
+  0% { transform: none; }
+  30% { transform: translateY(-18px) rotate(-7deg); }
+  58% { transform: translateY(12px) rotate(2deg); }
+  100% { transform: none; }
+}
+
+@keyframes rps-throw-pop {
+  from { transform: scale(0.5) rotate(-14deg); }
+  to { transform: none; }
+}
+
+@keyframes rps-clash-you {
+  0% { transform: scale(0.5); }
+  35% { transform: translateY(-20px) scale(1.08); }
+  65% { transform: translateY(10px) scale(0.96); }
+  100% { transform: none; }
+}
+
+@keyframes rps-clash-bot {
+  0% { transform: scale(0.5); }
+  35% { transform: translateY(20px) scale(1.08); }
+  65% { transform: translateY(-10px) scale(0.96); }
+  100% { transform: none; }
+}
+
+@keyframes rps-glow {
+  from { opacity: 0; transform: scale(0.4); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes rps-slam {
+  0% { transform: rotate(-6deg) scale(2.2); opacity: 0; }
+  60% { transform: rotate(-6deg) scale(0.94); opacity: 1; }
+  100% { transform: rotate(-6deg) scale(1); }
+}
+
+@keyframes rps-tape-in {
+  from { opacity: 0; transform: scale(1.7) rotate(8deg); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes rps-tray-up {
+  from { opacity: 0; transform: translateY(26px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes rps-fill {
+  to { width: 100%; }
+}
+
+/* Reduced motion: every beat, reveal, and coping slide becomes an instant
+   state change. There is no fill to watch, so there is no auto-start either. */
+@media (prefers-reduced-motion: reduce) {
+  .rps-arena,
+  .rps-arena *,
+  .rps-arena *::before,
+  .rps-arena *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .rps-start-fill {
+    display: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1452,11 +2017,6 @@ main {
   .challenge-stage,
   .challenge-option-control,
   .score-progress-fill,
-  .rps-bounce,
-  .rps-countdown-word,
-  .rps-reveal-pop,
-  .rps-result.rps-tie .rps-reveal,
-  .rps-winner .rps-icon,
   .defense-mode-banner,
   .attempt-panel .trick-anim--moving::after {
     animation: none;
@@ -1811,6 +2371,34 @@ main {
   padding: 20px;
   text-align: center;
   color: var(--muted);
+}
+
+/* Context line pinned under a TrickPicker list (e.g. why a miss is asked about). */
+.picker-note {
+  margin: 10px 0 0;
+  padding: 12px 4px 0;
+  border-top: 1px solid #eceaf2;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+  text-align: center;
+}
+
+.picker-note-action {
+  display: inline;
+  background: none;
+  border: none;
+  padding: 0 0 0 6px;
+  font: inherit;
+  font-weight: 700;
+  color: var(--purple);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.picker-note-action:hover {
+  color: var(--purple-dark);
 }
 
 .dots {
@@ -3839,129 +4427,9 @@ main {
   50% { transform: translateY(-6px) rotate(2deg); }
 }
 
-.robot-card:hover .robot-avatar {
-  animation: idle-bob 1.5s ease-in-out infinite;
-}
-
-/* ---------- Game start animation ---------- */
-
-.game-start-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background:
-    radial-gradient(circle at 50% 34%, rgba(236, 229, 251, 0.92) 0 18%, transparent 34%),
-    linear-gradient(180deg, #fbfaff 0%, #f3f2f6 58%, #ece9f5 100%);
-  overflow: hidden;
-}
-
-.game-start-content {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0;
-  width: 100%;
-  max-width: 420px;
-}
-
-/* Speed lines streaking behind the robot */
-.game-start-speedlines {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 1;
-}
-
-.game-start-speedlines span {
-  position: absolute;
-  left: -120px;
-  height: 3px;
-  border-radius: 2px;
-  background: rgba(100, 49, 216, 0.22);
-  animation: speedline 0.6s linear infinite;
-}
-
-@keyframes speedline {
-  from { transform: translateX(0); }
-  to { transform: translateX(calc(100vw + 200px)); }
-}
-
-/* Robot skates in from the left */
-.game-start-robot {
-  position: relative;
-  z-index: 2;
-  animation: robot-skate-in 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards,
-             robot-skate-bob 0.4s ease-in-out infinite 1.2s;
-  transform: translateX(-150vw);
-  filter: drop-shadow(0 10px 18px rgba(34, 26, 78, 0.16));
-}
-
-@keyframes robot-skate-in {
-  0% { transform: translateX(-150vw) rotate(-5deg); }
-  60% { transform: translateX(10px) rotate(3deg); }
-  80% { transform: translateX(-5px) rotate(-2deg); }
-  100% { transform: translateX(0) rotate(0); }
-}
-
-@keyframes robot-skate-bob {
-  0%, 100% { transform: translateY(0) rotate(-1deg); }
-  50% { transform: translateY(-4px) rotate(1deg); }
-}
-
-/* Title appears after the robot skates in. */
-.game-start-title {
-  position: relative;
-  z-index: 3;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  margin-top: 28px;
-  opacity: 0;
-  animation: title-pop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-}
-
-@keyframes title-pop {
-  0% {
-    opacity: 0;
-    transform: scale(0.3) rotate(-10deg);
-  }
-  70% {
-    opacity: 1;
-    transform: scale(1.15) rotate(3deg);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1) rotate(0);
-  }
-}
-
-.game-start-title-main {
-  font-size: 2.2rem;
-  font-weight: 900;
-  color: var(--ink);
-  letter-spacing: 2px;
-  text-shadow: 0 4px 0 rgba(100, 49, 216, 0.12), 0 18px 30px rgba(34, 26, 78, 0.14);
-}
-
-.game-start-title-sub {
-  font-size: 1rem;
-  font-weight: 800;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .game-start-title,
-  .game-start-robot,
-  .game-start-speedlines span {
-    animation-duration: 0.01s !important;
-    animation-delay: 0s !important;
+@media (hover: hover) and (pointer: fine) {
+  .robot-card:hover .robot-avatar {
+    animation: idle-bob 1.5s ease-in-out infinite;
   }
 }
 

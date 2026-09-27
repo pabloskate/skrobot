@@ -19,7 +19,7 @@ export const functionDeclarations: FunctionDeclaration[] = [
   {
     name: 'report_set_attempt',
     description:
-      "Report the OUTCOME of the player's set attempt. An advance announcement is optional: call immediately for a complete report such as 'I landed a kickflip' (landed=true, trick='kickflip'), or after a previously announced trick when they later say 'I landed it'. NEVER call when they merely announce what they are about to try. Use landed=false if they missed, gave up, or passed. Narrate the response's `summary` field.",
+      "Report the OUTCOME of the player's set attempt. An advance announcement is optional: call immediately for a complete report such as 'I landed a kickflip' (landed=true, trick='kickflip'), or after a previously announced trick when they later say 'I landed it'. NEVER call when they merely announce what they are about to try. Use landed=false if they missed, gave up, or passed. Include the attempted trick when known; if tracking requires a trick or the response asks for clarification, ask the player and retry before advancing. Narrate the response's `summary` field.",
     parameters: {
       type: Type.OBJECT,
       properties: {

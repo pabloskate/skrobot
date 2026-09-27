@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import type { CSSProperties } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { useVisualViewportHeight, useVisualViewportOffsetTop } from '@/shared/useKeyboardInset';
 import type { Stance, Trick } from './tricks';
 import { grade, trickMatchesSearch } from './tricks';
@@ -12,6 +12,8 @@ interface Props {
   usedIds: Set<string>;
   onPick: (trick: Trick) => void;
   onClose: () => void;
+  /** Optional content pinned below the list (e.g. context about why we're asking). */
+  footer?: ReactNode;
 }
 
 const STANCE_TABS: { stance: Stance; label: string }[] = [
@@ -32,7 +34,7 @@ function DifficultyDots({ trick }: { trick: Trick }) {
 }
 
 /** Bottom-sheet trick browser: search across everything, stance tabs to browse. */
-export default function TrickPicker({ title, pool, usedIds, onPick, onClose }: Props) {
+export default function TrickPicker({ title, pool, usedIds, onPick, onClose, footer }: Props) {
   const [query, setQuery] = useState('');
   const [stance, setStance] = useState<Stance>('regular');
   const visualViewportHeight = useVisualViewportHeight();
@@ -120,6 +122,7 @@ export default function TrickPicker({ title, pool, usedIds, onPick, onClose }: P
           })}
           {shown.length === 0 && <li className="trick-empty">No tricks match.</li>}
         </ul>
+        {footer}
       </div>
     </div>
   );

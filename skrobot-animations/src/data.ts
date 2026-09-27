@@ -1,10 +1,30 @@
 import type { Robot, Stance, Trick } from '@skrobot/animations';
 
 export const ROBOTS: Robot[] = [
-  { id: 'shifty', name: 'Swivel', avatar: { body: '#7ec8e3', accent: '#e05c7a', variant: 0 } },
-  { id: 'baily', name: 'Scuffy', avatar: { body: '#5b8def', accent: '#f2a541', variant: 1 } },
-  { id: 'sacker', name: 'Gutsy', avatar: { body: '#7ea0b5', accent: '#e0455c', variant: 2 } },
-  { id: 'nolly', name: 'Nosy', avatar: { body: '#9b59b6', accent: '#f1c40f', variant: 3 } },
+  {
+    id: 'shifty',
+    name: 'Swivel',
+    avatar: { body: '#7ec8e3', accent: '#e05c7a', variant: 0 },
+    skateStyle: { popHeight: 0.5, rotationSpeed: 1.16, flickStrength: 0.88 },
+  },
+  {
+    id: 'baily',
+    name: 'Scuffy',
+    avatar: { body: '#5b8def', accent: '#f2a541', variant: 1 },
+    skateStyle: { popHeight: 0.88, rotationSpeed: 0.88, flickStrength: 0.76 },
+  },
+  {
+    id: 'sacker',
+    name: 'Gutsy',
+    avatar: { body: '#7ea0b5', accent: '#e0455c', variant: 2 },
+    skateStyle: { popHeight: 1.15, rotationSpeed: 0.94, flickStrength: 1.04 },
+  },
+  {
+    id: 'nolly',
+    name: 'Nosy',
+    avatar: { body: '#9b59b6', accent: '#f1c40f', variant: 3 },
+    skateStyle: { popHeight: 1.04, rotationSpeed: 1.16, flickStrength: 1.25 },
+  },
 ];
 
 const FLATGROUND_BASES = [

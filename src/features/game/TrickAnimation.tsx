@@ -1,14 +1,12 @@
 'use client';
 
 import type { ComponentProps } from 'react';
-import {
-  TrickAnimation3D,
-} from '@skrobot/animations';
+import { TrickScene } from '@skrobot/animations';
 import { usePlayerStance } from './gamePreferences';
 
-type Props = ComponentProps<typeof TrickAnimation3D>;
+type Props = ComponentProps<typeof TrickScene>;
 
 export default function PlayerStanceTrickAnimation(props: Props) {
   const stance = usePlayerStance();
-  return <TrickAnimation3D {...props} riderStance={stance} />;
+  return <TrickScene {...props} riderStance={stance} />;
 }

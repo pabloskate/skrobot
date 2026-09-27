@@ -1,4 +1,5 @@
 import type { Discipline, Trick } from '@/features/tricks';
+import type { SkateStyle } from '@skrobot/animations';
 import { ROBOT_DEFENSE_SET_WEIGHTS } from './behavior';
 import { getTunedConsistency, getTunedDefenseSetWeight, getTunedSetWeight } from './tuning';
 
@@ -29,9 +30,22 @@ export interface Robot {
   /** Profile signature chips only. Never changes land rates or set weights. */
   favorites: string[];
   avatar: { body: string; accent: string; variant: 0 | 1 | 2 | 3 };
+  /** Optional visual-only variation for the shared 3D trick animation. */
+  skateStyle?: SkateStyle;
   /** Trash talk during the rock-paper-scissors toss. */
   rpsTaunts: RpsTaunts;
 }
+
+/**
+ * A deliberately tiny palette. Robots can share a motion signature without
+ * turning the roster into dozens of bespoke animation configurations.
+ */
+const SKATE_STYLES = {
+  lowAndQuick: { popHeight: 0.5, rotationSpeed: 1.16, flickStrength: 0.88 },
+  floaty: { popHeight: 1.15, rotationSpeed: 0.94, flickStrength: 1.04 },
+  snappy: { popHeight: 1.04, rotationSpeed: 1.16, flickStrength: 1.25 },
+  loose: { popHeight: 0.88, rotationSpeed: 0.88, flickStrength: 0.76 },
+} satisfies Record<string, SkateStyle>;
 
 const TIE = ['Tie. Again.', 'Dead heat. Throw once more.', 'One more time.'];
 
@@ -48,6 +62,7 @@ const ROBOTS_UNSORTED: Robot[] = [
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     favorites: ['Pop Shuvit', 'Frontside Shuvit'],
     avatar: { body: '#7ec8e3', accent: '#e05c7a', variant: 0 },
+    skateStyle: SKATE_STYLES.lowAndQuick,
     rpsTaunts: {
       countdown: ['You sure about that throw?', 'Here we go...'],
       win: ['Swivel takes first!', 'I set, you sweat.'],
@@ -66,6 +81,7 @@ const ROBOTS_UNSORTED: Robot[] = [
     disciplines: ['roll', 'shuvit', 'rotation', 'manual', 'oldschool'],
     favorites: ['Ollie', 'Hippie Jump', 'Caveman'],
     avatar: { body: '#5b8def', accent: '#f2a541', variant: 1 },
+    skateStyle: SKATE_STYLES.loose,
     rpsTaunts: {
       countdown: ['Here goes nothing!', 'Okay, no take-backs.'],
       win: ["Scuffy's going first!", 'Style points for winning the toss.'],
@@ -84,6 +100,7 @@ const ROBOTS_UNSORTED: Robot[] = [
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     favorites: ['Backside 180'],
     avatar: { body: '#7ea0b5', accent: '#e0455c', variant: 2 },
+    skateStyle: SKATE_STYLES.loose,
     rpsTaunts: {
       countdown: ["I'm feeling lucky.", 'Brave throw, human.'],
       win: ['Gutsy sets!', 'Bravery pays off.'],
@@ -102,6 +119,7 @@ const ROBOTS_UNSORTED: Robot[] = [
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     favorites: ['Kickflip'],
     avatar: { body: '#4f86f7', accent: '#f7c948', variant: 3 },
+    skateStyle: SKATE_STYLES.lowAndQuick,
     rpsTaunts: {
       countdown: ['Kickflip of the coin.', 'Flip it.'],
       win: ['Sparky flips first!', 'First flip is mine.'],
@@ -120,6 +138,7 @@ const ROBOTS_UNSORTED: Robot[] = [
     disciplines: ['roll', 'rotation', 'manual', 'oldschool', 'transition'],
     favorites: ['Manual', 'Powerslide', 'Boneless', 'Caveman'],
     avatar: { body: '#7bb661', accent: '#c8e6b0', variant: 0 },
+    skateStyle: SKATE_STYLES.loose,
     rpsTaunts: {
       countdown: ['Old school rules.', 'Cruiser ready.'],
       win: ["Rusty's turn!", 'Old school goes first.'],
@@ -133,11 +152,12 @@ const ROBOTS_UNSORTED: Robot[] = [
     tier: 'beginner',
     tagline: 'Heels over head',
     summary:
-      'Lefty is all about the heelflip and that satisfying flick of the heel. Kickflips? Never heard of them. It commits to the heel side and rarely strays.',
+      'Lefty is all about the heelflip and that satisfying flick of the heel. Kickflips are still shaky, and switch flips are a work in progress. It trusts the heel side first.',
     skill: 3.2,
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     favorites: ['Heelflip'],
     avatar: { body: '#41c9b4', accent: '#1d7a8c', variant: 1 },
+    skateStyle: SKATE_STYLES.lowAndQuick,
     rpsTaunts: {
       countdown: ['Heels over head.', 'Heel flip the coin.'],
       win: ['Lefty first!', 'Heel yeah.'],
@@ -156,6 +176,7 @@ const ROBOTS_UNSORTED: Robot[] = [
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     favorites: ['Backside 180', 'Pop Shuvit'],
     avatar: { body: '#6a8caf', accent: '#f0c987', variant: 2 },
+    skateStyle: SKATE_STYLES.loose,
     rpsTaunts: {
       countdown: ['Cab it.', 'Fakie first.'],
       win: ['Boomerang half-cabs first!', 'Out of fakie, into first.'],
@@ -174,6 +195,7 @@ const ROBOTS_UNSORTED: Robot[] = [
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     favorites: ['Frontside Shuvit', 'Frontside 180'],
     avatar: { body: '#ff9f1c', accent: '#2ec4b6', variant: 0 },
+    skateStyle: SKATE_STYLES.lowAndQuick,
     rpsTaunts: {
       countdown: ['Frontside only.', 'Scoop it front.'],
       win: ['Magnet goes first!', 'Frontside privilege.'],
@@ -247,6 +269,7 @@ const ROBOTS_UNSORTED: Robot[] = [
     disciplines: ['roll', 'shuvit', 'rotation', 'flip', 'oldschool', 'manual'],
     favorites: ['No Comply 180', 'Boneless'],
     avatar: { body: '#c9a227', accent: '#8d99ae', variant: 1 },
+    skateStyle: SKATE_STYLES.floaty,
     rpsTaunts: {
       countdown: ['No comply? No problem.', 'Wizard incoming.'],
       win: ['Hocus is up first!', 'No comply, first try.'],
@@ -265,6 +288,7 @@ const ROBOTS_UNSORTED: Robot[] = [
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     favorites: [],
     avatar: { body: '#f6a5c0', accent: '#3a2e4d', variant: 2 },
+    skateStyle: SKATE_STYLES.snappy,
     rpsTaunts: {
       countdown: ['Off the nose...', 'Nollie or nothing.'],
       win: ['Nosy noses ahead.', 'First, off the nose.'],
@@ -319,6 +343,7 @@ const ROBOTS_UNSORTED: Robot[] = [
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     favorites: ['Varial Kickflip', 'Varial Heelflip', 'Pop Shuvit'],
     avatar: { body: '#7bdff2', accent: '#b388eb', variant: 1 },
+    skateStyle: SKATE_STYLES.snappy,
     rpsTaunts: {
       countdown: ['Diagonal only.', 'Varial the toss.'],
       win: ['Zigzag goes first.', 'Diagonal privilege.'],
@@ -337,6 +362,7 @@ const ROBOTS_UNSORTED: Robot[] = [
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     favorites: ['Bigspin', 'FS Bigspin'],
     avatar: { body: '#ff6b6b', accent: '#4ecdc4', variant: 0 },
+    skateStyle: SKATE_STYLES.lowAndQuick,
     rpsTaunts: {
       countdown: ['Bigspin the coin.', 'Spin big.'],
       win: ['Cyclone sets first.', 'Big spin, first set.'],
@@ -373,6 +399,7 @@ const ROBOTS_UNSORTED: Robot[] = [
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     favorites: ['Backside 180', 'Backside 360'],
     avatar: { body: '#a8dadc', accent: '#e63946', variant: 3 },
+    skateStyle: SKATE_STYLES.loose,
     rpsTaunts: {
       countdown: ['Rolling fakie...', 'Backward first.'],
       win: ['Rewind sets first.', 'Out of fakie, into first.'],
@@ -392,6 +419,7 @@ const ROBOTS_UNSORTED: Robot[] = [
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     favorites: ['Bigspin', '360 Shuvit', 'FS Bigspin', 'Frontside 360 Shuvit'],
     avatar: { body: '#cfd2d9', accent: '#7b6cf6', variant: 0 },
+    skateStyle: SKATE_STYLES.lowAndQuick,
     rpsTaunts: {
       countdown: ['Spin the planets.', 'Planetary alignment...'],
       win: ['Orbit rotates first.', 'Planetary priority.'],
@@ -405,7 +433,7 @@ const ROBOTS_UNSORTED: Robot[] = [
     tier: 'advanced',
     tagline: 'Tre flip gatekeeper',
     summary:
-      'Bouncer sits right at the tre-flip threshold — 360 flips are a coin flip, hardflips are sketchy, and laser flips are still out of reach. The textbook advanced skater: dangerous, but beatable.',
+      'Bouncer sits right at the tre-flip threshold — 360 flips are a coin flip, hardflips are sketchy, and laser flips are a long shot. Its regular frontside flip is dependable; switch scoop tricks are an opening.',
     skill: 5.8,
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     favorites: ['360 Flip', 'Hardflip'],
@@ -428,6 +456,7 @@ const ROBOTS_UNSORTED: Robot[] = [
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     favorites: ['Hardflip', 'Inward Heelflip', 'Varial Kickflip'],
     avatar: { body: '#e76f51', accent: '#264653', variant: 1 },
+    skateStyle: SKATE_STYLES.snappy,
     rpsTaunts: {
       countdown: ['Hardflip energy.', 'Scoop and commit.'],
       win: ['Diesel sets first.', 'Hard first.'],
@@ -441,11 +470,12 @@ const ROBOTS_UNSORTED: Robot[] = [
     tier: 'advanced',
     tagline: 'Full cab technician',
     summary:
-      'Carousel is the full-cab technician — fakie 360s, cab flips, and every cab variation you can name. Street-video energy: if it comes out of fakie with spin, it is probably in the bag.',
+      'Carousel is the full-cab technician — fakie 360s, half cab flips, and fakie bigspins are its comfort zone. Switch rotations and heel combinations are much less settled.',
     skill: 5.95,
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     favorites: ['Backside 360', 'Backside Flip', 'Bigspin', '360 Flip'],
     avatar: { body: '#90be6d', accent: '#577590', variant: 2 },
+    skateStyle: SKATE_STYLES.loose,
     rpsTaunts: {
       countdown: ['Full cab incoming.', 'Cab it all.'],
       win: ['Carousel goes first.', 'Cab priority.'],
@@ -477,11 +507,12 @@ const ROBOTS_UNSORTED: Robot[] = [
     tier: 'advanced',
     tagline: 'Late trick nerd',
     summary:
-      'Snooze lives for late shuvits and late flips — the weird mid-air scoop chapter of advanced skating. Not the flashiest bag, but deeply annoying to match if you never learned lates.',
+      'Snooze lives for late frontside shuvits and late flips — the weird mid-air scoop chapter of advanced skating. Not the flashiest bag, but deeply annoying to match if you never learned lates.',
     skill: 6.0,
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
-    favorites: ['Late Backside Shuvit', 'Late Frontside Shuvit', 'Late Kickflip', 'Pop Shuvit'],
+    favorites: ['Late Frontside Shuvit', 'Late Kickflip', 'Pop Shuvit'],
     avatar: { body: '#f4a261', accent: '#2a9d8f', variant: 0 },
+    skateStyle: SKATE_STYLES.loose,
     rpsTaunts: {
       countdown: ['Late to the toss.', 'Scoop it late.'],
       win: ['Snooze sets first.', 'Fashionably first.'],
@@ -496,7 +527,7 @@ const ROBOTS_UNSORTED: Robot[] = [
     tier: 'pro',
     tagline: 'Switch sorcerer',
     summary:
-      'Palindrome is fluent in every stance — switch, nollie, fakie, it is all the same. There is no off-foot to exploit here; it skates a flawless mirror of itself.',
+      'Palindrome puts serious time into switch heels and frontside tricks. Its switch frontside bigspin can beat its regular one, but switch backside bigspins, pressure flips, and doubles still expose gaps.',
     skill: 6.9,
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     favorites: [],
@@ -514,7 +545,7 @@ const ROBOTS_UNSORTED: Robot[] = [
     tier: 'pro',
     tagline: 'Smith grind royalty',
     summary:
-      'Crown is grind royalty, ruling the rails with smiths, feebles, and overcrookeds. Bow down — its lock-ins are very nearly flawless.',
+      'Crown rules the rails with smiths and feebles, but overcrookeds still take work. Away from its favorite ledge, switch flips and awkward flatground combos leave plenty of openings.',
     skill: 7.5,
     disciplines: ['roll', 'shuvit', 'rotation', 'flip', 'grind', 'slide'],
     favorites: ['Smith Grind', 'Feeble Grind', 'Overcrooked Grind', 'Hurricane'],
@@ -537,6 +568,7 @@ const ROBOTS_UNSORTED: Robot[] = [
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     favorites: ['360 Shuvit', '360 Flip', 'Laser Flip', 'Bigspin Flip'],
     avatar: { body: '#f4f4f6', accent: '#2b2d42', variant: 0 },
+    skateStyle: SKATE_STYLES.lowAndQuick,
     rpsTaunts: {
       countdown: ['Calculating probability...', 'Rotational analysis...'],
       win: ['Abacus sets. Optimal.', '360 degrees of first.'],
@@ -550,7 +582,7 @@ const ROBOTS_UNSORTED: Robot[] = [
     tier: 'pro',
     tagline: 'Cold, calculated, consistent',
     summary:
-      'Metronome has no favorites and no flair — just cold, relentless consistency across the entire trick list. It will not dazzle you; it will simply never miss.',
+      'Metronome keeps a dependable core of kickflips, half cab flips, and clean basics. It has a broad bag, but unfamiliar scoops, late flips, and doubles can break its rhythm.',
     skill: 8.1,
     disciplines: ['roll', 'shuvit', 'rotation', 'flip', 'grind', 'slide', 'manual', 'transition', 'oldschool'],
     favorites: [],
@@ -568,11 +600,12 @@ const ROBOTS_UNSORTED: Robot[] = [
     tier: 'pro',
     tagline: 'Tre flips on demand',
     summary:
-      'Maestro throws 360 flips like they are ollies and only gets fancier from there. Elite-level flip tech — matching its sets is a very tall order.',
+      'Maestro trusts tre flips and bigflips above everything else. Half cab flips are another safe bet; heelflip combinations, pressure flips, and switch backside bigspins are much less dependable.',
     skill: 8.1,
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     favorites: ['360 Flip', 'Bigspin Flip', 'Dolphin Flip'],
     avatar: { body: '#f4f4f6', accent: '#2b2d42', variant: 2 },
+    skateStyle: SKATE_STYLES.snappy,
     rpsTaunts: {
       countdown: ['Tre flips on demand.', 'Demand a good throw.'],
       win: ['Maestro sets. Flip it.', 'First flip coming up.'],
@@ -591,6 +624,7 @@ const ROBOTS_UNSORTED: Robot[] = [
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     favorites: ['Laser Flip', 'FS Bigspin Heelflip', 'Varial Heelflip', '360 Flip'],
     avatar: { body: '#e0aaff', accent: '#10002b', variant: 0 },
+    skateStyle: SKATE_STYLES.snappy,
     rpsTaunts: {
       countdown: ['Laser locked.', 'Sniper mode.'],
       win: ['Scope sets first.', 'Target acquired.'],
@@ -604,11 +638,12 @@ const ROBOTS_UNSORTED: Robot[] = [
     tier: 'pro',
     tagline: 'Impossible artist',
     summary:
-      'Houdini wraps the board with impossibles and pressure flips — old-school footwork tech that still cooks modern games of S.K.A.T.E. Weird bag, elite land rates.',
+      'Houdini wraps the board with impossibles and pressure flips — old-school footwork that can steal letters. Its favorite scoops are strong; heel combinations and unfamiliar stances are a different story.',
     skill: 7.2,
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     favorites: ['Impossible', 'Pressure Flip'],
     avatar: { body: '#ffd6a5', accent: '#9b2226', variant: 1 },
+    skateStyle: SKATE_STYLES.floaty,
     rpsTaunts: {
       countdown: ['Wrap it up.', 'Impossible odds.'],
       win: ['Houdini first.', 'Art sets first.'],
@@ -627,6 +662,7 @@ const ROBOTS_UNSORTED: Robot[] = [
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     favorites: ['Double Kickflip', 'Double Heelflip', '360 Double Kickflip', '360 Flip'],
     avatar: { body: '#48cae4', accent: '#023e8a', variant: 2 },
+    skateStyle: SKATE_STYLES.snappy,
     rpsTaunts: {
       countdown: ['Twice is nice.', 'Double or nothing.'],
       win: ['Encore sets first.', 'Two flips ahead.'],
@@ -638,34 +674,35 @@ const ROBOTS_UNSORTED: Robot[] = [
 
 /**
  * Canonical output of the seeded 506,000-game flatground calibration tournament
- * (`npm run simulate:robot-elo -- --games=2000 --seed=20260820`). Elo is only
+ * (`npm run simulate:robot-elo -- --games=2000 --seed=20260920`). Elo is only
  * comparable within that routed flatground field; other-discipline robots have
- * not been assigned a misleading flatground rating.
+ * not been assigned a misleading flatground rating. See
+ * docs/PRO_ROBOT_RELIABILITY_REVIEW.md for the current reliability/pacing audit.
  */
 const ROBOT_ELO_BY_ID: Readonly<Partial<Record<string, number>>> = {
-  sacker: 167,
-  fronty: 339,
-  flipster: 409,
-  flipper: 533,
-  cabby: 541,
-  shifty: 680,
-  heelzy: 844,
-  varial: 1001,
-  biggy: 1036,
-  nolly: 1076,
-  fakie: 1087,
-  hesh: 1583,
-  jupiter: 1667,
-  latezy: 1803,
-  hardy: 1813,
-  switchy: 1830,
-  caball: 1876,
-  freely: 2035,
-  impy: 2307,
-  c360po: 2772,
-  laser: 2936,
-  tre: 3009,
-  double: 3158,
+  sacker: 750,
+  fronty: 828,
+  flipster: 864,
+  flipper: 933,
+  cabby: 963,
+  shifty: 1071,
+  heelzy: 1262,
+  varial: 1314,
+  biggy: 1343,
+  nolly: 1349,
+  fakie: 1339,
+  hesh: 1486,
+  jupiter: 1611,
+  latezy: 1475,
+  hardy: 1623,
+  switchy: 1609,
+  caball: 1652,
+  freely: 2006,
+  impy: 2022,
+  c360po: 2291,
+  laser: 2299,
+  tre: 2169,
+  double: 2240,
 };
 
 // Fixed display anchors keep product-facing ratings stable when the calibration
@@ -716,6 +753,7 @@ const DEFENSE_ROBOTS_UNSORTED: Robot[] = [
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     favorites: ['Pop Shuvit', 'Frontside 180'],
     avatar: { body: '#f2c14e', accent: '#7a5c1e', variant: 1 },
+    skateStyle: SKATE_STYLES.lowAndQuick,
     rpsTaunts: {
       countdown: ['You first... oh wait, me first.', 'Bump set.'],
       win: ['Bump goes first.', 'Right in your line.'],
@@ -734,11 +772,50 @@ const DEFENSE_ROBOTS_UNSORTED: Robot[] = [
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     favorites: ['Heelflip'],
     avatar: { body: '#9ad0ec', accent: '#22608e', variant: 2 },
+    skateStyle: SKATE_STYLES.loose,
     rpsTaunts: {
       countdown: ['Clear it if you can.', 'Hurdle one.'],
       win: ['Hurdle sets.', 'Jump it clean.'],
       lose: ['Clipped the hurdle.', 'You ate pavement.'],
       tie: ['Hurdle two.', 'Clear it again.'],
+    },
+  },
+  {
+    id: 'pothole',
+    name: 'Pothole',
+    tier: 'beginner',
+    tagline: 'Trips up your basics',
+    summary:
+      'Pothole is not trying to impress anyone — it just sits in the pavement and waits for your frontside game to wobble. FS 180s, FS shuvits, half cabs: frontside is where the cracks are.',
+    skill: 3.3,
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    favorites: ['Frontside 180', 'Frontside Shuvit'],
+    avatar: { body: '#c9c1b2', accent: '#5c5346', variant: 3 },
+    skateStyle: SKATE_STYLES.loose,
+    rpsTaunts: {
+      countdown: ['Mind the gap.', 'Watch your line.'],
+      win: ['Pothole sets first.', 'Right in the pavement.'],
+      lose: ['You rolled clean over.', 'Filled in.'],
+      tie: ['Cracked again.', 'Same pothole, twice.'],
+    },
+  },
+  {
+    id: 'tripwire',
+    name: 'Tripwire',
+    tier: 'beginner',
+    tagline: 'Shuvits at ankle height',
+    summary:
+      'Tripwire strings shuvits across your path and waits for you to clip one. Nothing it sets is hard — it is just always exactly where your front foot wants to be.',
+    skill: 3.6,
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    favorites: ['Pop Shuvit', 'Frontside Shuvit'],
+    avatar: { body: '#e8d44d', accent: '#7a6d1c', variant: 0 },
+    skateStyle: SKATE_STYLES.lowAndQuick,
+    rpsTaunts: {
+      countdown: ['Watch your ankles.', 'Wire is up.'],
+      win: ['Tripwire sets.', 'Ankles first.'],
+      lose: ['You stepped over.', 'Wire snapped.'],
+      tie: ['Strung again.', 'Tied on the wire.'],
     },
   },
   // Intermediate
@@ -753,6 +830,7 @@ const DEFENSE_ROBOTS_UNSORTED: Robot[] = [
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     favorites: ['Backside 360', 'Kickflip'],
     avatar: { body: '#c0b283', accent: '#54442b', variant: 3 },
+    skateStyle: SKATE_STYLES.lowAndQuick,
     rpsTaunts: {
       countdown: ['Mind the rotation.', 'Spin through.'],
       win: ['Turnstile sets.', 'Wrong way incoming.'],
@@ -778,6 +856,43 @@ const DEFENSE_ROBOTS_UNSORTED: Robot[] = [
       tie: ['Rebuild the wall.', 'Climb again.'],
     },
   },
+  {
+    id: 'deadbolt',
+    name: 'Deadbolt',
+    tier: 'intermediate',
+    tagline: 'Locks the varials',
+    summary:
+      'Deadbolt locks down regular and fakie varials, then changes the key with nollie and switch 180s. Pick the lock before the rotations catch you.',
+    skill: 5.1,
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    favorites: ['Varial Kickflip', 'Varial Heelflip'],
+    avatar: { body: '#7d8597', accent: '#f2b138', variant: 1 },
+    rpsTaunts: {
+      countdown: ['Bolted shut.', 'Turn the key.'],
+      win: ['Deadbolt sets.', 'Locked in first.'],
+      lose: ['You picked the lock.', 'Bolt slid open.'],
+      tie: ['Re-key it.', 'Locked again.'],
+    },
+  },
+  {
+    id: 'quicksand',
+    name: 'Quicksand',
+    tier: 'intermediate',
+    tagline: 'Slow spin sinkhole',
+    summary:
+      'Quicksand does not beat you fast — it sinks you slowly. Late shuvits, 360 shuvs, and bigspins keep coming until your legs get heavy and your timing goes.',
+    skill: 5.5,
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    favorites: ['Late Frontside Shuvit', '360 Shuvit'],
+    avatar: { body: '#d9b382', accent: '#6e4f28', variant: 2 },
+    skateStyle: SKATE_STYLES.loose,
+    rpsTaunts: {
+      countdown: ['Sink slowly.', 'Stand still.'],
+      win: ['Quicksand sets.', 'Down you go.'],
+      lose: ['You climbed out.', 'Solid ground.'],
+      tie: ['Sink again.', 'Waist-deep tie.'],
+    },
+  },
   // Advanced
   {
     id: 'barricade',
@@ -785,7 +900,7 @@ const DEFENSE_ROBOTS_UNSORTED: Robot[] = [
     tier: 'advanced',
     tagline: 'Roadblocked with spins',
     summary:
-      'Barricade parks its whole bag across your path: tre-flip combos, 360 shuvs, bigspin everything. Every set is a detour through trick territory you do not warm up on.',
+      'Barricade mixes kickflips and half cab flips with tre flips and bigflip challenges. Off-stance hardflips appear occasionally, so a game has room to breathe between its tougher sets.',
     skill: 6.2,
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     favorites: ['360 Flip', 'FS Bigspin'],
@@ -815,6 +930,43 @@ const DEFENSE_ROBOTS_UNSORTED: Robot[] = [
       tie: ['Still watching.', 'Shift change.'],
     },
   },
+  {
+    id: 'moat',
+    name: 'Moat',
+    tier: 'advanced',
+    tagline: 'Backside and deep',
+    summary:
+      'Moat circles the castle with backside everything — BS flips, BS heels, full cabs, bigspin flips. You can see the other side the whole game. Getting there is the problem.',
+    skill: 6.3,
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    favorites: ['Backside Flip', 'Backside Heelflip'],
+    avatar: { body: '#3d5a80', accent: '#98c1d9', variant: 3 },
+    rpsTaunts: {
+      countdown: ['No drawbridge today.', 'Swim if you dare.'],
+      win: ['Moat sets.', 'Deep end first.'],
+      lose: ['You crossed the moat.', 'Drained.'],
+      tie: ['Tread water.', 'Still afloat.'],
+    },
+  },
+  {
+    id: 'gauntlet',
+    name: 'Gauntlet',
+    tier: 'advanced',
+    tagline: 'Run the hardflip line',
+    summary:
+      'Gauntlet lines up the tricks nobody warms up with — hardflips, inward heels, pressure flips — and makes you run the whole row. Every round is a fresh lane of pain.',
+    skill: 6.7,
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    favorites: ['Hardflip', 'Inward Heelflip', 'Pressure Flip'],
+    avatar: { body: '#9e2b25', accent: '#e3b23c', variant: 0 },
+    skateStyle: SKATE_STYLES.snappy,
+    rpsTaunts: {
+      countdown: ['Throw down.', 'Enter the lane.'],
+      win: ['Gauntlet sets.', 'Run it.'],
+      lose: ['You ran the gauntlet.', 'Lane cleared.'],
+      tie: ['Another lane.', 'Run it back.'],
+    },
+  },
   // Pro
   {
     id: 'aegis',
@@ -840,16 +992,54 @@ const DEFENSE_ROBOTS_UNSORTED: Robot[] = [
     tier: 'pro',
     tagline: 'Double flips behind walls',
     summary:
-      'Fortress is the final defense: double flips, 360 doubles, and late tech, all delivered without mercy. Almost nobody matches a full game of its sets.',
+      'Fortress mixes solid flip foundations with double-kickflip challenges. A 360 double or late flip can still test you, but those are occasional surprises in a varied game.',
     skill: 8.2,
     disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
     favorites: ['Double Kickflip', '360 Double Kickflip'],
     avatar: { body: '#556270', accent: '#ff6b6b', variant: 3 },
+    skateStyle: SKATE_STYLES.snappy,
     rpsTaunts: {
       countdown: ['The gates are closed.', 'Besiege me.'],
       win: ['Fortress stands.', 'Walls hold.'],
       lose: ['The fortress falls.', 'Breach reported.'],
       tie: ['Siege continues.', 'Gates rattled.'],
+    },
+  },
+  {
+    id: 'bastion',
+    name: 'Bastion',
+    tier: 'pro',
+    tagline: 'Nollie stronghold',
+    summary:
+      'Bastion guards the nose like a fortress gate — nollie tres, nollie lasers, nollie bigspin flips. Attacking its sets means winning the whole battle off your front foot.',
+    skill: 7.9,
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    favorites: ['360 Flip', 'Laser Flip', 'Bigspin Flip'],
+    avatar: { body: '#4a4e69', accent: '#9a8c98', variant: 1 },
+    rpsTaunts: {
+      countdown: ['Hold the line.', 'Stronghold ready.'],
+      win: ['Bastion sets.', 'Off the nose, first.'],
+      lose: ['The bastion yields.', 'Gate overrun.'],
+      tie: ['Hold position.', 'Stalemate at the wall.'],
+    },
+  },
+  {
+    id: 'citadel',
+    name: 'Citadel',
+    tier: 'pro',
+    tagline: 'Full cab capital',
+    summary:
+      'Citadel rules from the top of the rotation tree — cab flips, fakie bigspin flips, 360 doubles, BS bigspin heels. The final exam nobody studies for.',
+    skill: 8.4,
+    disciplines: ['roll', 'shuvit', 'rotation', 'flip'],
+    favorites: ['360 Double Kickflip', 'BS Bigspin Heelflip'],
+    avatar: { body: '#22223b', accent: '#c9ada7', variant: 2 },
+    skateStyle: SKATE_STYLES.loose,
+    rpsTaunts: {
+      countdown: ['The citadel watches.', 'Approach the throne.'],
+      win: ['Citadel decrees.', 'Rule one: I set.'],
+      lose: ['The citadel falls.', 'Coup successful.'],
+      tie: ['The court is tied.', 'Rule two: again.'],
     },
   },
 ];
@@ -909,9 +1099,8 @@ export function hasDefenseSets(robot: SetWeightRobot): boolean {
 }
 
 /**
- * Roster for a game variant. Classic keeps the calibrated flatground ladder
- * (with its beat-to-unlock gate); defense shows its own dedicated roster with
- * every robot available immediately.
+ * Roster for a game variant. Classic uses the calibrated flatground ladder;
+ * defense uses its dedicated roster. Every robot is available immediately.
  */
 export function rosterForVariant(variant: 'classic' | 'defense'): Robot[] {
   if (variant === 'defense') return DEFENSE_ROBOTS;

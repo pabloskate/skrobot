@@ -57,15 +57,15 @@ const MIN_FIT_ATTEMPTS = 10;
 const MAX_WEIGHT_PER_TRICK = 8;
 
 /**
- * Robot-equivalent skill: fit the player's per-trick make rates onto the same
- * a smooth curve over skill-difficulty headroom and solve for the skill that best
+ * Robot-equivalent skill: fit the player's per-trick make rates onto a
+ * player-only curve over skill-difficulty headroom and solve for the skill that best
  * explains the observed attempts. This estimates the player only; robot behavior
  * comes from explicit per-trick data.
  * Returns null when there isn't enough tracked attempt data to trust the fit.
  *
  * Attempts are selection-biased (players set tricks they like), but robot-chosen
- * copy attempts push the other way — and riding the robots' own curve keeps the
- * number on exactly the same ruler as the roster.
+ * copy attempts push the other way. The separately calibrated Elo projection
+ * relates this player estimate to the explicitly authored roster.
  */
 export function fitRobotEquivalentSkill(stats: Record<string, TrickStat>): number | null {
   const rows: { difficulty: number; rate: number; weight: number }[] = [];

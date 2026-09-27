@@ -6,6 +6,7 @@ A standalone, interactive dev environment for the Skrobot animation assets.
 
 - `TrickAnimation` — side-view SVG animation of a robot attempting a skate trick, imported from `@skrobot/animations`.
 - `TrickAnimation3D` — perspective SVG renderer sharing the same animation model.
+- `TrickScene` — from-scratch look on the same physics: a new toy-robot character, a golden-hour skate plaza, and a crane camera that rises with the pop. Code lives in `packages/animations/src/scene/`; its tests assert it moves exactly like `TrickAnimation3D` and keeps every trick in frame.
 - `SlowMotionTrickAnimation` — a ready-made slow-motion version of `TrickAnimation`.
 - `BACKGROUND_SCENE_OPTIONS` / `FALL_VARIANT_OPTIONS` — named scene and bail presets for reproducible demos.
 - `RobotAvatar` — parameterized robot avatar SVG from the shared animation package.
@@ -30,6 +31,11 @@ Then open the printed local URL (usually `http://localhost:5173`).
 4. Click **Land** to see the success animation, **Fall** to see the bail, or **Replay** to restart the current one.
 5. Switch **Playback** between normal and slow motion to inspect trick timing.
 6. Pin a **Background** and **Fall** variant, then copy the parameter JSON below the demo.
+
+The New 3D preview opens on a frozen setup pose. Use the frame slider or
+Setup / Pop / Peak / Catch / Roll away buttons to inspect the motion, and
+Land / Fall / Replay to return to playback. Background presets apply to the
+side and legacy views; New 3D uses its original outdoor scene.
 
 ## Slow motion
 

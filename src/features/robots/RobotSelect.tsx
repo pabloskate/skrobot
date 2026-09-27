@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRecordsSnapshot } from '@/features/records';
 import type { Robot, Tier } from './robots';
-import { DEFENSE_ROBOTS, rosterForVariant, TIERS } from './robots';
+import { rosterForVariant, TIERS } from './robots';
 import RobotAvatar from './RobotAvatar';
 import RobotRating from './RobotRating';
 
@@ -11,13 +11,11 @@ const TIER_TAB_KEY = 'skrobot.robotTier';
 
 interface Props {
   onPick: (robot: Robot) => void;
-  /** Game variant: defense shows its own dedicated roster with no unlock gate. */
+  /** Game variant: both rosters are available to everyone. */
   variant?: 'classic' | 'defense';
-  /** Unlock every robot regardless of the beat-the-previous gate (?override=true). */
-  override?: boolean;
 }
 
-export default function RobotSelect({ onPick, variant = 'classic', override = false }: Props) {
+export default function RobotSelect({ onPick, variant = 'classic' }: Props) {
   const defense = variant === 'defense';
   const { records } = useRecordsSnapshot();
   const [tier, setTier] = useState<Tier>(TIERS[0].tier);
@@ -56,9 +54,7 @@ export default function RobotSelect({ onPick, variant = 'classic', override = fa
     }
   };
 
-  const tierRobots = defense
-    ? DEFENSE_ROBOTS.filter((robot) => robot.tier === tier)
-    : rosterForVariant('classic').filter((robot) => robot.tier === tier);
+  const tierRobots = rosterForVariant(variant).filter((robot) => robot.tier === tier);
 
   return (
     <>
@@ -86,46 +82,24 @@ export default function RobotSelect({ onPick, variant = 'classic', override = fa
       </div>
       {defense && (
         <p className="muted small" role="note">
-          Defense mode: every robot is unlocked and each one only sets tricks. Land a set to give
-          that robot a letter.
+          Defense mode: each robot only sets tricks. Land a set to give that robot a letter.
         </p>
       )}
       <section role="tabpanel">
         <div className="robot-grid">
-          {tierRobots.map((robot, index) => {
-            const previousRobot = tierRobots[index - 1];
+          {tierRobots.map((robot) => {
             const rec = records[robot.id];
             const defeated = (rec?.w ?? 0) > 0;
-            // The defense roster has no progression gate: every robot is
-            // pickable immediately.
-            const unlocked =
-              defense ||
-              override ||
-              defeated ||
-              !previousRobot ||
-              (records[previousRobot.id]?.w ?? 0) > 0;
 
             return (
               <button
                 key={robot.id}
-                className={`robot-card${defeated ? ' robot-card--defeated' : ''}${unlocked ? '' : ' robot-card--locked'}`}
+                className={`robot-card${defeated ? ' robot-card--defeated' : ''}`}
                 onClick={() => onPick(robot)}
-                disabled={!unlocked}
-                aria-label={
-                  unlocked ? undefined : `${robot.name} is locked. Beat ${previousRobot.name} to unlock.`
-                }
               >
                 {defeated && (
                   <span className="robot-defeated" aria-label="Defeated">
                     <span aria-hidden="true">✓</span>
-                  </span>
-                )}
-                {!unlocked && (
-                  <span className="robot-locked-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="4" y="11" width="16" height="10" rx="2.5" />
-                      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
-                    </svg>
                   </span>
                 )}
                 <span
@@ -137,14 +111,11 @@ export default function RobotSelect({ onPick, variant = 'classic', override = fa
                 </span>
                 <span className="robot-name">{robot.name}</span>
                 <RobotRating robot={robot} />
-                    <span className="robot-tagline">{robot.tagline}</span>
-                    {rec && (
+                <span className="robot-tagline">{robot.tagline}</span>
+                {rec && (
                   <span className="robot-record">
                     <strong>{rec.w}W</strong> – <strong>{rec.l}L</strong>
                   </span>
-                )}
-                {!unlocked && (
-                  <span className="robot-unlock-copy">Beat {previousRobot.name} to unlock</span>
                 )}
               </button>
             );

@@ -30,7 +30,7 @@ If the answer is unclear, tighten the feature boundary before adding more code.
 | Runtime infrastructure | `src/platform/server/` | Cloudflare env and bindings, D1, future logging/HTTP adapters. |
 | Shared primitives | `src/shared/` | Reserved for domain-neutral primitives only, such as online status. |
 | Expo companion app | `apps/mobile/` | Native WebView shell that loads the same web app; no alternate game implementation. |
-| Shared animations | `packages/animations/` | Reusable robot/avatar/trick animation components, physics model, and browser feedback helpers. |
+| Shared animations | `packages/animations/` | Reusable robot/avatar/trick animation components, physics model, push-off scene, and browser feedback helpers. |
 | Animation playground | `skrobot-animations/` | Standalone Vite playground for animation iteration; consumes `@skrobot/animations` and owns only preview controls/fixtures. |
 
 ## Dependency Map
@@ -126,6 +126,7 @@ Every change should satisfy these constraints:
 - Runtime bindings and secrets stay behind `src/platform/server/`.
 - Browser route calls stay in feature-owned `api.ts` files.
 - Product rules/data stay in their owning feature folders.
+- Animation motion and reusable scenes stay in `packages/animations`; game features supply match-specific text and state.
 - Narration and UI react to reducer state instead of duplicating rules.
 - Durable data changes come with a migration and stay behind a feature/server API.
 - Repeated behavior is extracted only after there is real duplication or a shared

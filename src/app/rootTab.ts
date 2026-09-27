@@ -3,7 +3,6 @@ export type RootTab = 'skate' | 'tricks' | 'settings';
 
 const ROOT_TAB_PARAM = 'tab';
 const VERSION_PARAM = 'version';
-const OVERRIDE_PARAM = 'override';
 const URL_CHANGE_EVENT = 'skrobot-url';
 
 const BETA_VERSION = 'beta';
@@ -36,13 +35,6 @@ export function searchFromRecord(params: SearchRecord): string {
 /** Release features are generally available; only unfinished features stay beta-only. */
 export function betaFeaturesEnabledFromSearch(search: string | URLSearchParams | SearchRecord): boolean {
   return asSearchParams(search).get(VERSION_PARAM) === BETA_VERSION;
-}
-
-/** ?override=true unlocks the whole roster (skips the beat-the-previous unlock gate). */
-export function rosterOverrideEnabledFromSearch(
-  search: string | URLSearchParams | SearchRecord,
-): boolean {
-  return asSearchParams(search).get(OVERRIDE_PARAM) === 'true';
 }
 
 export function parseRootTab(search: string | URLSearchParams | SearchRecord): RootTab {

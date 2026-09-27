@@ -7,6 +7,7 @@ import {
   ROLL_IN,
   TrickAnimation,
   TrickAnimation3D,
+  TrickScene,
   type FallVariant,
   type RiderStance,
   type Robot,
@@ -27,7 +28,8 @@ import styles from './ContactSheet.module.css';
 const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
 
 type RiderMode = RiderStance | 'both';
-type ViewMode = '3d' | 'side' | 'both';
+type View = 'scene' | '3d' | 'side';
+type ViewMode = View | 'both';
 type Outcome = 'landed' | FallVariant;
 
 interface Phase {
@@ -50,7 +52,7 @@ function phasesFor(landed: boolean): Phase[] {
 const noop = () => {};
 
 interface CellProps {
-  view: '3d' | 'side';
+  view: View;
   robot: Robot;
   trick: Trick;
   landed: boolean;
@@ -61,7 +63,7 @@ interface CellProps {
 
 /** Memoized so filter keystrokes only re-render rows that actually change. */
 const Cell = memo(function Cell({ view, robot, trick, landed, fallVariant, riderStance, fixedTime }: CellProps) {
-  const Renderer = view === '3d' ? TrickAnimation3D : TrickAnimation;
+  const Renderer = view === 'scene' ? TrickScene : view === '3d' ? TrickAnimation3D : TrickAnimation;
   return (
     <div className={styles.cell}>
       <Renderer
@@ -98,7 +100,7 @@ export default function ContactSheet() {
   }, [stance, filter]);
 
   const riders: RiderStance[] = riderMode === 'both' ? ['regular', 'goofy'] : [riderMode];
-  const views: Array<'3d' | 'side'> = viewMode === 'both' ? ['3d', 'side'] : [viewMode];
+  const views: View[] = viewMode === 'both' ? ['3d', 'side'] : [viewMode];
   const rowsPerTrick = riders.length * views.length;
 
   return (
@@ -140,14 +142,14 @@ export default function ContactSheet() {
           <div className={styles.controlGroup}>
             <span className={styles.controlLabel}>View</span>
             <div className={playgroundStyles.stanceRow}>
-              {(['3d', 'side', 'both'] as ViewMode[]).map((v) => (
+              {(['scene', '3d', 'side', 'both'] as ViewMode[]).map((v) => (
                 <button
                   key={v}
                   className={`${playgroundStyles.stanceBtn} ${viewMode === v ? playgroundStyles.stanceBtnActive : ''}`}
                   onClick={() => setViewMode(v)}
                   aria-pressed={viewMode === v}
                 >
-                  {v === 'side' ? '2D' : v}
+                  {v === 'side' ? '2D' : v === 'both' ? '3d + 2D' : v}
                 </button>
               ))}
             </div>

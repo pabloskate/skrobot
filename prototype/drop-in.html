@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>S.K.A.T.E. — Game start v2 “Drop In” (Design)</title>
+<style>
+@font-face{
+  font-family:'Montserrat';
+  src:url('../public/fonts/montserrat-latin.woff2') format('woff2');
+  font-style:normal;font-weight:400 800;font-display:swap;
+}
+:root{
+  --purple:#6431d8;--purple-dark:#4f23b0;--purple-soft:#ece5fb;
+  --ink:#221a4e;--muted:#6b6786;--bg:#f3f2f6;--card:#fff;
+  --green:#2da866;--robot-ink:#23232e;
+  --shadow:0 2px 8px rgba(34,26,78,.08),0 8px 24px rgba(34,26,78,.06);
+  --ease-pop:cubic-bezier(.2,1.45,.4,1);
+  --grip:
+    radial-gradient(130% 70% at 50% 115%,rgba(20,6,70,.45),transparent 62%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.15' numOctaves='2' seed='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.08 0 0 0 0 0.02 0 0 0 0 0.25 0 0 0 1.25 -0.52'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.4' numOctaves='1' seed='9' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1.1 -0.62'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:'Montserrat',system-ui,-apple-system,sans-serif;color:var(--ink);background:#e7e4ef}
+button{font-family:inherit;color:inherit}
+
+/* =====================================================================
+   Design doc page chrome
+   ===================================================================== */
+.doc{max-width:1240px;margin:0 auto;padding:44px 28px 96px}
+.eyebrow{margin:0;font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--purple)}
+.doc-head h1{margin:8px 0 0;font-size:52px;font-weight:900;letter-spacing:-1px;line-height:1}
+.doc-head p{margin:12px 0 0;max-width:640px;color:var(--muted);font-size:17px;line-height:1.5;font-weight:500}
+.hero{display:grid;grid-template-columns:410px minmax(0,1fr);gap:56px;align-items:start;margin-top:36px}
+.phone{width:410px;height:864px;padding:10px;border-radius:50px;background:#17131f;box-shadow:0 40px 90px rgba(34,26,78,.3),inset 0 0 0 2px #2c2638}
+.side{display:flex;flex-direction:column;gap:20px}
+.card{background:var(--card);border-radius:20px;box-shadow:var(--shadow);padding:22px 24px}
+.card h3{margin:0 0 14px;font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.ctl-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}
+.ctl-row:last-child{margin-bottom:0}
+.ctl-label{width:100%;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:2px}
+.chip{display:inline-flex;align-items:center;gap:6px;border:0;border-radius:999px;background:var(--bg);padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;color:var(--ink);transition:background .15s,color .15s,transform .08s}
+.chip:hover{background:var(--purple-soft)}
+.chip:active{transform:scale(.96)}
+.chip.on{background:var(--purple);color:#fff}
+.chip .robot-avatar{width:26px;height:26px;margin:-6px -2px -6px -6px;color:var(--robot-ink)}
+.chip.primary{background:var(--purple);color:#fff;padding:10px 20px}
+.scrub{display:flex;align-items:center;gap:12px;width:100%}
+.scrub input{flex:1;accent-color:var(--purple)}
+.scrub output{min-width:52px;font-size:13px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--ink);text-align:right}
+.changes{margin:0;padding:0;list-style:none;counter-reset:c}
+.changes li{position:relative;padding:0 0 16px 40px;font-size:14.5px;line-height:1.5;color:var(--muted);font-weight:500}
+.changes li:last-child{padding-bottom:0}
+.changes li::before{counter-increment:c;content:counter(c);position:absolute;left:0;top:-1px;width:26px;height:26px;border-radius:9px;background:var(--purple-soft);color:var(--purple);font-size:13px;font-weight:800;display:grid;place-items:center}
+.changes b{color:var(--ink);font-weight:800}
+.changes code,.build code{font-size:12.5px;background:var(--bg);padding:1px 6px;border-radius:6px;color:var(--purple-dark);font-weight:600}
+.section-title{margin:84px 0 6px;font-size:28px;font-weight:900;letter-spacing:-.3px}
+.section-sub{margin:0 0 28px;color:var(--muted);font-size:15px;font-weight:500}
+.board{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:18px}
+.frame{margin:0}
+.frame figcaption{margin-top:12px}
+.frame figcaption b{display:block;font-size:13.5px;font-weight:800}
+.frame figcaption span{display:block;margin-top:3px;font-size:12.5px;line-height:1.45;color:var(--muted);font-weight:500}
+.mini{--s:.462;width:calc(390px * var(--s));height:calc(844px * var(--s));border-radius:22px;overflow:hidden;box-shadow:0 18px 40px rgba(34,26,78,.22)}
+.mini .screen{transform:scale(var(--s));transform-origin:0 0;border-radius:0}
+.build{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px}
+.build ul{margin:0;padding-left:18px}
+.build li{font-size:14px;line-height:1.55;color:var(--muted);font-weight:500;margin-bottom:8px}
+.build li b{color:var(--ink)}
+
+/* =====================================================================
+   Phone screen
+   ===================================================================== */
+.screen{position:relative;width:390px;height:844px;border-radius:40px;overflow:hidden;background:var(--bg);isolation:isolate;user-select:none;-webkit-user-select:none}
+.statusbar{position:absolute;z-index:50;top:0;left:0;right:0;height:47px;display:flex;align-items:center;justify-content:space-between;padding:6px 26px 0 30px;color:#fff;font-size:15px;font-weight:700;pointer-events:none}
+.statusbar i{display:inline-block;width:25px;height:12px;border-radius:4px;border:1.5px solid rgba(255,255,255,.85);position:relative}
+.statusbar i::after{content:'';position:absolute;inset:1.5px 5px 1.5px 1.5px;border-radius:2px;background:#fff}
+
+/* ---------- Underlays: what the overlay covers (Throw Down result) and reveals (the game) ---------- */
+.under{position:absolute;inset:0;display:flex;flex-direction:column}
+.under[hidden]{display:none}
+.topbar{background:var(--purple);color:#fff;padding:47px 20px 14px;box-shadow:0 2px 12px rgba(34,26,78,.25);display:flex;align-items:center;gap:12px}
+.topbar span{font-size:26px;line-height:1;padding:2px 6px}
+.topbar b{font-size:22px;font-weight:800;letter-spacing:.3px}
+.under-rps .field{position:relative;flex:1;background-color:var(--purple);background-image:var(--grip)}
+.under-rps .turf{position:absolute;inset:0 0 auto 0;height:38%;clip-path:polygon(0 0,100% 0,100% calc(100% - 34px),0 100%);background:linear-gradient(180deg,var(--turf-top),var(--turf-bottom))}
+.under-rps .cope{position:absolute;left:-6%;width:112%;top:calc(38% - 24.5px);height:15px;transform:rotate(-4.98deg);background:linear-gradient(180deg,#fff,#e3e1ec 35%,#b3afc4 80%,#8f8aa6);border-top:3px solid var(--robot-ink);border-bottom:3px solid var(--robot-ink)}
+.under-rps .res{position:absolute;left:0;right:0;bottom:30px;text-align:center;color:#fff}
+.under-rps .res small{display:block;font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;opacity:.72}
+.under-rps .res strong{display:block;margin:6px 0 20px;font-size:36px;font-weight:900}
+.under-rps .res span{display:inline-block;width:330px;padding:18px;border-radius:999px;background:#fff;color:var(--purple);font-size:17px;font-weight:800}
+.under-game .body{flex:1;padding:20px 16px}
+.g-card{background:#fff;border-radius:16px;box-shadow:var(--shadow);padding:16px 18px}
+.g-row{display:flex;align-items:center;justify-content:space-between;padding:4px 0}
+.g-row b{font-size:15px;font-weight:700}
+.g-letters{display:flex;gap:6px}
+.g-letters i{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;font-style:normal;font-weight:800;font-size:16px;background:var(--bg);color:#c8c4d8}
+.g-track{margin-top:8px;padding-top:9px;border-top:1px solid #f0eef6;text-align:center;font-size:12px;font-weight:600;color:var(--muted)}
+.g-track::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:6px}
+.g-panel{margin-top:16px;display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center;padding:24px 20px}
+.g-note{margin:0;background:var(--purple-soft);color:var(--purple-dark);font-weight:600;font-size:14px;padding:8px 14px;border-radius:999px}
+.g-panel h2{margin:0;font-size:22px;font-weight:800}
+.g-panel p{margin:0;color:var(--muted)}
+.g-btn{border-radius:999px;padding:14px 28px;min-width:220px;background:var(--purple);color:#fff;font-weight:700;box-shadow:0 4px 14px rgba(100,49,216,.4)}
+.g-ghost{font-weight:700;color:var(--muted);font-size:15px}
+.g-panel .robot-avatar{color:var(--robot-ink)}
+
+/* ---------- Drop In overlay ---------- */
+.drop{
+  position:absolute;inset:0;z-index:20;overflow:hidden;cursor:pointer;
+  background-color:var(--purple);background-image:var(--grip);
+  /* Wipes up from the bottom along the coping's tilt: the winner's turf takes the rest of the screen. */
+  animation:drop-wipe .3s cubic-bezier(.25,.8,.3,1) both,drop-out .3s ease var(--t-exit) both;
+}
+@keyframes drop-wipe{
+  from{clip-path:polygon(0 100%,100% calc(100% - 34px),100% 100%,0 100%)}
+  to{clip-path:polygon(0 -40px,100% -74px,100% 100%,0 100%)}
+}
+@keyframes drop-out{from{opacity:1;transform:none}to{opacity:0;transform:scale(1.05);visibility:hidden}}
+.drop-light{position:absolute;inset:0;background:radial-gradient(70% 30% at 50% 50%,rgba(255,255,255,.16),transparent 70%)}
+.drop-world{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.rider{color:var(--robot-ink)}
+.trail{fill:none;stroke:#fff;stroke-linecap:round;stroke-width:3.5}
+
+.drop-title{position:absolute;top:104px;left:0;right:0;display:flex;flex-direction:column;align-items:center}
+.drop-lets{position:relative;z-index:2;margin:0 0 -12px -150px;filter:drop-shadow(0 4px 0 rgba(20,6,70,.28));animation:tape-in .38s var(--ease-pop) var(--d) both}
+.drop-lets span{display:block;padding:8px 20px 7px;background:linear-gradient(180deg,#fffaf0,#f6ecd4);color:var(--robot-ink);font-size:16px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;transform:rotate(-7deg);clip-path:polygon(3% 0,97% 0,100% 20%,97% 42%,100% 64%,97.5% 84%,99.5% 100%,1% 100%,3.5% 80%,0 60%,3% 40%,0 18%)}
+@keyframes tape-in{from{opacity:0;transform:scale(1.8) rotate(10deg)}to{opacity:1;transform:none}}
+.drop-tiles{display:flex;gap:10px}
+.drop-slot{position:relative;width:60px;height:60px;border-radius:19px;border:2px dashed rgba(255,255,255,.3);animation:rise .3s ease .12s both}
+.drop-tile{
+  position:absolute;inset:-2px;
+  display:grid;place-items:center;width:60px;height:60px;border-radius:19px;border:4.5px solid #fff;background:var(--tint);
+  color:var(--robot-ink);font-size:32px;font-weight:900;line-height:1;position:relative;overflow:hidden;
+  box-shadow:0 3px 0 rgba(20,6,70,.28),0 10px 18px rgba(20,6,70,.35);
+  transform:rotate(var(--rot));animation:tile-slam .34s var(--ease-pop) var(--d) both;
+}
+.drop-tile::after{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.6),rgba(255,255,255,0) 42%)}
+@keyframes tile-slam{
+  0%{opacity:0;transform:translateY(-30px) rotate(calc(var(--rot) * 4)) scale(1.9)}
+  55%{opacity:1;transform:rotate(var(--rot)) scale(.9)}
+  100%{transform:rotate(var(--rot))}
+}
+
+.drop-head{position:absolute;left:0;right:0;top:622px;display:flex;flex-direction:column;align-items:center;text-align:center;padding:0 18px}
+.drop-head b{display:block;font-size:44px;font-weight:900;line-height:1.02;letter-spacing:.5px;text-transform:uppercase;white-space:nowrap;color:#fff;-webkit-text-stroke:10px var(--robot-ink);paint-order:stroke fill;filter:drop-shadow(0 5px 0 rgba(20,6,70,.3));animation:slam .34s var(--ease-pop) var(--d) both}
+.drop-head b + b{animation-delay:calc(var(--d) + .08s);color:#ffd166}
+@keyframes slam{0%{opacity:0;transform:scale(2.1) rotate(-4deg)}60%{opacity:1;transform:scale(.94)}100%{transform:none}}
+.drop-sub{margin:14px 0 0;max-width:320px;font-size:15px;font-weight:700;line-height:1.4;color:var(--ink);animation:rise .35s ease var(--d) both}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.drop-skip{position:absolute;right:16px;bottom:30px;font-size:12px;font-weight:700;color:rgba(34,26,78,.5);letter-spacing:.04em;animation:rise .3s ease .6s both}
+
+/* Beat-sheet frames are paused at a timestamp; nothing plays on its own. */
+.frozen{pointer-events:none}
+@media (max-width:1100px){.hero{grid-template-columns:1fr}.phone{margin:0 auto}.board{grid-template-columns:repeat(3,minmax(0,1fr))}.build{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="doc">
+  <header class="doc-head">
+    <p class="eyebrow">Skate Robot · Game start v2</p>
+    <h1>Drop In</h1>
+    <p>The robot stands on a quarter pipe, tips over the coping, and rides the ramp under real gravity. It's fastest at the bottom and carries that speed up the far wall and onto the deck. The game's letters slam in as stickers when it hits the bottom. Then the screen says who sets first and what to do.</p>
+  </header>
+
+  <section class="hero">
+    <div class="phone"><div id="live"></div></div>
+    <div class="side">
+      <div class="card">
+        <h3>Play with it</h3>
+        <div class="ctl-row" id="ctl-who"><div class="ctl-label">Sets first</div></div>
+        <div class="ctl-row" id="ctl-robots"><div class="ctl-label">Opponent</div></div>
+        <div class="ctl-row" id="ctl-format"><div class="ctl-label">Game</div></div>
+        <div class="ctl-row" id="ctl-speed"><div class="ctl-label">Speed</div></div>
+        <div class="ctl-row"><div class="ctl-label">Scrub</div>
+          <div class="scrub"><input id="scrub" type="range" min="0" max="1" step="0.001" value="0"><output id="scrub-out">0.00s</output></div>
+        </div>
+        <div class="ctl-row" id="ctl-actions"></div>
+      </div>
+      <div class="card">
+        <h3>What changed</h3>
+        <ol class="changes">
+          <li><b>It drops in instead of sliding in.</b> Only the push is scripted. After that it's a small physics sim: speed comes from height, the robot squashes in proportion to the force at the bottom of the transition, and friction is tuned so it crests the far coping with just enough speed to roll out and stop on the deck.</li>
+          <li><b>The camera follows.</b> The world pans on a damped spring, so the far ramp comes into frame as the robot gets there.</li>
+          <li><b>Same look as Throw Down:</b> purple grip-tape backdrop, concrete tinted with the robot's color, steel coping, sticker tiles, masking tape, and slam type. The screen wipes up from the bottom along the coping's tilt, picking up where the toss left off.</li>
+          <li><b>The letters are the title.</b> The game's letters slam in as stickers the moment the robot bottoms out, and a strip of tape adds “Let's”. An S.K.8 game gets three tiles.</li>
+          <li><b>It says what to do next.</b> “You set first. Land any trick. Sparky has to match it.”</li>
+          <li><b>The robot reacts with poses it already has.</b> It hops into <code>stoked</code> when it sets first and settles <code>idle</code> when you do. It gets no new body parts.</li>
+          <li><b>Tap anywhere to skip.</b> At the end it fades into the game underneath instead of cutting to it.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <h2 class="section-title">Beat sheet</h2>
+  <p class="section-sub">The robot sets first here. Every frame is the same simulation paused at its timestamp, so these are exactly what plays.</p>
+  <div class="board" id="board"></div>
+
+  <h2 class="section-title">How it maps to the code</h2>
+  <p class="section-sub">This replaces the inside of <code>GameStartAnimation</code> and keeps its props and contract. The motion is a small pure module that can be tested.</p>
+  <div class="build">
+    <div class="card">
+      <h3>Keeps</h3>
+      <ul>
+        <li><b>Props:</b> <code>robot</code>, <code>playerFirst</code>, <code>onComplete</code>. It still mounts from <code>RpsPanel</code> when you press Start.</li>
+        <li><b><code>RobotAvatar</code> poses:</b> <code>idle</code> and <code>stoked</code> only, with the same drawing the rest of the app uses.</li>
+        <li><b>Engine:</b> the <code>START</code> dispatch is unchanged, so the game's own “You won the toss” note still greets you underneath.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Adds</h3>
+      <ul>
+        <li><b><code>dropIn.ts</code></b>: ramp geometry plus a fixed-step integrator that returns a timeline (position, speed, camera). Tests can pin “crests the far coping, never rolls back, stops on the deck, finishes under 3.5 s”.</li>
+        <li><b>One SVG plus <code>requestAnimationFrame</code></b>, transforms only. The type and stickers are CSS.</li>
+        <li><b>A <code>letters</code> prop</b> from <code>lettersForFormat</code>, so S.K.8 games get three tiles.</li>
+        <li><b>Tap to skip</b>, and reduced motion shows the settled frame for 1.2 s, then fades.</li>
+        <li><b>Layout:</b> the ramp scene anchors to the bottom and scales to the screen width, and the text rows are anchored top and bottom.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<svg id="measure" width="0" height="0" style="position:absolute" aria-hidden="true"></svg>
+
+<script>
+const SVGNS='http://www.w3.org/2000/svg';
+const INK='#23232e';
+
+/* ================= robot avatar (transcribed from packages/animations/src/RobotAvatar.tsx) ================= */
+const ACCENT_DARK_LUM=0.19, ACCENT_TARGET_LUM=0.45;
+function _lum(hex){const [r,g,b]=hex.replace('#','').match(/[0-9a-f]{2}/gi).map(x=>parseInt(x,16)/255);
+  const lin=c=>(c<=0.04045?c/12.92:Math.pow((c+0.055)/1.055,2.4));return 0.2126*lin(r)+0.7152*lin(g)+0.0722*lin(b);}
+function _hsl(hex){const [r,g,b]=hex.replace('#','').match(/[0-9a-f]{2}/gi).map(x=>parseInt(x,16)/255);
+  const max=Math.max(r,g,b),min=Math.min(r,g,b);let h=0,s=0;const l=(max+min)/2;
+  if(max!==min){const d=max-min;s=l>0.5?d/(2-max-min):d/(max+min);
+    if(max===r)h=(g-b)/d+(g<b?6:0);else if(max===g)h=(b-r)/d+2;else h=(r-g)/d+4;h*=60;}return {h,s};}
+function _hslHex(h,s,l){const f=n=>{const k=(n+h/30)%12;return l-s*Math.min(l,1-l)*Math.max(-1,Math.min(k-3,Math.min(9-k,1)));};
+  return '#'+[f(0),f(8),f(4)].map(v=>Math.round(v*255).toString(16).padStart(2,'0')).join('');}
+function readableAccent(a){if(_lum(a)>=ACCENT_DARK_LUM)return a;const {h,s}=_hsl(a);
+  for(let l=50;l<=96;l+=2){const c=_hslHex(h,s,l/100);if(_lum(c)>=ACCENT_TARGET_LUM)return c;}return _hslHex(h,s,.96);}
+function mixHex(a,b,t){const p=h=>h.replace('#','').match(/[0-9a-f]{2}/gi).map(x=>parseInt(x,16));const A=p(a),B=p(b);
+  return '#'+A.map((v,i)=>Math.round(v*t+B[i]*(1-t)).toString(16).padStart(2,'0')).join('');}
+
+function robotInner(r,pose='idle'){
+  const body=r.avatar.body, accent=readableAccent(r.avatar.accent), S='currentColor';
+  const outlined=(d,w=5.5)=>`<path d="${d}" stroke="${S}" stroke-width="${w+2}" stroke-linecap="round" fill="none"/><path d="${d}" stroke="${accent}" stroke-width="${w-1}" stroke-linecap="round" fill="none"/>`;
+  const backArm=d=>`<path d="${d}" stroke="${accent}" stroke-width="4.5" stroke-linecap="round" fill="none" opacity="0.35"/>`;
+  const a=pose==='stoked'
+    ?{frontL:'M38 40 Q26 26 24 12',frontR:'M58 40 Q70 26 72 12',backL:'M38 40 Q30 28 28 16',backR:'M58 40 Q66 28 68 16',hl:[24,12],hr:[72,12]}
+    :{frontL:'M38 40 Q24 54 22 68',frontR:'M58 40 Q72 54 74 68',backL:'M38 40 Q30 52 28 66',backR:'M58 40 Q66 52 68 66',hl:[22,68],hr:[74,68]};
+  const dot=([cx,cy])=>`<circle cx="${cx}" cy="${cy}" r="4" fill="${accent}" stroke="${S}" stroke-width="1.5"/>`;
+  return `<g transform="translate(2 0) scale(0.95)">`+
+    backArm(a.backL)+backArm(a.backR)+outlined('M42 64 Q36 78 34 92')+outlined('M54 64 Q60 78 62 92')+
+    outlined(a.frontL)+outlined(a.frontR)+dot(a.hl)+dot(a.hr)+
+    `<rect x="28" y="89" width="12" height="7" rx="3.5" fill="${accent}" stroke="${S}" stroke-width="2"/>
+     <rect x="56" y="89" width="12" height="7" rx="3.5" fill="${accent}" stroke="${S}" stroke-width="2"/>
+     <line x1="48" y1="32" x2="48" y2="36" stroke="${S}" stroke-width="2.5" stroke-linecap="round"/>
+     <rect x="36" y="36" width="24" height="28" rx="9" fill="${body}" stroke="${S}" stroke-width="3"/>
+     <rect x="34" y="12" width="28" height="20" rx="7" fill="${body}" stroke="${S}" stroke-width="3"/>
+     <rect x="38" y="16" width="20" height="7" rx="3.5" fill="${S}" opacity="0.85"/>
+     <circle cx="43" cy="19.5" r="2" fill="${accent}"/><circle cx="53" cy="19.5" r="2" fill="${accent}"/>
+     <line x1="48" y1="12" x2="48" y2="6" stroke="${S}" stroke-width="2.5" stroke-linecap="round"/>
+     <circle cx="48" cy="4.5" r="3.5" fill="${accent}" stroke="${S}" stroke-width="1.5"/></g>
+    <g transform="translate(18 86)">
+      <path d="M0 0 q4 6 12 6 h40 q8 0 12 -6" stroke="${S}" stroke-width="3" fill="none" stroke-linecap="round"/>
+      <circle cx="16" cy="10" r="3.8" fill="#c8c8c8" stroke="${S}" stroke-width="2.5"/>
+      <circle cx="48" cy="10" r="3.8" fill="#c8c8c8" stroke="${S}" stroke-width="2.5"/></g>`;
+}
+const robotSVG=(r,size=96,pose='idle')=>`<svg class="robot-avatar" width="${size}" height="${size}" viewBox="0 -5 100 106" role="img" aria-label="${r.name}">${robotInner(r,pose)}</svg>`;
+
+/* ================= data ================= */
+const ROBOTS=[
+  {id:'sparky',name:'Sparky',avatar:{body:'#4f86f7',accent:'#f7c948'}},
+  {id:'magnet',name:'Magnet',avatar:{body:'#ff9f1c',accent:'#2ec4b6'}},
+  {id:'clamp',name:'Clamp',avatar:{body:'#d6457a',accent:'#9be564'}},
+  {id:'nosy',name:'Nosy',avatar:{body:'#f6a5c0',accent:'#3a2e4d'}},
+  {id:'boomerang',name:'Boomerang',avatar:{body:'#6a8caf',accent:'#f0c987'}},
+];
+const FORMATS={skate:['S','K','A','T','E'],sk8:['S','K','8']};
+const TINTS=['#ffd166','#a5e8c6','#ffb3c7'];
+
+/* ================= ramp geometry =================
+   World units are screen px at 390 wide. Left quarter pipe (drop-in side),
+   a short flat, and a lower right quarter pipe whose deck the robot rolls
+   out onto. Lips get a small fillet so the board pivots over the coping
+   instead of snapping from flat to steep. */
+function makeRamp(){
+  const yF=580, H1=135, H2=98, R1=200, R2=170, FLAT=56, X1=120, r=12;
+  const y1=yF-H1, y2=yF-H2;
+  const p1=Math.acos((R1-H1)/R1), p2=Math.acos((R2-H2)/R2);
+  const xB1=X1+R1*Math.sin(p1), xB2=xB1+FLAT, X2=xB2+R2*Math.sin(p2);
+  const d1=r*Math.tan(p1/2), d2=r*Math.tan(p2/2);
+  const l1s=[X1-d1,y1], l1e=[X1+d1*Math.cos(p1),y1+d1*Math.sin(p1)];
+  const l2s=[X2-d2*Math.cos(p2),y2+d2*Math.sin(p2)], l2e=[X2+d2,y2];
+  const f=n=>n.toFixed(2), L0=X1-420, R0=X2+560;
+  const ride=`M ${L0} ${y1} L ${f(l1s[0])} ${y1} A ${r} ${r} 0 0 1 ${f(l1e[0])} ${f(l1e[1])} A ${R1} ${R1} 0 0 0 ${f(xB1)} ${yF} L ${f(xB2)} ${yF} A ${R2} ${R2} 0 0 0 ${f(l2s[0])} ${f(l2s[1])} A ${r} ${r} 0 0 1 ${f(l2e[0])} ${y2} L ${R0} ${y2}`;
+  return {yF,y1,y2,X1,X2,xB1,xB2,l1s,l2e,ride,solid:`${ride} L ${R0} 1400 L ${L0} 1400 Z`,sLip1:l1s[0]-L0};
+}
+
+function sampler(d){
+  const p=document.createElementNS(SVGNS,'path');p.setAttribute('d',d);
+  document.getElementById('measure').appendChild(p);
+  const L=p.getTotalLength(),step=.5,n=Math.ceil(L/step)+1;
+  const xs=new Float64Array(n),ys=new Float64Array(n),th=new Float64Array(n),k=new Float64Array(n);
+  for(let i=0;i<n;i++){const q=p.getPointAtLength(Math.min(L,i*step));xs[i]=q.x;ys[i]=q.y;}
+  for(let i=0;i<n;i++){const a=Math.max(0,i-2),b=Math.min(n-1,i+2);th[i]=Math.atan2(ys[b]-ys[a],xs[b]-xs[a]);}
+  for(let i=0;i<n;i++){const a=Math.max(0,i-3),b=Math.min(n-1,i+3);k[i]=(th[b]-th[a])/((b-a)*step||1);}
+  p.remove();
+  const at=s=>{const fi=Math.max(0,Math.min(n-1.0001,s/step)),i=Math.floor(fi),u=fi-i;
+    return {x:xs[i]+(xs[i+1]-xs[i])*u,y:ys[i]+(ys[i+1]-ys[i])*u,th:th[i]+(th[i+1]-th[i])*u,k:k[i]};};
+  const sAtX=(x,after=0)=>{for(let i=Math.floor(after/step);i<n;i++)if(xs[i]>=x)return i*step;return L;};
+  return {L,at,sAtX};
+}
+
+/* ================= physics =================
+   Point mass on the ramp curve: gravity along the tangent, a little rolling
+   drag, and a brake once it's on the far deck. Everything except the push is
+   emergent; `drag` is solved so it rolls out onto the far deck and stops
+   ~STOP_IN px past the lip. */
+const PHYS={dt:1/480,G:2500,PUSH_T:.38,PUSH_V:150,MU:40,DECK_BRAKE:1500,STOP_IN:30};
+function simulate(path,ramp,drag){
+  const {dt,G,PUSH_T,PUSH_V,MU,DECK_BRAKE}=PHYS;
+  const sDeck2=path.sAtX(ramp.l2e[0],ramp.sLip1+10);
+  let t=0,s=ramp.sLip1-26,v=0,pushed=false,tStop=null,tBottom=null,tLip1=null,tCrest=null;
+  const S=[];
+  while(t<6){
+    if(!pushed&&t>=PUSH_T){pushed=true;v=PUSH_V;}
+    if(pushed&&tStop===null){
+      const {th}=path.at(s);
+      let a=G*Math.sin(th)-drag*v-MU;
+      if(s>sDeck2)a-=DECK_BRAKE;
+      v+=a*dt;s+=v*dt;
+      const x=path.at(s).x;
+      if(tLip1===null&&s>ramp.sLip1)tLip1=t;
+      if(tBottom===null&&x>=ramp.xB1)tBottom=t;
+      if(tCrest===null&&s>sDeck2)tCrest=t;
+      if(v<=0){if(s>sDeck2){v=0;tStop=t;}else return null;}
+    }
+    S.push(s);t+=dt;
+    if(tStop!==null&&t>tStop+2.5)break;
+  }
+  if(tStop===null)return null;
+  return {S,tStop,tBottom,tLip1,tCrest,sDeck2,over:s-sDeck2};
+}
+function solve(path,ramp){
+  let lo=0,hi=4,best=null;
+  for(let i=0;i<40;i++){const mid=(lo+hi)/2,r=simulate(path,ramp,mid);
+    if(!r){hi=mid;continue;}best=r;if(r.over>PHYS.STOP_IN)lo=mid;else hi=mid;}
+  return best;
+}
+function withCamera(sim,path,ramp){
+  const {dt}=PHYS,n=sim.S.length,cam=new Float64Array(n);
+  const xEnd=path.at(sim.S[n-1]).x,camMin=ramp.X1-104,camMax=xEnd-282,w=7.5;
+  let c=camMin,cv=0;
+  for(let i=0;i<n;i++){
+    const tgt=Math.max(camMin,Math.min(camMax,path.at(sim.S[i]).x-205));
+    cv+=(w*w*(tgt-c)-2*w*cv)*dt;c+=cv*dt;cam[i]=c;
+  }
+  sim.cam=cam;return sim;
+}
+
+/* ================= feedback (prototype stand-ins) ================= */
+let soundOn=true,actx=null,roll=null;
+function ac(){try{actx=actx||new (window.AudioContext||window.webkitAudioContext)();}catch(e){}return actx;}
+function blip(freq,{dur=.07,type='triangle',gain=.08,when=0}={}){
+  if(!soundOn||!ac())return;const t=actx.currentTime+when,o=actx.createOscillator(),g=actx.createGain();
+  o.type=type;o.frequency.setValueAtTime(freq,t);g.gain.setValueAtTime(gain,t);g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+  o.connect(g).connect(actx.destination);o.start(t);o.stop(t+dur+.02);}
+function clack(gain=.25){if(!soundOn||!ac())return;const t=actx.currentTime,len=.06,b=actx.createBuffer(1,actx.sampleRate*len,actx.sampleRate),d=b.getChannelData(0);
+  for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,5);
+  const s=actx.createBufferSource(),f=actx.createBiquadFilter(),g=actx.createGain();s.buffer=b;f.type='bandpass';f.frequency.value=1800;g.gain.value=gain;
+  s.connect(f).connect(g).connect(actx.destination);s.start(t);blip(140,{dur:.08,type:'sine',gain:gain*.6});}
+function rollStart(){if(!soundOn||!ac()||roll)return;const b=actx.createBuffer(1,actx.sampleRate*2,actx.sampleRate),d=b.getChannelData(0);
+  for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;const s=actx.createBufferSource(),f=actx.createBiquadFilter(),g=actx.createGain();
+  s.buffer=b;s.loop=true;f.type='lowpass';f.frequency.value=520;g.gain.value=0;s.connect(f).connect(g).connect(actx.destination);s.start();roll={s,g};}
+function rollGain(v){if(roll)roll.g.gain.setTargetAtTime(Math.min(.22,v/3200),actx.currentTime,.03);}
+function rollStop(){if(roll){try{roll.s.stop();}catch(e){}roll=null;}}
+
+/* ================= scene ================= */
+function mountScene(root,{robot,playerFirst,letters,live}){
+  const ramp=makeRamp(),path=sampler(ramp.ride),sim=withCamera(solve(path,ramp),path,ramp);
+  const tLetters=sim.tBottom-.02,stagger=.07;
+  const tLets=tLetters+letters.length*stagger+.06;
+  const tHead=sim.tStop+.08,tSub=tHead+.3,tHop=sim.tStop+.06;
+  const tExit=tHead+1.2,tEnd=tExit+.3;
+  const turfTop=mixHex(robot.avatar.body,'#fbfaff',.14),turfBottom=mixHex(robot.avatar.body,'#e7e4f0',.36);
+  const who=playerFirst?'You':robot.name;
+  const sub=playerFirst?`Land any trick. ${robot.name} has to match it.`:`Land ${robot.name}’s trick back or take a letter.`;
+  const note=playerFirst?'You won the toss — you set first!':`${robot.name} won the toss and sets first.`;
+
+  root.innerHTML=`
+  <div class="screen" style="--turf-top:${turfTop};--turf-bottom:${turfBottom}">
+    <div class="statusbar"><span>9:41</span><i></i></div>
+    <div class="under under-rps">
+      <div class="field"><div class="turf"></div><div class="cope"></div>
+        <div class="res"><small>${playerFirst?'You won the throw':robot.name+' won the throw'}</small><strong>${who} ${playerFirst?'set':'sets'} first.</strong><span>Start game</span></div></div>
+    </div>
+    <div class="under under-game" hidden>
+      <div class="topbar"><span>←</span><b>${robot.name}</b></div>
+      <div class="body">
+        <div class="g-card">
+          <div class="g-row"><b>${robot.name}</b><span class="g-letters">${letters.map(l=>`<i>${l}</i>`).join('')}</span></div>
+          <div class="g-row"><b>You</b><span class="g-letters">${letters.map(l=>`<i>${l}</i>`).join('')}</span></div>
+          <div class="g-track">Tracking your tricks for consistency stats</div>
+        </div>
+        <div class="g-card g-panel">${playerFirst
+          ?`<p class="g-note">${note}</p><h2>Your turn to set</h2><p>Go skate! Then come back and tell me how it went.</p><span class="g-btn">I landed a trick</span><span class="g-ghost">Couldn’t land one — pass</span>`
+          :`<p class="g-note">${note}</p>${robotSVG(robot,130,'idle')}<h2>${robot.name} is picking a trick…</h2>`}</div>
+      </div>
+    </div>
+    <div class="drop" style="--t-exit:${tExit}s" role="img" aria-label="Let's skate. ${who} ${playerFirst?'set':'sets'} first.">
+      <div class="drop-light"></div>
+      <svg class="drop-world" viewBox="0 0 390 844" aria-hidden="true">
+        <defs>
+          <linearGradient id="concrete" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="${turfTop}"/><stop offset=".55" stop-color="${turfBottom}"/><stop offset="1" stop-color="${mixHex(robot.avatar.body,'#d9d5e6',.3)}"/>
+          </linearGradient>
+          <linearGradient id="steel" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#fff"/><stop offset=".4" stop-color="#dcd9e6"/><stop offset="1" stop-color="#8f8aa6"/>
+          </linearGradient>
+          <pattern id="speckle" width="200" height="200" patternUnits="userSpaceOnUse">
+            <image width="200" height="200" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' seed='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.2 0 0 0 0 0.18 0 0 0 0 0.3 0 0 0 .9 -0.38'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"/>
+          </pattern>
+          <clipPath id="ramp-clip"><path d="${ramp.solid}"/></clipPath>
+        </defs>
+        <g class="cam">
+          <path d="${ramp.solid}" fill="url(#concrete)"/>
+          <path d="${ramp.solid}" fill="url(#speckle)" opacity=".5"/>
+          <path d="${ramp.ride}" fill="none" stroke="rgba(34,26,78,.12)" stroke-width="30" clip-path="url(#ramp-clip)"/>
+          <path d="${ramp.ride}" fill="none" stroke="${INK}" stroke-width="3.5" stroke-linejoin="round"/>
+          <circle cx="${ramp.X1-1}" cy="${ramp.y1+6}" r="6.5" fill="url(#steel)" stroke="${INK}" stroke-width="3"/>
+          <circle cx="${ramp.X2+1}" cy="${ramp.y2+6}" r="6.5" fill="url(#steel)" stroke="${INK}" stroke-width="3"/>
+          <g class="trails"><path class="trail"/><path class="trail"/><path class="trail"/></g>
+          <g class="dust" fill="#fff"><circle/><circle/><circle/><circle/></g>
+          <g class="rider">
+            <ellipse class="rider-shadow" cx="0" cy="2" rx="30" ry="4.5" fill="rgba(20,6,70,.28)"/>
+            <g class="rider-flex"><svg class="robot-avatar" x="-56" y="-117.4" width="112" height="118.72" viewBox="0 -5 100 106"></svg></g>
+          </g>
+        </g>
+      </svg>
+      <div class="drop-title">
+        <div class="drop-lets" style="--d:${tLets}s"><span>Let’s</span></div>
+        <div class="drop-tiles">${letters.map((l,i)=>`<span class="drop-slot"><span class="drop-tile" style="--d:${(tLetters+i*stagger).toFixed(3)}s;--tint:${TINTS[i%3]};--rot:${[-5,3,-2,4,-3][i%5]}deg">${l}</span></span>`).join('')}</div>
+      </div>
+      <div class="drop-head" style="--d:${tHead}s">
+        <b>${who}</b><b>${playerFirst?'set first':'sets first'}</b>
+        <p class="drop-sub" style="--d:${tSub}s">${sub}</p>
+      </div>
+      <span class="drop-skip">Tap to skip</span>
+    </div>
+  </div>`;
+
+  const $=s=>root.querySelector(s);
+  const el={under1:$('.under-rps'),under2:$('.under-game'),cam:$('.cam'),rider:$('.rider'),flex:$('.rider-flex'),bot:$('.rider .robot-avatar'),
+    shadow:$('.rider-shadow'),trails:[...root.querySelectorAll('.trail')],dust:[...root.querySelectorAll('.dust circle')],drop:$('.drop')};
+  let pose=null,anims=[];
+  const setPose=p=>{if(p!==pose){pose=p;el.bot.innerHTML=robotInner(robot,p);}};
+  const idx=t=>Math.max(0,Math.min(sim.S.length-1,Math.floor(t/PHYS.dt)));
+  const speedAt=i=>(sim.S[Math.min(i+1,sim.S.length-1)]-sim.S[i])/PHYS.dt;
+  const ease=u=>u<0?0:u>1?1:u*u*(3-2*u);
+
+  function renderAt(t){
+    const i=idx(t),s=sim.S[i],p=path.at(s),v=speedAt(i);
+    el.cam.setAttribute('transform',`translate(${(-sim.cam[i]).toFixed(2)} 0)`);
+
+    // Crouch before the push, then extend; squash with the load in concave transitions.
+    let sq=0,lean=0,hop=0;
+    if(t<PHYS.PUSH_T){const u=ease((t-.14)/(PHYS.PUSH_T-.14));sq=.1*u;lean=-3*u;}
+    else if(t<PHYS.PUSH_T+.12){sq=-.05*(1-(t-PHYS.PUSH_T)/.12);}
+    if(p.k<0)sq=Math.max(sq,Math.min(.17,v*v*-p.k/9000));
+    if(!playerFirst&&t>=tHop){
+      const u=(t-tHop)/.42;
+      if(u<1)hop=-24*Math.sin(Math.PI*u);
+      else if(u<1.4)sq=Math.max(sq,.1*(1-(u-1)/.4));
+    }else if(playerFirst&&t>sim.tStop+.2){hop=-2.5*Math.sin((t-sim.tStop-.2)*4.2);}
+    setPose(!playerFirst&&t>=tHop+.1?'stoked':'idle');
+    const deg=p.th*180/Math.PI+lean;
+    el.rider.setAttribute('transform',`translate(${p.x.toFixed(2)} ${p.y.toFixed(2)}) rotate(${deg.toFixed(2)})`);
+    el.flex.setAttribute('transform',`translate(0 ${hop.toFixed(2)}) scale(${(1+sq*.45).toFixed(3)} ${(1-sq).toFixed(3)})`);
+    el.shadow.setAttribute('opacity',(1+hop/40).toFixed(2));
+
+    // Speed lines: the rider's recent path, offset along the surface normal.
+    const lines=[[26,.9],[52,1],[80,.7]],a=Math.max(0,Math.min(1,(v-260)/420));
+    el.trails.forEach((tr,j)=>{
+      if(a<=0){tr.setAttribute('d','');return;}
+      const [h,len]=lines[j],pts=[];
+      for(let q=0;q<=10;q++){const ii=Math.max(0,i-Math.round(q*len*38/10)),pp=path.at(sim.S[ii]);
+        pts.push(`${(pp.x+Math.sin(pp.th)*h).toFixed(1)} ${(pp.y-Math.cos(pp.th)*h).toFixed(1)}`);}
+      tr.setAttribute('d','M'+pts.slice(2).join(' L '));tr.setAttribute('opacity',(a*.55).toFixed(2));
+    });
+
+    // Dust as the brake bites on the far deck.
+    const du=(t-(sim.tStop-.14))/.5;
+    el.dust.forEach((c,j)=>{
+      if(du<0||du>1){c.setAttribute('r',0);return;}
+      const back=-26-j*9,rise=-4-j*5*ease(du);
+      c.setAttribute('cx',(p.x+back-ease(du)*14*(j+1)).toFixed(1));c.setAttribute('cy',(p.y+rise).toFixed(1));
+      c.setAttribute('r',(3+j*1.6+du*9).toFixed(1));c.setAttribute('opacity',((1-du)*.55).toFixed(2));
+    });
+
+    el.under1.hidden=t>=.32;el.under2.hidden=t<.32;
+    anims.forEach(a=>{a.currentTime=Math.max(0,t*1000);});
+    return {v,i};
+  }
+  const ready=new Promise(res=>requestAnimationFrame(()=>{
+    anims=root.getAnimations({subtree:true});anims.forEach(a=>a.pause());res();
+  }));
+  return {renderAt,ready,tEnd,tExit,sim,times:{tLip1:sim.tLip1,tBottom:sim.tBottom,tStop:sim.tStop,tHead,tLetters,stagger,tExit}};
+}
+
+/* ================= live player (one master clock drives the sim and the CSS) ================= */
+const state={robot:ROBOTS[0],playerFirst:false,format:'skate',speed:1};
+let scene=null,raf=0,t0=0,tNow=0,playing=false,fired=new Set();
+const scrub=document.getElementById('scrub'),scrubOut=document.getElementById('scrub-out');
+
+async function build(){
+  cancelAnimationFrame(raf);rollStop();playing=false;
+  const root=document.getElementById('live');
+  scene=mountScene(root,{...state,letters:FORMATS[state.format],live:true});
+  root.querySelector('.drop').addEventListener('click',()=>{if(playing&&tNow<scene.tExit)seek(scene.tExit,true);});
+  scrub.max=scene.tEnd.toFixed(3);
+  await scene.ready;scene.renderAt(0);
+  buildBoard();
+}
+function play(from=0){
+  cancelAnimationFrame(raf);fired=new Set();playing=true;tNow=from;t0=performance.now()-from*1000/state.speed;
+  if(from<scene.times.tStop)rollStart();
+  const tick=now=>{
+    tNow=(now-t0)/1000*state.speed;
+    const {v}=scene.renderAt(Math.min(tNow,scene.tEnd));
+    scrub.value=Math.min(tNow,scene.tEnd);scrubOut.textContent=Math.min(tNow,scene.tEnd).toFixed(2)+'s';
+    cues(tNow,v);
+    if(tNow<scene.tEnd)raf=requestAnimationFrame(tick);else{playing=false;rollStop();}
+  };
+  raf=requestAnimationFrame(tick);
+}
+function seek(t,resume){t0=performance.now()-t*1000/state.speed;tNow=t;if(!resume){cancelAnimationFrame(raf);playing=false;scene.renderAt(t);}}
+function cues(t,v){
+  const T=scene.times,once=(k,at,fn)=>{if(t>=at&&!fired.has(k)){fired.add(k);fn();}};
+  rollGain(t<T.tStop?v:0);
+  once('lip',T.tLip1+.05,()=>clack(.22));
+  once('bottom',T.tBottom,()=>blip(90,{dur:.18,type:'sine',gain:.18}));
+  for(let i=0;i<FORMATS[state.format].length;i++)once('l'+i,T.tLetters+i*T.stagger,()=>blip(620+i*90,{dur:.06}));
+  once('stop',T.tStop,()=>{clack(.3);rollStop();});
+  once('head',T.tHead,()=>[523,659,784].forEach((f,i)=>blip(f,{when:i*.07,dur:.14,gain:.07})));
+}
+
+/* ================= beat sheet ================= */
+async function buildBoard(){
+  const board=document.getElementById('board');board.innerHTML='';
+  const probe=scene.times;
+  const frames=[
+    {t:.34,title:'1 · Set up',text:'Tail on the coping, knees bending: the anticipation before the push.'},
+    {t:probe.tLip1+.1,title:'2 · Over the lip',text:'Rolling slowly, it pivots over the coping instead of snapping steep.'},
+    {t:probe.tBottom-.12,title:'3 · Drop',text:'Gravity only. Speed lines appear once it’s actually fast.'},
+    {t:probe.tBottom+.16,title:'4 · Bottom out',text:'Squash scales with the load, and the letters slam in on the impact.'},
+    {t:probe.tHead+.7,title:'5 · Deck',text:'It rolls out, brakes, and hops into its pose. Now the screen says who sets first.'},
+    {t:probe.tExit+.16,title:'6 · Into the game',text:'It fades into the game, where the engine’s toss note is waiting.'},
+  ];
+  for(const f of frames){
+    const fig=document.createElement('figure');fig.className='frame';
+    fig.innerHTML=`<div class="mini frozen"></div><figcaption><b>${f.title} <span style="display:inline;color:var(--muted);font-weight:700">${f.t.toFixed(2)}s</span></b><span>${f.text}</span></figcaption>`;
+    board.appendChild(fig);
+    const m=mountScene(fig.querySelector('.mini'),{...state,playerFirst:false,letters:FORMATS[state.format]});
+    await m.ready;m.renderAt(f.t);
+  }
+}
+
+/* ================= controls ================= */
+function chip(parent,html,on,onClick,cls=''){
+  const b=document.createElement('button');b.type='button';b.className='chip'+(on?' on':'')+(cls?' '+cls:'');b.innerHTML=html;
+  b.addEventListener('click',()=>onClick(b));document.getElementById(parent).appendChild(b);return b;}
+const group=(parent,items,get,set)=>items.forEach(([v,label])=>chip(parent,label,get()===v,b=>{
+  set(v);document.querySelectorAll(`#${parent} .chip`).forEach(c=>c.classList.toggle('on',c===b));}));
+group('ctl-who',[[true,'You'],[false,'Robot']],()=>state.playerFirst,v=>{state.playerFirst=v;build().then(()=>play());});
+group('ctl-robots',ROBOTS.map(r=>[r.id,`${robotSVG(r,26)}${r.name}`]),()=>state.robot.id,v=>{state.robot=ROBOTS.find(r=>r.id===v);build().then(()=>play());});
+group('ctl-format',[['skate','S.K.A.T.E.'],['sk8','S.K.8']],()=>state.format,v=>{state.format=v;build().then(()=>play());});
+group('ctl-speed',[[1,'1×'],[.5,'½×'],[.25,'¼×']],()=>state.speed,v=>{state.speed=v;if(playing)play(tNow);});
+chip('ctl-actions','▶ Replay',false,()=>play(0),'primary');
+const snd=chip('ctl-actions','Sound on',true,b=>{soundOn=!soundOn;b.classList.toggle('on',soundOn);b.textContent=soundOn?'Sound on':'Sound off';if(!soundOn)rollStop();});
+scrub.addEventListener('input',()=>{rollStop();seek(+scrub.value,false);scrubOut.textContent=(+scrub.value).toFixed(2)+'s';});
+
+/* #who=robot|you&robot=clamp&format=sk8&t=1.2 */
+{
+  const q=new URLSearchParams(location.hash.slice(1));
+  if(q.get('who')==='you')state.playerFirst=true;
+  const r=ROBOTS.find(x=>x.id===q.get('robot'));if(r)state.robot=r;
+  if(FORMATS[q.get('format')])state.format=q.get('format');
+  document.querySelectorAll('#ctl-who .chip').forEach((c,i)=>c.classList.toggle('on',(i===0)===state.playerFirst));
+  document.querySelectorAll('#ctl-robots .chip').forEach((c,i)=>c.classList.toggle('on',ROBOTS[i]===state.robot));
+  document.querySelectorAll('#ctl-format .chip').forEach((c,i)=>c.classList.toggle('on',(i===0)===(state.format==='skate')));
+  build().then(()=>{const t=q.get('t');if(t!==null){seek(+t,false);scrub.value=+t;scrubOut.textContent=(+t).toFixed(2)+'s';}else play(0);});
+}
+</script>
+</body>
+</html>

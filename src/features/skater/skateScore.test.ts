@@ -216,13 +216,13 @@ describe('skillToRawElo', () => {
   });
 
   it('matches the seeded bare-curve anchors in the middle band', () => {
-    expect(skillToRawElo(7)).toBe(1415);
-    expect(skillToRawElo(9)).toBe(2168);
+    expect(skillToRawElo(7)).toBe(2104);
+    expect(skillToRawElo(9)).toBe(2626);
   });
 
   it('maps onto the shared 800–2400 display rating', () => {
-    expect(skillToDisplayRating(7)).toBe(rawEloToDisplayRating(1415));
-    expect(skillToDisplayRating(10)).toBe(rawEloToDisplayRating(2770));
+    expect(skillToDisplayRating(7)).toBe(rawEloToDisplayRating(2104));
+    expect(skillToDisplayRating(10)).toBe(rawEloToDisplayRating(3000));
   });
 });
 

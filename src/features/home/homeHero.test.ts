@@ -58,7 +58,7 @@ describe('computeHero', () => {
     });
 
     expect(hero.kind).toBe('next');
-    // Magnet is the next robot above Gutsy in the simulated Elo ladder.
+    // Magnet follows Gutsy after calibrating the authored set repertoires.
     expect(hero.robot.id).toBe('fronty');
   });
 

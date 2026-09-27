@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BEATS, RPS_CHOICES, type Rps, robotThrow, rpsOutcome } from './rps'
+import { BEATS, RPS_CHOICES, RPS_RULE, type Rps, robotThrow, rpsOutcome } from './rps'
 
 const ALL: Rps[] = ['rock', 'paper', 'scissors']
 
@@ -36,6 +36,16 @@ describe('BEATS / RPS_CHOICES', () => {
     for (const c of ALL) {
       expect(ALL).toContain(BEATS[c])
       expect(BEATS[c]).not.toBe(c)
+    }
+  })
+})
+
+describe('RPS_RULE', () => {
+  it('names the winning throw first and the throw it beats last', () => {
+    for (const c of ALL) {
+      const rule = RPS_RULE[c].toLowerCase()
+      expect(rule.startsWith(c)).toBe(true)
+      expect(rule.endsWith(BEATS[c])).toBe(true)
     }
   })
 })

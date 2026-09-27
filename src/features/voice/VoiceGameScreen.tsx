@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { SignInScreen } from '@/features/auth';
 import { UpgradeScreen } from '@/features/billing';
 import type { GameFormat, GameProgress, GameSessionSnapshot, GameState } from '@/features/game';
-import { TrickAnimation, createInitialGameState, lettersForFormat } from '@/features/game';
+import { TrickAnimation, TrackingStatusChip, createInitialGameState, lettersForFormat } from '@/features/game';
 import type { Robot } from '@/features/robots';
 import { RobotAvatar } from '@/features/robots';
 import type { Trick } from '@/features/tricks';
@@ -84,8 +84,9 @@ export default function VoiceGameScreen({
   const pocketRef = useRef(false);
   const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const progressRef = useRef<GameProgress>(
-    resume?.progress ?? { trickIdsLanded: [], trickAttempts: [] },
+    resume?.progress ?? { trickIdsLanded: [], trickAttempts: [], trackingEligible: true },
   );
+  const [trackingEligible, setTrackingEligible] = useState(resume?.progress.trackingEligible ?? true);
   const onCompleteRef = useRef(onComplete);
   useEffect(() => {
     onCompleteRef.current = onComplete;
@@ -107,6 +108,7 @@ export default function VoiceGameScreen({
     });
     controller.onChange = (s, progress) => {
       progressRef.current = progress;
+      setTrackingEligible(progress.trackingEligible);
       setGame({ ...s });
       // A rematch resets to the toss — drop any leftover attempt animations.
       if (s.phase === 'rps') setAttempts([]);
@@ -231,6 +233,7 @@ export default function VoiceGameScreen({
             <span className="score-name">You</span>
             <Letters count={game.letters.player} format={game.gameFormat} />
           </div>
+          <TrackingStatusChip trackingEligible={trackingEligible} />
         </div>
       )}
 

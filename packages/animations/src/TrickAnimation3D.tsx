@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useId, useRef, useState, type ReactElement } from 'react';
+import { useId, useMemo, useState, type ReactElement } from 'react';
 import type { RiderStance, Robot, Trick } from './types';
-import { orientTrickRotation, resolveRiderMechanics } from './stanceMechanics';
+import { flickExtension, orientTrickRotation, resolveRiderMechanics } from './stanceMechanics';
 import { readableAccent } from './robotColors';
+import { resolveSkateStyle } from './skateStyle';
+import { useTrickPlayback } from './useTrickPlayback';
 import {
-  computeFrame,
   specFor,
   knee,
   clampFootReach,
@@ -21,9 +22,6 @@ import {
   JUMP,
   ROLL_IN,
   FLIP_T,
-  LAND_T,
-  FALL_T,
-  HOLD,
   STREET_DASH_PERIOD,
   STREET_DASH_SECONDS,
   type BackgroundSceneId,
@@ -580,6 +578,11 @@ export default function TrickAnimation3D({
   fixedTime,
 }: Props) {
   const skyGradId = useId().replace(/:/g, '');
+  const skateStyle = useMemo(() => resolveSkateStyle(robot.skateStyle), [robot.skateStyle]);
+  // Taller authored pops need a little extra camera headroom so the antenna
+  // stays inside the frame at the above-neutral extreme. Neutral and low
+  // styles keep the original framing.
+  const styleSkyPad = SKY_PAD + Math.max(0, skateStyle.popHeight - 1) * SKY_PAD;
   const forcedFall = !landed && knewIt === false ? ('shank' as FallVariant) : undefined;
   const [randomizedFallVariant] = useState<FallVariant>(randomFallVariant);
   const [shankProgress] = useState(randomShankProgress);
@@ -587,97 +590,16 @@ export default function TrickAnimation3D({
   // anatomy below; it is not simulated as fakie + nollie.
   const [spec] = useState(() => specFor(trick));
   const resolvedFallVariant = forcedFall ?? fallVariant ?? randomizedFallVariant;
-  const [frame, setFrame] = useState(() => computeFrame(0, spec, landed, resolvedFallVariant, shankProgress));
-  const [isPlaying, setIsPlaying] = useState(true);
-  const [replayNonce, setReplayNonce] = useState(0);
-  const [selectedPlaybackRate, setSelectedPlaybackRate] = useState<0.5 | 1>(() => playbackRate === 0.5 ? 0.5 : 1);
-  const doneRef = useRef(false);
-  const onDoneRef = useRef(onDone);
-  const pausedRef = useRef(paused);
-  const speedToggleVisible = showSpeedToggle && fixedTime == null;
-  const effectivePlaybackRate = Math.max(0.05, speedToggleVisible ? selectedPlaybackRate : playbackRate);
-  // Static mode: one frozen frame, computed in render so a changed fixedTime
-  // (e.g. a scrubber) re-renders without touching the playback machinery.
-  const staticTime = fixedTime == null
-    ? null
-    : Math.max(0, Math.min(fixedTime, ROLL_IN + FLIP_T + (landed ? LAND_T : FALL_T)));
-
-  useEffect(() => {
-    onDoneRef.current = onDone;
-  }, [onDone]);
-
-  useEffect(() => {
-    pausedRef.current = paused;
-  }, [paused]);
-
-  useEffect(() => {
-    if (staticTime != null) return;
-    const end = ROLL_IN + FLIP_T + (landed ? LAND_T : FALL_T);
-    const durationMs = ((end + HOLD) / effectivePlaybackRate) * 1000;
-    const finish = () => {
-      setIsPlaying(false);
-      if (!doneRef.current) {
-        doneRef.current = true;
-        onDoneRef.current();
-      }
-    };
-    let raf = 0;
-    let lastNow: number | null = null;
-    let animationTime = 0;
-    const tick = (now: number) => {
-      if (lastNow === null) lastNow = now;
-      const dt = (now - lastNow) / 1000;
-      lastNow = now;
-      if (!pausedRef.current) {
-        animationTime += dt * effectivePlaybackRate;
-      }
-      setFrame(computeFrame(Math.min(animationTime, end), spec, landed, resolvedFallVariant, shankProgress));
-      if (animationTime >= end + HOLD) {
-        finish();
-        return;
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    let failSafe = 0;
-    const armFailSafe = () => {
-      failSafe = window.setTimeout(() => {
-        if (pausedRef.current) {
-          armFailSafe();
-          return;
-        }
-        setFrame(computeFrame(end, spec, landed, resolvedFallVariant, shankProgress));
-        finish();
-      }, durationMs + 500);
-    };
-    armFailSafe();
-    return () => {
-      cancelAnimationFrame(raf);
-      clearTimeout(failSafe);
-    };
-  }, [spec, landed, resolvedFallVariant, shankProgress, effectivePlaybackRate, replayNonce, staticTime]);
-
-  const replay = () => {
-    if (staticTime != null) return;
-    setIsPlaying(true);
-    setFrame(computeFrame(0, spec, landed, resolvedFallVariant, shankProgress));
-    setReplayNonce((current) => current + 1);
-  };
-
-  const togglePlaybackRate = () => {
-    if (!speedToggleVisible) return;
-    doneRef.current = false;
-    setIsPlaying(true);
-    setFrame(computeFrame(0, spec, landed, resolvedFallVariant, shankProgress));
-    setSelectedPlaybackRate((current) => current === 1 ? 0.5 : 1);
-    setReplayNonce((current) => current + 1);
-  };
+  const {
+    frame: f, isPlaying, staticTime, speedToggleVisible, effectivePlaybackRate,
+    selectedPlaybackRate, replay, togglePlaybackRate,
+  } = useTrickPlayback({
+    spec, landed, resolvedFallVariant, shankProgress, skateStyle,
+    onDone, paused, playbackRate, showSpeedToggle, fixedTime,
+  });
 
   const colors = robot.avatar;
   const accent = readableAccent(colors.accent);
-  const f = staticTime != null
-    ? computeFrame(staticTime, spec, landed, resolvedFallVariant, shankProgress)
-    : frame;
   const prims: Prim[] = [];
   const mechanics = resolveRiderMechanics(riderStance, spec.stance);
 
@@ -712,9 +634,8 @@ export default function TrickAnimation3D({
   const headYawDeg3d = orientedRotation.bodyYawDeg * headSpinFollow
     + restingHeadYaw * uprightP
     + restingBodyYaw * (1 - uprightP);
-  const rawFlightP = (f.t - ROLL_IN) / FLIP_T;
-  const catchP3d = clamp01(rawFlightP / 0.85);
-  const spinP3d = rawFlightP < 0 ? 0 : rawFlightP >= 1 ? 1 : spec.late ? clamp01((rawFlightP - 0.38) / 0.30) : catchP3d;
+  const rawFlightP = f.motion.flight;
+  const spinP3d = f.motion.rotation;
   const isForwardFlip = spec.forwardFlip;
   const flipDeg3d = orientedRotation.flipDeg;
   // Dolphin keeps its original nose-dive pitch; varials leave forwardPitchDeg
@@ -925,8 +846,8 @@ export default function TrickAnimation3D({
   // kickflip as a heelflip.
   let flickZ = 0;
   if (spec.flipDir && rawFlightP >= 0 && rawFlightP < 1) {
-    const flickAmount = 9;
-    flickZ = -spec.flipDir * localToeDir * flickAmount * Math.sin(spinP3d * Math.PI);
+    const flickAmount = 9 * skateStyle.flickStrength;
+    flickZ = -spec.flipDir * localToeDir * flickAmount * flickExtension(spinP3d);
   }
 
   // Frame channels are stable board roles: R is nose, L is tail. Keep those
@@ -1467,9 +1388,15 @@ export default function TrickAnimation3D({
       data-toe-side={mechanics.orientationSign}
       data-board-flip={flipDeg3d.toFixed(1)}
       data-board-yaw={yawDeg3d.toFixed(1)}
+      data-board-height={(GROUND - f.board.y).toFixed(1)}
+      data-rotation-progress={f.motion.rotation.toFixed(3)}
+      data-flick-depth={flickZ.toFixed(1)}
       data-current-body-yaw={bodyYawDeg3d.toFixed(1)}
       data-current-head-yaw={headYawDeg3d.toFixed(1)}
       data-playback-rate={effectivePlaybackRate}
+      data-pop-height={skateStyle.popHeight}
+      data-rotation-speed={skateStyle.rotationSpeed}
+      data-flick-strength={skateStyle.flickStrength}
     >
       <button
         type="button"
@@ -1478,7 +1405,7 @@ export default function TrickAnimation3D({
         aria-roledescription="trick animation"
         onClick={replay}
       >
-        <svg viewBox={`0 ${-SKY_PAD} ${W} ${H + SKY_PAD}`} xmlns="http://www.w3.org/2000/svg">
+        <svg viewBox={`0 ${-styleSkyPad} ${W} ${H + styleSkyPad}`} xmlns="http://www.w3.org/2000/svg">
         <defs>
           <linearGradient id={skyGradId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#7ec8f0" />
@@ -1551,9 +1478,9 @@ export default function TrickAnimation3D({
         <rect
           fill={`url(#${skyGradId})`}
           x={0}
-          y={-SKY_PAD}
+          y={-styleSkyPad}
           width={W}
-          height={H + SKY_PAD}
+          height={H + styleSkyPad}
         />
         <g aria-hidden="true">{skyScenery}</g>
         <path className="trick-anim-3d__floor-plane" d={floorPath} fill={`url(#${shoulderGradId})`} />

@@ -33,7 +33,6 @@ import {
   betaFeaturesEnabledFromSearch,
   hrefForRootTab,
   parseRootTab,
-  rosterOverrideEnabledFromSearch,
   subscribeToUrlChanges,
   syncRootTabUrl,
   type RootTab,
@@ -138,7 +137,6 @@ export default function AppShell({ initialSearch = '' }: { initialSearch?: strin
   const appInstallOffer = useAppInstallOffer(nativeApp);
   const search = useSyncExternalStore(subscribeToUrlChanges, () => window.location.search, () => initialSearch);
   const betaFeaturesEnabled = betaFeaturesEnabledFromSearch(search);
-  const rosterOverrideEnabled = rosterOverrideEnabledFromSearch(search);
   const urlTab = parseRootTab(search);
   const [detail, setDetail] = useState<Screen | null>(null);
   const screen = detail ?? TAB_ROOT_SCREEN[urlTab];
@@ -321,7 +319,6 @@ export default function AppShell({ initialSearch = '' }: { initialSearch?: strin
               installBanner={<AppInstallBanner offer={appInstallOffer} />}
               onPickRobot={(robot) => go({ id: 'profile', ...defaultRoutedTrickPool(), robot })}
               gameVariant={gameVariant}
-              rosterOverrideEnabled={rosterOverrideEnabled}
               voiceVisible={betaFeaturesEnabled}
               adaptiveMatchVisible={betaFeaturesEnabled}
               adaptiveSaveWaiting={betaFeaturesEnabled && adaptiveSaveWaiting}

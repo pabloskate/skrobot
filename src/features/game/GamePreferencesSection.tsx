@@ -6,9 +6,11 @@ import {
   setGameFormat,
   setGameVariant,
   setPlayerStance,
+  setTrickTracking,
   useGameFormat,
   useGameVariant,
   usePlayerStance,
+  useTrickTracking,
 } from './gamePreferences';
 
 const OPTIONS: { value: GameFormat; title: string; detail: string; letters: string }[] = [
@@ -26,16 +28,30 @@ const STANCES: { value: PlayerStance; title: string; detail: string }[] = [
   { value: 'goofy', title: 'Goofy', detail: 'Right foot forward' },
 ];
 
+const TRACKING: { value: boolean; title: string; detail: string }[] = [
+  {
+    value: true,
+    title: 'Track my tricks',
+    detail: 'Log every attempt — even a missed set names the trick — to build your consistency stats',
+  },
+  {
+    value: false,
+    title: 'Just play',
+    detail: 'Games count toward your record only, and missed sets pass without naming a trick',
+  },
+];
+
 export default function GamePreferencesSection() {
   const format = useGameFormat();
   const variant = useGameVariant();
   const stance = usePlayerStance();
+  const tracking = useTrickTracking();
 
   return (
     <section className="settings-section" aria-labelledby="game-preferences-title">
       <div className="settings-section-heading">
         <h2 id="game-preferences-title">Game preferences</h2>
-        <p>Choose match rules and your stance. Saved games keep their match settings.</p>
+        <p>Choose match rules, your stance, and whether games feed your trick stats. Saved games keep their match settings.</p>
       </div>
       <fieldset className="game-format-options">
         <legend className="sr-only">Game format</legend>
@@ -87,6 +103,24 @@ export default function GamePreferencesSection() {
               value={option.value}
               checked={stance === option.value}
               onChange={() => setPlayerStance(option.value)}
+            />
+            <span className="game-format-copy">
+              <strong>{option.title}</strong>
+              <small>{option.detail}</small>
+            </span>
+          </label>
+        ))}
+      </fieldset>
+      <fieldset className="game-format-options">
+        <legend className="settings-choice-label">Trick tracking</legend>
+        {TRACKING.map((option) => (
+          <label key={option.title} className={`game-format-option ${tracking === option.value ? 'selected' : ''}`}>
+            <input
+              type="radio"
+              name="trick-tracking"
+              value={option.value ? 'on' : 'off'}
+              checked={tracking === option.value}
+              onChange={() => setTrickTracking(option.value)}
             />
             <span className="game-format-copy">
               <strong>{option.title}</strong>

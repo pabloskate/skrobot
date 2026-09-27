@@ -50,6 +50,86 @@ describe('defense roster', () => {
     }
   });
 
+  it('never carries or sets late backside shuvits', () => {
+    for (const robot of DEFENSE_ROBOTS) {
+      expect(
+        Object.keys(DEFENSE_CONSISTENCY[robot.id]!).some((trickId) =>
+          trickId.endsWith('-late-backside-shuvit'),
+        ),
+        `${robot.name} consistency table`,
+      ).toBe(false);
+      expect(
+        Object.keys(ROBOT_DEFENSE_SET_WEIGHTS[robot.id]!).some((trickId) =>
+          trickId.endsWith('-late-backside-shuvit'),
+        ),
+        `${robot.name} set-weight table`,
+      ).toBe(false);
+    }
+  });
+
+  it('gives every hard robot some foundational flip and 180 sets', () => {
+    for (const robot of DEFENSE_ROBOTS.filter((candidate) => candidate.tier === 'advanced')) {
+      const settableBases = new Set(
+        Object.keys(ROBOT_DEFENSE_SET_WEIGHTS[robot.id]!).map(
+          (trickId) => TRICK_BY_ID.get(trickId)!.base,
+        ),
+      );
+      expect(settableBases.has('Kickflip'), `${robot.name} kickflip`).toBe(true);
+      expect(settableBases.has('Heelflip'), `${robot.name} heelflip`).toBe(true);
+      expect(settableBases.has('Frontside 180'), `${robot.name} frontside 180`).toBe(true);
+      expect(settableBases.has('Backside 180'), `${robot.name} backside 180`).toBe(true);
+    }
+  });
+
+  it('keeps Deadbolt off-stance sets focused on 180s instead of kickflips or varials', () => {
+    const deadboltSets = ROBOT_DEFENSE_SET_WEIGHTS.deadbolt!;
+    for (const stance of ['nollie', 'switch'] as const) {
+      expect(deadboltSets[`${stance}-frontside-180`]).toBeGreaterThan(0);
+      expect(deadboltSets[`${stance}-backside-180`]).toBeGreaterThan(0);
+      expect(deadboltSets[`${stance}-kickflip`]).toBeUndefined();
+      expect(
+        Object.keys(deadboltSets).some((trickId) =>
+          trickId.startsWith(`${stance}-varial-`),
+        ),
+      ).toBe(false);
+    }
+  });
+
+  it('keeps Rampart grounded with regular shuvits and 180s', () => {
+    const rampartSets = ROBOT_DEFENSE_SET_WEIGHTS.rampart!;
+    for (const trickId of [
+      'regular-pop-shuvit',
+      'regular-frontside-shuvit',
+      'regular-frontside-180',
+      'regular-backside-180',
+    ]) {
+      expect(rampartSets[trickId], trickId).toBeGreaterThan(0);
+    }
+    for (const trickId of [
+      'switch-bigspin',
+      'switch-360-shuvit',
+      'nollie-360-shuvit',
+      'regular-fs-bigspin',
+    ]) {
+      expect(rampartSets[trickId], trickId).toBeUndefined();
+    }
+  });
+
+  it('gives Turnstile nollie and switch rotations without its regular FS bigspin', () => {
+    const turnstileSets = ROBOT_DEFENSE_SET_WEIGHTS.turnstile!;
+    for (const trickId of [
+      'nollie-backside-360',
+      'nollie-bigspin',
+      'nollie-backside-180',
+      'switch-backside-180',
+      'switch-frontside-180',
+    ]) {
+      expect(turnstileSets[trickId], trickId).toBeGreaterThan(0);
+    }
+    expect(turnstileSets['switch-360-shuvit']).toBeUndefined();
+    expect(turnstileSets['regular-fs-bigspin']).toBeUndefined();
+  });
+
   it('every set-table trick exists in the catalog and the bag', () => {
     const catalog = new Set(TRICKS.map((t) => t.id));
     for (const robot of DEFENSE_ROBOTS) {
@@ -78,5 +158,33 @@ describe('defense roster', () => {
     expect(hasDefenseSets({ id: 'aegis' })).toBe(true);
     expect(hasDefenseSets({ id: 'tre' })).toBe(false);
     expect(hasDefenseSets({ id: 'nobody' })).toBe(false);
+  });
+
+  it('gives every defense bot individual trick rates instead of a placeholder plateau', () => {
+    for (const robot of DEFENSE_ROBOTS) {
+      const rates = Object.values(DEFENSE_CONSISTENCY[robot.id]);
+      expect(new Set(rates).size, robot.name).toBeGreaterThanOrEqual(8);
+      for (const rate of rates) {
+        expect(Number.isFinite(rate)).toBe(true);
+        expect(rate).toBeGreaterThan(0);
+        expect(rate).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
+  it('keeps core flips in the Pro defense mix alongside specialist challenges', () => {
+    const coreBases = new Set(['Kickflip', 'Heelflip', 'Backside Flip']);
+    for (const robot of DEFENSE_ROBOTS.filter(r => r.tier === 'pro')) {
+      let total = 0;
+      let core = 0;
+      for (const trick of TRICKS) {
+        const weight = trickDefenseSetWeight(trick, robot);
+        total += weight;
+        if (coreBases.has(trick.base)) core += weight;
+      }
+      // Initial draw mass, not a promise that every random game has this mix.
+      expect(core / total, robot.name).toBeGreaterThanOrEqual(0.3);
+      expect(core / total, robot.name).toBeLessThan(0.7);
+    }
   });
 });

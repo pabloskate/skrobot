@@ -13,8 +13,13 @@ import {
   type Frame,
   type Spec,
 } from './TrickAnimation';
+import {
+  DEFAULT_SKATE_STYLE,
+  SKATE_STYLE_BOUNDS,
+  resolveSkateStyle,
+} from './skateStyle';
 import { orientTrickRotation, resolveRiderMechanics } from './stanceMechanics';
-import type { RiderStance, Stance, Trick } from './types';
+import type { RiderStance, SkateStyle, Stance, Trick } from './types';
 
 /**
  * Invariant tests for the animation core. These exist because the dominant
@@ -88,6 +93,7 @@ const frameNumbers = (f: Frame): number[] => [
   f.board.x, f.board.y, f.board.rot, f.board.sx, f.board.sy,
   f.body.x, f.body.y, f.body.sx, f.body.rot,
   f.spin3d.flipDeg, f.spin3d.yawDeg, f.spin3d.forwardPitchDeg, f.spin3d.bodyYawDeg,
+  f.motion.flight, f.motion.rotation,
   f.footL.x, f.footL.y, f.footR.x, f.footR.y,
   f.armFront, f.armBack,
   f.streetDist,
@@ -97,6 +103,37 @@ const sampleTimes = (landed: boolean, n = 48): number[] => {
   const end = endTime(landed);
   return Array.from({ length: n + 1 }, (_, i) => (end * i) / n);
 };
+
+const style = (overrides: Partial<SkateStyle>): SkateStyle =>
+  resolveSkateStyle({ ...DEFAULT_SKATE_STYLE, ...overrides });
+
+const STYLE_EXTREMES: SkateStyle[] = [
+  {
+    popHeight: SKATE_STYLE_BOUNDS.popHeight.min,
+    rotationSpeed: SKATE_STYLE_BOUNDS.rotationSpeed.min,
+    flickStrength: SKATE_STYLE_BOUNDS.flickStrength.min,
+  },
+  {
+    popHeight: SKATE_STYLE_BOUNDS.popHeight.max,
+    rotationSpeed: SKATE_STYLE_BOUNDS.rotationSpeed.max,
+    flickStrength: SKATE_STYLE_BOUNDS.flickStrength.max,
+  },
+];
+
+describe('resolveSkateStyle', () => {
+  it('uses neutral values by default and clamps authored values to the style bounds', () => {
+    expect(resolveSkateStyle()).toEqual(DEFAULT_SKATE_STYLE);
+    expect(resolveSkateStyle({
+      popHeight: -10,
+      rotationSpeed: 10,
+      flickStrength: Number.NaN,
+    })).toEqual({
+      popHeight: SKATE_STYLE_BOUNDS.popHeight.min,
+      rotationSpeed: SKATE_STYLE_BOUNDS.rotationSpeed.max,
+      flickStrength: DEFAULT_SKATE_STYLE.flickStrength,
+    });
+  });
+});
 
 // ---------- Rider mechanics symmetries ----------
 
@@ -278,6 +315,16 @@ describe('specFor', () => {
 // ---------- Frame invariants across the full catalog ----------
 
 describe('computeFrame', () => {
+  it('keeps the neutral style identical to the default animation', () => {
+    for (const base of BASES) {
+      const spec = specFor(trick(base, 'regular'));
+      for (const t of sampleTimes(true, 12)) {
+        expect(computeFrame(t, spec, true, 'slam', 0.65, DEFAULT_SKATE_STYLE))
+          .toEqual(computeFrame(t, spec, true, 'slam'));
+      }
+    }
+  });
+
   it('never produces NaN or infinity for any trick, stance, outcome, or fall', () => {
     const failures: string[] = [];
     const sweep = (spec: Spec, label: string, landed: boolean, fall: FallVariant, samples: number) => {
@@ -293,6 +340,26 @@ describe('computeFrame', () => {
         sweep(spec, `${base} (${stance})`, true, 'slam', 48);
         for (const fall of FALLS) {
           sweep(spec, `${base} (${stance})`, false, fall, 24);
+        }
+      }
+    }
+    expect(failures).toEqual([]);
+  });
+
+  it('stays finite across the full catalog at both style extremes', () => {
+    const failures: string[] = [];
+    for (const skateStyle of STYLE_EXTREMES) {
+      for (const base of BASES) {
+        for (const stance of STANCES) {
+          const spec = specFor(trick(base, stance));
+          for (const landed of [true, false]) {
+            for (const t of sampleTimes(landed, 16)) {
+              const frame = computeFrame(t, spec, landed, 'shank', 0.65, skateStyle);
+              if (!frameNumbers(frame).every(Number.isFinite)) {
+                failures.push(`${base} (${stance}) t=${t.toFixed(3)}`);
+              }
+            }
+          }
         }
       }
     }
@@ -315,6 +382,76 @@ describe('computeFrame', () => {
       expect(computeFrame(ROLL_IN + FLIP_T / 2, spec, true, 'slam').board.y).toBeCloseTo(GROUND - JUMP, 5);
       expect(computeFrame(ROLL_IN + FLIP_T, spec, true, 'slam').board.y).toBeCloseTo(GROUND, 5);
       expect(computeFrame(endTime(true), spec, true, 'slam').board.y).toBeCloseTo(GROUND, 5);
+    }
+  });
+
+  it('pop style changes only the height of the shared flight arc', () => {
+    const spec = specFor(trick('Ollie', 'regular'));
+    const low = style({ popHeight: SKATE_STYLE_BOUNDS.popHeight.min });
+    const high = style({ popHeight: SKATE_STYLE_BOUNDS.popHeight.max });
+    const apex = ROLL_IN + FLIP_T / 2;
+    const lowFrame = computeFrame(apex, spec, true, 'slam', 0.65, low);
+    const highFrame = computeFrame(apex, spec, true, 'slam', 0.65, high);
+
+    expect(lowFrame.board.y).toBeCloseTo(GROUND - JUMP * low.popHeight, 5);
+    expect(highFrame.board.y).toBeCloseTo(GROUND - JUMP * high.popHeight, 5);
+    expect(highFrame.board.y).toBeLessThan(lowFrame.board.y);
+    expect(computeFrame(ROLL_IN, spec, true, 'slam', 0.65, high).board.y).toBe(GROUND);
+    expect(computeFrame(ROLL_IN + FLIP_T, spec, true, 'slam', 0.65, high).board.y).toBe(GROUND);
+  });
+
+  it('rotation style makes the catch earlier while preserving the exact final trick', () => {
+    const spec = specFor(trick('Backside 180', 'regular'));
+    const slow = style({ rotationSpeed: SKATE_STYLE_BOUNDS.rotationSpeed.min });
+    const fast = style({ rotationSpeed: SKATE_STYLE_BOUNDS.rotationSpeed.max });
+    const beforeSlowCatch = ROLL_IN + FLIP_T * 0.8;
+    const slowFrame = computeFrame(beforeSlowCatch, spec, true, 'slam', 0.65, slow);
+    const fastFrame = computeFrame(beforeSlowCatch, spec, true, 'slam', 0.65, fast);
+
+    expect(Math.abs(fastFrame.spin3d.bodyYawDeg)).toBeGreaterThan(Math.abs(slowFrame.spin3d.bodyYawDeg));
+    expect(fastFrame.spin3d.bodyYawDeg).toBeCloseTo(180, 5);
+    expect(Math.abs(slowFrame.spin3d.bodyYawDeg)).toBeLessThan(180);
+
+    const end = endTime(true);
+    expect(computeFrame(end, spec, true, 'slam', 0.65, slow).spin3d.bodyYawDeg).toBeCloseTo(180, 5);
+    expect(computeFrame(end, spec, true, 'slam', 0.65, fast).spin3d.bodyYawDeg).toBeCloseTo(180, 5);
+
+    const justBeforeTouchdown = ROLL_IN + FLIP_T - 1e-6;
+    expect(computeFrame(justBeforeTouchdown, spec, true, 'slam', 0.65, slow).spin3d.bodyYawDeg)
+      .toBeCloseTo(180, 3);
+  });
+
+  it('flick style changes the flick foot reach without moving the pop foot', () => {
+    const spec = specFor(trick('Kickflip', 'regular'));
+    const weak = style({ flickStrength: SKATE_STYLE_BOUNDS.flickStrength.min });
+    const strong = style({ flickStrength: SKATE_STYLE_BOUNDS.flickStrength.max });
+    const midFlick = ROLL_IN + FLIP_T * 0.425;
+    const weakFrame = computeFrame(midFlick, spec, true, 'slam', 0.65, weak);
+    const strongFrame = computeFrame(midFlick, spec, true, 'slam', 0.65, strong);
+
+    expect(strongFrame.footR.x).toBeGreaterThan(weakFrame.footR.x);
+    expect(strongFrame.footR.y).toBeLessThan(weakFrame.footR.y);
+    expect(strongFrame.footL).toEqual(weakFrame.footL);
+
+    const catchTime = ROLL_IN + FLIP_T * 0.85;
+    expect(computeFrame(catchTime, spec, true, 'slam', 0.65, strong).footR)
+      .toEqual(computeFrame(catchTime, spec, true, 'slam', 0.65, weak).footR);
+  });
+
+  it('strong styled flicks keep the extended foot within the two-bone leg reach', () => {
+    const MAX_REACH = 35 + 35 - 0.5;
+    const strong = style({ flickStrength: SKATE_STYLE_BOUNDS.flickStrength.max });
+    for (const base of BASES) {
+      for (const stance of STANCES) {
+        const spec = specFor(trick(base, stance));
+        if (!spec.flips) continue;
+        for (let i = 0; i <= 24; i += 1) {
+          const t = ROLL_IN + FLIP_T * (i / 24);
+          const frame = computeFrame(t, spec, true, 'slam', 0.65, strong);
+          const flickFoot = spec.nollie ? frame.footL : frame.footR;
+          expect(Math.hypot(flickFoot.x, flickFoot.y), `${base} ${stance}`).toBeLessThanOrEqual(MAX_REACH + 1e-6);
+        }
+      }
     }
   });
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { TrickAnimation3DLegacy } from '@skrobot/animations';
+import { TrickScene } from '@skrobot/animations';
 import { ROBOT_BY_ID, ROBOTS } from '@/features/robots';
 import type { Trick } from '@/features/tricks';
 
@@ -10,7 +10,7 @@ const ignoreAnimationEnd = () => {};
 /** A clean, always-landed playback used when a curated tutorial is unavailable. */
 export default function GalleryTrickAnimation({ trick }: { trick: Trick }) {
   return (
-    <TrickAnimation3DLegacy
+    <TrickScene
       robot={GALLERY_ROBOT}
       trick={trick}
       landed

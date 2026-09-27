@@ -302,7 +302,7 @@ describe('chooseRobotTrick', () => {
     vi.restoreAllMocks()
   })
 
-  it('weights by consistency — a low roll picks the heavy option', () => {
+  it('a low roll picks the option with the heavier authored weight', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0)
     expect(pick()?.id).toBe('a')
   })

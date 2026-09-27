@@ -146,7 +146,7 @@ export default function TuneScreen() {
         <p className="tune-hint">
           {mode === 'consistency'
             ? 'Exact land rate 0–1. Every visible number is explicit robot data.'
-            : 'Exact relative pick weight (0 = never sets). % shows share of all picks.'}
+            : 'Relative set weight (0 = copy only). Set % is the opening pick chance across the full bag; it changes as landed sets are used up.'}
         </p>
       </header>
 
@@ -163,6 +163,8 @@ export default function TuneScreen() {
               <div className="tune-variants">
                 {variants.map((trick) => {
                   const inBag = bag.has(trick.id);
+                  const weight = setWeights.weights.get(trick.id) ?? 0;
+                  const share = setWeights.total > 0 ? (weight / setWeights.total) * 100 : 0;
                   const tuned = getTuned(mode, robot.id, trick.id);
                   const placeholder =
                     mode === 'consistency'
@@ -187,7 +189,7 @@ export default function TuneScreen() {
                         type="number"
                         min={0}
                         max={mode === 'consistency' ? 1 : undefined}
-                        step={0.05}
+                        step={0.01}
                         inputMode="decimal"
                         placeholder={placeholder}
                         value={tuned ?? ''}
@@ -196,7 +198,8 @@ export default function TuneScreen() {
                       />
                       {mode === 'setWeight' && inBag && setWeights.total > 0 && (
                         <span className="tune-share">
-                          {Math.round((setWeights.weights.get(trick.id)! / setWeights.total) * 100)}%
+                          {weight === 0 ? 'Copy only' : `Set ${share < 0.1 ? '<0.1' : share.toFixed(1)}%`}
+                          {' · Land '}{Math.round(bag.get(trick.id)! * 100)}%
                         </span>
                       )}
                     </label>

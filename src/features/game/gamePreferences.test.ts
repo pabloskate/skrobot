@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { getPlayerStance, setPlayerStance } from './gamePreferences';
+import { getPlayerStance, getTrickTracking, setPlayerStance, setTrickTracking } from './gamePreferences';
 
 function installBrowserStorage() {
   const store = new Map<string, string>();
@@ -45,5 +45,26 @@ describe('player stance preference', () => {
     setPlayerStance('goofy');
     expect(getPlayerStance()).toBe('goofy');
     expect(events).toContain('skrobot-player-stance');
+  });
+});
+
+describe('trick tracking preference', () => {
+  it('defaults to on when unset or invalid', () => {
+    expect(getTrickTracking()).toBe(true);
+    localStorage.setItem('skaterobot-trick-tracking', 'banana');
+    expect(getTrickTracking()).toBe(true);
+  });
+
+  it('persists off and announces the same-tab change', () => {
+    const { events } = installBrowserStorage();
+    setTrickTracking(false);
+    expect(getTrickTracking()).toBe(false);
+    expect(events).toContain('skrobot-trick-tracking');
+  });
+
+  it('can be turned back on', () => {
+    setTrickTracking(false);
+    setTrickTracking(true);
+    expect(getTrickTracking()).toBe(true);
   });
 });

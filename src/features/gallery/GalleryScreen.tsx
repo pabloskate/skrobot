@@ -784,7 +784,7 @@ export default function GalleryScreen() {
                 )}
               </div>
               <p className="modal-title">{activeVideo.name}</p>
-              {!activePlayerSrc && <p className="modal-kicker">3D trick animation · Tap to replay</p>}
+              {!activePlayerSrc && <p className="modal-kicker">Trick scene · Tap to replay</p>}
               {trickDescription(activeVideo) && (
                 <p className="modal-desc">{trickDescription(activeVideo)}</p>
               )}

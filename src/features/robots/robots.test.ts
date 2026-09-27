@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ROBOTS, buildBag, isFlatgroundRobot, robotConsistency, robotDisplayRating, trickSetWeight } from './robots';
+import { SKATE_STYLE_BOUNDS, resolveSkateStyle } from '@skrobot/animations';
+import { DEFENSE_ROBOTS, ROBOTS, buildBag, isFlatgroundRobot, robotConsistency, robotDisplayRating, trickSetWeight } from './robots';
 import { TRICKS, TRICK_BY_ID, trickDiscipline } from '@/features/tricks';
 import { DEFENSE_CONSISTENCY, ROBOT_CONSISTENCY, ROBOT_DEFENSE_SET_WEIGHTS, ROBOT_SET_WEIGHTS } from './behavior';
 
@@ -254,7 +255,7 @@ describe('Robots repertoire and consistency math', () => {
 
   it('Fakie lands fakie 360s better than regular ones (signature stance shows on harder tricks)', () => {
     const fakie = byId('fakie');
-    // Kickflips both cap out; full cabs are hard enough for the stance boost to matter.
+    // Individually authored full cabs reflect Rewind's fakie specialty.
     const fullCab = robotConsistency(fakie, TRICK_BY_ID.get('fakie-backside-360')!);
     const regularBs360 = robotConsistency(fakie, TRICK_BY_ID.get('regular-backside-360')!);
     expect(fullCab).not.toBeNull();
@@ -274,7 +275,7 @@ describe('Robots repertoire and consistency math', () => {
   it('Switchy is stronger in switch than a typical advanced bot without switch comfort', () => {
     const switchy = byId('switchy');
     const hesh = byId('hesh');
-    // Easy flips cap for both; switch hardflips are where comfort separates them.
+    // Switch hardflips are one of Echo's authored advantages over Bouncer.
     const switchHard = robotConsistency(switchy, TRICK_BY_ID.get('switch-hardflip')!);
     const heshSwitchHard = robotConsistency(hesh, TRICK_BY_ID.get('switch-hardflip')!);
     expect(switchHard).not.toBeNull();
@@ -282,22 +283,21 @@ describe('Robots repertoire and consistency math', () => {
     expect(switchHard!).toBeGreaterThan(heshSwitchHard!);
   });
 
-  it('Latezy specializes in late shuvits/flips without elite lasers', () => {
+  it('Latezy specializes in late frontside shuvits/flips without elite lasers', () => {
     const bag = buildBag(byId('latezy'), TRICKS);
-    expect(bag.has('regular-late-backside-shuvit')).toBe(true);
     expect(bag.has('regular-late-frontside-shuvit')).toBe(true);
     expect(bag.has('regular-late-kickflip')).toBe(true);
-    expect(bag.has('switch-late-backside-shuvit')).toBe(false);
     expect(bag.has('regular-laser-flip')).toBe(false);
   });
 
-  it('keeps Late Backside Shuvit to its explicit specialty robot', () => {
-    const lateBackside = TRICK_BY_ID.get('regular-late-backside-shuvit')!;
-    const specialist = byId('latezy');
-
-    expect(robotConsistency(specialist, lateBackside)).not.toBeNull();
-    for (const robot of ROBOTS.filter((candidate) => candidate.id !== specialist.id)) {
-      expect(robotConsistency(robot, lateBackside), `${robot.name} should not carry the specialty trick`).toBeNull();
+  it('removes late backside shuvits from every robot repertoire and signature', () => {
+    for (const table of [ROBOT_CONSISTENCY, ROBOT_SET_WEIGHTS, DEFENSE_CONSISTENCY, ROBOT_DEFENSE_SET_WEIGHTS]) {
+      for (const [id, entries] of Object.entries(table)) {
+        expect(Object.keys(entries).some((trickId) => trickId.endsWith('-late-backside-shuvit')), id).toBe(false);
+      }
+    }
+    for (const robot of [...ROBOTS, ...DEFENSE_ROBOTS]) {
+      expect(robot.favorites, robot.name).not.toContain('Late Backside Shuvit');
     }
   });
 
@@ -381,7 +381,7 @@ describe('Explicit robot personality examples', () => {
     const cyclone = ROBOTS.find((robot) => robot.id === 'biggy')!;
     const regularTre = TRICK_BY_ID.get('regular-360-flip')!;
     expect(robotConsistency(cyclone, regularTre)).toBe(0.4);
-    expect(trickSetWeight(regularTre, cyclone)).toBe(0.86);
+    expect(trickSetWeight(regularTre, cyclone)).toBe(0.2);
   });
 });
 
@@ -426,6 +426,38 @@ describe('Roster metadata', () => {
     expect(robotDisplayRating({ elo: 1949 })).toBe(1830);
     expect(robotDisplayRating({})).toBeNull();
   });
+
+  it('keeps authored skate styles bounded and visibly varied', () => {
+    const styled = [...ROBOTS, ...DEFENSE_ROBOTS].filter((robot) => robot.skateStyle);
+    const distinctStyles = new Set(styled.map((robot) => JSON.stringify(robot.skateStyle)));
+
+    expect(styled.length).toBeGreaterThanOrEqual(12);
+    expect(distinctStyles.size).toBeGreaterThanOrEqual(4);
+    for (const robot of styled) {
+      const resolved = resolveSkateStyle(robot.skateStyle);
+      expect(resolved, robot.name).toEqual(robot.skateStyle);
+      expect(resolved.popHeight).toBeGreaterThanOrEqual(SKATE_STYLE_BOUNDS.popHeight.min);
+      expect(resolved.popHeight).toBeLessThanOrEqual(SKATE_STYLE_BOUNDS.popHeight.max);
+      expect(resolved.rotationSpeed).toBeGreaterThanOrEqual(SKATE_STYLE_BOUNDS.rotationSpeed.min);
+      expect(resolved.rotationSpeed).toBeLessThanOrEqual(SKATE_STYLE_BOUNDS.rotationSpeed.max);
+      expect(resolved.flickStrength).toBeGreaterThanOrEqual(SKATE_STYLE_BOUNDS.flickStrength.min);
+      expect(resolved.flickStrength).toBeLessThanOrEqual(SKATE_STYLE_BOUNDS.flickStrength.max);
+    }
+  });
+
+  it('gives every beginner robot either the low-and-quick or loose style', () => {
+    const allowedBeginnerStyles = new Set([
+      JSON.stringify({ popHeight: 0.5, rotationSpeed: 1.16, flickStrength: 0.88 }),
+      JSON.stringify({ popHeight: 0.88, rotationSpeed: 0.88, flickStrength: 0.76 }),
+    ]);
+    const beginners = [...ROBOTS, ...DEFENSE_ROBOTS].filter((robot) => robot.tier === 'beginner');
+
+    expect(beginners).toHaveLength(12);
+    for (const robot of beginners) {
+      expect(allowedBeginnerStyles.has(JSON.stringify(robot.skateStyle)), robot.name).toBe(true);
+    }
+  });
+
 });
 
 describe('trickSetWeight', () => {
@@ -438,9 +470,9 @@ describe('trickSetWeight', () => {
   const swivel = byId('shifty');
 
   it('returns the exact configured robot/trick weight', () => {
-    expect(trickSetWeight(kickflip, sparky)).toBe(1.7879999999999998);
-    expect(trickSetWeight(lateKickflip, snooze)).toBe(1.24848);
-    expect(trickSetWeight(ollieNorth, swivel)).toBe(0.30512300000000003);
+    expect(trickSetWeight(kickflip, sparky)).toBe(10);
+    expect(trickSetWeight(lateKickflip, snooze)).toBe(1.2);
+    expect(trickSetWeight(ollieNorth, swivel)).toBe(0.05);
   });
 
   it('returns 0 when a robot has no configured weight for a trick', () => {

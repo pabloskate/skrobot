@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react';
-import type { RiderStance, Robot, Trick } from './types';
+import type { RiderStance, Robot, SkateStyle, Trick } from './types';
 import { resolveRiderMechanics } from './stanceMechanics';
 import { readableAccent } from './robotColors';
+import { DEFAULT_SKATE_STYLE } from './skateStyle';
 
 /**
  * Side-view animated robot attempt: roll in, pop the trick, then catch it and
@@ -373,6 +374,8 @@ interface Frame {
    *  around the vertical axis, forwardPitchDeg = Dolphin/Forward-flip nose
    *  dive, bodyYawDeg = skater around the vertical axis. */
   spin3d: { flipDeg: number; yawDeg: number; forwardPitchDeg: number; bodyYawDeg: number };
+  /** Shared phase clocks for renderer-only motion such as lateral flick. */
+  motion: { flight: number; rotation: number };
   footL: Pt;
   footR: Pt;
   armFront: number;
@@ -416,7 +419,13 @@ function frontFootCatchPlant(p: number): number {
   return smoothstep(clamp01((p - 0.62) / 0.32));
 }
 
-function feetForFlip(spec: Spec, p: number, bodyYOffset: number, boardRot: number): Feet {
+function feetForFlip(
+  spec: Spec,
+  p: number,
+  bodyYOffset: number,
+  boardRot: number,
+  flickStrength = 1,
+): Feet {
   const lift = Math.sin(p * Math.PI);
   const baselineY = FOOT_Y - bodyYOffset - 4;
   const popFromNose = spec.nollie;
@@ -431,9 +440,14 @@ function feetForFlip(spec: Spec, p: number, bodyYOffset: number, boardRot: numbe
   // swaps which role pops/flicks, never which end of the board those channels
   // represent. This is what lets the renderer attach a real regular/goofy
   // skeleton without silently turning a kickflip into a heelflip.
-  const fromPopAndFlick = (pop: Pt, flick: Pt): Feet => popFromNose
-    ? { footR: pop, footL: flick }
-    : { footR: flick, footL: pop };
+  const fromPopAndFlick = (pop: Pt, flick: Pt): Feet => {
+    // Strong styles can ask for a larger gesture, never a stretched shin.
+    // Leave neutral untouched so the pre-style renderer stays byte-equivalent.
+    const reachableFlick = flickStrength === 1 ? flick : clampFootReach(flick);
+    return popFromNose
+      ? { footR: pop, footL: reachableFlick }
+      : { footR: reachableFlick, footL: pop };
+  };
 
   if (spec.flips && spec.yaw && !spec.forwardFlip && spec.yaw < 360) {
     // Varial / hardflip: kickflip-style flick + mild scoop. Dolphin keeps the
@@ -447,8 +461,8 @@ function feetForFlip(spec: Spec, p: number, bodyYOffset: number, boardRot: numbe
         y: baselineY - lift * 11,
       },
       {
-        x: flickBaseX + flickOutward * lift * flickReach,
-        y: baselineY - lift * 17,
+        x: flickBaseX + flickOutward * lift * flickReach * flickStrength,
+        y: baselineY - lift * 17 * flickStrength,
       },
     );
   } else if (spec.flips && spec.yaw) {
@@ -456,7 +470,7 @@ function feetForFlip(spec: Spec, p: number, bodyYOffset: number, boardRot: numbe
     // For 360 flips the front/flick foot stamps the catch while the scooping
     // foot stays tucked a beat longer.
     const scoop = p < 0.3 ? 20 * Math.sin((p / 0.3) * Math.PI) : 0;
-    const flickLift = lift * 25 * (1 - catchPlant);
+    const flickLift = lift * 25 * flickStrength * (1 - catchPlant);
     const popLift = lift * 8 + catchPlant * 16;
     const flickReturn = catchPlant * 10; // pull the kicked foot back over the bolts
     return fromPopAndFlick(
@@ -465,7 +479,9 @@ function feetForFlip(spec: Spec, p: number, bodyYOffset: number, boardRot: numbe
         y: baselineY - popLift,
       },
       {
-        x: flickBaseX + flickOutward * lift * 8 * (1 - catchPlant) - flickOutward * flickReturn,
+        x: flickBaseX
+          + flickOutward * lift * 8 * flickStrength * (1 - catchPlant)
+          - flickOutward * flickReturn,
         y: baselineY - flickLift,
       },
     );
@@ -478,8 +494,8 @@ function feetForFlip(spec: Spec, p: number, bodyYOffset: number, boardRot: numbe
     return fromPopAndFlick(
       { x: popBaseX, y: baselineY - lift * 10 },
       {
-        x: flickBaseX + flickOutward * lift * flickX,
-        y: baselineY - lift * flickY,
+        x: flickBaseX + flickOutward * lift * flickX * flickStrength,
+        y: baselineY - lift * flickY * flickStrength,
       },
     );
   } else if (spec.roll) {
@@ -581,6 +597,7 @@ function computeFrame(
   fall: FallVariant,
   /** Fraction of the trick that completes on a shank (flip + body spin). */
   shankProgress = 0.65,
+  skateStyle: Readonly<SkateStyle> = DEFAULT_SKATE_STYLE,
 ): Frame {
   let boardX = X0;
   let boardY = GROUND;
@@ -602,6 +619,8 @@ function computeFrame(
   let yawDeg = 0;
   let forwardPitchDeg = 0;
   let bodyYawDeg = 0;
+  const flightProgress = (t - ROLL_IN) / FLIP_T;
+  let rotationProgress = 0;
 
   const popAngle = spec.nollie ? 60 : -60;
 
@@ -647,18 +666,27 @@ function computeFrame(
   } else if (t < ROLL_IN + FLIP_T) {
     const p = (t - ROLL_IN) / FLIP_T;
     
-    // The "Catch": finish board rotation early so it holds flat before landing
-    const catchP = Math.min(1, p / 0.85);
+    // The "Catch": finish board rotation early so it holds flat before
+    // landing. Robot style only stretches this normalized clock; the actual
+    // flight phase remains the same duration for every opponent.
+    // Slow styles may use the entire flight, but must still finish at
+    // touchdown. Without the cap, values below 0.85 would remain visibly
+    // under-rotated at p=1 and snap into the landed pose on the next frame.
+    const catchAt = Math.min(1, 0.85 / skateStyle.rotationSpeed);
+    const catchP = clamp01(p / catchAt);
     // A "late" shuvit holds the board flat off the pop, then whips the rotation
     // through in the back half of the flight (the late scoop). Its yaw runs on a
     // delayed clock; everything else (pop arc, catch) stays on catchP.
-    const rawSpinP = spec.late ? clamp01((p - 0.38) / 0.30) : catchP;
+    const rawSpinP = spec.late
+      ? clamp01((p - 0.38) / (0.30 / skateStyle.rotationSpeed))
+      : catchP;
     // Pure shuvits (no flip, no body rotation) decelerate into the catch
     // instead of snapping to a dead stop mid-air — flip/bigspin families keep
     // the linear clock since their sy/pitch curves already read fine at
     // constant angular speed.
     const shuvitFamily = spec.yaw > 0 && !spec.bodyYaw && !spec.flips && !spec.forwardFlip;
     const spinP = shuvitFamily ? easeOutCubic(rawSpinP) : rawSpinP;
+    rotationProgress = spinP;
     
     // Shank: the trick dies mid-rotation. Flip and body spin (yaw) share the
     // same per-attempt progress (35–90%) so an under-rotated kickflip 180
@@ -669,7 +697,7 @@ function computeFrame(
     const shankBodyScale = shankScale;
     const shankRollScale = shankScale;
     
-    boardY = GROUND - 4 * JUMP * p * (1 - p);
+    boardY = GROUND - 4 * JUMP * skateStyle.popHeight * p * (1 - p);
     // Lateral drift mid-spin: the board arcs toward the toes (frontside, -1)
     // or heels (backside, +1) so the spin reads with a direction. The drift
     // peaks at the rotation apex and returns to center for the catch.
@@ -700,7 +728,10 @@ function computeFrame(
     // whole 360 across nearly the full hang time so it also doesn't finish
     // early and hang flat before the catch.
     if (spec.roll) {
-      const wrapP = easeOutCubic(Math.min(1, p / 0.95));
+      // A relaxed style still completes the wrap in flight instead of snapping
+      // from an unfinished impossible to the landed pose at touchdown.
+      const wrapEnd = Math.min(0.98, 0.95 / skateStyle.rotationSpeed);
+      const wrapP = easeOutCubic(Math.min(1, p / wrapEnd));
       boardRot = popAngle + (spec.roll - popAngle) * wrapP * shankRollScale;
     } else if (spec.late) {
       // Late tricks: board stays flat after the pop (no wobble). Shuvits
@@ -710,7 +741,7 @@ function computeFrame(
       // the decay settles into the flat hold instead of arriving at speed.
       boardRot = p < 0.3 ? popAngle * (1 - smoothstep(clamp01(p / 0.3))) : 0;
       if (spec.yaw) {
-        const scoopPhase = clamp01((p - 0.38) / 0.30);
+        const scoopPhase = rawSpinP;
         const dipEase = Math.sin(clamp01(scoopPhase / 0.2) * Math.PI);
         const dipDir = spec.nollie ? 1 : -1; // tail dips down regardless of stance
         boardRot += dipEase * dipDir * -14;
@@ -783,18 +814,18 @@ function computeFrame(
         // through in the back half of the flight. feetForFlip with spinP=0
         // gives planted feet (hold); as spinP ramps up the flick kicks in
         // on the delayed clock.
-        const feet = feetForFlip(spec, spinP, bodyYOffset, boardRot);
+        const feet = feetForFlip(spec, spinP, bodyYOffset, boardRot, skateStyle.flickStrength);
         footL = feet.footL;
         footR = feet.footR;
       } else {
         // Late shuvit: back foot stays near the board during the hold phase,
         // then scoops backward/around to whip the board rotation mid-flight.
         // Finish with a front-foot catch — same stamp as a regular shuvit.
-        const scoopP = clamp01((p - 0.38) / 0.30);
+        const scoopP = rawSpinP;
         // Quick pop-and-return scoop arc: peaks early, tapers back toward the
         // board as the rotation comes around so the foot doesn't hang out.
         const scoopArc = Math.sin(scoopP * Math.PI) * (1 - scoopP * 0.5);
-        const catchPlant = frontFootCatchPlant(p);
+        const catchPlant = frontFootCatchPlant(clamp01(p * skateStyle.rotationSpeed));
         const th = rad(boardRot);
         const noseX = spec.nollie ? 25 : 10;
         const tailX = spec.nollie ? -10 : -25;
@@ -825,11 +856,12 @@ function computeFrame(
         }
       }
     } else {
-      const feet = feetForFlip(spec, catchP, bodyYOffset, boardRot);
+      const feet = feetForFlip(spec, catchP, bodyYOffset, boardRot, skateStyle.flickStrength);
       footL = feet.footL;
       footR = feet.footR;
     }
   } else if (landed) {
+    rotationProgress = 1;
     // Compress on the catch, then ride away. After a 180/bigspin the skater
     // stays turned around (rides away switch).
     const complexity = (spec.flips * 0.5) + (spec.yaw / 180 * 0.3) + (spec.roll ? 0.5 : 0);
@@ -870,6 +902,7 @@ function computeFrame(
     armFront = armFront * (1 - p) + (Math.sin(t * 3) * 0.3 + landP * 0.5);
     armBack = armBack * (1 - p) + (Math.sin(t * 3 + Math.PI) * 0.3 - landP * 0.5);
   } else {
+    rotationProgress = 1;
     // Fall: same physics language as a landing — impact, compress, settle —
     // with a different outcome. Seed from the flight-end tuck so the handoff
     // doesn't teleport limbs or arms into a separate ragdoll sim. Fakie
@@ -1056,6 +1089,7 @@ function computeFrame(
     board: { x: boardX, y: boardY, rot: boardRot, sx, sy, griptape: sy >= 0 },
     body: { x: bodyX, y: bodyY, sx: bodySX, rot: bodyRot },
     spin3d: { flipDeg, yawDeg, forwardPitchDeg, bodyYawDeg },
+    motion: { flight: flightProgress, rotation: rotationProgress },
     footL,
     footR,
     armFront,

@@ -6,6 +6,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import {
   FALL_VARIANT_OPTIONS,
@@ -27,19 +28,13 @@ import styles from './BlenderPrototype.module.css';
 type LoadState = 'loading' | 'ready' | 'error';
 
 /** Geometry-only source. Baked clips are ignored — motion comes from computeFrame. */
-const RIG_ASSET = '/blender-prototype/skrobot-kickflip-land.glb';
+const RIG_ASSET = '/blender-prototype/skrobot-kickflip-land.glb?v=second-session-1';
 
 const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
 const RIDER_STANCES: RiderStance[] = ['regular', 'goofy'];
 
-/**
- * Presentation is deliberately matched to the shipped 3D robots
- * (`packages/animations/src/TrickAnimation3D.tsx` + its CSS): flat cel-shaded
- * fills, a heavy ink outline on every part, and the same mini skate spot —
- * blue sky, warm sun, green shoulders, an asphalt lane with a dashed centre
- * line. Blender owns the geometry; `@skrobot/animations` owns the motion;
- * this file owns the look and the playground controls.
- */
+/** Second Session: enamel shells, rubber joints and softly lit display glass.
+ * Geometry lives in Blender; the existing physics remains the motion source. */
 const INK = '#25354b';
 const SKY_TOP = '#7ec8f0';
 const SKY_MID = '#a8daf5';
@@ -86,19 +81,6 @@ function skyAnchor(right: number, up: number, distance: number): THREE.Vector3 {
     .addScaledVector(CAMERA_FORWARD, distance)
     .addScaledVector(CAMERA_RIGHT, right * halfWidth)
     .addScaledVector(CAMERA_UP, up * halfHeight);
-}
-
-/** Three-step ramp: the cel banding that replaces smooth PBR falloff. The
- *  steps sit close together on purpose — the 2D robots are flat fills with a
- *  narrow highlight, not half-lit solids, so a wide ramp reads as a dark blob
- *  across the shaded side of the head. */
-function createToonRamp(): THREE.DataTexture {
-  const ramp = new THREE.DataTexture(new Uint8Array([224, 244, 255]), 3, 1, THREE.RedFormat);
-  ramp.minFilter = THREE.NearestFilter;
-  ramp.magFilter = THREE.NearestFilter;
-  ramp.generateMipmaps = false;
-  ramp.needsUpdate = true;
-  return ramp;
 }
 
 /** Ink outline: an inverted hull pushed along the normal in view space, so the
@@ -376,60 +358,50 @@ function updateBlobShadow(shadow: BlobShadow, subject: THREE.Vector3, groundOffs
   (shadow.mesh.material as THREE.MeshBasicMaterial).opacity = 0.42 * (1 - 0.62 * fade);
 }
 
-/** Repaint the imported GLB in the game's cartoon style and give every part an
- *  ink outline. Decals and eyes get a lighter stroke so they stay crisp. */
-function applyCartoonStyle(root: THREE.Object3D, ramp: THREE.DataTexture, disposables: Set<THREE.Object3D>) {
-  const outlineHeavy = createOutlineMaterial(0.0042);
-  const outlineLight = createOutlineMaterial(0.0014);
-  const converted = new Map<THREE.Material, THREE.MeshToonMaterial>();
+/** Small silhouette rims and material-specific finishes preserve real volume. */
+function applyRobotMaterials(root: THREE.Object3D) {
+  const outlineMaterial = createOutlineMaterial(0.00065);
+  const converted = new Map<THREE.Material, THREE.MeshPhysicalMaterial>();
   const meshes: THREE.Mesh[] = [];
-
-  root.traverse((object) => {
-    if (object instanceof THREE.Mesh) meshes.push(object);
-  });
-
+  root.traverse((object) => { if (object instanceof THREE.Mesh) meshes.push(object); });
   for (const mesh of meshes) {
-    const sourceMaterials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-    const toonMaterials = sourceMaterials.map((source) => {
-      const existing = converted.get(source);
-      if (existing) return existing;
-      const base = (source as THREE.MeshStandardMaterial).color ?? new THREE.Color('#ffffff');
-      // The rider is the subject, not scenery: fog belongs to the ground fade.
-      const toon = new THREE.MeshToonMaterial({ color: base.clone(), gradientMap: ramp, fog: false });
-      toon.name = source.name;
-      converted.set(source, toon);
-      return toon;
+    const sources = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    const materials = sources.map((source) => {
+      const cached = converted.get(source);
+      if (cached) return cached;
+      const name = source.name.toLowerCase();
+      const isGlass = name.includes('visor');
+      const isRubber = name.includes('rubber') || name.includes('grip');
+      const isMetal = name.includes('truck');
+      const material = new THREE.MeshPhysicalMaterial({
+        color: (source as THREE.MeshStandardMaterial).color?.clone() ?? new THREE.Color('white'),
+        roughness: isGlass ? 0.22 : isRubber ? 0.86 : isMetal ? 0.32 : 0.38,
+        metalness: isMetal ? 0.65 : 0,
+        clearcoat: isGlass ? 0.8 : isRubber ? 0 : 0.3,
+        clearcoatRoughness: 0.24,
+        envMapIntensity: isGlass ? 0.5 : 0.3,
+        fog: false,
+      });
+      if (name.includes('light')) {
+        material.emissive.copy(material.color);
+        material.emissiveIntensity = 0.3;
+      }
+      material.name = source.name;
+      converted.set(source, material);
+      return material;
     });
-    mesh.material = Array.isArray(mesh.material) ? toonMaterials : toonMaterials[0];
-
-    // Decals sit a hair off the deck and the antenna/neck/visor are thinner
-    // than the stroke itself — a full-weight hull swallows them or, on the
-    // visor, turns the lens edge into a crunchy intersection.
-    const isDetail =
-      mesh.name.startsWith('Decal.') ||
-      mesh.name.startsWith('Eye.') ||
-      mesh.name === 'Body.Visor' ||
-      mesh.name === 'Body.Antenna' ||
-      mesh.name === 'Body.AntennaBall' ||
-      mesh.name === 'Body.Neck';
-    const outline = new THREE.Mesh(
-      createOutlineGeometry(mesh.geometry),
-      isDetail ? outlineLight : outlineHeavy,
-    );
-    outline.name = `${mesh.name}.Outline`;
-    outline.renderOrder = -1;
-    mesh.add(outline);
-    disposables.add(outline);
+    mesh.material = Array.isArray(mesh.material) ? materials : materials[0];
+    if (/^(Helmet\.?Shell|Chassis\.?Main|Arm\.?Forearm|Leg\.?Thigh|Leg\.?Shin|Shoe\.?Upper)/.test(mesh.name)) {
+      const outline = new THREE.Mesh(createOutlineGeometry(mesh.geometry), outlineMaterial);
+      outline.name = `${mesh.name}.Outline`;
+      mesh.add(outline);
+    }
   }
-
-  return () => {
-    outlineHeavy.dispose();
-    outlineLight.dispose();
-    converted.forEach((material) => material.dispose());
-  };
+  converted.forEach((_, source) => source.dispose());
+  return () => outlineMaterial.dispose();
 }
 
-function disposeScene(scene: THREE.Scene) {
+function disposeScene(scene: THREE.Object3D) {
   const materials = new Set<THREE.Material>();
   const textures = new Set<THREE.Texture>();
   scene.traverse((object) => {
@@ -470,6 +442,7 @@ export default function BlenderPrototype() {
     riderStance: 'regular' as RiderStance,
     body: ROBOTS[0].avatar.body,
     accent: ROBOTS[0].avatar.accent,
+    variant: ROBOTS[0].avatar.variant,
   });
 
   const [selectedRobotId, setSelectedRobotId] = useState(ROBOTS[0].id);
@@ -518,6 +491,7 @@ export default function BlenderPrototype() {
       riderStance: selectedRiderStance,
       body: robot.avatar.body,
       accent: robot.avatar.accent,
+      variant: robot.avatar.variant,
     };
   }, [spec, landed, fallVariant, selectedRiderStance, robot]);
 
@@ -544,6 +518,14 @@ export default function BlenderPrototype() {
       powerPreference: 'high-performance',
     });
     renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.NoToneMapping;
+    renderer.toneMappingExposure = 1;
+    const environmentGenerator = new THREE.PMREMGenerator(renderer);
+    const room = new RoomEnvironment();
+    const environment = environmentGenerator.fromScene(room, 0.04);
+    scene.environment = environment.texture;
+    room.dispose();
+    environmentGenerator.dispose();
     renderer.setPixelRatio(Math.min(Math.max(window.devicePixelRatio, 1) * 2, 3));
 
     const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 200);
@@ -560,10 +542,13 @@ export default function BlenderPrototype() {
     controls.maxPolarAngle = Math.PI * 0.495;
     controls.update();
 
-    scene.add(new THREE.AmbientLight(0xffffff, 2.7));
-    const key = new THREE.DirectionalLight(0xfff3dc, 0.62);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+    const key = new THREE.DirectionalLight(0xfff3dc, 1.8);
     key.position.copy(LIGHT_DIRECTION).multiplyScalar(20);
     scene.add(key);
+    const rim = new THREE.DirectionalLight(0xc6e9ff, 1.0);
+    rim.position.set(-4, 5, -4);
+    scene.add(rim);
     scene.add(new THREE.HemisphereLight(0xdff1ff, 0x9fbf88, 0.45));
 
     scene.add(createSkyDome());
@@ -586,8 +571,6 @@ export default function BlenderPrototype() {
     const riderShadow = createBlobShadow(30 * U * 2, blobTexture);
     scene.add(boardShadow.mesh, riderShadow.mesh);
 
-    const ramp = createToonRamp();
-    const outlineOwners = new Set<THREE.Object3D>();
     let releaseStyle: (() => void) | null = null;
     let disposed = false;
     let lastProgressWrite = 0;
@@ -598,17 +581,20 @@ export default function BlenderPrototype() {
     loader.load(
       RIG_ASSET,
       (gltf) => {
-        if (disposed) return;
+        if (disposed) {
+          disposeScene(gltf.scene);
+          return;
+        }
         // Drop baked clips — this prototype drives the rig from computeFrame.
         gltf.animations = [];
-        releaseStyle = applyCartoonStyle(gltf.scene, ramp, outlineOwners);
+        releaseStyle = applyRobotMaterials(gltf.scene);
         const rig = bindRig(gltf.scene);
         if (!rig) {
           setLoadState('error');
           return;
         }
         const selection = selectionRef.current;
-        applyRobotPalette(gltf.scene, { body: selection.body, accent: selection.accent });
+        applyRobotPalette(gltf.scene, { body: selection.body, accent: selection.accent, variant: selection.variant });
         scene.add(gltf.scene);
         poseRef.current = {
           rig,
@@ -677,7 +663,7 @@ export default function BlenderPrototype() {
         updateBlobShadow(boardShadow, boardPosition, DECK_REST_HEIGHT);
         if (delta > 0) {
           const desiredX = THREE.MathUtils.clamp(riderPosition.x * 0.86, -2.6, 3.6);
-          const desiredY = THREE.MathUtils.clamp(0.5 + riderPosition.y * 0.55, 1.2, 2.5);
+          const desiredY = THREE.MathUtils.clamp(riderPosition.y + 0.35, 1.35, 4.5);
           const follow = Math.min(1, delta * 3.5);
           const shiftX = (desiredX - controls.target.x) * follow;
           const shiftY = (desiredY - controls.target.y) * follow;
@@ -710,7 +696,7 @@ export default function BlenderPrototype() {
       renderer.setAnimationLoop(null);
       controls.dispose();
       releaseStyle?.();
-      ramp.dispose();
+      environment.dispose();
       disposeScene(scene);
       smaaPass.dispose();
       composer.dispose();
@@ -763,12 +749,11 @@ export default function BlenderPrototype() {
   return (
     <main className={styles.prototype}>
       <div className={styles.intro}>
-        <p className={styles.eyebrow}>Blender lab · physics-driven</p>
-        <h2>Same tricks. Real scene.</h2>
+        <p className={styles.eyebrow}>Blender lab / Second Session</p>
+        <h2>Fresh shells. Same soul.</h2>
         <p className={styles.summary}>
-          Blender owns the capsule rig and board; the playground&rsquo;s shared{' '}
-          <code>computeFrame</code> physics drives every joint. Pick any flatground
-          trick, stance, and outcome — cel-shaded to match the shipped 3D robots.
+          Meet the rebuilt crew. Enamel helmets, bright eyes, rubber joints,
+          and shoes made for grip. Pick a bot, spin it around, and take a kickflip.
         </p>
       </div>
 
@@ -834,20 +819,38 @@ export default function BlenderPrototype() {
           />
           <div className={styles.stageTopline}>
             <span className={styles.liveDot} />
-            {loadState === 'loading' ? 'Loading GLB' : loadState === 'error' ? 'Asset error' : 'Live WebGL'}
+            {loadState === 'loading' ? 'Loading robot' : loadState === 'error' ? 'Asset error' : robot.name}
           </div>
           <div className={styles.outcomeStamp} data-outcome={landed ? 'land' : 'bail'}>
             <span>{landed ? 'Landed' : fallVariant}</span>
             <strong>{currentTrick?.base ?? 'Ollie'}</strong>
           </div>
-          {loadState === 'loading' && <div className={styles.loader}>Assembling rig…</div>}
+          {loadState === 'loading' && <div className={styles.loader}>Getting the crew ready…</div>}
           {loadState === 'error' && <div className={styles.loader}>Couldn’t load the prototype asset.</div>}
           <p className={styles.orbitHint}>Drag to orbit · double-click to reset</p>
         </div>
 
-        <div className={styles.progressTrack} aria-hidden="true">
-          <span style={{ transform: `scaleX(${progress})` }} />
-        </div>
+        <input
+          className={styles.timeline}
+          type="range"
+          aria-label="Animation timeline"
+          min="0"
+          max="1"
+          step="0.001"
+          value={progress}
+          disabled={loadState !== 'ready'}
+          onChange={(event) => {
+            const next = Number(event.target.value);
+            animationTimeRef.current = next * clipDuration;
+            pausedRef.current = true;
+            setPaused(true);
+            setProgress(next);
+            const pose = poseRef.current;
+            if (pose) poseFromFrame(pose.rig,
+              computeFrame(Math.min(animationTimeRef.current, endTime), pose.spec, pose.landed, pose.fall, pose.shankProgress),
+              pose.spec, pose.riderStance);
+          }}
+        />
 
         <div className={styles.controls}>
           <div className={styles.outcomes} aria-label="Animation outcome">
@@ -886,18 +889,18 @@ export default function BlenderPrototype() {
       <section className={styles.notes} aria-label="Prototype implementation notes">
         <div>
           <span>Motion</span>
-          <strong>Shared computeFrame physics</strong>
-          <p>Same Spec catalog and timeline as the 2D/3D playground renderers.</p>
+          <strong>Every flatground trick</strong>
+          <p>Try a clean catch, a bail, or slow things down to inspect the pose.</p>
         </div>
         <div>
           <span>Geometry</span>
-          <strong>Blender capsule rig</strong>
-          <p>One GLB for the meshes; joints are posed each frame in Three.js.</p>
+          <strong>Built from the bolts up</strong>
+          <p>Sculpted helmets, inset displays, layered shells, and articulated shoes.</p>
         </div>
         <div>
-          <span>Boundary</span>
-          <strong>Playground only</strong>
-          <p>No production renderer imports this code or downloads these assets.</p>
+          <span>Collection</span>
+          <strong>Four familiar personalities</strong>
+          <p>Swivel, Scuffy, Gutsy, and Nosy — original colors, entirely new silhouettes.</p>
         </div>
       </section>
     </main>

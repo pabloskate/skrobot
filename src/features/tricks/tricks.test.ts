@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
-import { TRICK_BY_ID, TRICK_BY_NAME, TRICKS, trickDescription, trickDiscipline, trickMatchesSearch } from './tricks';
+import { TRICK_BY_ID, TRICK_BY_NAME, TRICKS, defaultRoutedTrickPool, trickDescription, trickDiscipline, trickMatchesSearch } from './tricks';
+
+describe('selectable trick catalog', () => {
+  it('omits every late backside shuvit while retaining late frontside shuvits', () => {
+    const { pool } = defaultRoutedTrickPool();
+    expect(TRICKS.some((trick) => trick.base === 'Late Backside Shuvit')).toBe(false);
+    expect(pool.some((trick) => trick.base === 'Late Backside Shuvit')).toBe(false);
+    for (const stance of ['regular', 'fakie', 'switch', 'nollie']) {
+      expect(TRICK_BY_ID.has(`${stance}-late-backside-shuvit`)).toBe(false);
+      expect(pool.some((trick) => trick.id === `${stance}-late-frontside-shuvit`)).toBe(true);
+    }
+  });
+});
 
 describe('TRICK_BY_NAME', () => {
   it('has a unique display name for every trick (needed for legacy record migration)', () => {

@@ -8,6 +8,8 @@ export type SavedGameMode = 'screen' | 'voice';
 export interface GameProgress {
   trickIdsLanded: string[];
   trickAttempts: TrickAttempt[];
+  /** False once any part of this match was played without trick tracking. */
+  trackingEligible: boolean;
 }
 
 export interface GameSessionSnapshot {
@@ -21,7 +23,7 @@ export interface GameSessionIdentity {
 }
 
 export interface SavedGame {
-  version: 4;
+  version: 5;
   savedAt: string;
   robotId: string;
   mode: SavedGameMode;
@@ -86,9 +88,9 @@ function rehydrateState(raw: GameState): GameState | null {
   };
 }
 
-function rehydrateProgress(value: unknown): GameProgress {
+function rehydrateProgress(value: unknown, trackingEligibleDefault = true): GameProgress {
   if (value == null || typeof value !== 'object' || Array.isArray(value)) {
-    return { trickIdsLanded: [], trickAttempts: [] };
+    return { trickIdsLanded: [], trickAttempts: [], trackingEligible: trackingEligibleDefault };
   }
   const raw = value as Record<string, unknown>;
   const currentIds = Array.isArray(raw.trickIdsLanded)
@@ -114,7 +116,11 @@ function rehydrateProgress(value: unknown): GameProgress {
       if (trick) trickAttempts.push({ trickId: trick.id, landed: attempt.landed });
     }
   }
-  return { trickIdsLanded: currentIds.length > 0 ? currentIds : legacyIds, trickAttempts };
+  return {
+    trickIdsLanded: currentIds.length > 0 ? currentIds : legacyIds,
+    trickAttempts,
+    trackingEligible: typeof raw.trackingEligible === 'boolean' ? raw.trackingEligible : trackingEligibleDefault,
+  };
 }
 
 function parseSavedGame(value: unknown): SavedGame | null {
@@ -128,7 +134,7 @@ function parseSavedGame(value: unknown): SavedGame | null {
     state?: unknown;
     progress?: unknown;
   };
-  if (v.version !== 1 && v.version !== 2 && v.version !== 3 && v.version !== 4) return null;
+  if (v.version !== 1 && v.version !== 2 && v.version !== 3 && v.version !== 4 && v.version !== 5) return null;
   if (typeof v.robotId !== 'string' || !v.robotId) return null;
   if (v.mode !== 'screen' && v.mode !== 'voice') return null;
   if (typeof v.savedAt !== 'string') return null;
@@ -136,7 +142,7 @@ function parseSavedGame(value: unknown): SavedGame | null {
   if (!state || !isSaveWorthKeeping(state)) return null;
   const rawSession = v.session;
   const session =
-    (v.version === 3 || v.version === 4) &&
+    (v.version === 3 || v.version === 4 || v.version === 5) &&
     rawSession != null &&
     typeof rawSession === 'object' &&
     'id' in rawSession &&
@@ -146,13 +152,17 @@ function parseSavedGame(value: unknown): SavedGame | null {
       ? { id: rawSession.id, startedAt: rawSession.startedAt }
       : { id: randomId(), startedAt: v.savedAt };
   return {
-    version: 4,
+    version: 5,
     savedAt: v.savedAt,
     robotId: v.robotId,
     mode: v.mode,
     session,
     state,
-    progress: v.version === 2 || v.version === 3 || v.version === 4 ? rehydrateProgress(v.progress) : rehydrateProgress(null),
+    // Version 4 introduced the tracking toggle without saving whether an
+    // anonymous pass occurred. Treat those in-flight matches conservatively.
+    progress: v.version === 2 || v.version === 3 || v.version === 4 || v.version === 5
+      ? rehydrateProgress(v.progress, v.version !== 4 && v.version !== 5)
+      : rehydrateProgress(null),
   };
 }
 
@@ -190,7 +200,7 @@ export function saveGame(input: {
     return null;
   }
   const saved: SavedGame = {
-    version: 4,
+    version: 5,
     savedAt: new Date().toISOString(),
     robotId: input.robotId,
     mode: input.mode,

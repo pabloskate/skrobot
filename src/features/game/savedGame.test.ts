@@ -37,6 +37,7 @@ const progress = {
     { trickId: 'regular-kickflip', landed: true },
     { trickId: 'regular-heelflip', landed: false },
   ],
+  trackingEligible: false,
 };
 
 const session = { id: 'game-session-1', startedAt: '2026-08-01T00:00:00.000Z' };
@@ -66,7 +67,7 @@ describe('saveGame / getSavedGame', () => {
   it('round-trips a mid-game save', () => {
     const state = midGame();
     const saved = saveGame({ robotId: 'shifty', mode: 'screen', session, state, progress });
-    expect(saved?.version).toBe(4);
+    expect(saved?.version).toBe(5);
     expect(saved?.robotId).toBe('shifty');
     expect(getSavedGame()?.state.letters).toEqual({ player: 1, robot: 2 });
     expect(getSavedGame()?.state.used).toEqual(['kickflip']);
@@ -93,9 +94,9 @@ describe('saveGame / getSavedGame', () => {
     );
 
     expect(getSavedGame()).toMatchObject({
-      version: 4,
+      version: 5,
       mode: 'voice',
-      progress: { trickIdsLanded: [], trickAttempts: [] },
+      progress: { trickIdsLanded: [], trickAttempts: [], trackingEligible: true },
     });
   });
 
@@ -119,7 +120,22 @@ describe('saveGame / getSavedGame', () => {
     expect(getSavedGame()?.progress).toEqual({
       trickIdsLanded: ['regular-kickflip'],
       trickAttempts: [{ trickId: 'regular-heelflip', landed: false }],
+      trackingEligible: true,
     });
+  });
+
+  it('keeps tracking ineligible across a save and resume', () => {
+    saveGame({ robotId: 'shifty', mode: 'screen', session, state: midGame(), progress });
+    expect(getSavedGame()?.progress.trackingEligible).toBe(false);
+  });
+
+  it('does not treat a version-4 save with unknown tracking history as complete', () => {
+    localStorage.setItem('skaterobot-saved-game', JSON.stringify({
+      version: 4, savedAt: '2026-08-01T00:00:00.000Z',
+      robotId: 'shifty', mode: 'screen', session, state: midGame(),
+      progress: { trickIdsLanded: ['regular-kickflip'], trickAttempts: [] },
+    }));
+    expect(getSavedGame()?.progress.trackingEligible).toBe(false);
   });
 
   it('does not persist rps or over states', () => {

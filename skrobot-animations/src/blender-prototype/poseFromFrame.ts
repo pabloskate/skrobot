@@ -26,10 +26,10 @@ const THIGH = 35;
 const SHIN = 35;
 /** Raise foot targets onto the deck's top face (matches generate_prototype.py). */
 const FOOT_DECK_LIFT = 4;
-/** Mild torso yaw from travel toward toeside — matches TrickAnimation3D. */
+/** Turn the chest toward toeside; the helmet looks slightly farther across. */
 const STANCE_BODY_YAW = 40;
-/** Degrees the head stays toward travel relative to the torso yaw. */
-const HEAD_LOOK_FORWARD = 16;
+/** Head offset relative to the torso, in degrees. */
+const HEAD_LOOK_FORWARD = -19;
 const ARM_SPLAY = 13;
 
 export interface RigHandles {
@@ -51,25 +51,28 @@ export interface RigHandles {
 }
 
 export function bindRig(scene: THREE.Object3D): RigHandles | null {
-  const rider = scene.getObjectByName('RobotRig');
-  const board = scene.getObjectByName('SkateboardRig');
+  // GLTFLoader sanitizes punctuation for Three animation track names.
+  const node = (name: string) => scene.getObjectByName(name)
+    ?? scene.getObjectByName(THREE.PropertyBinding.sanitizeNodeName(name));
+  const rider = node('RobotRig');
+  const board = node('SkateboardRig');
   if (!rider || !board) return null;
   return {
     rider,
     board,
-    stance: scene.getObjectByName('Rig.Stance') ?? null,
-    torso: scene.getObjectByName('Rig.Torso') ?? null,
-    head: scene.getObjectByName('Rig.Head') ?? null,
-    hipNose: scene.getObjectByName('Rig.Hip.Nose') ?? null,
-    hipTail: scene.getObjectByName('Rig.Hip.Tail') ?? null,
-    kneeNose: scene.getObjectByName('Rig.Knee.Nose') ?? null,
-    kneeTail: scene.getObjectByName('Rig.Knee.Tail') ?? null,
-    footNose: scene.getObjectByName('Rig.Foot.Nose') ?? null,
-    footTail: scene.getObjectByName('Rig.Foot.Tail') ?? null,
-    shoulderFront: scene.getObjectByName('Rig.Shoulder.Front') ?? null,
-    shoulderBack: scene.getObjectByName('Rig.Shoulder.Back') ?? null,
-    elbowFront: scene.getObjectByName('Rig.Elbow.Front') ?? null,
-    elbowBack: scene.getObjectByName('Rig.Elbow.Back') ?? null,
+    stance: node('Rig.Stance') ?? null,
+    torso: node('Rig.Torso') ?? null,
+    head: node('Rig.Head') ?? null,
+    hipNose: node('Rig.Hip.Nose') ?? null,
+    hipTail: node('Rig.Hip.Tail') ?? null,
+    kneeNose: node('Rig.Knee.Nose') ?? null,
+    kneeTail: node('Rig.Knee.Tail') ?? null,
+    footNose: node('Rig.Foot.Nose') ?? null,
+    footTail: node('Rig.Foot.Tail') ?? null,
+    shoulderFront: node('Rig.Shoulder.Front') ?? null,
+    shoulderBack: node('Rig.Shoulder.Back') ?? null,
+    elbowFront: node('Rig.Elbow.Front') ?? null,
+    elbowBack: node('Rig.Elbow.Back') ?? null,
   };
 }
 
@@ -148,9 +151,8 @@ export function poseFromFrame(
   const restingBodyYaw = -STANCE_BODY_YAW * mechanics.orientationSign;
   const restingHeadYaw = -(STANCE_BODY_YAW - HEAD_LOOK_FORWARD) * mechanics.orientationSign;
   const uprightP = clamp(1 - Math.abs(frame.body.rot) / 55, 0, 1);
-  const bodyYawDeg = oriented.bodyYawDeg + restingBodyYaw;
-  const headYawDeg =
-    oriented.bodyYawDeg + restingHeadYaw * uprightP + restingBodyYaw * (1 - uprightP);
+  const bodyYawDeg = -oriented.bodyYawDeg + restingBodyYaw;
+  const headLocalYawDeg = (restingHeadYaw - restingBodyYaw) * uprightP;
 
   // Lift both roots by the deck rest height so wheels sit on the asphalt when
   // computeFrame reports board.y === GROUND (its ground plane is the midplane).
@@ -163,9 +165,9 @@ export function poseFromFrame(
   setEulerDeg(rig.rider, 0, 0, -frame.body.rot);
 
   // Resting skate stance on Rig.Stance (Blender Z → Three.js Y after yup).
-  setEulerDeg(rig.stance, 0, -bodyYawDeg, 0);
+  setEulerDeg(rig.stance, 0, bodyYawDeg, 0);
   setEulerDeg(rig.torso, 0, 0, 0);
-  setEulerDeg(rig.head, 0, headYawDeg - bodyYawDeg, 0);
+  setEulerDeg(rig.head, 0, headLocalYawDeg, 0);
 
   poseLeg(rig.hipTail, rig.kneeTail, rig.footTail, frame.footL);
   poseLeg(rig.hipNose, rig.kneeNose, rig.footNose, frame.footR);
@@ -191,13 +193,16 @@ export function poseFromFrame(
 /** Retint exported materials to the selected robot's avatar palette. */
 export function applyRobotPalette(
   root: THREE.Object3D,
-  colors: { body: string; accent: string },
+  colors: { body: string; accent: string; variant?: number },
 ) {
   root.traverse((object) => {
+    if (/^Variant\.?[0-3]$/.test(object.name)) {
+      object.visible = Number(object.name.slice(-1)) === (colors.variant ?? 0);
+    }
     if (!(object instanceof THREE.Mesh)) return;
     const materials = Array.isArray(object.material) ? object.material : [object.material];
     for (const material of materials) {
-      const named = material as THREE.MeshToonMaterial & { name?: string };
+      const named = material as THREE.MeshStandardMaterial & { name?: string };
       if (!('color' in named) || !named.color) continue;
       const materialName = (named.name ?? '').toLowerCase();
       const objectName = object.name.toLowerCase();
@@ -205,7 +210,7 @@ export function applyRobotPalette(
       // meshes named Body.Thigh.* keep the accent fill instead of the body tint.
       if (materialName.includes('accent') || objectName.startsWith('eye.') || objectName.includes('hub')) {
         named.color.set(colors.accent);
-      } else if (materialName.includes('body') || objectName.includes('boot')) {
+      } else if (materialName.includes('body')) {
         named.color.set(colors.body);
       }
     }
