@@ -2175,6 +2175,61 @@ main:has(.rps-arena) > .screen {
   line-height: 0;
 }
 
+/* The robot calling its set: its trick names reel in the sky above it. */
+.pick-reel {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 120px;
+  pointer-events: none;
+}
+
+.pick-reel-window {
+  position: absolute;
+  inset: 0;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 30%, #000 72%, transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0, #000 30%, #000 72%, transparent 100%);
+}
+
+.pick-reel-name {
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  color: #fff;
+  -webkit-text-stroke: 7px var(--ink);
+  paint-order: stroke fill;
+  filter: drop-shadow(0 3px 0 rgba(34, 26, 78, 0.22));
+  will-change: transform;
+}
+
+.pick-reel-name--pick {
+  filter: drop-shadow(0 4px 0 rgba(34, 26, 78, 0.28));
+}
+
+.pick-reel-tape {
+  position: absolute;
+  z-index: 2;
+  top: 14px;
+  left: 50%;
+  padding: 6px 14px 5px;
+  background: linear-gradient(180deg, #fffaf0, #f6ecd4);
+  color: var(--robot-ink);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  clip-path: polygon(3% 0, 97% 0, 100% 20%, 97% 42%, 100% 64%, 97.5% 84%, 99.5% 100%, 1% 100%, 3.5% 80%, 0 60%, 3% 40%, 0 18%);
+  filter: drop-shadow(0 3px 0 rgba(34, 26, 78, 0.2));
+  transform-origin: 50% 50%;
+}
+
 /* currentColor source for the robot avatar's outline/face ink. */
 .robot-avatar {
   color: var(--robot-ink);

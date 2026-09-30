@@ -29,7 +29,12 @@ export {
 } from './TrickAnimation';
 export { default as TrickAnimation3D } from './TrickAnimation3D';
 /** From-scratch look (new robot, skate plaza, crane camera) on the same physics. */
-export { default as TrickScene } from './scene/TrickScene';
+export { default as TrickScene, type HeadPose, type LeadIn } from './scene/TrickScene';
+/** Flat-bar grinds and slides — TrickScene only (the other renderers are flatground). */
+export { grindTimelineFor, type GrindTimeline } from './scene/grind';
+export { GRIND_BASES, grindSpecFor, type GrindSide } from './scene/grindDefinitions';
+/** Flatground tricks popped into a grind: "Kickflip into Frontside Lipslide", "Backside 180 into Frontside Nosegrind". */
+export { canEnterGrind, joinGrindBase, splitGrindBase } from './scene/grindEntry';
 /** Frozen pre-rework snapshot of the 3D renderer, for side-by-side comparison. */
 export { default as TrickAnimation3DLegacy } from './TrickAnimation3DLegacy';
 export { default as RobotAvatar } from './RobotAvatar';

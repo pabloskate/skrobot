@@ -14,13 +14,24 @@ import {
   TrickAnimation3D,
   TrickAnimation3DLegacy,
   TrickScene,
+  grindSpecFor,
+  grindTimelineFor,
   type BackgroundSceneId,
   type FallVariant,
   type RiderStance,
   type SkateStyle,
   type Stance,
 } from '@skrobot/animations';
-import { ROBOTS, robotById, tricksForStance } from './data';
+import {
+  GRIND_BASES,
+  GRIND_ENTRY_BASES,
+  GRIND_SIDES,
+  ROBOTS,
+  grindTrick,
+  robotById,
+  tricksForStance,
+  type GrindSideName,
+} from './data';
 import ContactSheet from './ContactSheet';
 import styles from './Playground.module.css';
 
@@ -43,6 +54,13 @@ const VIEW_OPTIONS = [
 ] as const;
 
 type ViewMode = (typeof VIEW_OPTIONS)[number]['id'];
+
+const DISCIPLINES = [
+  { id: 'flatground', label: 'Flatground' },
+  { id: 'grinds', label: 'Grinds' },
+] as const;
+
+type Discipline = (typeof DISCIPLINES)[number]['id'];
 
 const APP_MODES = [
   { id: 'playground', label: 'Playground' },
@@ -104,7 +122,12 @@ async function writeClipboardText(text: string): Promise<boolean> {
 export default function App() {
   const [appMode, setAppMode] = useState<AppMode>('playground');
   const [selectedRobotId, setSelectedRobotId] = useState(ROBOTS[0].id);
+  const [discipline, setDiscipline] = useState<Discipline>('flatground');
   const [selectedBase, setSelectedBase] = useState('Kickflip');
+  const [selectedGrind, setSelectedGrind] = useState(GRIND_BASES[0]);
+  const [grindSide, setGrindSide] = useState<GrindSideName>('Frontside');
+  /** Flatground trick popped into the grind; '' is a plain ollie on. */
+  const [entryTrick, setEntryTrick] = useState('');
   const [selectedStance, setSelectedStance] = useState<Stance>('regular');
   const [selectedRiderStance, setSelectedRiderStance] = useState<RiderStance>('regular');
   const [landed, setLanded] = useState<boolean | null>(null);
@@ -130,8 +153,12 @@ export default function App() {
   const availableTricks = useMemo(() => tricksForStance(selectedStance), [selectedStance]);
 
   const currentTrick = useMemo(() => {
+    if (discipline === 'grinds') return grindTrick(selectedGrind, grindSide, selectedStance, entryTrick || undefined);
     return availableTricks.find((t) => t.base === selectedBase) ?? availableTricks[0];
-  }, [availableTricks, selectedBase]);
+  }, [availableTricks, discipline, entryTrick, grindSide, selectedBase, selectedGrind, selectedStance]);
+  const grindSpec = discipline === 'grinds' ? grindSpecFor(currentTrick) : null;
+  // Grinds need the bar, and only the Scene renderer has one.
+  const activeView: ViewMode = discipline === 'grinds' ? 'scene' : viewMode;
 
   const animationKey = [
     playKey,
@@ -140,7 +167,7 @@ export default function App() {
     selectedRiderStance,
     landed === null ? 'idle' : landed ? 'landed' : 'bailed',
     playbackMode,
-    viewMode,
+    activeView,
     backgroundSceneId,
     fallVariant,
     skateStyle.popHeight,
@@ -162,13 +189,18 @@ export default function App() {
       playbackMode,
       playbackRate,
       fixedTime: inspectionTime,
-      view: viewMode,
+      discipline,
+      entryTrick: discipline === 'grinds' && entryTrick ? entryTrick : null,
+      view: activeView,
       backgroundSceneId,
       fallVariant,
     }),
     [
+      activeView,
       backgroundSceneId,
       currentTrick,
+      discipline,
+      entryTrick,
       fallVariant,
       landed,
       playbackMode,
@@ -180,7 +212,6 @@ export default function App() {
       selectedBase,
       selectedRiderStance,
       selectedStance,
-      viewMode,
     ]
   );
   const paramsText = useMemo(() => JSON.stringify(animationParams, null, 2), [animationParams]);
@@ -233,14 +264,43 @@ export default function App() {
     setSkateStyle(robot.skateStyle ?? DEFAULT_SKATE_STYLE);
   };
 
-  const duration = ROLL_IN + FLIP_T + (landed === false ? FALL_T : LAND_T);
-  const phases = [
-    { label: 'Setup', time: 0 },
-    { label: 'Pop', time: ROLL_IN + FLIP_T * 0.1 },
-    { label: 'Peak', time: ROLL_IN + FLIP_T * 0.5 },
-    { label: 'Catch', time: ROLL_IN + FLIP_T * 0.88 },
-    { label: landed === false ? 'Bail' : 'Roll away', time: duration },
-  ];
+  const grind = useMemo(
+    () => discipline === 'grinds'
+      ? grindTimelineFor(currentTrick, selectedRiderStance, skateStyle, landed !== false, fallVariant)
+      : null,
+    [currentTrick, discipline, fallVariant, landed, selectedRiderStance, skateStyle],
+  );
+  const duration = grind?.end ?? ROLL_IN + FLIP_T + (landed === false ? FALL_T : LAND_T);
+  const phases = grind
+    ? [
+      { label: 'Setup', time: 0 },
+      { label: 'Pop', time: grind.pop },
+      ...(grind.trick === null ? [] : [{ label: 'Trick', time: grind.trick }]),
+      { label: 'Lock', time: grind.lock },
+      ...(grind.fail === null
+        ? [
+          { label: 'Hold', time: (grind.lock + grind.off) / 2 },
+          { label: 'Pop off', time: grind.off },
+          { label: 'Roll away', time: duration },
+        ]
+        : [
+          { label: 'Slip', time: grind.fail },
+          { label: 'Bail', time: duration },
+        ]),
+    ]
+    : [
+      { label: 'Setup', time: 0 },
+      { label: 'Pop', time: ROLL_IN + FLIP_T * 0.1 },
+      { label: 'Peak', time: ROLL_IN + FLIP_T * 0.5 },
+      { label: 'Catch', time: ROLL_IN + FLIP_T * 0.88 },
+      { label: landed === false ? 'Bail' : 'Roll away', time: duration },
+    ];
+
+  const changeDiscipline = (next: Discipline) => {
+    setDiscipline(next);
+    // Phase times differ between flatground and grinds; start the new one from its setup.
+    setInspectionTime(0);
+  };
 
   return (
     <div className={styles.wrap}>
@@ -330,6 +390,22 @@ export default function App() {
         </div>
 
         <div>
+          <h2 className={styles.sectionTitle}>Discipline</h2>
+          <div className={styles.stanceRow}>
+            {DISCIPLINES.map((option) => (
+              <button
+                key={option.id}
+                className={`${styles.stanceBtn} ${discipline === option.id ? styles.stanceBtnActive : ''}`}
+                onClick={() => changeDiscipline(option.id)}
+                aria-pressed={discipline === option.id}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
           <h2 className={styles.sectionTitle}>Rider stance</h2>
           <div className={styles.stanceRow}>
             {RIDER_STANCES.map((stance) => (
@@ -361,31 +437,86 @@ export default function App() {
           </div>
         </div>
 
-        <div>
-          <h2 className={styles.sectionTitle}>Trick</h2>
+        {discipline === 'grinds' && <div>
+          <h2 className={styles.sectionTitle}>Grind side</h2>
+          <div className={styles.stanceRow}>
+            {GRIND_SIDES.map((side) => (
+              <button
+                key={side}
+                className={`${styles.stanceBtn} ${grindSide === side ? styles.stanceBtnActive : ''}`}
+                onClick={() => setGrindSide(side)}
+                aria-pressed={grindSide === side}
+              >
+                {side}
+              </button>
+            ))}
+          </div>
+        </div>}
+
+        {discipline === 'grinds' && <div>
+          <h2 className={styles.sectionTitle}>Trick into grind</h2>
+          <p className={styles.styleNote}>Flips, shuvs, and spins, in the trick stance above</p>
           <select
-            aria-label="Trick"
+            aria-label="Trick into grind"
             className={styles.trickSelect}
-            value={currentTrick?.base ?? ''}
-            onChange={(e) => setSelectedBase(e.target.value)}
+            value={entryTrick}
+            onChange={(e) => setEntryTrick(e.target.value)}
           >
-            {availableTricks.map((t) => (
-              <option key={t.id} value={t.base}>
-                {t.base}
+            <option value="">None (ollie on)</option>
+            {GRIND_ENTRY_BASES.map((base) => (
+              <option key={base} value={base}>
+                {base}
               </option>
             ))}
           </select>
+          {grindSpec?.reversed && <p className={styles.styleNote}>
+            Spins them round: they roll in with the bar on the {grindSpec.toesideApproach ? 'toeside' : 'heelside'} and
+            ride the {grindSide.toLowerCase()} {selectedGrind.toLowerCase()} fakie
+          </p>}
+        </div>}
+
+        <div>
+          <h2 className={styles.sectionTitle}>{discipline === 'grinds' ? 'Grind' : 'Trick'}</h2>
+          {discipline === 'grinds' ? (
+            <select
+              aria-label="Grind"
+              className={styles.trickSelect}
+              value={selectedGrind}
+              onChange={(e) => setSelectedGrind(e.target.value)}
+            >
+              {GRIND_BASES.map((base) => (
+                <option key={base} value={base}>
+                  {base}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <select
+              aria-label="Trick"
+              className={styles.trickSelect}
+              value={currentTrick?.base ?? ''}
+              onChange={(e) => setSelectedBase(e.target.value)}
+            >
+              {availableTricks.map((t) => (
+                <option key={t.id} value={t.base}>
+                  {t.base}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
         <div>
           <h2 className={styles.sectionTitle}>View</h2>
+          {discipline === 'grinds' && <p className={styles.styleNote}>Grinds render in the Scene view only</p>}
           <div className={styles.speedRow}>
             {VIEW_OPTIONS.map((option) => (
               <button
                 key={option.id}
-                className={`${styles.speedBtn} ${viewMode === option.id ? styles.speedBtnActive : ''}`}
+                className={`${styles.speedBtn} ${activeView === option.id ? styles.speedBtnActive : ''}`}
                 onClick={() => setViewMode(option.id)}
-                aria-pressed={viewMode === option.id}
+                aria-pressed={activeView === option.id}
+                disabled={discipline === 'grinds' && option.id !== 'scene'}
               >
                 {option.label}
               </button>
@@ -409,7 +540,7 @@ export default function App() {
           </div>
         </div>
 
-        {viewMode !== '3d' && viewMode !== 'scene' && <div>
+        {activeView !== '3d' && activeView !== 'scene' && <div>
           <h2 className={styles.sectionTitle}>Background</h2>
           <div className={styles.optionGrid}>
             {BACKGROUND_SCENE_OPTIONS.map((option) => (
@@ -446,12 +577,12 @@ export default function App() {
         <div className={styles.stageHeading}>
           <div><span className={styles.eyebrow}>{robot.name} / {selectedRiderStance} rider</span>
           <h2>{currentTrick?.name ?? selectedBase}</h2></div>
-          <span className={styles.stageBadge}>{viewMode === 'scene' ? 'New scene' : viewMode === '3d' ? '3D preview' : viewMode === 'side' ? 'Side view' : 'Legacy 3D'}</span>
+          <span className={styles.stageBadge}>{activeView === 'scene' ? 'New scene' : activeView === '3d' ? '3D preview' : activeView === 'side' ? 'Side view' : 'Legacy 3D'}</span>
         </div>
         <div className={styles.viewport}>
         {
           <>
-            {viewMode === 'scene' ? (
+            {activeView === 'scene' ? (
               <TrickScene
                 key={animationKey}
                 robot={previewRobot}
@@ -465,8 +596,8 @@ export default function App() {
                 paused={paused}
                 onDone={() => {}}
               />
-            ) : viewMode === '3d' || viewMode === '3d-legacy' ? (
-              viewMode === '3d' ? (
+            ) : activeView === '3d' || activeView === '3d-legacy' ? (
+              activeView === '3d' ? (
               <TrickAnimation3D
                 key={animationKey}
                 robot={previewRobot}

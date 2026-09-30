@@ -1,8 +1,20 @@
 import type { ReactElement } from 'react';
 import { PALETTE, type Camera } from './camera';
-import { ball, facePath, facing, newGroup, renderGroup, roundedBox, roundedRectPts, tube, OUTLINE, type BoxSpec, type Group } from './draw';
+import {
+  ball,
+  facePath,
+  facing,
+  newGroup,
+  renderGroup,
+  roundedBox,
+  roundedRectPts,
+  tube,
+  OUTLINE,
+  type BoxSpec,
+  type Group,
+} from './draw';
 import { dot3, mixHex, smoothstep, sub3, type V3 } from './math';
-import { SHOE_HALF_HEIGHT, SHOE_HALF_LENGTH, shiftFrame, type Frame3, type Rig } from './rig';
+import { SHOE_HALF_HEIGHT, SHOE_HALF_LENGTH, shiftFrame, type Frame3, type Rig } from './skeleton';
 
 /**
  * The TrickScene robot.
@@ -113,6 +125,14 @@ function drawAntenna(g: Group, cam: Camera, head: Frame3, look: RobotLook) {
 }
 
 /**
+ * How far past edge-on the underside must face the camera (cosine) before it
+ * starts, and finishes, hiding feet on the grip. The swap happens at edge-on,
+ * where the deck is a sliver and covers next to nothing, so it never pops.
+ */
+const UNDERFOOT_FROM = 0;
+const UNDERFOOT_BAND = 0.04;
+
+/**
  * The robot and the board it rides, in paint order (back to front).
  *
  * Legs normally paint over the board they stand on. The flicking foot is the
@@ -120,7 +140,9 @@ function drawAntenna(g: Group, cam: Camera, head: Frame3, look: RobotLook) {
  * between it and the camera (a regular kickflip seen from the front) the
  * board hides it. Drawing it on top there made the heelside flick read as a
  * toeside one. It fades between the two paint orders by how far the shoe is
- * past the deck plane, so the switch never pops.
+ * past the deck plane, so the switch never pops. Feet standing on the grip
+ * (Rig.onGrip) do the same: a blunt can stand the deck up underside-first to
+ * the camera, and painting the shoes over it put them on the wheels.
  */
 export function drawRobot(cam: Camera, rig: Rig, look: RobotLook, expression: Expression, board: ReactElement): ReactElement[] {
   const limb = mixHex(PALETTE.limb, look.body, 0.16);
@@ -188,10 +210,15 @@ export function drawRobot(cam: Camera, rig: Rig, look: RobotLook, expression: Ex
   // Which face of the deck the camera sees, eased through edge-on (where
   // the wheels still have area) instead of flipping sign.
   const toEye = Math.max(-1, Math.min(1, dot3(sub3(cam.eye, deckCenter), grip) / 60));
+  // Soles on the grip are on the far side of a deck showing its underside, so
+  // it paints over them and they stand up out of its top edge. Painted on top,
+  // a tailslide seen from the front put the shoes on the graphic and trucks.
+  const underfoot = (rig.onGrip ?? 0) * smoothstep((-facing(cam, deckCenter, grip) - UNDERFOOT_FROM) / UNDERFOOT_BAND);
   const hiddenBy = (leg: typeof legA) => {
-    if (!leg.flicking || rig.flickOut === 0) return 0;
-    const past = -toEye * dot3(sub3(leg.shoe.origin, deckCenter), grip);
-    return rig.flickOut * smoothstep((past + 2) / 8);
+    const flick = leg.flicking && rig.flickOut > 0
+      ? rig.flickOut * smoothstep((-toEye * dot3(sub3(leg.shoe.origin, deckCenter), grip) + 2) / 8)
+      : 0;
+    return Math.max(flick, underfoot);
   };
   const legs = [
     { group: legGroup('legFar', farLeg), hidden: hiddenBy(farLeg) },

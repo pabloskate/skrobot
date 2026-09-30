@@ -1,4 +1,4 @@
-import type { Robot, Stance, Trick } from '@skrobot/animations';
+import { GRIND_BASES, canEnterGrind, joinGrindBase, type Robot, type Stance, type Trick } from '@skrobot/animations';
 
 export const ROBOTS: Robot[] = [
   {
@@ -95,6 +95,20 @@ export const TRICKS: Trick[] = FLATGROUND_BASES.flatMap((base) =>
     stance,
   }))
 );
+
+/** Grinds and slides name their side up front: "Frontside 50-50 Grind". */
+export const GRIND_SIDES = ['Frontside', 'Backside'] as const;
+export type GrindSideName = (typeof GRIND_SIDES)[number];
+export { GRIND_BASES };
+
+/** Flatground tricks that can be popped into a grind (the animation package decides which). */
+export const GRIND_ENTRY_BASES = FLATGROUND_BASES.filter(canEnterGrind);
+
+/** A grind, optionally popped into off a flatground trick: "Kickflip into Frontside Lipslide". */
+export function grindTrick(base: string, side: GrindSideName, stance: Stance, entry?: string): Trick {
+  const sided = entry ? joinGrindBase(entry, `${side} ${base}`) : `${side} ${base}`;
+  return { id: `${slug(sided)}-${stance}`, name: `${sided}${stanceSuffix(stance)}`, base: sided, stance };
+}
 
 export function trickByBase(base: string, stance: Stance): Trick | undefined {
   return TRICKS.find((t) => t.base === base && t.stance === stance);

@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { LIGHT_SCREEN, PALETTE, tone, type Camera } from './camera';
 import { add3, clipConvex, hull, norm3, pathOf, scale3, sub3, type P2, type V3 } from './math';
-import type { Frame3 } from './rig';
+import type { Frame3 } from './skeleton';
 
 /**
  * Drawing primitives for TrickScene.

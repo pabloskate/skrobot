@@ -16,6 +16,7 @@ If the answer is unclear, tighten the feature boundary before adding more code.
 | Web feature API | `src/features/<name>/index.ts` | Public web boundary. Other web features import this barrel. |
 | Game rules in the web app | `src/features/game/engine.ts` | Pure reducer; edit here for rule changes. |
 | On-screen gameplay | `src/features/game/` | Web UI may call reducer, robot model, trick catalog, and records. |
+| Robot set presentation | `src/features/game/RobotSetTurn.tsx` | Owns one set turn; `pickTimeline.ts` plans the reel and `PickReel.tsx` renders it. Eligible tricks and weighted selection stay in `engine.ts`. |
 | Voice gameplay | `src/features/voice/` | Web Live API client code plus resolver/prompts. |
 | Voice token mint | `src/features/voice/server/` | Server-only; imported directly only by `src/app/api/live-token`. |
 | Auth/session/quota | `src/features/auth/` | Client auth state in the barrel; server code under `server/`. |
@@ -32,6 +33,30 @@ If the answer is unclear, tighten the feature boundary before adding more code.
 | Expo companion app | `apps/mobile/` | Native WebView shell that loads the same web app; no alternate game implementation. |
 | Shared animations | `packages/animations/` | Reusable robot/avatar/trick animation components, physics model, push-off scene, and browser feedback helpers. |
 | Animation playground | `skrobot-animations/` | Standalone Vite playground for animation iteration; consumes `@skrobot/animations` and owns only preview controls/fixtures. |
+| Frozen design references | `prototype/` | Static artifacts with no build step; see its README for the maintained product sources. |
+
+## Animation Source Map
+
+Consumers use `@skrobot/animations` and its exported styles. Internal scene files
+are private to the package; the import graph test checks alias and relative
+imports so moving these files does not require app or playground changes.
+
+| Change | Owner under `packages/animations/src/` |
+|---|---|
+| Flatground board motion | `TrickAnimation.tsx` (`computeFrame`) |
+| Shared skeleton dimensions, frames, joints, and neutral poses | `scene/skeleton.ts` |
+| Flatground rider motion | `scene/rig.ts` |
+| Grind names, lock poses, and contact geometry | `scene/grindDefinitions.ts` |
+| Tricks performed into a grind | `scene/grindEntry.ts` |
+| Grind timeline and board path | `scene/grind.ts` |
+| Grind rider motion and handoff from flatground | `scene/grindRig.ts` |
+| Scene rendering and reusable lead-in presentation | `scene/TrickScene.tsx` |
+
+Motion solvers share the skeleton contract, not each other's private constants.
+Grind entry reuses the flatground solver for the hop. Match-specific choices,
+reel text, and reducer callbacks belong in `features/game`, passed through the
+scene's `LeadIn` API. Keep tests sampling the complete motion; aggregate hot
+sweeps by their worst violation instead of making an assertion per sample.
 
 ## Dependency Map
 

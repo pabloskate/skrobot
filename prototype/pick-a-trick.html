@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>S.K.A.T.E. — Robot's turn “Call It” (Design)</title>
+<!-- Frozen design snapshot; see README.md for the maintained app and animation sources. -->
+<link rel="stylesheet" href="pick-a-trick.css">
+<style>
+@font-face{
+  font-family:'Montserrat';
+  src:url('../public/fonts/montserrat-latin.woff2') format('woff2');
+  font-style:normal;font-weight:400 800;font-display:swap;
+}
+:root{
+  --purple:#6431d8;--purple-dark:#4f23b0;--purple-soft:#ece5fb;
+  --ink:#221a4e;--muted:#6b6786;--bg:#f3f2f6;--card:#fff;
+  --green:#2da866;--robot-ink:#23232e;--radius:16px;
+  --shadow:0 2px 8px rgba(34,26,78,.08),0 8px 24px rgba(34,26,78,.06);
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:'Montserrat',system-ui,-apple-system,sans-serif;color:var(--ink);background:#e7e4ef}
+button{font-family:inherit;color:inherit}
+
+/* =====================================================================
+   Design doc page chrome (same as the game-start prototypes)
+   ===================================================================== */
+.doc{max-width:1240px;margin:0 auto;padding:44px 28px 96px}
+.eyebrow{margin:0;font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--purple)}
+.doc-head h1{margin:8px 0 0;font-size:52px;font-weight:900;letter-spacing:-1px;line-height:1}
+.doc-head p{margin:12px 0 0;max-width:660px;color:var(--muted);font-size:17px;line-height:1.5;font-weight:500}
+.hero{display:grid;grid-template-columns:410px minmax(0,1fr);gap:56px;align-items:start;margin-top:36px}
+.phone{width:410px;height:864px;padding:10px;border-radius:50px;background:#17131f;box-shadow:0 40px 90px rgba(34,26,78,.3),inset 0 0 0 2px #2c2638}
+.side{display:flex;flex-direction:column;gap:20px}
+.card{background:var(--card);border-radius:20px;box-shadow:var(--shadow);padding:22px 24px}
+.card h3{margin:0 0 14px;font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.ctl-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}
+.ctl-row:last-child{margin-bottom:0}
+.ctl-label{width:100%;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:2px}
+.chip{display:inline-flex;align-items:center;gap:6px;border:0;border-radius:999px;background:var(--bg);padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;color:var(--ink);transition:background .15s,color .15s,transform .08s}
+.chip:hover{background:var(--purple-soft)}
+.chip:active{transform:scale(.96)}
+.chip.on{background:var(--purple);color:#fff}
+.chip .robot-avatar{width:26px;height:26px;margin:-6px -2px -6px -6px;color:var(--robot-ink)}
+.chip.primary{background:var(--purple);color:#fff;padding:10px 20px}
+.scrub{display:flex;align-items:center;gap:12px;width:100%}
+.scrub input{flex:1;accent-color:var(--purple)}
+.scrub output{min-width:52px;font-size:13px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--ink);text-align:right}
+.changes{margin:0;padding:0;list-style:none;counter-reset:c}
+.changes li{position:relative;padding:0 0 16px 40px;font-size:14.5px;line-height:1.5;color:var(--muted);font-weight:500}
+.changes li:last-child{padding-bottom:0}
+.changes li::before{counter-increment:c;content:counter(c);position:absolute;left:0;top:-1px;width:26px;height:26px;border-radius:9px;background:var(--purple-soft);color:var(--purple);font-size:13px;font-weight:800;display:grid;place-items:center}
+.changes b{color:var(--ink);font-weight:800}
+.changes code,.build code{font-size:12.5px;background:var(--bg);padding:1px 6px;border-radius:6px;color:var(--purple-dark);font-weight:600}
+.section-title{margin:84px 0 6px;font-size:28px;font-weight:900;letter-spacing:-.3px}
+.section-sub{margin:0 0 28px;color:var(--muted);font-size:15px;font-weight:500}
+.board{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:16px}
+.frame{margin:0}
+.frame figcaption{margin-top:12px}
+.frame figcaption b{display:block;font-size:13.5px;font-weight:800}
+.frame figcaption em{font-style:normal;color:var(--muted);font-weight:700}
+.frame figcaption span{display:block;margin-top:3px;font-size:12.5px;line-height:1.45;color:var(--muted);font-weight:500}
+.frame:first-child .mini{opacity:.8;filter:saturate(.6)}
+.mini{--s:.4;width:calc(390px * var(--s));height:calc(780px * var(--s));border-radius:18px;overflow:hidden;box-shadow:0 18px 40px rgba(34,26,78,.22);pointer-events:none}
+.mini .screen{transform:scale(var(--s));transform-origin:0 0;border-radius:0}
+.build{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px}
+.build ul{margin:0;padding-left:18px}
+.build li{font-size:14px;line-height:1.55;color:var(--muted);font-weight:500;margin-bottom:8px}
+.build li b{color:var(--ink)}
+
+/* "This pick" card: the robot's real set table */
+.bag-lede{margin:0 0 12px;font-size:13.5px;line-height:1.45;color:var(--muted);font-weight:500}
+.bag{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
+.bag li{display:grid;grid-template-columns:150px 1fr 38px;align-items:center;gap:10px;font-size:13px;font-weight:700}
+.bag-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bag-bar{height:8px;border-radius:99px;background:var(--bg);overflow:hidden}
+.bag-bar i{display:block;height:100%;border-radius:inherit;background:#c9bdf0}
+.bag-pct{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
+.bag-pick .bag-name{color:var(--purple)}
+.bag-pick .bag-bar i{background:var(--purple)}
+.bag-pick .bag-pct{color:var(--purple)}
+.bag-used{color:#b3aec6}
+.bag-used .bag-name{text-decoration:line-through}
+.bag-used .bag-pct{grid-column:3}
+.bag-rest{font-size:12px!important;color:var(--muted);font-weight:600!important}
+
+/* =====================================================================
+   Phone screen: the game screen, copied from globals.css
+   ===================================================================== */
+.screen{position:relative;width:390px;height:844px;border-radius:40px;overflow:hidden;background:var(--bg);isolation:isolate;user-select:none;-webkit-user-select:none}
+.statusbar{position:absolute;z-index:50;top:0;left:0;right:0;height:47px;display:flex;align-items:center;justify-content:space-between;padding:6px 26px 0 30px;color:#fff;font-size:15px;font-weight:700;pointer-events:none}
+.statusbar i{display:inline-block;width:25px;height:12px;border-radius:4px;border:1.5px solid rgba(255,255,255,.85);position:relative}
+.statusbar i::after{content:'';position:absolute;inset:1.5px 5px 1.5px 1.5px;border-radius:2px;background:#fff}
+.topbar{background:var(--purple);color:#fff;padding:47px 20px 14px;box-shadow:0 2px 12px rgba(34,26,78,.25);display:flex;align-items:center;gap:12px}
+.topbar span{font-size:26px;line-height:1;padding:2px 6px}
+.topbar b{font-size:22px;font-weight:800;letter-spacing:.3px}
+.game-body{padding:20px 16px 40px}
+.scoreboard{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 18px;display:flex;flex-direction:column;gap:8px}
+.score-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.score-name{font-weight:700;font-size:15px}
+.letters{display:flex;gap:6px}
+.letter{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;font-weight:800;font-size:16px;background:var(--bg);color:#c8c4d8}
+.letter-on{background:var(--purple);color:#fff}
+.tracking{padding-top:9px;border-top:1px solid #f0eef6;text-align:center;font-size:12px;font-weight:600;color:var(--muted)}
+.tracking::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:6px}
+.panel{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:24px 20px;margin-top:16px}
+.panel.center{display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px;position:relative;overflow:hidden}
+.panel-title{margin:0;font-size:22px;font-weight:800}
+.note{margin:0;background:var(--purple-soft);color:var(--purple-dark);font-weight:600;font-size:14px;padding:8px 14px;border-radius:999px}
+.btn-primary{display:inline-block;border-radius:999px;padding:14px 28px;min-width:220px;font-size:16px;font-weight:700;background:var(--purple);color:#fff;box-shadow:0 4px 14px rgba(100,49,216,.4)}
+.attempt-panel{gap:0;padding:0}
+.attempt-panel .trick-anim{position:relative;display:grid;width:100%;margin:0;place-items:center;overflow:hidden}
+.attempt-panel .trick-anim svg{position:relative;z-index:1;width:100%;overflow:visible}
+.attempt-panel .panel-title{max-width:100%;padding:22px 28px 26px}
+.attempt-panel .note{margin:20px 24px 0}
+.attempt-panel .btn-primary{margin:0 0 24px}
+.robot-avatar{color:var(--robot-ink);border-radius:34%}
+.today-wobble{margin:30px auto 10px;padding:10px;line-height:0;transform:rotate(-4deg)}
+.today-pulse{opacity:.7}
+
+/* =====================================================================
+   The reel: slam type in the sky above the robot
+   ===================================================================== */
+.reel{position:absolute;z-index:3;left:0;right:0;top:0;height:120px;pointer-events:none}
+.reel-defs{position:absolute}
+.reel-window{position:absolute;inset:0;
+  -webkit-mask-image:linear-gradient(180deg,transparent 0,#000 30%,#000 72%,transparent 100%);
+          mask-image:linear-gradient(180deg,transparent 0,#000 30%,#000 72%,transparent 100%)}
+.reel-name{position:absolute;left:50%;top:60px;white-space:nowrap;line-height:1;font-weight:800;letter-spacing:.01em;color:#fff;
+  -webkit-text-stroke:7px var(--ink);paint-order:stroke fill;filter:drop-shadow(0 3px 0 rgba(34,26,78,.22));will-change:transform}
+.reel-name--pick{filter:drop-shadow(0 4px 0 rgba(34,26,78,.28))}
+.reel-tape{position:absolute;left:50%;top:14px;z-index:2;padding:6px 14px 5px;background:linear-gradient(180deg,#fffaf0,#f6ecd4);color:var(--robot-ink);
+  font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;white-space:nowrap;
+  clip-path:polygon(3% 0,97% 0,100% 20%,97% 42%,100% 64%,97.5% 84%,99.5% 100%,1% 100%,3.5% 80%,0 60%,3% 40%,0 18%);
+  filter:drop-shadow(0 3px 0 rgba(34,26,78,.2));transform-origin:50% 50%}
+
+/* Review mode (#…&solo): just the phone, optionally zoomed with --zoom. */
+body.solo{background:#17131f}
+body.solo .doc{padding:0;max-width:none}
+body.solo .doc > :not(.hero),body.solo .side{display:none}
+body.solo .hero{display:block;margin:0}
+body.solo .phone{zoom:var(--zoom,1);border-radius:0;padding:0;height:auto}
+
+@media (max-width:1100px){.hero{grid-template-columns:1fr}.phone{margin:0 auto}.board{grid-template-columns:repeat(4,minmax(0,1fr))}.build{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="doc">
+  <header class="doc-head">
+    <p class="eyebrow">Skate Robot · Robot’s turn</p>
+    <h1>Call It</h1>
+    <p>The robot picks its trick in the plaza it’s about to skate. It keeps rolling and looks up while its real options flick past overhead, weighted the way it actually sets. It takes about two seconds to decide. The reel clicks onto the pick, the robot calls it, and the attempt starts from that exact frame.</p>
+  </header>
+
+  <section class="hero">
+    <div class="phone"><div id="live"></div></div>
+    <div class="side">
+      <div class="card">
+        <h3>Play with it</h3>
+        <div id="controls"></div>
+      </div>
+      <div class="card">
+        <h3>This pick</h3>
+        <div id="bag"></div>
+      </div>
+      <div class="card">
+        <h3>What changed</h3>
+        <ol class="changes">
+          <li><b>Same robot, same stage, no cut.</b> Today a flat icon wobbles in a white card, then the card turns into the plaza and a different, 3D robot. Now the pick happens on the attempt stage with the scene robot, and the attempt plays from the frame the pick ends on.</li>
+          <li><b>It rolls while it thinks.</b> The robot cruises in its roll-in pose with the street moving under it and tips its head up toward its options. It gets no new parts: the head tilts and the visor uses the <code>open</code> and <code>happy</code> faces it already has.</li>
+          <li><b>The reel is its real bag.</b> Names come from the robot’s set table in proportion to their weights, and tricks already set this game are left out. Swivel’s reel is mostly shuvits and Boomerang’s is mostly cabs. The reel ends on the engine’s own pick.</li>
+          <li><b>It slows down so you can read it.</b> The reel starts as a vertical blur and decelerates. Each name that settles ticks, and the robot nods at it. At the end it drifts a hair past the pick and clicks back.</li>
+          <li><b>It calls it.</b> The pick slams in the robot’s accent color under a strip of tape (“Sparky calls it”), and the visor smiles. The head nods down to the board, and the name lifts away before the pop so the trick has the whole sky.</li>
+          <li><b>It takes its time.</b> The reel runs about 2 s: a longer blur, then four or five names slow enough to read before the call. The trick starts at 2.30 s instead of 1.40 s, so the pop lands at 2.86 s instead of 1.96 s. Use <i>Choosing</i> to compare this with today’s timer and a longer option. Tap the stage to skip straight to the call.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <h2 class="section-title">Beat sheet</h2>
+  <p class="section-sub">Today, then the new version beat by beat. Each frame is the live screen paused at its timestamp, using the current opponent and its favorite trick.</p>
+  <div class="board" id="board"></div>
+
+  <h2 class="section-title">How it maps to the code</h2>
+  <p class="section-sub">The engine and the trick physics don’t change. What changes is when the trick is chosen and what the stage shows before its t = 0.</p>
+  <div class="build">
+    <div class="card">
+      <h3>Keeps</h3>
+      <ul>
+        <li><b>Engine:</b> the <code>thinking</code> stage and <code>ROBOT_SET_CHOICE</code> are unchanged. Only <code>GameScreen</code>’s timer changes, from 1400 ms to 2300 ms. <code>chooseRobotTrick</code> is unchanged. <code>GameScreen</code> calls it when thinking starts instead of when it ends, so the reel can land on the answer.</li>
+        <li><b>Trick physics:</b> <code>computeFrame</code>, <code>solveRig</code>, <code>rollAttempt</code>, and the landed/missed flow are untouched. From the pop on, the stage is the attempt you already have.</li>
+        <li><b>Copy and a11y:</b> the same “is picking a trick…” and “goes for a …” lines under the stage, still the live status. The reel is <code>aria-hidden</code>.</li>
+        <li><b>Out of tricks:</b> <code>cant</code> keeps today’s card. There is nothing to reel.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Adds</h3>
+      <ul>
+        <li><b><code>TrickScene</code> lead-in</b> (scene only): a <code>leadIn</code> prop that renders negative time as cruising in the t = 0 pose, plus a head <code>gaze</code> (pitch/roll about the neck) that settles to zero before the pop. Tests pin that the last lead-in frame matches t = 0 and that bones keep their lengths.</li>
+        <li><b><code>PickReel</code></b> in <code>features/game</code>: an HTML overlay above the stage. A pure <code>reelTimeline(options, pick, seed)</code> returns the rows and tick times. Tests pin that it ends on the pick, never shows a used trick, and locks 0.3 s before the timer fires.</li>
+        <li><b><code>GameScreen</code>:</b> the attempt panel mounts the stage during <code>thinking</code>, so there’s no avatar-to-stage swap. The toss/turn note stays up through the attempt (today it disappears at 1.40 s), so the text under the stage only changes height at the result.</li>
+        <li><b>Feedback:</b> the tick and lock sounds go through the existing <code>rpsSound</code> / <code>rpsVibrate</code> hooks. Reduced motion skips the spin and fades the name in at the call.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+<script src="pick-a-trick.js"></script>
+</body>
+</html>

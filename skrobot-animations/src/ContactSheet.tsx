@@ -8,13 +8,15 @@ import {
   TrickAnimation,
   TrickAnimation3D,
   TrickScene,
+  grindTimelineFor,
   type FallVariant,
+  type GrindTimeline,
   type RiderStance,
   type Robot,
   type Stance,
   type Trick,
 } from '@skrobot/animations';
-import { ROBOTS, tricksForStance } from './data';
+import { GRIND_BASES, GRIND_ENTRY_BASES, GRIND_SIDES, ROBOTS, grindTrick, tricksForStance } from './data';
 import playgroundStyles from './Playground.module.css';
 import styles from './ContactSheet.module.css';
 
@@ -27,6 +29,7 @@ import styles from './ContactSheet.module.css';
 
 const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
 
+type Discipline = 'flatground' | 'grinds';
 type RiderMode = RiderStance | 'both';
 type View = 'scene' | '3d' | 'side';
 type ViewMode = View | 'both';
@@ -47,6 +50,24 @@ function phasesFor(landed: boolean): Phase[] {
     { label: landed ? 'touch down' : 'falling', t: ROLL_IN + FLIP_T + tail * 0.35 },
     { label: landed ? 'ride away' : 'settled', t: ROLL_IN + FLIP_T + tail },
   ];
+}
+
+/** Grind frames sit at each trick's own moments, so the header only names them. */
+const GRIND_LABELS = {
+  landed: ['pop', 'up', 'lock', 'hold', 'pop off', 'ride away'],
+  fall: ['pop', 'up', 'lock', 'slip', 'falling', 'settled'],
+};
+
+/** A trick popped into the grind puts its second frame mid-trick, not just mid-hop. */
+const grindLabels = (landed: boolean, entry: boolean) =>
+  GRIND_LABELS[landed ? 'landed' : 'fall'].map((label, i) => (entry && i === 1 ? 'trick' : label));
+
+function grindPhases(tl: GrindTimeline, labels: string[]): Phase[] {
+  const up = tl.trick ?? (tl.pop + tl.lock) / 2;
+  const times = tl.fail === null
+    ? [tl.pop, up, tl.lock, (tl.lock + tl.off) / 2, (tl.off + tl.land) / 2, tl.end]
+    : [tl.pop, up, tl.lock, tl.fail + 0.05, tl.fail + (tl.end - tl.fail) * 0.35, tl.end];
+  return times.map((t, i) => ({ label: labels[i], t }));
 }
 
 const noop = () => {};
@@ -81,32 +102,73 @@ const Cell = memo(function Cell({ view, robot, trick, landed, fallVariant, rider
 });
 
 export default function ContactSheet() {
+  const [discipline, setDiscipline] = useState<Discipline>('flatground');
   const [stance, setStance] = useState<Stance>('regular');
   const [riderMode, setRiderMode] = useState<RiderMode>('regular');
   const [viewMode, setViewMode] = useState<ViewMode>('3d');
   const [outcome, setOutcome] = useState<Outcome>('landed');
   const [robotId, setRobotId] = useState(ROBOTS[0].id);
   const [filter, setFilter] = useState('');
+  const [entry, setEntry] = useState('');
 
   const robot = ROBOTS.find((r) => r.id === robotId) ?? ROBOTS[0];
   const landed = outcome === 'landed';
   const fallVariant: FallVariant = landed ? 'slam' : outcome;
   const phases = useMemo(() => phasesFor(landed), [landed]);
 
+  const grinds = discipline === 'grinds';
   const tricks = useMemo(() => {
-    const all = tricksForStance(stance);
+    const all = grinds
+      ? GRIND_BASES.flatMap((base) => GRIND_SIDES.map((side) => grindTrick(base, side, stance, entry || undefined)))
+      : tricksForStance(stance);
     const query = filter.trim().toLowerCase();
     return query ? all.filter((t) => t.base.toLowerCase().includes(query)) : all;
-  }, [stance, filter]);
+  }, [grinds, stance, entry, filter]);
 
   const riders: RiderStance[] = riderMode === 'both' ? ['regular', 'goofy'] : [riderMode];
-  const views: View[] = viewMode === 'both' ? ['3d', 'side'] : [viewMode];
+  // Grinds need the bar, and only the Scene renderer has one.
+  const views: View[] = grinds ? ['scene'] : viewMode === 'both' ? ['3d', 'side'] : [viewMode];
+  const rowPhases = (trick: Trick, rider: RiderStance): Phase[] => {
+    const tl = grinds ? grindTimelineFor(trick, rider, robot.skateStyle, landed, fallVariant) : null;
+    return tl ? grindPhases(tl, grindLabels(landed, entry !== '')) : phases;
+  };
   const rowsPerTrick = riders.length * views.length;
 
   return (
     <div className={styles.wrap}>
       <section className={playgroundStyles.card}>
         <div className={styles.controls}>
+          <div className={styles.controlGroup}>
+            <span className={styles.controlLabel}>Discipline</span>
+            <div className={playgroundStyles.stanceRow}>
+              {(['flatground', 'grinds'] as Discipline[]).map((d) => (
+                <button
+                  key={d}
+                  className={`${playgroundStyles.stanceBtn} ${discipline === d ? playgroundStyles.stanceBtnActive : ''}`}
+                  onClick={() => setDiscipline(d)}
+                  aria-pressed={discipline === d}
+                >
+                  {d}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {grinds && <div className={styles.controlGroup}>
+            <span className={styles.controlLabel}>Trick into grind</span>
+            <select
+              className={playgroundStyles.trickSelect}
+              aria-label="Trick into grind"
+              value={entry}
+              onChange={(e) => setEntry(e.target.value)}
+            >
+              <option value="">None (ollie on)</option>
+              {GRIND_ENTRY_BASES.map((base) => (
+                <option key={base} value={base}>{base}</option>
+              ))}
+            </select>
+          </div>}
+
           <div className={styles.controlGroup}>
             <span className={styles.controlLabel}>Trick stance</span>
             <div className={playgroundStyles.stanceRow}>
@@ -139,7 +201,7 @@ export default function ContactSheet() {
             </div>
           </div>
 
-          <div className={styles.controlGroup}>
+          {!grinds && <div className={styles.controlGroup}>
             <span className={styles.controlLabel}>View</span>
             <div className={playgroundStyles.stanceRow}>
               {(['scene', '3d', 'side', 'both'] as ViewMode[]).map((v) => (
@@ -153,7 +215,7 @@ export default function ContactSheet() {
                 </button>
               ))}
             </div>
-          </div>
+          </div>}
 
           <div className={styles.controlGroup}>
             <span className={styles.controlLabel}>Outcome</span>
@@ -214,10 +276,10 @@ export default function ContactSheet() {
         ) : (
           <div className={styles.grid} style={{ '--phase-count': phases.length } as CSSProperties}>
             <div className={styles.headCell}>Trick</div>
-            {phases.map((phase) => (
+            {phases.map((phase, i) => (
               <div key={phase.label} className={styles.headCell}>
-                {phase.label}
-                <small>t = {phase.t.toFixed(2)}s</small>
+                {grinds ? grindLabels(landed, entry !== '')[i] : phase.label}
+                {!grinds && <small>t = {phase.t.toFixed(2)}s</small>}
               </div>
             ))}
             {tricks.map((trick) =>
@@ -234,7 +296,7 @@ export default function ContactSheet() {
                         </span>
                       )}
                     </div>
-                    {phases.map((phase) => (
+                    {rowPhases(trick, rider).map((phase) => (
                       <Cell
                         key={`${trick.id}:${rider}:${view}:${phase.label}`}
                         view={view}

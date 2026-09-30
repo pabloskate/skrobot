@@ -221,6 +221,35 @@ export function gameReducer(s: GameState, a: GameAction): GameState {
   }
 }
 
+export interface SetOption {
+  trick: Trick;
+  weight: number;
+}
+
+/**
+ * What the robot could set right now: tricks in its bag with a positive set
+ * weight that haven't been set this game, in bag order.
+ */
+export function robotSetOptions(
+  bag: Map<string, number>,
+  used: string[],
+  trickById: Map<string, Trick>,
+  robot: SetWeightRobot,
+  setWeight: (trick: Trick, robot: SetWeightRobot) => number = trickSetWeight,
+): SetOption[] {
+  const usedSet = new Set(used);
+  const options: SetOption[] = [];
+  for (const [id] of bag) {
+    if (usedSet.has(id)) continue;
+    const trick = trickById.get(id);
+    if (!trick) continue;
+    const weight = setWeight(trick, robot);
+    if (weight <= 0) continue;
+    options.push({ trick, weight });
+  }
+  return options;
+}
+
 /**
  * Weighted random pick from the robot's bag, excluding tricks already set this
  * game. Every weight is explicitly configured for that robot/trick. Returns
@@ -234,16 +263,7 @@ export function chooseRobotTrick(
   random: () => number = Math.random,
   setWeight: (trick: Trick, robot: SetWeightRobot) => number = trickSetWeight,
 ): Trick | null {
-  const usedSet = new Set(used);
-  const options: { trick: Trick; weight: number }[] = [];
-  for (const [id] of bag) {
-    if (usedSet.has(id)) continue;
-    const trick = trickById.get(id);
-    if (!trick) continue;
-    const weight = setWeight(trick, robot);
-    if (weight <= 0) continue;
-    options.push({ trick, weight });
-  }
+  const options = robotSetOptions(bag, used, trickById, robot, setWeight);
   if (options.length === 0) return null;
   const total = options.reduce((sum, o) => sum + o.weight, 0);
   let roll = random() * total;

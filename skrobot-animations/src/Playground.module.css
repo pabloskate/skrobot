@@ -322,6 +322,12 @@
   background: var(--purple-soft);
 }
 
+.speedBtn:disabled {
+  background: var(--bg);
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .speedBtnActive {
   border-color: var(--purple);
   background: var(--purple-soft);

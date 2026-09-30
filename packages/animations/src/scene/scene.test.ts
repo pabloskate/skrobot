@@ -1,6 +1,6 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   computeFrame,
   specFor,
@@ -11,6 +11,8 @@ import {
   LAND_T,
   ROLL_IN,
   SKY_PAD,
+  STREET_DASH_PERIOD,
+  STREET_DASH_SECONDS,
   W,
   type FallVariant,
 } from '../TrickAnimation';
@@ -18,9 +20,12 @@ import TrickAnimation3D from '../TrickAnimation3D';
 import { SKATE_STYLE_BOUNDS, resolveSkateStyle } from '../skateStyle';
 import { resolveRiderMechanics } from '../stanceMechanics';
 import type { RiderStance, Robot, Stance, Trick } from '../types';
-import TrickScene from './TrickScene';
+import TrickScene, { type LeadIn } from './TrickScene';
+import { WHEEL_R, WHEEL_SPIN } from './board';
 import { cameraLift, makeCamera } from './camera';
-import { DECK_HALF_WIDTH, SHIN, SHOE_HALF_LENGTH, THIGH, solveRig, type Rig } from './rig';
+import { solveRig } from './rig';
+import { DECK_HALF_WIDTH, SHIN, SHOE_HALF_LENGTH, THIGH, tiltHead, type Rig } from './skeleton';
+import { dot3, sub3, type V3 } from './math';
 
 /**
  * TrickScene is a new look on the shared physics, so the things that must
@@ -312,4 +317,122 @@ describe('TrickScene body physics', () => {
       }
     }
   }, 30_000);
+});
+
+describe('TrickScene wheels', () => {
+  const robot = robotWith(1);
+  const numberAttr = (html: string, name: string) => Number(new RegExp(`${name}="([^"]*)"`).exec(html)?.[1]);
+  const at = (trick: Trick, t: number, landed = true, fall: FallVariant = 'slam') => {
+    const html = render(TrickScene, { robot, trick, landed, fall, rider: 'regular', t });
+    return { roll: numberAttr(html, 'data-wheel-roll'), yaw: numberAttr(html, 'data-board-yaw') };
+  };
+  // Street travel per second at full speed, in world units.
+  const SPEED = STREET_DASH_PERIOD / STREET_DASH_SECONDS;
+  // Radians per world unit travelled on the nose's heading.
+  const RATE = WHEEL_SPIN / WHEEL_R;
+  const touchdown = ROLL_IN + FLIP_T;
+  const DT = 0.05;
+
+  it('rolls the wheels with the ground, and the other way when the board lands turned around', () => {
+    for (const base of BASES) {
+      for (const stance of STANCES) {
+        const trick = trickOf(base, stance);
+        const dir = specFor(trick).dir;
+        const label = `${base} ${stance}`;
+        // The wheel turns in step with the distance travelled: forward on
+        // the nose's heading, backward fakie.
+        const before = (at(trick, 0.1 + DT).roll - at(trick, 0.1).roll) / RATE;
+        expect(before, label).toBeCloseTo(dir * SPEED * DT, 0);
+        const landing = at(trick, touchdown + 0.2);
+        const after = (at(trick, touchdown + 0.2 + DT).roll - landing.roll) / RATE;
+        expect(after, label).toBeCloseTo(dir * Math.cos((landing.yaw * Math.PI) / 180) * SPEED * DT, 0);
+      }
+    }
+    // A pop shuv lands the nose where the tail was, so the wheels reverse.
+    const shuv = trickOf('Pop Shuvit', 'regular');
+    expect(at(shuv, touchdown + 0.3).roll).toBeLessThan(at(shuv, touchdown + 0.2).roll);
+  });
+
+  it('turns the wheels continuously: they coast through the air and never jump', () => {
+    // Each render rolls its own shank; hold it still so frames share one.
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    const step = 1 / 60;
+    const maxTurn = SPEED * step * RATE + 1e-3;
+    try {
+      for (const base of ['Ollie', 'Kickflip', 'Pop Shuvit', 'Frontside 180']) {
+        for (const { landed, fall } of OUTCOMES) {
+          const trick = trickOf(base, 'regular');
+          const end = ROLL_IN + FLIP_T + (landed ? LAND_T : FALL_T);
+          let prev = at(trick, 0, landed, fall).roll;
+          for (let t = step; t <= end; t += step) {
+            const roll = at(trick, t, landed, fall).roll;
+            expect(Math.abs(roll - prev), `${base} ${fall} t=${t.toFixed(3)}`).toBeLessThanOrEqual(maxTurn);
+            prev = roll;
+          }
+        }
+      }
+    } finally {
+      random.mockRestore();
+    }
+  }, 20_000);
+});
+
+describe('TrickScene lead-in', () => {
+  const lead = (overlay?: LeadIn['overlay']): LeadIn => ({ seconds: 2, label: 'Skip ahead', skipTo: -0.3, overlay });
+  const at = (trick: Trick, t: number, leadIn?: LeadIn) =>
+    renderToStaticMarkup(createElement(TrickScene, {
+      robot: robotWith(1), trick, landed: true, fallVariant: 'slam', riderStance: 'goofy', fixedTime: t, leadIn, onDone: () => {},
+    }));
+  const cameraLiftOf = (html: string) => /data-camera-lift="([^"]*)"/.exec(html)?.[1];
+
+  it('cruises in the t = 0 pose, so the attempt starts from the last lead-in frame', () => {
+    for (const base of ['Ollie', 'Kickflip', '360 Flip', 'Frontside 180', 'Bigspin']) {
+      for (const stance of STANCES) {
+        const trick = trickOf(base, stance);
+        const start = at(trick, 0);
+        for (const t of [-2, -0.9, -0.001]) {
+          const html = at(trick, t, lead());
+          expect(attrs(html), `${base} ${stance} t=${t}`).toEqual(attrs(start));
+          expect(cameraLiftOf(html)).toBe(cameraLiftOf(start));
+          expect(html).not.toMatch(/NaN|Infinity/);
+        }
+      }
+    }
+  });
+
+  it('keeps the trick a secret during the lead-in and draws the overlay on the trick clock', () => {
+    const trick = trickOf('Kickflip', 'regular');
+    const html = at(trick, -1.25, lead((t) => createElement('i', { className: 'probe' }, t.toFixed(2))));
+    expect(html).toContain('aria-label="Skip ahead"');
+    expect(html).not.toContain('Kickflip');
+    expect(html).toContain('<i class="probe">-1.25</i>');
+    expect(html).not.toContain('trick-anim-3d__speed-toggle');
+    expect(at(trick, 0.2, lead())).toContain('aria-label="Replay Test attempting Kickflip"');
+  });
+
+  it('turns the head rigidly about the base of the head', () => {
+    const spec = specFor(trickOf('Kickflip', 'regular'));
+    const style = resolveSkateStyle();
+    const rig = solveRig(computeFrame(0, spec, true, 'slam', 0.65, style), spec, resolveRiderMechanics('regular', 'regular'), style, 'landed');
+    const corners = (frame: Rig['head']) => {
+      const pts: V3[] = [];
+      for (const f of [-13, 13]) for (const u of [-14, 14]) for (const side of [-17, 17]) pts.push(frame.at(f, u, side));
+      return pts;
+    };
+    const base = corners(rig.head);
+    expect(tiltHead(rig.head, 0, 0)).toBe(rig.head);
+    for (const [pitch, roll] of [[18, 6], [-11, 0], [0, -8], [25, 12]]) {
+      const head = tiltHead(rig.head, pitch, roll);
+      for (const [a, b] of [[head.fwd, head.up], [head.up, head.side], [head.side, head.fwd]]) expect(dot3(a, b)).toBeCloseTo(0, 9);
+      for (const axis of [head.fwd, head.up, head.side]) expect(dot3(axis, axis)).toBeCloseTo(1, 9);
+      // The pivot on the neck doesn't move, and the head keeps its shape.
+      const pivot = sub3(head.at(-2, -13, 0), rig.head.at(-2, -13, 0));
+      expect(Math.hypot(pivot.x, pivot.y, pivot.z)).toBeCloseTo(0, 9);
+      const moved = corners(head);
+      const span = (pts: V3[], i: number, j: number) => Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y, pts[i].z - pts[j].z);
+      for (let i = 0; i < 8; i++) for (let j = i + 1; j < 8; j++) expect(span(moved, i, j)).toBeCloseTo(span(base, i, j), 9);
+      // Positive pitch looks up (world up is -y).
+      if (pitch > 0) expect(head.fwd.y).toBeLessThan(rig.head.fwd.y);
+    }
+  });
 });

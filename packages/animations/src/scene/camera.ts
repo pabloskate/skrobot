@@ -107,7 +107,7 @@ export function makeCamera(lift: number): Camera {
 }
 
 /** Share of the pop the camera rises with. */
-const FOLLOW_POP = 0.58;
+export const FOLLOW_POP = 0.58;
 /** Share of a fall's head drop the camera sinks with. */
 const FOLLOW_FALL = 0.6;
 /** Head height above the asphalt while riding. */
@@ -121,8 +121,12 @@ const RIDING_HEAD_HEIGHT = 122;
 export function cameraLift(flight: number, popHeight: number, headHeight: number, falling: boolean): number {
   const inFlight = flight > 0 && flight < 1;
   const rise = inFlight ? FOLLOW_POP * JUMP * popHeight * Math.sin(Math.PI * flight) ** 2 : 0;
-  const sink = falling ? FOLLOW_FALL * Math.max(0, RIDING_HEAD_HEIGHT - headHeight) : 0;
-  return rise - sink;
+  return rise - (falling ? fallSink(headHeight) : 0);
+}
+
+/** How far the crane sinks to keep a fallen rider's head in frame. */
+export function fallSink(headHeight: number): number {
+  return FOLLOW_FALL * Math.max(0, RIDING_HEAD_HEIGHT - headHeight);
 }
 
 /** Does a surface with normal `n` at `p` face the camera? */

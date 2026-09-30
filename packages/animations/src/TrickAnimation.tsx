@@ -197,6 +197,8 @@ const ROLL_IN = 0.5 * SPEED_SCALE;
 // law (more hang time = the 360 has longer to come around). Baseline: a 130px
 // pop flew for 0.75s.
 const FLIP_T = 0.75 * Math.sqrt(JUMP / 130) * SPEED_SCALE;
+/** Share of the flight by which a robot's rotation is caught: 0.85 at neutral speed, never after touchdown. */
+const catchFraction = (style: Readonly<SkateStyle>) => Math.min(1, 0.85 / style.rotationSpeed);
 const LAND_T = 0.95 * SPEED_SCALE;
 // Falls share the landing's "impact → settle" budget so a miss doesn't feel
 // like a second, slower animation system. A touch longer than LAND_T for the
@@ -672,7 +674,7 @@ function computeFrame(
     // Slow styles may use the entire flight, but must still finish at
     // touchdown. Without the cap, values below 0.85 would remain visibly
     // under-rotated at p=1 and snap into the landed pose on the next frame.
-    const catchAt = Math.min(1, 0.85 / skateStyle.rotationSpeed);
+    const catchAt = catchFraction(skateStyle);
     const catchP = clamp01(p / catchAt);
     // A "late" shuvit holds the board flat off the pop, then whips the rotation
     // through in the back half of the flight (the late scoop). Its yaw runs on a
@@ -1103,6 +1105,7 @@ function computeFrame(
 export {
   specFor,
   computeFrame,
+  catchFraction,
   knee,
   clampFootReach,
   darken,

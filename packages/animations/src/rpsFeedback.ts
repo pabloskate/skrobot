@@ -1,6 +1,7 @@
 'use client';
 
-export type RpsSound = 'beat' | 'reveal' | 'win' | 'lose' | 'tie';
+/** RPS beats plus the robot's trick call: a reel tick and the call itself. */
+export type RpsSound = 'beat' | 'reveal' | 'win' | 'lose' | 'tie' | 'tick' | 'call';
 
 function prefersReducedMotion(): boolean {
   if (typeof window === 'undefined') return false;
@@ -36,7 +37,7 @@ function getAudioContext(): AudioContext | null {
   return audioCtx;
 }
 
-function beep(freq: number, duration: number, type: OscillatorType = 'sine', when?: number) {
+function beep(freq: number, duration: number, type: OscillatorType = 'sine', when?: number, peak = 0.2) {
   const ctx = getAudioContext();
   if (!ctx) return;
   if (prefersReducedMotion()) return;
@@ -47,7 +48,7 @@ function beep(freq: number, duration: number, type: OscillatorType = 'sine', whe
   osc.type = type;
   osc.frequency.setValueAtTime(freq, t);
   gain.gain.setValueAtTime(0.0001, t);
-  gain.gain.exponentialRampToValueAtTime(0.2, t + 0.01);
+  gain.gain.exponentialRampToValueAtTime(peak, t + Math.min(0.01, duration / 3));
   gain.gain.exponentialRampToValueAtTime(0.0001, t + duration);
   osc.connect(gain);
   gain.connect(ctx.destination);
@@ -80,6 +81,13 @@ export function rpsSound(kind: RpsSound): void {
       beep(500, 0.1, 'square', now);
       beep(500, 0.1, 'square', now + 0.12);
       beep(500, 0.1, 'square', now + 0.24);
+      break;
+    case 'tick':
+      beep(1700, 0.02, 'square', now, 0.03);
+      break;
+    case 'call':
+      beep(660, 0.12, 'triangle', now, 0.12);
+      beep(990, 0.16, 'triangle', now + 0.07, 0.12);
       break;
   }
 }

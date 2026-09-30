@@ -1,11 +1,18 @@
 import { readdirSync, readFileSync } from 'node:fs';
-import { dirname, relative, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 const ROOT = process.cwd();
 const FEATURES_ROOT = resolve(ROOT, 'src/features');
 const MOBILE_ROOT = resolve(ROOT, 'apps/mobile');
+const ANIMATIONS_ROOT = resolve(ROOT, 'packages/animations');
+const PLAYGROUND_ROOT = resolve(ROOT, 'skrobot-animations/src');
+
+function isWithin(path: string, root: string): boolean {
+  const part = relative(root, path);
+  return part !== '..' && !part.startsWith(`..${sep}`) && !isAbsolute(part);
+}
 
 const ALLOWED_FEATURE_IMPORTS: Record<string, readonly string[]> = {
   analytics: [],
@@ -95,6 +102,42 @@ describe('architecture import graph', () => {
         const resolved = specifier.startsWith('.') ? resolve(dirname(file), specifier) : '';
         if (specifier.startsWith('@/') || (resolved && relative(resolve(ROOT, 'src'), resolved).split(sep)[0] !== '..')) {
           violations.push(`${relative(ROOT, file)} imports web source through ${specifier}`);
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it('keeps animation consumers on the package public surface', () => {
+    const manifest = JSON.parse(readFileSync(resolve(ANIMATIONS_ROOT, 'package.json'), 'utf8'));
+    const publicImports = new Set(Object.keys(manifest.exports).map((entry) =>
+      entry === '.' ? '@skrobot/animations' : `@skrobot/animations/${entry.slice(2)}`));
+    const violations: string[] = [];
+    for (const root of [resolve(ROOT, 'src'), PLAYGROUND_ROOT, MOBILE_ROOT, resolve(ROOT, 'prototype')]) {
+      for (const file of sourceFiles(root)) {
+        for (const specifier of importsIn(file)) {
+          const isPackageImport = specifier === '@skrobot/animations' || specifier.startsWith('@skrobot/animations/');
+          const resolved = specifier.startsWith('.') ? resolve(dirname(file), specifier) : '';
+          if ((isPackageImport && !publicImports.has(specifier)) || (resolved && isWithin(resolved, ANIMATIONS_ROOT))) {
+            violations.push(`${relative(ROOT, file)} bypasses animation exports through ${specifier}`);
+          }
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it('keeps shared animations and the playground independent from web source', () => {
+    const violations: string[] = [];
+    for (const root of [resolve(ANIMATIONS_ROOT, 'src'), PLAYGROUND_ROOT]) {
+      for (const file of sourceFiles(root)) {
+        for (const specifier of importsIn(file)) {
+          const resolved = specifier.startsWith('.') ? resolve(dirname(file), specifier) : '';
+          const forbidden = [resolve(ROOT, 'src'), MOBILE_ROOT,
+            ...(isWithin(file, ANIMATIONS_ROOT) ? [resolve(ROOT, 'skrobot-animations')] : [])];
+          if (specifier.startsWith('@/') || (resolved && forbidden.some((dir) => isWithin(resolved, dir)))) {
+            violations.push(`${relative(ROOT, file)} imports app or preview source through ${specifier}`);
+          }
         }
       }
     }

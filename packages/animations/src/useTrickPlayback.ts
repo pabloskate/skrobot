@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SkateStyle } from './types';
 import {
   computeFrame, ROLL_IN, FLIP_T, LAND_T, FALL_T, HOLD,
@@ -18,33 +18,48 @@ interface Options {
   playbackRate: number;
   showSpeedToggle: boolean;
   fixedTime?: number;
+  /** Seconds before the trick's t = 0 that the first run starts at. */
+  leadIn?: number;
+  /** Fires once, when the clock first reaches t = 0 after a lead-in. */
+  onLeadInEnd?: () => void;
+  /** Clock time the attempt ends at, for motions longer than a flatground trick. */
+  end?: number;
 }
 
 /** Shared playback lifecycle for the active 3D renderers. Geometry stays in each renderer. */
 export function useTrickPlayback({
   spec, landed, resolvedFallVariant, shankProgress, skateStyle,
   onDone, paused, playbackRate, showSpeedToggle, fixedTime,
+  leadIn = 0, onLeadInEnd, end: endOverride,
 }: Options) {
-  const [frame, setFrame] = useState(() =>
-    computeFrame(0, spec, landed, resolvedFallVariant, shankProgress, skateStyle)
-  );
+  // The trick's clock, negative during a lead-in. Frames clamp it to t >= 0.
+  const [time, setTime] = useState(-leadIn);
   const [isPlaying, setIsPlaying] = useState(true);
   const [replayNonce, setReplayNonce] = useState(0);
   const [selectedPlaybackRate, setSelectedPlaybackRate] = useState<0.5 | 1>(() => playbackRate === 0.5 ? 0.5 : 1);
   const doneRef = useRef(false);
   const onDoneRef = useRef(onDone);
+  const leadInDoneRef = useRef(leadIn <= 0);
+  const onLeadInEndRef = useRef(onLeadInEnd);
   const pausedRef = useRef(paused);
+  const seekRef = useRef<number | null>(null);
   const speedToggleVisible = showSpeedToggle && fixedTime == null;
   const effectivePlaybackRate = Math.max(0.05, speedToggleVisible ? selectedPlaybackRate : playbackRate);
+  const end = endOverride ?? ROLL_IN + FLIP_T + (landed ? LAND_T : FALL_T);
   // Static mode: one frozen frame, computed in render so a changed fixedTime
   // (e.g. a scrubber) re-renders without touching the playback machinery.
   const staticTime = fixedTime == null
     ? null
-    : Math.max(0, Math.min(fixedTime, ROLL_IN + FLIP_T + (landed ? LAND_T : FALL_T)));
+    : Math.max(-leadIn, Math.min(fixedTime, end));
+  const clock = staticTime ?? time;
 
   useEffect(() => {
     onDoneRef.current = onDone;
   }, [onDone]);
+
+  useEffect(() => {
+    onLeadInEndRef.current = onLeadInEnd;
+  }, [onLeadInEnd]);
 
   useEffect(() => {
     pausedRef.current = paused;
@@ -52,8 +67,14 @@ export function useTrickPlayback({
 
   useEffect(() => {
     if (staticTime != null) return;
-    const end = ROLL_IN + FLIP_T + (landed ? LAND_T : FALL_T);
-    const durationMs = ((end + HOLD) / effectivePlaybackRate) * 1000;
+    // Only the first run has the lead-in; a replay is just the trick.
+    const start = replayNonce === 0 ? -leadIn : 0;
+    const durationMs = ((end - start + HOLD) / effectivePlaybackRate) * 1000;
+    const endLeadIn = () => {
+      if (leadInDoneRef.current) return;
+      leadInDoneRef.current = true;
+      onLeadInEndRef.current?.();
+    };
     const finish = () => {
       setIsPlaying(false);
       if (!doneRef.current) {
@@ -63,22 +84,19 @@ export function useTrickPlayback({
     };
     let raf = 0;
     let lastNow: number | null = null;
-    let animationTime = 0;
+    let animationTime = start;
     const tick = (now: number) => {
       if (lastNow === null) lastNow = now;
       const dt = (now - lastNow) / 1000;
       lastNow = now;
-      if (!pausedRef.current) {
+      if (seekRef.current != null) {
+        animationTime = Math.max(animationTime, seekRef.current);
+        seekRef.current = null;
+      } else if (!pausedRef.current) {
         animationTime += dt * effectivePlaybackRate;
       }
-      setFrame(computeFrame(
-        Math.min(animationTime, end),
-        spec,
-        landed,
-        resolvedFallVariant,
-        shankProgress,
-        skateStyle,
-      ));
+      if (animationTime >= 0) endLeadIn();
+      setTime(Math.min(animationTime, end));
       if (animationTime >= end + HOLD) {
         finish();
         return;
@@ -93,7 +111,8 @@ export function useTrickPlayback({
           armFailSafe();
           return;
         }
-        setFrame(computeFrame(end, spec, landed, resolvedFallVariant, shankProgress, skateStyle));
+        setTime(end);
+        endLeadIn();
         finish();
       }, durationMs + 500);
     };
@@ -102,29 +121,43 @@ export function useTrickPlayback({
       cancelAnimationFrame(raf);
       clearTimeout(failSafe);
     };
-  }, [spec, landed, resolvedFallVariant, shankProgress, skateStyle, effectivePlaybackRate, replayNonce, staticTime]);
+    // A new trick, outcome, or style restarts the clock, as does a replay.
+  }, [spec, landed, resolvedFallVariant, shankProgress, skateStyle, end, leadIn, effectivePlaybackRate, replayNonce, staticTime]);
+
+  const frame = useMemo(
+    () => computeFrame(Math.max(0, Math.min(clock, end)), spec, landed, resolvedFallVariant, shankProgress, skateStyle),
+    [clock, end, spec, landed, resolvedFallVariant, shankProgress, skateStyle],
+  );
 
   const replay = () => {
     if (staticTime != null) return;
     setIsPlaying(true);
-    setFrame(computeFrame(0, spec, landed, resolvedFallVariant, shankProgress, skateStyle));
+    setTime(0);
     setReplayNonce((current) => current + 1);
+  };
+
+  /** Jump the running clock forward to `to` (never back). */
+  const seek = (to: number) => {
+    if (staticTime != null) return;
+    seekRef.current = to;
   };
 
   const togglePlaybackRate = () => {
     if (!speedToggleVisible) return;
     doneRef.current = false;
     setIsPlaying(true);
-    setFrame(computeFrame(0, spec, landed, resolvedFallVariant, shankProgress, skateStyle));
+    setTime(0);
     setSelectedPlaybackRate((current) => current === 1 ? 0.5 : 1);
     setReplayNonce((current) => current + 1);
   };
 
   return {
-    frame: staticTime != null
-      ? computeFrame(staticTime, spec, landed, resolvedFallVariant, shankProgress, skateStyle)
-      : frame,
+    frame,
+    /** The trick's clock: negative during the lead-in, capped at the end. */
+    time: clock,
+    /** False once a replay or speed change has restarted the trick. */
+    firstRun: replayNonce === 0,
     isPlaying, staticTime, speedToggleVisible, effectivePlaybackRate,
-    selectedPlaybackRate, replay, togglePlaybackRate,
+    selectedPlaybackRate, replay, seek, togglePlaybackRate,
   };
 }

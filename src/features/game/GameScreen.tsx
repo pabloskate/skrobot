@@ -6,11 +6,10 @@ import type { TrickAttempt } from '@/features/records';
 import type { Robot } from '@/features/robots';
 import { buildBag, hasDefenseSets, RobotAvatar, trickDefenseSetWeight, trickSetWeight } from '@/features/robots';
 import type { Trick } from '@/features/tricks';
-import { TRICK_BY_ID, TrickPicker } from '@/features/tricks';
+import { TrickPicker } from '@/features/tricks';
 import {
   createInitialGameState,
   lettersForFormat,
-  chooseRobotTrick,
   gameReducer,
   rollAttempt,
 } from './engine';
@@ -19,6 +18,7 @@ import { getTrickTracking, setTrickTracking, useTrickTracking } from './gamePref
 import type { GameSessionSnapshot } from './savedGame';
 import { clearSavedGame } from './savedGame';
 import { isTrackingGame, progressForLog, setAttemptNeedsTrick } from './trickTracking';
+import RobotSetTurn from './RobotSetTurn';
 import RpsPanel from './RpsPanel';
 import TrackingStatusChip from './TrackingStatusChip';
 import TrickAnimation from './TrickAnimation';
@@ -146,18 +146,6 @@ export default function GameScreen({
   const setWeightFn =
     state.gameVariant === 'defense' && hasDefenseSets(robot) ? trickDefenseSetWeight : trickSetWeight;
 
-  // Robot picking a trick is still a simple timer; attempts are resolved by
-  // the trick animation (the roll happens up front, the animation shows the
-  // outcome, and its completion dispatches the result).
-  useEffect(() => {
-    if (state.phase !== 'robotSet' || state.stage !== 'thinking') return;
-    const t = setTimeout(
-      () => dispatchGame({ type: 'ROBOT_SET_CHOICE', trick: chooseRobotTrick(bag, state.used, TRICK_BY_ID, robot, Math.random, setWeightFn) }),
-      1400,
-    );
-    return () => clearTimeout(t);
-  }, [state.phase, state.stage, state.used, bag, robot, setWeightFn, dispatchGame]);
-
   // Persist W/L once per game; trick evidence only when tracking is on.
   useEffect(() => {
     if (state.phase === 'over' && state.winner && !recorded.current) {
@@ -278,22 +266,26 @@ export default function GameScreen({
 
       {(state.phase === 'robotCopy' || state.phase === 'robotSet') && (
         <div className="panel center attempt-panel">
-          {state.current && state.stage !== 'thinking' ? (
+          {state.phase === 'robotSet' && state.stage !== 'cant' ? (
+            <RobotSetTurn
+              robot={robot}
+              bag={bag}
+              used={state.used}
+              resumed={state.stage === 'thinking' ? null : state.current}
+              setWeight={setWeightFn}
+              alwaysLand={state.gameVariant === 'defense'}
+              onChoice={(trick) => dispatchGame({ type: 'ROBOT_SET_CHOICE', trick })}
+              onResult={({ landed }) => dispatchGame({ type: 'ROBOT_SET_RESULT', landed })}
+            />
+          ) : state.phase === 'robotCopy' && state.current ? (
             <RobotAttempt
               // Remount per attempt: a retry decrements attemptsLeft, which
               // re-rolls and replays the animation.
-              key={`${state.phase}-${state.current.id}-${state.attemptsLeft}`}
+              key={`${state.current.id}-${state.attemptsLeft}`}
               robot={robot}
               trick={state.current}
               bag={bag}
-              alwaysLand={state.gameVariant === 'defense' && state.phase === 'robotSet'}
-              onResult={({ landed, knewIt }) =>
-                dispatchGame(
-                  state.phase === 'robotCopy'
-                    ? { type: 'ROBOT_COPY_RESULT', landed, knewIt }
-                    : { type: 'ROBOT_SET_RESULT', landed },
-                )
-              }
+              onResult={({ landed, knewIt }) => dispatchGame({ type: 'ROBOT_COPY_RESULT', landed, knewIt })}
             />
           ) : (
             <div className={robotAnim}>
@@ -423,18 +415,14 @@ function RobotAttempt({
   robot,
   trick,
   bag,
-  alwaysLand = false,
   onResult,
 }: {
   robot: Robot;
   trick: Trick;
   bag: Map<string, number>;
-  alwaysLand?: boolean;
   onResult: (r: { landed: boolean; knewIt: boolean }) => void;
 }) {
-  const [roll] = useState(() =>
-    alwaysLand ? { landed: true, knewIt: true } : rollAttempt(bag, trick.id),
-  );
+  const [roll] = useState(() => rollAttempt(bag, trick.id));
   return <TrickAnimation robot={robot} trick={trick} landed={roll.landed} knewIt={roll.knewIt} onDone={() => onResult(roll)} />;
 }
 
@@ -456,9 +444,12 @@ function RobotStatus({ state, say }: { state: GameState; say: (s: string) => str
     else if (state.stage === 'cant') text = `{R} is out of tricks to set!`;
   }
   const busy = state.stage === 'thinking' || state.stage === 'attempting' || state.stage === 'retry';
+  // A set turn's note stays up through the attempt, so the text under the
+  // stage only changes height at the result, where the button appears anyway.
+  const noted = state.stage === 'thinking' || (state.phase === 'robotSet' && state.stage === 'attempting');
   return (
     <>
-      {state.note && state.stage === 'thinking' && <p className="note">{say(state.note)}</p>}
+      {state.note && noted && <p className="note">{say(state.note)}</p>}
       <h2 className={`panel-title ${busy ? 'pulse' : ''}`}>{say(text)}</h2>
     </>
   );
