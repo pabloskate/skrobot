@@ -14,6 +14,7 @@ import {
   type Group,
 } from './draw';
 import { dot3, mixHex, smoothstep, sub3, type V3 } from './math';
+import { deckTopY } from './board';
 import { SHOE_HALF_HEIGHT, SHOE_HALF_LENGTH, shiftFrame, type Frame3, type Rig } from './skeleton';
 
 /**
@@ -139,6 +140,10 @@ function drawAntenna(g: Group, cam: Camera, head: Frame3, look: RobotLook) {
  */
 const UNDERFOOT_FROM = 0;
 const UNDERFOOT_BAND = 0.04;
+/** How far a sole may hover over the grip and still count as standing on it,
+ *  and the lift (world units) at which it is clear of it. */
+const SOLE_HOLD = 2.5;
+const SOLE_FREE = 7;
 
 /**
  * The robot and the board it rides, in paint order (back to front).
@@ -148,9 +153,11 @@ const UNDERFOOT_BAND = 0.04;
  * between it and the camera (a regular kickflip seen from the front) the
  * board hides it. Drawing it on top there made the heelside flick read as a
  * toeside one. It fades between the two paint orders by how far the shoe is
- * past the deck plane, so the switch never pops. Feet standing on the grip
- * (Rig.onGrip) do the same: a blunt can stand the deck up underside-first to
- * the camera, and painting the shoes over it put them on the wheels.
+ * past the deck plane, so the switch never pops. Feet standing on the grip do
+ * the same (grinds say so with Rig.onGrip; any other sole resting on the grip
+ * counts, such as the pop onto a bar): a blunt, or a deck tipped up for a
+ * pop, can show its underside to the camera, and painting the shoes over it
+ * put them on the wheels.
  */
 export function drawRobot(cam: Camera, rig: Rig, look: RobotLook, expression: Expression, board: ReactElement): ReactElement[] {
   const limb = mixHex(PALETTE.limb, look.body, 0.16);
@@ -221,12 +228,20 @@ export function drawRobot(cam: Camera, rig: Rig, look: RobotLook, expression: Ex
   // Soles on the grip are on the far side of a deck showing its underside, so
   // it paints over them and they stand up out of its top edge. Painted on top,
   // a tailslide seen from the front put the shoes on the graphic and trucks.
-  const underfoot = (rig.onGrip ?? 0) * smoothstep((-facing(cam, deckCenter, grip) - UNDERFOOT_FROM) / UNDERFOOT_BAND);
+  const undersideShows = smoothstep((-facing(cam, deckCenter, grip) - UNDERFOOT_FROM) / UNDERFOOT_BAND);
+  const alongDeck = rig.board.dir({ x: 1, y: 0, z: 0 });
+  // How squarely a sole rests on the grip: its height over the deck's top
+  // surface there, eased from SOLE_HOLD out to SOLE_FREE.
+  const standingOn = (leg: typeof legA) => {
+    const rel = sub3(leg.shoe.at(0, -SHOE_HALF_HEIGHT, 0), deckCenter);
+    const lift = dot3(rel, grip) + deckTopY(dot3(rel, alongDeck));
+    return 1 - smoothstep((Math.abs(lift) - SOLE_HOLD) / (SOLE_FREE - SOLE_HOLD));
+  };
   const hiddenBy = (leg: typeof legA) => {
     const flick = leg.flicking && rig.flickOut > 0
       ? rig.flickOut * smoothstep((-toEye * dot3(sub3(leg.shoe.origin, deckCenter), grip) + 2) / 8)
       : 0;
-    return Math.max(flick, underfoot);
+    return Math.max(flick, Math.max(rig.onGrip ?? 0, standingOn(leg)) * undersideShows);
   };
   const legs = [
     { group: legGroup('legFar', farLeg), hidden: hiddenBy(farLeg) },

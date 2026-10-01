@@ -1,42 +1,41 @@
 import type { ReactElement } from 'react';
 import { PALETTE, facesCamera, lambert, tone, type Camera } from './camera';
-import { OUTLINE, facing } from './draw';
-import { clamp01, cross3, dot3, hull, mixHex, norm3, pathOf, rad, sub3, type P2, type V3 } from './math';
-import { DECK_HALF_WIDTH, type BoardRig } from './skeleton';
+import { OUTLINE, facing, newGroup, renderGroup, roundedBox, type BoxSpec } from './draw';
+import { BOTTOM_LOCAL, TOP_LOCAL, deckBottomY, deckTopY, drawDeck, kickY, THICKNESS } from './deck';
+import { clamp01, hull, mixHex, norm3, pathOf, rad, type P2, type V3 } from './math';
+import { frameOf, type BoardRig } from './skeleton';
 
 /**
  * Skateboard for TrickScene: a solid popsicle deck (grip top, painted
- * bottom, maple ply band) on silver trucks and cream wheels with metal
- * hubs. Each wheel carries one printed mark that turns with the distance
- * rolled, smeared over the angle it sweeps in a displayed frame, so a fast
- * wheel reads as a spinning blur instead of strobing. The deck keeps
- * the physics renderers' dimensions — 96 long, kicked nose and tail — so
- * foot targets land where the trick engine expects.
+ * bottom, maple ply band) on silver trucks (a baseplate and a hanger that
+ * widens down to the axle) and cream wheels with metal hubs. Each wheel
+ * carries one printed mark that turns with the distance rolled, smeared over
+ * the angle it sweeps in a displayed frame, so a fast wheel reads as a
+ * spinning blur instead of strobing. The deck keeps the physics renderers'
+ * dimensions — 96 long, kicked nose and tail — and the wheels the same 13
+ * units of ride height under the deck, so foot targets and ground contact
+ * land where the trick engine expects.
  *
  * Parts are painted with their own outlines (not merged like the robot):
  * the board is small and reads better when wheels and deck stay separate.
  */
 
-const DECK_PROFILE: ReadonlyArray<[number, number]> = [
-  [-48, -8.4], [-42, -6.4], [-36, -4], [-28, -2.2], [-16, -1.4], [0, -1.1],
-  [16, -1.4], [28, -2.2], [36, -4], [42, -6.4], [48, -8.4],
-];
-const TIP_X = 48;
-const HALF_W = DECK_HALF_WIDTH;
-const CORNER_R = 9.5;
-const SAMPLES = 36;
-const THICKNESS = 2;
 export const WHEEL_X = 28;
-const WHEEL_Y = 8.4;
-/** Radius of the truck hanger (board.tsx draws it 3 wide). */
-const HANGER_R = 1.5;
-/** Board-local depth of the bottom of a truck hanger: what rides a bar in a grind. */
-export const HANGER_BOTTOM = WHEEL_Y + HANGER_R;
-const WHEEL_Z = 7.2;
-export const WHEEL_R = 4.6;
-const WHEEL_HALF_W = 2.1;
-/** Board-local depth of the wheels' contact patch below the deck center. */
-export const WHEEL_BOTTOM = WHEEL_Y + 4.6;
+/** Board-local depth of the wheels' contact patch below the deck center: the
+ *  shared physics rides the deck this far off the ground. */
+export const WHEEL_BOTTOM = 13;
+export const WHEEL_R = 4.5;
+export const WHEEL_Y = WHEEL_BOTTOM - WHEEL_R;
+/** Board-local depth of the bottom of a truck hanger: what rides a bar in a
+ *  grind. The wheels dip WHEEL_BOTTOM - HANGER_BOTTOM past the contact. */
+export const HANGER_BOTTOM = 9.9;
+const WHEEL_HALF_W = WHEEL_R * 0.46;
+/** The wheels' inner faces stay this far from the centerline, clear of a bar. */
+const WHEEL_INNER = 5;
+export const WHEEL_Z = WHEEL_INNER + WHEEL_HALF_W;
+/** Truck parts: the baseplate flat against the deck, the hanger widening toward the axle. */
+const PLATE: BoxSpec = { f: 5.2, u: 0.7, s: 4.4, r: 0.65 };
+const HANGER: BoxSpec = { f: 2.5, u: 4.85, s: 3.7, r: 1.2, taper: 1.35 };
 /**
  * Share of true rolling speed the wheels turn at. Full speed (about nine
  * turns a second) is a blur the eye can't follow on a wheel this small.
@@ -54,44 +53,7 @@ const MAX_SWEEP = rad(300);
 /** Cap facing (1 head-on) below which the hub and mark fade toward edge-on. */
 const DETAIL_FADE = 0.35;
 
-function kickY(x: number): number {
-  if (x <= DECK_PROFILE[0][0]) return DECK_PROFILE[0][1];
-  for (let i = 1; i < DECK_PROFILE.length; i++) {
-    const [x0, y0] = DECK_PROFILE[i - 1];
-    const [x1, y1] = DECK_PROFILE[i];
-    if (x <= x1) return y0 + ((y1 - y0) * (x - x0)) / (x1 - x0);
-  }
-  return DECK_PROFILE[DECK_PROFILE.length - 1][1];
-}
-
-/** Board-local y of the grip and of the underside at `x` along the deck. */
-export const deckTopY = (x: number) => kickY(x) - THICKNESS / 2;
-export const deckBottomY = (x: number) => kickY(x) + THICKNESS / 2;
-
-function halfWidth(x: number): number {
-  const ax = Math.abs(x);
-  const start = TIP_X - CORNER_R;
-  if (ax <= start) return HALF_W;
-  const u = (ax - start) / CORNER_R;
-  return u >= 1 ? 0 : HALF_W * Math.sqrt(1 - u * u);
-}
-
-function outline(offsetY: number): V3[] {
-  const pts: V3[] = [];
-  for (let i = 0; i <= SAMPLES; i++) {
-    const x = -TIP_X + (2 * TIP_X * i) / SAMPLES;
-    pts.push({ x, y: kickY(x) + offsetY, z: -halfWidth(x) });
-  }
-  for (let i = SAMPLES - 1; i >= 1; i--) {
-    const x = -TIP_X + (2 * TIP_X * i) / SAMPLES;
-    pts.push({ x, y: kickY(x) + offsetY, z: halfWidth(x) });
-  }
-  return pts;
-}
-
-const TOP_LOCAL = outline(-THICKNESS / 2);
-const BOTTOM_LOCAL = outline(THICKNESS / 2);
-const RAIL_STEP = 3;
+export { deckBottomY, deckTopY };
 
 interface Part {
   depth: number;
@@ -178,37 +140,13 @@ export function drawBoard(cam: Camera, board: BoardRig, look: BoardLook, spin: W
   const seeingTop = facesCamera(cam, board.center, up);
   const top = TOP_LOCAL.map(board.point);
   const bottom = BOTTOM_LOCAL.map(board.point);
-  const topPath = pathOf(top.map((p) => cam.project(p)));
-  const bottomPath = pathOf(bottom.map((p) => cam.project(p)));
   const lamUp = lambert(up);
-  const gripFill = tone(PALETTE.grip, lamUp);
-  const graphicFill = tone(look.graphic, 1 - lamUp);
-
-  // Ply band: back-face culled quads between the two faces.
-  const rails: ReactElement[] = [];
-  for (let i = 0; i < top.length; i += RAIL_STEP) {
-    const j = (i + RAIL_STEP) % top.length;
-    const q = [top[i], top[j], bottom[j], bottom[i]];
-    let n = cross3(sub3(q[1], q[0]), sub3(q[3], q[0]));
-    const m = Math.hypot(n.x, n.y, n.z);
-    if (m < 1e-6) continue;
-    n = { x: n.x / m, y: n.y / m, z: n.z / m };
-    if (dot3(n, sub3(q[0], board.center)) < 0) n = { x: -n.x, y: -n.y, z: -n.z };
-    if (!facesCamera(cam, q[0], n)) continue;
-    const fill = tone(PALETTE.ply, lambert(n));
-    rails.push(<path key={`r${i}`} d={pathOf(q.map((p) => cam.project(p)))} fill={fill} stroke={fill} strokeWidth={0.6} />);
-  }
-
-  // Underside stripe, lifted off the face so it never z-fights.
-  let stripe: ReactElement | null = null;
-  if (!seeingTop) {
-    const y = (x: number) => kickY(x) + THICKNESS / 2 + 0.15;
-    const pts: V3[] = [];
-    for (const x of [-30, -10, 10, 30]) pts.push({ x, y: y(x), z: -3.2 });
-    for (const x of [30, 10, -10, -30]) pts.push({ x, y: y(x), z: 3.2 });
-    const fill = tone(look.stripe, 1 - lamUp);
-    stripe = <path d={pathOf(pts.map((p) => cam.project(board.point(p))))} fill={fill} />;
-  }
+  const deck = drawDeck(cam, board, {
+    grip: tone(PALETTE.grip, lamUp),
+    graphic: tone(look.graphic, 1 - lamUp),
+    stripe: tone(look.stripe, 1 - lamUp),
+    ink: ow,
+  });
 
   // Trucks and wheels, far → near so a spun board mirrors cleanly.
   const parts: Part[] = [];
@@ -216,27 +154,15 @@ export function drawBoard(cam: Camera, board: BoardRig, look: BoardLook, spin: W
   const wheelUp = norm3(board.dir({ x: 0, y: -1, z: 0 }));
   const wheelFwd = norm3(board.dir({ x: 1, y: 0, z: 0 }));
   for (const tx of [-WHEEL_X, WHEEL_X]) {
-    const hangerA = board.point({ x: tx, y: WHEEL_Y, z: -WHEEL_Z + WHEEL_HALF_W });
-    const hangerB = board.point({ x: tx, y: WHEEL_Y, z: WHEEL_Z - WHEEL_HALF_W });
-    const baseTop = board.point({ x: tx, y: THICKNESS / 2 + kickY(tx) + 0.5, z: 0 });
-    const baseBot = board.point({ x: tx, y: WHEEL_Y - 1.5, z: 0 });
-    const pa = cam.project(hangerA);
-    const pb = cam.project(hangerB);
-    const pc = cam.project(baseTop);
-    const pd = cam.project(baseBot);
-    const metal = tone(PALETTE.metal, 0.55);
-    parts.push({
-      depth: (pa.depth + pb.depth) / 2,
-      z: (hangerA.z + hangerB.z) / 2,
-      el: (
-        <g key={`truck${tx}`}>
-          <line x1={pc.x} y1={pc.y} x2={pd.x} y2={pd.y} stroke={PALETTE.ink} strokeWidth={4.6 * s + ow} strokeLinecap="round" />
-          <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke={PALETTE.ink} strokeWidth={3 * s + ow} strokeLinecap="round" />
-          <line x1={pc.x} y1={pc.y} x2={pd.x} y2={pd.y} stroke={tone(PALETTE.metal, 0.35)} strokeWidth={4.6 * s} strokeLinecap="round" />
-          <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke={metal} strokeWidth={3 * s} strokeLinecap="round" />
-        </g>
-      ),
-    });
+    // One truck: a thin baseplate under the deck and a hanger that widens
+    // from it down to the axle, painted as a single silhouette.
+    const underside = kickY(tx) + THICKNESS / 2;
+    const truck = newGroup(`truck${tx}`);
+    const frameAt = (y: number) => frameOf(board.point({ x: tx, y, z: 0 }), board.dir);
+    roundedBox(truck, cam, frameAt(HANGER_BOTTOM - HANGER.u), HANGER, PALETTE.metal, { outline: OUTLINE * 0.85 });
+    roundedBox(truck, cam, frameAt(underside + PLATE.u - 0.3), PLATE, PALETTE.metal, { outline: OUTLINE * 0.85 });
+    const pt = cam.project(board.point({ x: tx, y: HANGER_BOTTOM - HANGER.u, z: 0 }));
+    parts.push({ depth: pt.depth, z: board.point({ x: tx, y: WHEEL_Y, z: 0 }).z, el: renderGroup(truck) });
     for (const wz of [-WHEEL_Z, WHEEL_Z]) {
       const c = board.point({ x: tx, y: WHEEL_Y, z: wz });
       /** A point on the wheel `r` (a fraction of its radius) out at angle `a`. */
@@ -338,17 +264,11 @@ export function drawBoard(cam: Camera, board: BoardRig, look: BoardLook, spin: W
     }
   }
 
-  const face = (d: string, fill: string, key: string) => (
-    <path key={key} d={d} fill={fill} stroke={PALETTE.ink} strokeWidth={ow} strokeLinejoin="round" />
-  );
   return (
     <g key="board">
       {bar && !seeingTop ? <g key="bar">{bar.el}</g> : null}
       {seeingTop ? running : null}
-      {face(seeingTop ? bottomPath : topPath, seeingTop ? graphicFill : gripFill, 'back')}
-      {rails}
-      {face(seeingTop ? topPath : bottomPath, seeingTop ? gripFill : graphicFill, 'front')}
-      {stripe}
+      {deck}
       {cover}
       {seeingTop ? null : running}
     </g>

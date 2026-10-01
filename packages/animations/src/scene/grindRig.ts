@@ -165,8 +165,9 @@ function bodyOn(g: GrindFrame, plan: GrindPlan, mechanics: RiderMechanics): Rig 
     const along = rotY({ x: 1, y: 0, z: 0 }, toeDir * rake);
     const flicking = trick != null && trick.mechanics.flickFoot === side;
     const lane = toeDir * SHOE_TOESIDE - toe.z * TOE_REACH + (flicking ? flickDir * g.flickOut * flickReach : 0);
-    // The sole sits 2 below the foot point (see solveRig's shoe placement).
-    const footY = deckTopY(x) - 2 - feetLift;
+    // The sole sits 2 below the foot point (see solveRig's shoe placement), on
+    // the deck where the shoe's center is, which the toe reaches past the foot.
+    const footY = deckTopY(x + toe.x * TOE_REACH) - 2 - feetLift;
     const center: V3 = { x: x + toe.x * TOE_REACH, y: footY + 2 - SHOE_HALF_HEIGHT, z: lane + toe.z * TOE_REACH };
     const shoe = frameOf(board.point(center), (d) =>
       board.dir({ x: toe.x * d.x + along.x * d.z, y: d.y, z: toe.z * d.x + along.z * d.z }));

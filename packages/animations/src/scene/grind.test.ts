@@ -6,8 +6,10 @@ import { resolveSkateStyle } from '../skateStyle';
 import { resolveRiderMechanics } from '../stanceMechanics';
 import type { RiderStance, Robot, SkateStyle, Stance } from '../types';
 import TrickScene from './TrickScene';
-import { WHEEL_X, deckTopY } from './board';
+import { HANGER_BOTTOM, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z, deckTopY } from './board';
 import { fallSink, makeCamera } from './camera';
+import { facing } from './draw';
+import { drawRobot } from './robot';
 import {
   barSpan,
   grindCameraLift,
@@ -87,11 +89,11 @@ function boardSamples(rig: Rig): V3[] {
     for (const z of [-DECK_HALF_WIDTH + 1, 0, DECK_HALF_WIDTH - 1]) pts.push(rig.board.point({ x, y: deckTopY(x) + 2, z }));
   }
   for (const tx of [-WHEEL_X, WHEEL_X]) {
-    for (let z = -5; z <= 5; z += 2.5) pts.push(rig.board.point({ x: tx, y: 9.9, z }));
-    for (const wz of [-7.2, 7.2]) {
+    for (let z = -5; z <= 5; z += 2.5) pts.push(rig.board.point({ x: tx, y: HANGER_BOTTOM, z }));
+    for (const wz of [-WHEEL_Z, WHEEL_Z]) {
       for (let k = 0; k < 16; k++) {
         const a = (k / 16) * Math.PI * 2;
-        pts.push(rig.board.point({ x: tx + Math.sin(a) * 4.6, y: 8.4 + Math.cos(a) * 4.6, z: wz }));
+        pts.push(rig.board.point({ x: tx + Math.sin(a) * WHEEL_R, y: WHEEL_Y + Math.cos(a) * WHEEL_R, z: wz }));
       }
     }
   }
@@ -275,6 +277,38 @@ describe('Grind body', () => {
       }
     }
   });
+
+  it('paints the shoes behind a deck that shows its underside to the camera on the hop', () => {
+    // Tipped up for the pop, the deck can show the wheels to the camera while
+    // both soles stand on the far side of it. Drawn over the deck, the shoes
+    // read as being on the trucks. Swept over the stock camera and the ones the
+    // explorer's presets frame it from (head-on, behind).
+    const cameras = [{ yaw: -26, pitch: 9, lens: 1 }, { yaw: -70, pitch: 7, lens: 1 }, { yaw: 58, pitch: 14, lens: 0.85 }];
+    const look = { body: '#5b8def', accent: '#f2a541', variant: 0 as const };
+    let underside = 0;
+    const wrong: string[] = [];
+    for (const { base, side, rider, label } of everyGrind()) {
+      const { plan, mechanics } = planFor(base, side, 'regular', rider, null);
+      if (plan.entry) continue;
+      for (const camera of cameras) {
+        for (let t = plan.pop; t < plan.lockAt; t += 0.02) {
+          const { rig, frame } = solveGrindRig(t, plan, mechanics, NEUTRAL);
+          const cam = makeCamera(grindCameraLift(plan, t, frame.rail, 0), camera);
+          const deckCenter = rig.board.point({ x: 0, y: 0, z: 0 });
+          // Past the crossfade band: comfortably showing the underside.
+          if (facing(cam, deckCenter, rig.board.dir({ x: 0, y: -1, z: 0 })) > -0.06) continue;
+          underside++;
+          const keys = drawRobot(cam, rig, look, 'focus', createElement('g', { key: 'board' })).map((el) => String(el.key));
+          const board = keys.indexOf('board');
+          for (const leg of ['legFar', 'legNear']) {
+            if (keys.indexOf(`${leg}Behind`) < 0 || keys.indexOf(`${leg}Behind`) > board) wrong.push(`${label} ${camera.yaw}° t=${t.toFixed(2)} ${leg}`);
+          }
+        }
+      }
+    }
+    expect(underside).toBeGreaterThan(0);
+    expect(wrong.slice(0, 5)).toEqual([]);
+  }, 30_000);
 
   it('never stretches a leg, and keeps the soles on the grip until a slip', () => {
     const sweep = sweepBounds();
