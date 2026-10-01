@@ -5159,3 +5159,1051 @@ main:has(.rps-arena) > .screen {
     display: grid;
   }
 }
+
+/* ---------- Trick Explorer (/explore) ---------- */
+
+/* A customer-facing playground for watching tricks: game purple chrome
+   around a full-bleed stage, white cards for the controls. Mobile keeps the
+   stage pinned while the picker scrolls under it; desktop puts the stage
+   on the left and the controls on the right. */
+
+.explorer {
+  --explorer-line: #e4e1ee;
+  --explorer-glass: rgba(255, 255, 255, 0.86);
+  --explorer-thumb: 18px;
+  min-height: 100vh;
+  padding-bottom: calc(32px + env(safe-area-inset-bottom));
+  background: var(--bg);
+}
+
+.explorer button {
+  font-family: inherit;
+}
+
+.explorer button:focus-visible,
+.explorer a:focus-visible,
+.explorer input:focus-visible {
+  outline: 3px solid rgba(100, 49, 216, 0.4);
+  outline-offset: 2px;
+}
+
+/* Header band */
+
+.explorer-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: calc(12px + var(--app-safe-area-top)) 14px 14px;
+  overflow: hidden;
+  color: #fff;
+  background: linear-gradient(150deg, #7b47ee 0%, var(--purple) 46%, var(--purple-dark) 100%);
+}
+
+/* Faint orbit rings: the camera that circles the rider. */
+.explorer-header::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -60px;
+  width: 260px;
+  height: 260px;
+  border-radius: 50%;
+  transform: translateY(-50%);
+  background:
+    radial-gradient(circle, transparent 0 38%, rgba(255, 255, 255, 0.09) 38.5% 39.5%, transparent 40% 58%,
+      rgba(255, 255, 255, 0.07) 58.5% 59.5%, transparent 60% 78%, rgba(255, 255, 255, 0.05) 78.5% 79.5%, transparent 80%);
+  pointer-events: none;
+}
+
+.explorer-back {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.16);
+  text-decoration: none;
+  transition: background 0.15s ease;
+}
+
+.explorer-back:hover {
+  background: rgba(255, 255, 255, 0.26);
+}
+
+.explorer-back svg {
+  width: 22px;
+  height: 22px;
+}
+
+.explorer-brand {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-width: 0;
+}
+
+.explorer-eyebrow {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+
+.explorer-brand h1 {
+  margin: 1px 0 0;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+}
+
+.explorer-share {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 999px;
+  color: var(--purple-dark);
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(34, 26, 78, 0.25);
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 0.08s ease;
+}
+
+.explorer-share:active {
+  transform: scale(0.96);
+}
+
+.explorer-share svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Layout */
+
+.explorer-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+
+.explorer-panel-col {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  padding: 0 12px;
+}
+
+/* Pin the single-column stage only when the viewport leaves room below it
+   for the controls. Wider, shorter windows scroll the stage with the page. */
+@media (max-width: 959px) and (min-height: 640px) and (max-aspect-ratio: 3/4) {
+  .explorer-stage-col {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+  }
+}
+
+@media (min-width: 960px) {
+  .explorer-header {
+    padding: calc(22px + var(--app-safe-area-top)) max(24px, calc((100% - 1180px) / 2 + 24px)) 72px;
+  }
+
+  .explorer-brand h1 {
+    font-size: 30px;
+  }
+
+  .explorer-layout {
+    position: relative;
+    z-index: 1;
+    width: min(1180px, 100%);
+    margin: -52px auto 0;
+    padding: 0 24px;
+    grid-template-columns: minmax(0, 1.45fr) minmax(340px, 1fr);
+    align-items: start;
+    gap: 20px;
+  }
+
+  .explorer-panel-col {
+    padding: 0;
+  }
+
+  .explorer-stage-col {
+    position: sticky;
+    top: 20px;
+  }
+}
+
+/* Stage card */
+
+.explorer-stage-card {
+  overflow: hidden;
+  background: var(--card);
+  border-radius: 0 0 22px 22px;
+  box-shadow: 0 10px 28px rgba(34, 26, 78, 0.16);
+}
+
+@media (min-width: 960px) {
+  .explorer-stage-card {
+    border-radius: 24px;
+    box-shadow: 0 18px 44px rgba(34, 26, 78, 0.2);
+  }
+}
+
+.explorer-stage {
+  position: relative;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.explorer-stage:active {
+  cursor: grabbing;
+}
+
+.explorer-stage:focus-visible {
+  outline: 3px solid rgba(100, 49, 216, 0.55);
+  outline-offset: -3px;
+}
+
+/* Holds the stage's shape until the scene renders in the browser. */
+.explorer-scene-placeholder {
+  aspect-ratio: 500 / 404;
+  background: linear-gradient(180deg, #c9b8ef 0%, #f7c9b4 38%, #ffe6c7 52%, #b9cf94 56%, #efe3d3 72%);
+}
+
+.explorer-scene .trick-anim.trick-anim--3d,
+.explorer-scene .trick-anim.trick-anim--3d:hover {
+  max-width: none;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.explorer-hud {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+  pointer-events: none;
+}
+
+.explorer-hud-title {
+  max-width: 64%;
+  margin: 0;
+  padding: 7px 12px;
+  border-radius: 14px;
+  color: var(--ink);
+  background: var(--explorer-glass);
+  box-shadow: 0 2px 10px rgba(34, 26, 78, 0.12);
+  backdrop-filter: blur(8px);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.explorer-hud-camera {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.explorer-cam-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 5px;
+  border-radius: 999px;
+  color: var(--purple-dark);
+  background: var(--explorer-glass);
+  box-shadow: 0 2px 10px rgba(34, 26, 78, 0.12);
+  backdrop-filter: blur(8px);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.explorer-cam-reset {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  color: var(--purple-dark);
+  background: var(--explorer-glass);
+  box-shadow: 0 2px 10px rgba(34, 26, 78, 0.12);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.explorer-cam-reset svg {
+  width: 17px;
+  height: 17px;
+}
+
+.explorer-orbit-hint {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(34, 26, 78, 0.62);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: explorer-hint 2.4s ease-in-out infinite;
+}
+
+@keyframes explorer-hint {
+  0%, 100% { opacity: 0.92; }
+  50% { opacity: 0.55; }
+}
+
+/* Transport */
+
+.explorer-transport {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 4px;
+}
+
+.explorer-play {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 50%;
+  color: #fff;
+  background: var(--purple);
+  box-shadow: 0 4px 12px rgba(100, 49, 216, 0.38);
+  cursor: pointer;
+  transition: transform 0.08s ease, background 0.15s ease;
+}
+
+.explorer-play:hover {
+  background: var(--purple-dark);
+}
+
+.explorer-play:active {
+  transform: scale(0.94);
+}
+
+.explorer-play svg {
+  width: 20px;
+  height: 20px;
+}
+
+.explorer-scrub {
+  min-width: 0;
+}
+
+.explorer-scrub-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.explorer-scrub-label strong {
+  color: var(--purple-dark);
+  font-weight: 800;
+}
+
+.explorer-scrub-label span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The rail and fill are inset by half a thumb so they line up with where
+   the native thumb's center actually travels. */
+.explorer-scrub-track {
+  position: relative;
+  height: 24px;
+}
+
+.explorer-scrub-track::before,
+.explorer-scrub-track::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: calc(var(--explorer-thumb) / 2);
+  height: 6px;
+  border-radius: 999px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.explorer-scrub-track::before {
+  right: calc(var(--explorer-thumb) / 2);
+  background: var(--explorer-line);
+}
+
+.explorer-scrub-track::after {
+  width: calc((100% - var(--explorer-thumb)) * var(--progress, 0));
+  background: var(--purple);
+}
+
+.explorer-scrub-tick {
+  position: absolute;
+  top: 50%;
+  z-index: 1;
+  width: 3px;
+  height: 12px;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(79, 35, 176, 0.35);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.explorer-scrub-track input,
+.explorer-lens input {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.explorer-scrub-track input {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+.explorer-scrub-track input::-webkit-slider-runnable-track {
+  height: 100%;
+  background: transparent;
+}
+
+.explorer-scrub-track input::-moz-range-track {
+  background: transparent;
+}
+
+.explorer-scrub-track input::-webkit-slider-thumb,
+.explorer-lens input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: var(--explorer-thumb);
+  height: var(--explorer-thumb);
+  margin-top: 3px;
+  border: 3px solid var(--purple);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(34, 26, 78, 0.28);
+}
+
+.explorer-scrub-track input::-moz-range-thumb,
+.explorer-lens input::-moz-range-thumb {
+  box-sizing: border-box;
+  width: var(--explorer-thumb);
+  height: var(--explorer-thumb);
+  border: 3px solid var(--purple);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(34, 26, 78, 0.28);
+}
+
+.explorer-speed,
+.explorer-loop {
+  display: grid;
+  place-items: center;
+  height: 36px;
+  border: none;
+  color: var(--ink);
+  background: var(--bg);
+  cursor: pointer;
+}
+
+.explorer-speed {
+  min-width: 46px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.explorer-loop {
+  width: 36px;
+  border-radius: 50%;
+  color: var(--muted);
+}
+
+.explorer-loop.active {
+  color: var(--purple-dark);
+  background: var(--purple-soft);
+}
+
+.explorer-loop svg {
+  width: 19px;
+  height: 19px;
+}
+
+.explorer-phases {
+  display: flex;
+  gap: 6px;
+  padding: 6px 12px 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.explorer-phases::-webkit-scrollbar {
+  display: none;
+}
+
+.explorer-phase {
+  flex-shrink: 0;
+  padding: 6px 11px;
+  border: none;
+  border-radius: 999px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.explorer-phase:hover {
+  color: var(--ink);
+  background: var(--bg);
+}
+
+.explorer-phase.current {
+  color: var(--purple-dark);
+  background: var(--purple-soft);
+}
+
+/* Cards */
+
+.explorer-card {
+  padding: 16px;
+  border-radius: 20px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+
+.explorer-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.explorer-card-head h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.explorer-card-hint {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: right;
+}
+
+/* Camera presets */
+
+.explorer-cams {
+  display: grid;
+  grid-auto-columns: 78px;
+  grid-auto-flow: column;
+  gap: 8px;
+  margin: 0 -16px;
+  padding: 2px 16px 4px;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+}
+
+.explorer-cams::-webkit-scrollbar {
+  display: none;
+}
+
+@media (min-width: 960px) {
+  .explorer-cams {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-auto-flow: row;
+    margin: 0;
+    padding: 0;
+    overflow: visible;
+  }
+}
+
+.explorer-cam {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  padding: 10px 4px 9px;
+  border: 1.5px solid var(--explorer-line);
+  border-radius: 16px;
+  color: var(--purple-dark);
+  background: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.15;
+  scroll-snap-align: start;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, transform 0.08s ease;
+}
+
+.explorer-cam span {
+  color: var(--ink);
+}
+
+.explorer-cam:hover {
+  border-color: #cdbff3;
+}
+
+.explorer-cam:active {
+  transform: scale(0.96);
+}
+
+.explorer-cam.active {
+  border-color: var(--purple);
+  color: #fff;
+  background: var(--purple);
+}
+
+.explorer-cam.active span {
+  color: #fff;
+}
+
+.explorer-dial {
+  display: block;
+  flex-shrink: 0;
+}
+
+.explorer-lens {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.explorer-lens-end {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.explorer-lens input {
+  width: 100%;
+  height: 24px;
+  margin: 0;
+}
+
+.explorer-lens input::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--explorer-line);
+}
+
+.explorer-lens input::-webkit-slider-thumb {
+  margin-top: -6px;
+}
+
+.explorer-lens input::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--explorer-line);
+}
+
+/* Trick builder */
+
+.explorer-shuffle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 999px;
+  color: var(--purple-dark);
+  background: var(--purple-soft);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 0.08s ease;
+}
+
+.explorer-shuffle:active {
+  transform: scale(0.96) rotate(-2deg);
+}
+
+.explorer-shuffle svg {
+  width: 18px;
+  height: 18px;
+}
+
+.explorer-segmented {
+  display: flex;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--bg);
+}
+
+.explorer-segmented button {
+  flex: 1;
+  min-height: 36px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 999px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.explorer-segmented button:hover:not(.active):not(:disabled) {
+  color: var(--ink);
+}
+
+.explorer-segmented button.active {
+  color: var(--purple-dark);
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(34, 26, 78, 0.18), 0 4px 10px rgba(34, 26, 78, 0.08);
+}
+
+.explorer-segmented button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.explorer-modes button {
+  min-height: 42px;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.explorer-segmented-compact {
+  display: inline-flex;
+}
+
+.explorer-segmented-compact button {
+  flex: 0 0 auto;
+  padding: 0 14px;
+}
+
+.explorer-field {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.explorer-field-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.explorer-field-label {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.explorer-field-label small {
+  margin-left: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.explorer-picker {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--explorer-line);
+}
+
+.explorer-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 6px 0 14px;
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--bg);
+}
+
+.explorer-search svg {
+  flex-shrink: 0;
+  width: 17px;
+  height: 17px;
+}
+
+.explorer-search input {
+  flex: 1;
+  min-width: 0;
+  height: 42px;
+  border: none;
+  outline: none;
+  color: var(--ink);
+  background: transparent;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.explorer-search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.explorer-search button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  color: var(--muted);
+  background: #fff;
+  cursor: pointer;
+}
+
+.explorer-empty {
+  margin: 16px 4px 4px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.explorer-tier h3 {
+  margin: 16px 0 8px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.explorer-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.explorer-chip {
+  min-height: 36px;
+  padding: 0 13px;
+  border: 1.5px solid var(--explorer-line);
+  border-radius: 999px;
+  color: var(--ink);
+  background: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, transform 0.08s ease;
+}
+
+.explorer-chip:hover:not(.active) {
+  border-color: #cdbff3;
+  background: #faf8ff;
+}
+
+.explorer-chip:active {
+  transform: scale(0.96);
+}
+
+.explorer-chip.active {
+  border-color: var(--purple);
+  color: #fff;
+  background: var(--purple);
+  box-shadow: 0 3px 10px rgba(100, 49, 216, 0.3);
+}
+
+.explorer-chip-plain:not(.active) {
+  border-style: dashed;
+  color: var(--muted);
+}
+
+/* Grind combo: three slots, read left to right like the trick's name. */
+
+.explorer-combo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: stretch;
+  gap: 4px;
+}
+
+.explorer-combo-step {
+  display: contents;
+}
+
+.explorer-combo-arrow {
+  align-self: center;
+  width: 16px;
+  height: 16px;
+  color: #b6afcf;
+}
+
+.explorer-slot {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px 10px 11px;
+  border: 2px solid var(--explorer-line);
+  border-radius: 16px;
+  color: var(--ink);
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.explorer-slot:hover:not(.active) {
+  border-color: #cdbff3;
+}
+
+.explorer-slot.active {
+  border-color: var(--purple);
+  background: var(--purple-soft);
+}
+
+.explorer-slot-label {
+  color: var(--purple-dark);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.explorer-slot-value {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.2;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.explorer-slot.empty .explorer-slot-value {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.explorer-slot-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 16px;
+  background: #f8f7fb;
+}
+
+.explorer-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* How it goes */
+
+.explorer-step-text {
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.explorer-step-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: explorer-step;
+}
+
+.explorer-step-list li {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  padding-left: 38px;
+  counter-increment: explorer-step;
+}
+
+.explorer-step-list li::before {
+  content: counter(explorer-step);
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  color: var(--purple-dark);
+  background: var(--purple-soft);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.explorer-step-list li:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 30px;
+  bottom: -10px;
+  left: 12px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--purple-soft);
+}
+
+.explorer-step-list strong {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.explorer-step-list span {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .explorer-orbit-hint {
+    animation: none;
+  }
+}

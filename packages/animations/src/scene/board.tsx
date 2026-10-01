@@ -317,9 +317,21 @@ export function drawBoard(cam: Camera, board: BoardRig, look: BoardLook, spin: W
     const dipped = (outline: V3[]) => clipPlane(clipPlane(outline, (p) => p.y - bar.top - 1), (p) => bar.z - p.z);
     const pts = [...dipped(top), ...dipped(bottom)];
     if (pts.length >= 3) {
+      // The deck's ink extends beyond its geometry. Include that stroke in
+      // the cover footprint or a dark rim survives on the face of the bar.
+      // SVG clip paths ignore strokeWidth, so expand the geometry itself.
+      // Circumscribe the round stroke, with a small anti-aliasing overlap.
+      const pad = (ow / 2 + 0.2 * s) / Math.cos(Math.PI / 8);
+      const footprint = hull(pts.flatMap((p) => {
+        const q = cam.project(p);
+        return Array.from({ length: 8 }, (_, i) => {
+          const a = i * Math.PI / 4;
+          return { x: q.x + Math.cos(a) * pad, y: q.y + Math.sin(a) * pad };
+        });
+      }));
       cover = (
         <g key="cover">
-          <clipPath id={bar.clipId}><path d={pathOf(hull(pts.map((p) => cam.project(p))))} /></clipPath>
+          <clipPath id={bar.clipId}><path d={pathOf(footprint)} /></clipPath>
           <g clipPath={`url(#${bar.clipId})`}>{bar.cover}</g>
         </g>
       );

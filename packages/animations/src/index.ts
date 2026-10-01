@@ -30,11 +30,33 @@ export {
 export { default as TrickAnimation3D } from './TrickAnimation3D';
 /** From-scratch look (new robot, skate plaza, crane camera) on the same physics. */
 export { default as TrickScene, type HeadPose, type LeadIn } from './scene/TrickScene';
+/** Where TrickScene films from: the stock 3/4 view, or any angle inside the tested bounds. */
+export {
+  DEFAULT_SCENE_CAMERA,
+  SCENE_CAMERA_BOUNDS,
+  clampSceneCamera,
+  type SceneCamera,
+} from './scene/camera';
 /** Flat-bar grinds and slides — TrickScene only (the other renderers are flatground). */
 export { grindTimelineFor, type GrindTimeline } from './scene/grind';
-export { GRIND_BASES, grindSpecFor, type GrindSide } from './scene/grindDefinitions';
-/** Flatground tricks popped into a grind: "Kickflip into Frontside Lipslide", "Backside 180 into Frontside Nosegrind". */
-export { canEnterGrind, joinGrindBase, splitGrindBase } from './scene/grindEntry';
+/**
+ * Grind names. Flatground tricks can be popped into a grind ("Kickflip into
+ * Frontside Lipslide", "Backside 180 into Frontside Nosegrind") and out of it
+ * off an end the grind rides ("Backside 5-0 Grind Kickflip Out", "Crooked
+ * Grind Nollie Kickflip Out"; see exitEndsFor).
+ */
+export {
+  GRIND_BASES,
+  exitEndsFor,
+  grindSpecFor,
+  joinGrindBase,
+  joinGrindExit,
+  splitGrindBase,
+  type GrindExitName,
+  type GrindSide,
+  type PopEnd,
+} from './scene/grindDefinitions';
+export { canEnterGrind, canExitGrind } from './scene/grindTricks';
 /** Frozen pre-rework snapshot of the 3D renderer, for side-by-side comparison. */
 export { default as TrickAnimation3DLegacy } from './TrickAnimation3DLegacy';
 export { default as RobotAvatar } from './RobotAvatar';

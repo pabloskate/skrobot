@@ -16,7 +16,16 @@ import {
   type Stance,
   type Trick,
 } from '@skrobot/animations';
-import { GRIND_BASES, GRIND_ENTRY_BASES, GRIND_SIDES, ROBOTS, grindTrick, tricksForStance } from './data';
+import {
+  GRIND_BASES,
+  GRIND_ENTRY_BASES,
+  GRIND_EXIT_BASES,
+  GRIND_SIDES,
+  ROBOTS,
+  exitEndsFor,
+  grindTrick,
+  tricksForStance,
+} from './data';
 import playgroundStyles from './Playground.module.css';
 import styles from './ContactSheet.module.css';
 
@@ -58,14 +67,19 @@ const GRIND_LABELS = {
   fall: ['pop', 'up', 'lock', 'slip', 'falling', 'settled'],
 };
 
-/** A trick popped into the grind puts its second frame mid-trick, not just mid-hop. */
-const grindLabels = (landed: boolean, entry: boolean) =>
-  GRIND_LABELS[landed ? 'landed' : 'fall'].map((label, i) => (entry && i === 1 ? 'trick' : label));
+/**
+ * A trick popped into the grind puts its second frame mid-trick, not just
+ * mid-hop; one popped out of it does the same for the pop off.
+ */
+const grindLabels = (landed: boolean, entry: boolean, exit: boolean) =>
+  GRIND_LABELS[landed ? 'landed' : 'fall'].map((label, i) =>
+    entry && i === 1 ? 'trick in' : exit && landed && i === 4 ? 'trick out' : label);
 
 function grindPhases(tl: GrindTimeline, labels: string[]): Phase[] {
-  const up = tl.trick ?? (tl.pop + tl.lock) / 2;
+  const up = tl.trickIn ?? (tl.pop + tl.lock) / 2;
+  const off = tl.trickOut ?? (tl.off + tl.land) / 2;
   const times = tl.fail === null
-    ? [tl.pop, up, tl.lock, (tl.lock + tl.off) / 2, (tl.off + tl.land) / 2, tl.end]
+    ? [tl.pop, up, tl.lock, (tl.lock + tl.off) / 2, off, tl.end]
     : [tl.pop, up, tl.lock, tl.fail + 0.05, tl.fail + (tl.end - tl.fail) * 0.35, tl.end];
   return times.map((t, i) => ({ label: labels[i], t }));
 }
@@ -110,6 +124,7 @@ export default function ContactSheet() {
   const [robotId, setRobotId] = useState(ROBOTS[0].id);
   const [filter, setFilter] = useState('');
   const [entry, setEntry] = useState('');
+  const [exit, setExit] = useState('');
 
   const robot = ROBOTS.find((r) => r.id === robotId) ?? ROBOTS[0];
   const landed = outcome === 'landed';
@@ -119,18 +134,22 @@ export default function ContactSheet() {
   const grinds = discipline === 'grinds';
   const tricks = useMemo(() => {
     const all = grinds
-      ? GRIND_BASES.flatMap((base) => GRIND_SIDES.map((side) => grindTrick(base, side, stance, entry || undefined)))
+      ? GRIND_BASES.flatMap((base) => GRIND_SIDES.map((side) => grindTrick(
+        base, side, stance, entry || undefined,
+        // Each grind pops the trick out off the tail if it rides it, else off the nose.
+        exit ? { base: exit, end: exitEndsFor(base)[0] } : undefined,
+      )))
       : tricksForStance(stance);
     const query = filter.trim().toLowerCase();
     return query ? all.filter((t) => t.base.toLowerCase().includes(query)) : all;
-  }, [grinds, stance, entry, filter]);
+  }, [grinds, stance, entry, exit, filter]);
 
   const riders: RiderStance[] = riderMode === 'both' ? ['regular', 'goofy'] : [riderMode];
   // Grinds need the bar, and only the Scene renderer has one.
   const views: View[] = grinds ? ['scene'] : viewMode === 'both' ? ['3d', 'side'] : [viewMode];
   const rowPhases = (trick: Trick, rider: RiderStance): Phase[] => {
     const tl = grinds ? grindTimelineFor(trick, rider, robot.skateStyle, landed, fallVariant) : null;
-    return tl ? grindPhases(tl, grindLabels(landed, entry !== '')) : phases;
+    return tl ? grindPhases(tl, grindLabels(landed, entry !== '', exit !== '')) : phases;
   };
   const rowsPerTrick = riders.length * views.length;
 
@@ -165,6 +184,22 @@ export default function ContactSheet() {
               <option value="">None (ollie on)</option>
               {GRIND_ENTRY_BASES.map((base) => (
                 <option key={base} value={base}>{base}</option>
+              ))}
+            </select>
+          </div>}
+
+          {grinds && <div className={styles.controlGroup}>
+            <span className={styles.controlLabel}>Trick out of grind</span>
+            <select
+              className={playgroundStyles.trickSelect}
+              aria-label="Trick out of grind"
+              title="Off the tail where the grind rides it, else off the nose (nollie)"
+              value={exit}
+              onChange={(e) => setExit(e.target.value)}
+            >
+              <option value="">None (pop off)</option>
+              {GRIND_EXIT_BASES.map((base) => (
+                <option key={base} value={base}>{base} out</option>
               ))}
             </select>
           </div>}
@@ -278,7 +313,7 @@ export default function ContactSheet() {
             <div className={styles.headCell}>Trick</div>
             {phases.map((phase, i) => (
               <div key={phase.label} className={styles.headCell}>
-                {grinds ? grindLabels(landed, entry !== '')[i] : phase.label}
+                {grinds ? grindLabels(landed, entry !== '', exit !== '')[i] : phase.label}
                 {!grinds && <small>t = {phase.t.toFixed(2)}s</small>}
               </div>
             ))}

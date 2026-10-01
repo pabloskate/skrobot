@@ -30,15 +30,18 @@ import {
 import { clamp01, easeOutCubic, rotX, rotY, rotZ, smoothstep, type V3 } from './math';
 import {
   NO_SPIN,
-  entryClock,
-  entryFrame,
-  entryMid,
-  entryRate,
+  hopClock,
+  hopFrame,
+  hopMid,
+  hopRate,
+  poppingOff,
   settledHeading,
   settledSpin,
-  type EntryPlan,
+  thenSpin,
+  wrapSpin,
+  type HopPlan,
   type TrickSpin,
-} from './grindEntry';
+} from './grindTricks';
 
 /**
  * Grinds and slides on a flat bar, for TrickScene.
@@ -50,10 +53,15 @@ import {
  * the end, and rides away — or slips off and falls.
  *
  * A flatground trick can be popped into the grind ("Kickflip into Frontside
- * Lipslide", see grindEntry.ts). A flip or a shuv only turns the deck during
+ * Lipslide", see grindTricks.ts). A flip or a shuv only turns the deck during
  * the hop onto the bar. A 180, 360, or bigspin turns the rider too; after a
  * half turn they reach the bar riding fakie, and from the lock on it is the
  * plain grind as a fakie rider does it, turned to face the way they travel.
+ *
+ * One can be popped out of it too ("Backside 5-0 Grind Kickflip Out"): the
+ * pop off the end levers off the end the trick names, rises higher to give
+ * the trick room, and the trick turns the deck (and a 180 the rider) on the
+ * way down. Until the pop off, the attempt is the plain grind's.
  *
  * World space is the physics stage: x travel, y down, z toward the camera.
  * The rider stays at X0 and the plaza scrolls under them, so the bar is laid
@@ -93,6 +101,8 @@ const ENTRY_LOCK_IN = { from: 0.5, span: 0.45 };
  *  must then clear the bar's top (a dipped truck has further to come up). */
 const OFF_POP = 12;
 const OFF_CLEAR = 6;
+/** Share of a trick's extra lift (see HopTrick) the pop off adds: it starts up on the bar. */
+const EXIT_LIFT = 0.85;
 /** How far from the bar's centerline the board rolls in, and at least how
  *  far it moves across to lock in. */
 const APPROACH_GAP = 26;
@@ -215,27 +225,35 @@ export const travel = (dist: number) => (dist / STREET_DASH_SECONDS) * STREET_DA
 export interface GrindPlan {
   spec: GrindSpec;
   /** The trick popped into the grind, played for this rider and style. */
-  entry: EntryPlan | null;
+  entry: HopPlan | null;
+  /** The trick popped out of it, played for this rider popping off its end. */
+  exit: HopPlan | null;
   toeDir: 1 | -1;
   /** World z direction from the approach side of the bar to its far side. */
   far: 1 | -1;
   /** World yaw (deg) the entry trick spins the rider through: 0, ±180, or ±360. */
   heading: number;
+  /** The same once the trick out has spun them too: how they ride away. */
+  endHeading: number;
+  /** The deck turned under the feet riding away, by the tricks in and out. */
+  endSpin: TrickSpin;
   /** The lock pose, turned through `heading`. */
   lock: BoardPose;
   /** Board pitch at the instant it leaves the bar. */
   popOut: number;
   popIn: number;
-  /** Flatground seconds per second of the hop, for the trick popped into the grind. */
+  /** Flatground seconds per second of the hops, for the tricks popped into and out of the grind. */
   entryRate: number;
+  exitRate: number;
   /** Board center z rolling in. */
   laneZ: number;
   lockCenter: V3;
   /** Board center rise above rolling height: top of the hop on, and at lock-in. */
   apex: number;
   lockRise: number;
-  /** How far the board rises over the lock-in height popping off. */
+  /** How far the board rises over the lock-in height popping off, and how much of that is for the trick out. */
   offPop: number;
+  exitLift: number;
   upT: number;
   offT: number;
   /** Clock times: tail snap, lock-in, pop off, back on the ground. */
@@ -264,7 +282,9 @@ export function planGrind(
   const toeDir = mechanics.orientationSign;
   const far = (spec.toesideApproach ? toeDir : -toeDir) as 1 | -1;
   const entry = spec.entry ? { trick: spec.entry, mechanics, style } : null;
+  const exit = spec.exit ? { trick: spec.exit, mechanics: poppingOff(mechanics, spec.exitNose), style } : null;
   const heading = entry ? settledHeading(entry) : 0;
+  const entrySpin = entry ? settledSpin(entry) : NO_SPIN;
   // The lock as the rider rides it, then turned with them: a half turn puts
   // the bar on their other side and points the nose back up it.
   const riderFar = spec.reversed ? -far : far;
@@ -278,7 +298,8 @@ export function planGrind(
   const lockRise = GROUND - lockCenter.y;
   const apex = Math.max(APEX + APEX_STYLE * (style.popHeight - 1) + (spec.entry?.lift ?? 0), APEX_MIN, lockRise + 12);
   const upT = Math.sqrt((2 * apex) / GRAVITY) + Math.sqrt((2 * (apex - lockRise)) / GRAVITY);
-  const offPop = Math.max(OFF_POP, BAR_TOP + WHEEL_BOTTOM + OFF_CLEAR - lockRise);
+  const plainOffPop = Math.max(OFF_POP, BAR_TOP + WHEEL_BOTTOM + OFF_CLEAR - lockRise);
+  const offPop = plainOffPop + EXIT_LIFT * (spec.exit?.lift ?? 0);
   const v1 = Math.sqrt(2 * GRAVITY * offPop);
   const offT = (v1 + Math.sqrt(v1 * v1 + 2 * GRAVITY * lockRise)) / GRAVITY;
   const pop = ROLL_IN;
@@ -293,18 +314,23 @@ export function planGrind(
   return {
     spec,
     entry,
+    exit,
     toeDir,
     far,
     heading,
+    endHeading: heading + (exit ? settledHeading(exit) : 0),
+    endSpin: exit ? wrapSpin(thenSpin(entrySpin, settledSpin(exit))) : entrySpin,
     lock,
     popOut,
     popIn: (spec.popNose ? 1 : -1) * POP_IN,
-    entryRate: entry ? entryRate(entry, upT) : 1,
+    entryRate: entry ? hopRate(entry, upT) : 1,
+    exitRate: exit ? hopRate(exit, offT) : 1,
     laneZ: BAR_Z - far * Math.max(far === 1 ? BEHIND_GAP : APPROACH_GAP, far * (BAR_Z - lockCenter.z) + CROSS_MIN),
     lockCenter,
     apex,
     lockRise,
     offPop,
+    exitLift: offPop - plainOffPop,
     upT,
     offT,
     pop,
@@ -323,10 +349,12 @@ export function planGrind(
 /** Key times of a grind attempt, for scrubbers and contact sheets. */
 export interface GrindTimeline {
   pop: number;
-  /** Middle of the trick popped into the grind, or null for a plain grind. */
-  trick: number | null;
+  /** Middle of the trick popped into the grind, or null for an ollie on. */
+  trickIn: number | null;
   lock: number;
   off: number;
+  /** Middle of the trick popped out of the grind, or null for a plain pop off (and after a slip). */
+  trickOut: number | null;
   land: number;
   fail: number | null;
   end: number;
@@ -335,9 +363,10 @@ export interface GrindTimeline {
 export function grindTimeline(plan: GrindPlan): GrindTimeline {
   return {
     pop: plan.pop,
-    trick: plan.entry ? plan.pop + entryMid(plan.entry, plan.entryRate) : null,
+    trickIn: plan.entry ? plan.pop + hopMid(plan.entry, plan.entryRate) : null,
     lock: plan.lockAt,
     off: plan.off,
+    trickOut: plan.exit && plan.fail == null ? plan.off + hopMid(plan.exit, plan.exitRate) : null,
     land: plan.land,
     fail: plan.fail,
     end: plan.end,
@@ -369,7 +398,7 @@ export interface GrindFrame {
   pose: BoardPose;
   /** World yaw (deg) the rider has spun through so far; `pose` turns with it. */
   heading: number;
-  /** The deck turned under the feet by a trick popped into the grind, on top of `pose`. */
+  /** The deck turned under the feet by the tricks popped into and out of the grind, on top of `pose`. */
   spin: TrickSpin;
   /** 0 → 1: feet off the deck while it turns, and the flicking foot out over the rail. */
   offDeck: number;
@@ -493,7 +522,7 @@ export function grindFrame(time: number, plan: GrindPlan): GrindFrame {
     const across = smoothstep((s - 0.25) / 0.5);
     const ramp = plan.entry ? ENTRY_LOCK_IN : LOCK_IN;
     const lockIn = smoothstep((s - ramp.from) / ramp.span);
-    const trick = plan.entry ? entryFrame(plan.entry, entryClock(tau, plan.entryRate)) : null;
+    const trick = plan.entry ? hopFrame(plan.entry, hopClock(tau, plan.entryRate)) : null;
     const [noseFoot, tailFoot] = mixFeet(popFeet, spec.feet, smoothstep((s - 0.15) / 0.7));
     const ref = { x: X0, y: GROUND - rise, z: mix(plan.laneZ, plan.lockCenter.z, across) };
     // The pop turns the board about its middle, as on flatground, and levels
@@ -570,11 +599,15 @@ export function grindFrame(time: number, plan: GrindPlan): GrindFrame {
     const rise = plan.lockRise + v1 * tau - 0.5 * GRAVITY * tau * tau;
     const level = smoothstep(s / 0.42);
     const turnOut = smoothstep((s - 0.06) / 0.62);
+    const trick = plan.exit ? hopFrame(plan.exit, hopClock(tau, plan.exitRate)) : null;
+    // The board turns out of the lock to the way the rider is headed, and a
+    // 180 out carries rider and board round on top of that.
+    const heading = plan.heading + (trick?.heading ?? 0);
     const [noseFoot, tailFoot] = mixFeet(exitFeet, RIDE_FEET, smoothstep((s - 0.2) / 0.7));
     const ref = { x: X0, y: GROUND - rise, z: plan.lockCenter.z };
     const board = snapped(
       ref,
-      { yaw: plan.heading + (plan.lock.yaw - plan.heading) * (1 - turnOut), pitch: plan.lock.pitch * (1 - level), roll: plan.lock.roll * (1 - smoothstep(s / 0.5)) },
+      { yaw: heading + (plan.lock.yaw - plan.heading) * (1 - turnOut), pitch: plan.lock.pitch * (1 - level), roll: plan.lock.roll * (1 - smoothstep(s / 0.5)) },
       (plan.popOut - plan.lock.pitch) * (1 - level),
       spec.pivot,
     );
@@ -582,10 +615,14 @@ export function grindFrame(time: number, plan: GrindPlan): GrindFrame {
       ...base,
       phase: 'off',
       ...board,
+      ...(trick && plan.exit
+        ? { heading, spin: thenSpin(base.spin, trick.spin), offDeck: trick.offDeck, flickOut: trick.flickOut }
+        : null),
       ref,
       noseFoot,
       tailFoot,
-      overDeck: hopLegs(TUCK_OFF, s),
+      // As on the hop on, the hips ride up with feet that have left the deck.
+      overDeck: hopLegs(TUCK_OFF, s) + (trick && plan.exit ? TRICK_HIP_LIFT * trick.offDeck * plan.exit.trick.feetLift : 0),
       air: smoothstep(tau / 0.12),
       grind: 1 - smoothstep(tau / 0.15),
       rail: 1 - smoothstep(s),
@@ -598,9 +635,11 @@ export function grindFrame(time: number, plan: GrindPlan): GrindFrame {
   return {
     ...base,
     phase: 'ride',
+    heading: plan.endHeading,
+    spin: plan.endSpin,
     center,
     ref: center,
-    pose: { ...flat, yaw: plan.heading },
+    pose: { ...flat, yaw: plan.endHeading },
     noseFoot: RIDE_FEET[0],
     tailFoot: RIDE_FEET[1],
     overDeck: softFloor(spring(TOUCHDOWN_HEIGHT, offArrive, RIDE_HEIGHT, u), SQUAT_FLOOR) + cruiseBob(t) * settle,
@@ -673,12 +712,15 @@ export function slipBoard(u: number, plan: GrindPlan, at: GrindFrame): { center:
 /**
  * Crane height for a grind: it rides up with the bar (following the
  * lock-in height, on an ease that starts and ends at rest), adds the flatground
- * crane's lift over the hop on, and sinks after a slip like a flatground slam.
+ * crane's lift over the hop on and a trick out's higher pop off, and sinks
+ * after a slip like a flatground slam.
  */
 export function grindCameraLift(plan: GrindPlan, time: number, rail: number, sink: number): number {
   const t = Math.max(0, time);
   const hop = t > plan.pop && t < plan.lockAt
     ? FOLLOW_POP * (plan.apex - plan.lockRise) * Math.sin((Math.PI * (t - plan.pop)) / plan.upT) ** 2
-    : 0;
+    : t > plan.off && t < plan.land && plan.fail == null
+      ? FOLLOW_POP * plan.exitLift * Math.sin((Math.PI * (t - plan.off)) / plan.offT) ** 2
+      : 0;
   return FOLLOW_POP * plan.lockRise * rail + hop - sink;
 }

@@ -18,7 +18,7 @@ import {
   type GrindPlan,
 } from './grind';
 import { BAR_Z } from './grindDefinitions';
-import { NO_SPIN, entryClock, type TrickSpin } from './grindEntry';
+import { NO_SPIN, hopClock, type TrickSpin } from './grindTricks';
 import {
   add3,
   clamp01,
@@ -116,8 +116,8 @@ const REACH = THIGH + SHIN - 1.5;
 
 /**
  * The board at a pose, with its deck optionally turned about its own axes
- * (a flip or shuv popped into the grind). The turn is inside the pose, so the
- * deck spins on the attitude it is riding at.
+ * (a flip or shuv popped into or out of the grind). The turn is inside the
+ * pose, so the deck spins on the attitude it is riding at.
  */
 export function boardRigAt(center: V3, pose: BoardPose, spin: TrickSpin = NO_SPIN): BoardRig {
   const attitude = poseDir(pose);
@@ -139,11 +139,13 @@ function bodyOn(g: GrindFrame, plan: GrindPlan, mechanics: RiderMechanics): Rig 
   // The feet stand on the board's attitude; a deck flipping under them is
   // only drawn (the rig's board), never stood on.
   const board = boardRigAt(g.center, g.pose);
-  const entry = plan.entry;
-  const feetLift = entry ? entry.trick.feetLift * g.offDeck : 0;
+  // The trick under the feet: the one popped into the grind until the pop
+  // off, then the one popped out of it, flicked by its own foot.
+  const trick = g.t < plan.off ? plan.entry : plan.exit;
+  const feetLift = trick ? trick.trick.feetLift * g.offDeck : 0;
   // A kickflip flicks off the heelside rail, a heelflip off the toeside one.
-  const flickDir = entry ? -entry.trick.spec.flipDir * toeDir : 0;
-  const flickReach = entry ? DECK_HALF_WIDTH + 5 + 4 * entry.style.flickStrength : 0;
+  const flickDir = trick ? -trick.trick.spec.flipDir * toeDir : 0;
+  const flickReach = trick ? DECK_HALF_WIDTH + 5 + 4 * trick.style.flickStrength : 0;
   const restingBodyYaw = -STANCE_BODY_YAW * toeDir;
   const bodyYawDeg = g.pose.yaw + restingBodyYaw;
   // The board's own turn into the lock, past the rider's spin: the shoulders
@@ -161,7 +163,7 @@ function bodyOn(g: GrindFrame, plan: GrindPlan, mechanics: RiderMechanics): Rig 
     const rake = isNose ? 24 : 8;
     const toe = rotY({ x: 0, y: 0, z: toeDir }, toeDir * rake);
     const along = rotY({ x: 1, y: 0, z: 0 }, toeDir * rake);
-    const flicking = entry != null && mechanics.flickFoot === side;
+    const flicking = trick != null && trick.mechanics.flickFoot === side;
     const lane = toeDir * SHOE_TOESIDE - toe.z * TOE_REACH + (flicking ? flickDir * g.flickOut * flickReach : 0);
     // The sole sits 2 below the foot point (see solveRig's shoe placement).
     const footY = deckTopY(x) - 2 - feetLift;
@@ -257,7 +259,7 @@ function bodyOn(g: GrindFrame, plan: GrindPlan, mechanics: RiderMechanics): Rig 
     torso: frameOf(torsoPoint({ x: 1, y: -14, z: 0 }), (d) => upperDir(d, torsoRelYaw)),
     head: frameOf(add3(neckTop, headDir({ x: 4, y: 0, z: 0 })), headDir),
     toeDir,
-    flickZ: entry ? flickDir * g.flickOut * 9 * entry.style.flickStrength : 0,
+    flickZ: trick ? flickDir * g.flickOut * 9 * trick.style.flickStrength : 0,
     flickOut: g.flickOut,
     // The soles are on the grip unless the feet are up over a turning deck.
     onGrip: 1 - g.offDeck,
@@ -407,7 +409,7 @@ function withHop(rig: Rig, frame: GrindFrame, plan: GrindPlan, mechanics: RiderM
   if (frame.t >= plan.lockAt) return rig;
   const tau = frame.t - plan.pop;
   const spec = plan.entry?.trick.spec ?? ollieFor(plan);
-  const f = computeFrame(tau < 0 ? Math.max(0, frame.t) : entryClock(tau, plan.entryRate), spec, true, 'slam', 0.65, style);
+  const f = computeFrame(tau < 0 ? Math.max(0, frame.t) : hopClock(tau, plan.entryRate), spec, true, 'slam', 0.65, style);
   const carried = moveRig(solveRig(f, spec, mechanics, style, 'landed'), { x: 0, y: frame.ref.y - f.board.y, z: frame.ref.z });
   // Both bodies must face the same board heading before we blend them.
   // Flatground already supplies the entry trick's spin; add only the turn

@@ -106,21 +106,27 @@ function propBox(
   ];
   const s = cam.project(P((x0 + x1) / 2, y1, z1)).s;
   const els: ReactElement[] = [];
+  // Faces are clipped to the near plane: a camera swung toward the travel
+  // looks down the ledge row, whose far end runs past it.
+  const facePath = (pts: V3[]) => {
+    const clipped = cam.clipPolygon(pts);
+    return clipped.length < 3 ? null : pathOf(clipped.map((p) => cam.project(p)));
+  };
   for (const [i, face] of faces.entries()) {
     const c = face.pts[0];
     if (!facesCamera(cam, c, face.n)) continue;
+    const d = facePath(face.pts);
+    if (!d) continue;
     els.push(
-      <path key={i} d={pathOf(face.pts.map((p) => cam.project(p)))} fill={tone(color, lambert(face.n))}
+      <path key={i} d={d} fill={tone(color, lambert(face.n))}
         stroke={bgInk} strokeWidth={1.1 * s} strokeLinejoin="round" />,
     );
   }
   if (paint) {
     // Painted lip along the front-top edge, like waxed curb paint.
     const lip = 3.2;
-    els.push(
-      <path key="paint" d={pathOf([P(x0, y1, z1), P(x1, y1, z1), P(x1, y1 + lip, z1), P(x0, y1 + lip, z1)].map((p) => cam.project(p)))}
-        fill={tone(paint, lambert({ x: 0, y: 0, z: 1 }))} />,
-    );
+    const d = facePath([P(x0, y1, z1), P(x1, y1, z1), P(x1, y1 + lip, z1), P(x0, y1 + lip, z1)]);
+    if (d) els.push(<path key="paint" d={d} fill={tone(paint, lambert({ x: 0, y: 0, z: 1 }))} />);
   }
   return <g key={key}>{els}</g>;
 }
@@ -175,12 +181,14 @@ export function drawBackdrop(
 
   const layers: ReactElement[] = [];
   const skyTop = viewTop - BLEED_Y;
-  layers.push(<rect key="sky" x={BLEED_L} y={skyTop} width={BLEED_R - BLEED_L} height={hy - skyTop + 1} fill={`url(#${ids.sky})`} />);
-  layers.push(<rect key="glow" x={BLEED_L} y={skyTop} width={BLEED_R - BLEED_L} height={hy - skyTop + 1} fill={`url(#${ids.glow})`} />);
+  // Looking steeply down puts the horizon above the frame: no sky at all.
+  const skyHeight = Math.max(0, hy - skyTop + 1);
+  layers.push(<rect key="sky" x={BLEED_L} y={skyTop} width={BLEED_R - BLEED_L} height={skyHeight} fill={`url(#${ids.sky})`} />);
+  layers.push(<rect key="glow" x={BLEED_L} y={skyTop} width={BLEED_R - BLEED_L} height={skyHeight} fill={`url(#${ids.glow})`} />);
 
   // Soft golden-hour cloud banks: a long base with one or two puffs on top,
   // drifting slower than anything else.
-  const drift = scroll * 0.015;
+  const drift = scroll * cam.drift * 0.015;
   const clouds: Array<[number, number, number]> = [[30, 128, 120], [270, 160, 150], [470, 104, 96], [640, 142, 130]];
   layers.push(
     <g key="clouds" fill="#fffaf1" opacity={0.62}>
@@ -201,8 +209,8 @@ export function drawBackdrop(
     </g>,
   );
 
-  layers.push(skyline('cityFar', CITY_FAR, CITY_FAR_PERIOD, scroll * 0.03, hy, PALETTE.cityFar));
-  layers.push(skyline('cityNear', CITY_NEAR, CITY_NEAR_PERIOD, scroll * 0.06, hy, PALETTE.cityNear));
+  layers.push(skyline('cityFar', CITY_FAR, CITY_FAR_PERIOD, scroll * cam.drift * 0.03, hy, PALETTE.cityFar));
+  layers.push(skyline('cityNear', CITY_NEAR, CITY_NEAR_PERIOD, scroll * cam.drift * 0.06, hy, PALETTE.cityNear));
 
   // Ground to the horizon, then the lawn over everything behind the ledges.
   layers.push(<rect key="ground" x={BLEED_L} y={hy} width={BLEED_R - BLEED_L} height={viewBottom + BLEED_Y - hy} fill={`url(#${ids.ground})`} />);
@@ -217,9 +225,11 @@ export function drawBackdrop(
   const FAR_PATTERN: Array<[number, number]> = [[0, 34], [110, 28], [200, 40], [320, 30], [410, 26], [505, 38]];
   for (const [offset, r] of FAR_PATTERN) {
     for (const x of repeats(offset, 620, scroll)) {
+      const foot: V3 = { x, y: GROUND, z: FAR_TREE_Z };
+      if (!cam.sees(foot)) continue;
       const cp = cam.project({ x, y: GROUND - 18 - r, z: FAR_TREE_Z });
       if (cp.x < BLEED_L || cp.x > BLEED_R) continue;
-      const base = cam.project({ x, y: GROUND, z: FAR_TREE_Z });
+      const base = cam.project(foot);
       farTrees.push(
         <g key={`far${offset}_${Math.round(x)}`}>
           <line x1={base.x} y1={base.y} x2={cp.x} y2={cp.y} stroke={mixHex(PALETTE.trunk, PALETTE.lawnFar, 0.5)} strokeWidth={3.4 * cp.s} />
@@ -235,7 +245,9 @@ export function drawBackdrop(
   const TREE_PATTERN: Array<[number, number]> = [[0, 26], [160, 21], [290, 30], [470, 23], [590, 27]];
   for (const [offset, r] of TREE_PATTERN) {
     for (const x of repeats(offset, 720, scroll)) {
-      const baseP = cam.project({ x, y: GROUND, z: TREE_Z });
+      const foot: V3 = { x, y: GROUND, z: TREE_Z };
+      if (!cam.sees(foot)) continue;
+      const baseP = cam.project(foot);
       const crown: V3 = { x, y: GROUND - 30 - r, z: TREE_Z };
       const cp = cam.project(crown);
       if (cp.x < BLEED_L || cp.x > BLEED_R) continue;

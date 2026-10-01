@@ -171,7 +171,7 @@ export default defineConfig([
     ignores: ['src/features/*/server/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': restrictedImports(noClientServerImports, noClientPlatformServerImports, {
-        group: ['@/features/analytics', '@/features/auth', '@/features/billing', '@/features/gallery', '@/features/game', '@/features/home', '@/features/install', '@/features/robots', '@/features/skater', '@/features/voice'],
+        group: ['@/features/analytics', '@/features/auth', '@/features/billing', '@/features/explorer', '@/features/gallery', '@/features/game', '@/features/home', '@/features/install', '@/features/robots', '@/features/skater', '@/features/voice'],
         message: 'Records may depend on tricks only, for stable trick identity and legacy log migration. See docs/ARCHITECTURE.md.',
       }),
     },
@@ -182,8 +182,19 @@ export default defineConfig([
     ignores: ['src/features/*/server/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': restrictedImports(noClientServerImports, noClientPlatformServerImports, {
-        group: ['@/features/auth', '@/features/billing', '@/features/game', '@/features/home', '@/features/install', '@/features/voice'],
+        group: ['@/features/auth', '@/features/billing', '@/features/explorer', '@/features/game', '@/features/home', '@/features/install', '@/features/voice'],
         message: 'Gallery may depend on tricks, records, robots, and skater (the player model, for the stats tab). It browses the catalog, owns video tip curation, and overlays the player trick book. See docs/ARCHITECTURE.md.',
+      }),
+    },
+  },
+
+  {
+    files: ['src/features/explorer/**/*.{ts,tsx}'],
+    ignores: ['src/features/*/server/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': restrictedImports(noClientServerImports, noClientPlatformServerImports, {
+        group: ['@/features/analytics', '@/features/auth', '@/features/billing', '@/features/gallery', '@/features/game', '@/features/home', '@/features/install', '@/features/records', '@/features/skater', '@/features/voice'],
+        message: 'Explorer may depend on tricks (names, descriptions) and robots (its rider) only. It plays animations; it does not track the player. See docs/ARCHITECTURE.md.',
       }),
     },
   },
@@ -193,7 +204,7 @@ export default defineConfig([
     ignores: ['src/features/*/server/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': restrictedImports(noClientServerImports, noClientPlatformServerImports, {
-        group: ['@/features/auth', '@/features/billing', '@/features/game', '@/features/home', '@/features/install', '@/features/voice', '@/features/skater'],
+        group: ['@/features/auth', '@/features/billing', '@/features/explorer', '@/features/game', '@/features/home', '@/features/install', '@/features/voice', '@/features/skater'],
         message:
           'Robots may depend on tricks/records only. Keep screen/game/auth concerns out of the roster model. See docs/ARCHITECTURE.md.',
       }),
@@ -205,7 +216,7 @@ export default defineConfig([
     ignores: ['src/features/*/server/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': restrictedImports(noClientServerImports, noClientPlatformServerImports, {
-        group: ['@/features/auth', '@/features/billing', '@/features/gallery', '@/features/game', '@/features/home', '@/features/install', '@/features/voice'],
+        group: ['@/features/auth', '@/features/billing', '@/features/explorer', '@/features/gallery', '@/features/game', '@/features/home', '@/features/install', '@/features/voice'],
         message:
           'Skater is the player model (skate score, adaptive rival) and may depend on tricks/records/robots only. See docs/ARCHITECTURE.md.',
       }),
@@ -217,7 +228,7 @@ export default defineConfig([
     ignores: ['src/features/*/server/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': restrictedImports(noClientServerImports, noClientPlatformServerImports, {
-        group: ['@/features/auth', '@/features/billing', '@/features/game', '@/features/install', '@/features/tricks', '@/features/voice'],
+        group: ['@/features/auth', '@/features/billing', '@/features/explorer', '@/features/game', '@/features/install', '@/features/tricks', '@/features/voice'],
         message: 'Home composes records, robots, and skater only. Route broader flow changes through AppShell. See docs/ARCHITECTURE.md.',
       }),
     },
@@ -228,7 +239,7 @@ export default defineConfig([
     ignores: ['src/features/*/server/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': restrictedImports(noClientServerImports, noClientPlatformServerImports, {
-        group: ['@/features/auth', '@/features/billing', '@/features/home', '@/features/install', '@/features/voice'],
+        group: ['@/features/auth', '@/features/billing', '@/features/explorer', '@/features/home', '@/features/install', '@/features/voice'],
         message: 'Game may depend on tricks/robots/records only. Voice wraps game, not the reverse. See docs/ARCHITECTURE.md.',
       }),
     },
@@ -239,7 +250,7 @@ export default defineConfig([
     ignores: ['src/features/*/server/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': restrictedImports(noClientServerImports, noClientPlatformServerImports, {
-        group: ['@/features/home', '@/features/install'],
+        group: ['@/features/explorer', '@/features/home', '@/features/install'],
         message: 'Voice wraps game and auth/billing quota UI; it should not depend on unrelated screens. See docs/ARCHITECTURE.md.',
       }),
     },

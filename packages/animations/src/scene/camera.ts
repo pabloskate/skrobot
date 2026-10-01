@@ -5,21 +5,24 @@ import { clamp01, mixHex, norm3, rad, sub3, type P2, type V3 } from './math';
  * Crane camera for TrickScene.
  *
  * World space is the physics stage: x = travel, y = DOWN, z = toward the
- * rider's regular toeside. The camera sits low and in front of the rider,
- * yawed so the rider rolls slightly toward the viewer — the same 3/4 angle the
- * New 3D poses were tuned against — but with a real pinhole projection, so
- * the ground meets the sky on a level horizon instead of tilting like a hill.
+ * rider's regular toeside. The stock camera sits low and in front of the
+ * rider, yawed so the rider rolls slightly toward the viewer — the same 3/4
+ * angle the New 3D poses were tuned against — but with a real pinhole
+ * projection, so the ground meets the sky on a level horizon instead of
+ * tilting like a hill.
  *
  * `lift` raises the camera with the pop. Raising (not tilting) keeps the
  * horizon still while the ground drops away, which sells height without
  * shrinking the robot to fit the whole arc in frame.
+ *
+ * A SceneCamera swings the crane to another angle around the same target.
+ * Within SCENE_CAMERA_BOUNDS the eye always stays on the viewer's side of the
+ * bar (world z > BAR_Z), which the bar's paint order relies on.
  */
 
-const YAW = rad(-26);
-const PITCH = rad(9);
-/** Camera distance from its target; closer = stronger perspective. */
+/** Camera distance from its target at lens 1; closer = stronger perspective. */
 const DISTANCE = 520;
-/** Focal length in viewBox units. FOCAL / DISTANCE is the rider's scale. */
+/** Focal length in viewBox units at lens 1. FOCAL / DISTANCE is the rider's scale. */
 const FOCAL = 720;
 /** Target height above the asphalt: roughly the resting hip. */
 const TARGET_HEIGHT = 72;
@@ -29,10 +32,49 @@ const ANCHOR_Y = 203;
 /** Clip anything closer than this to the camera plane. */
 const NEAR = 60;
 
-const COS_A = Math.cos(YAW);
-const SIN_A = Math.sin(YAW);
-const COS_B = Math.cos(PITCH);
-const SIN_B = Math.sin(PITCH);
+/** Where the crane sits around the rider, and the lens on it. */
+export interface SceneCamera {
+  /**
+   * Degrees around the rider, seen from above. 0 is square to their side;
+   * negative swings ahead of a rider rolling forward, positive behind them.
+   */
+  yaw: number;
+  /** Degrees looking down at the rider's hips. */
+  pitch: number;
+  /**
+   * Lens length, 1 for stock. Shorter moves in close on a wider lens (same
+   * rider size, stronger perspective); longer backs off on a telephoto.
+   */
+  lens: number;
+}
+
+/** The stock 3/4 view every TrickScene uses unless told otherwise. */
+export const DEFAULT_SCENE_CAMERA: Readonly<SceneCamera> = Object.freeze({ yaw: -26, pitch: 9, lens: 1 });
+
+/**
+ * The range every landed trick is tested to stay in frame and draw correctly
+ * over (falls are framed for the stock view only). Yaw stops short of looking
+ * along the bar and pitch short of straight down, keeping the eye on the
+ * viewer's side of the bar. There's no zoom: the stock framing already spends
+ * the stage's height on the pop, so the lens only trades perspective.
+ */
+export const SCENE_CAMERA_BOUNDS = Object.freeze({
+  yaw: Object.freeze({ min: -75, max: 75 }),
+  pitch: Object.freeze({ min: 0, max: 60 }),
+  lens: Object.freeze({ min: 0.65, max: 1.6 }),
+});
+
+const within = (value: number | undefined, fallback: number, bounds: { min: number; max: number }) =>
+  value === undefined || !Number.isFinite(value) ? fallback : Math.max(bounds.min, Math.min(bounds.max, value));
+
+/** A camera inside SCENE_CAMERA_BOUNDS; missing or invalid fields keep the stock view's. */
+export function clampSceneCamera(camera: Partial<SceneCamera>): SceneCamera {
+  return {
+    yaw: within(camera.yaw, DEFAULT_SCENE_CAMERA.yaw, SCENE_CAMERA_BOUNDS.yaw),
+    pitch: within(camera.pitch, DEFAULT_SCENE_CAMERA.pitch, SCENE_CAMERA_BOUNDS.pitch),
+    lens: within(camera.lens, DEFAULT_SCENE_CAMERA.lens, SCENE_CAMERA_BOUNDS.lens),
+  };
+}
 
 export interface Proj extends P2 {
   /** Perspective scale: viewBox units per world unit at this depth. */
@@ -49,36 +91,53 @@ export interface Camera {
   eye: V3;
   /** Screen y of the horizon. Independent of lift. */
   horizonY: number;
+  /**
+   * How fast the far backdrop slides across the screen as the street rolls,
+   * relative to the stock view: less as the camera swings to face the travel.
+   */
+  drift: number;
+  /** Whether a point is in front of the near plane. */
+  sees(p: V3): boolean;
   /** Clip a world segment against the near plane. */
   clip(a: V3, b: V3): [V3, V3] | null;
   /** Clip a world polygon against the near plane (Sutherland–Hodgman). */
   clipPolygon(pts: V3[]): V3[];
 }
 
-export function makeCamera(lift: number): Camera {
+const STOCK_COS_YAW = Math.cos(rad(DEFAULT_SCENE_CAMERA.yaw));
+
+export function makeCamera(lift: number, view: Readonly<SceneCamera> = DEFAULT_SCENE_CAMERA): Camera {
+  const yaw = rad(view.yaw);
+  const pitch = rad(view.pitch);
+  const cosA = Math.cos(yaw);
+  const sinA = Math.sin(yaw);
+  const cosB = Math.cos(pitch);
+  const sinB = Math.sin(pitch);
+  const distance = DISTANCE * view.lens;
+  const focal = FOCAL * view.lens;
   const targetHeight = TARGET_HEIGHT + lift;
   const depthOf = (p: V3) => {
     const dx = p.x - X0;
     const wy = GROUND - p.y - targetHeight;
-    const z1 = -dx * SIN_A + p.z * COS_A;
-    return wy * SIN_B + z1 * COS_B;
+    const z1 = -dx * sinA + p.z * cosA;
+    return wy * sinB + z1 * cosB;
   };
   const project = (p: V3): Proj => {
     const dx = p.x - X0;
     const wy = GROUND - p.y - targetHeight;
-    const x1 = dx * COS_A + p.z * SIN_A;
-    const z1 = -dx * SIN_A + p.z * COS_A;
-    const y2 = wy * COS_B - z1 * SIN_B;
-    const z2 = wy * SIN_B + z1 * COS_B;
-    const s = FOCAL / Math.max(NEAR * 0.5, DISTANCE - z2);
+    const x1 = dx * cosA + p.z * sinA;
+    const z1 = -dx * sinA + p.z * cosA;
+    const y2 = wy * cosB - z1 * sinB;
+    const z2 = wy * sinB + z1 * cosB;
+    const s = focal / Math.max(NEAR * 0.5, distance - z2);
     return { x: ANCHOR_X + x1 * s, y: ANCHOR_Y - y2 * s, s, depth: z2 };
   };
   const eye: V3 = {
-    x: X0 - DISTANCE * COS_B * SIN_A,
-    y: GROUND - (targetHeight + DISTANCE * SIN_B),
-    z: DISTANCE * COS_B * COS_A,
+    x: X0 - distance * cosB * sinA,
+    y: GROUND - (targetHeight + distance * sinB),
+    z: distance * cosB * cosA,
   };
-  const limit = DISTANCE - NEAR;
+  const limit = distance - NEAR;
   const clip = (a: V3, b: V3): [V3, V3] | null => {
     const da = depthOf(a);
     const db = depthOf(b);
@@ -103,7 +162,16 @@ export function makeCamera(lift: number): Camera {
     }
     return out;
   };
-  return { project, depthOf, eye, horizonY: ANCHOR_Y - FOCAL * Math.tan(PITCH), clip, clipPolygon };
+  return {
+    project,
+    depthOf,
+    eye,
+    horizonY: ANCHOR_Y - focal * Math.tan(pitch),
+    drift: cosA / STOCK_COS_YAW,
+    sees: (p) => depthOf(p) <= limit,
+    clip,
+    clipPolygon,
+  };
 }
 
 /** Share of the pop the camera rises with. */

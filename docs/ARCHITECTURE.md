@@ -22,6 +22,7 @@ If the answer is unclear, tighten the feature boundary before adding more code.
 | Auth/session/quota | `src/features/auth/` | Client auth state in the barrel; server code under `server/`. |
 | Billing | `src/features/billing/` | Beta quota UI plus dormant Stripe server helpers. |
 | Tricks | `src/features/tricks/` | Catalog, difficulty, metadata, picker UI, and the default routed trick pool. Routed games currently use flatground only. |
+| Trick Explorer | `src/features/explorer/` | Customer-facing animation playground at `/explore`: flatground tricks and grind combos on the scene stage, scrubbable playback, camera angles, and shareable links. |
 | Gallery | `src/features/gallery/` | Flatground trick gallery plus the player trick book: browse the catalog with stance filters, curated video tips, personal proven/learning state, and per-trick consistency stats. |
 | Robots | `src/features/robots/` | Roster metadata, explicit per-trick land-rate/set-weight tables, profile/select/avatar UI, and the browser-local editor routed at `/tune`. Routed home currently exposes flatground robots only. |
 | Player skill / adaptive rival | `src/features/skater/` | Skate score (player-only curve fit + frontier fallback), robot-ladder placement, and a generated rival that copies the closest roster behavior table. All derived from the game log; nothing persisted. |
@@ -46,14 +47,16 @@ imports so moving these files does not require app or playground changes.
 | Flatground board motion | `TrickAnimation.tsx` (`computeFrame`) |
 | Shared skeleton dimensions, frames, joints, and neutral poses | `scene/skeleton.ts` |
 | Flatground rider motion | `scene/rig.ts` |
-| Grind names, lock poses, and contact geometry | `scene/grindDefinitions.ts` |
-| Tricks performed into a grind | `scene/grindEntry.ts` |
+| Grind names, lock poses, contact geometry, and which ends a trick out can pop off | `scene/grindDefinitions.ts` |
+| Tricks popped into and out of a grind | `scene/grindTricks.ts` |
 | Grind timeline and board path | `scene/grind.ts` |
 | Grind rider motion and handoff from flatground | `scene/grindRig.ts` |
 | Scene rendering and reusable lead-in presentation | `scene/TrickScene.tsx` |
+| Scene camera angles, lens, and the bounds every trick is framed for | `scene/camera.ts` (`SceneCamera`, `SCENE_CAMERA_BOUNDS`) |
 
 Motion solvers share the skeleton contract, not each other's private constants.
-Grind entry reuses the flatground solver for the hop. Match-specific choices,
+Grind entry reuses the flatground solver for the hop; tricks into and out of a
+grind borrow its rotation clocks. Match-specific choices,
 reel text, and reducer callbacks belong in `features/game`, passed through the
 scene's `LeadIn` API. Keep tests sampling the complete motion; aggregate hot
 sweeps by their worst violation instead of making an assertion per sample.
@@ -73,6 +76,7 @@ route is importing server-only feature code. ESLint enforces the common cases;
 | `analytics` | `platform/server` from server files | Gameplay and screen features; AppShell supplies lifecycle context through the public tracking API |
 | `billing` | `platform/server` from server files | Auth UI, gameplay, screens, other features |
 | `tricks` | none | Other features |
+| `explorer` | `tricks`, `robots`, `@skrobot/animations` | Other features; it plays animations and never reads or writes player records |
 | `gallery` | `tricks`, `records`, `robots`, `skater` | Other features |
 | `records` | `tricks` | Other features; the catalog dependency is limited to legacy display-name migration into stable trick IDs |
 | `robots` | `tricks`, `records`, `@skrobot/animations` | Screens, game, voice, auth, billing, skater |

@@ -1,14 +1,17 @@
 /**
  * Authored grind/slide lock poses, contact geometry, and name parsing.
- * Playback timing and rider motion live in grind.ts and grindRig.ts.
+ * Playback timing and rider motion live in grind.ts and grindRig.ts; tricks
+ * popped into and out of a grind in grindTricks.ts.
  */
 import type { Stance, Trick } from '../types';
 import { GROUND } from '../TrickAnimation';
 import { HANGER_BOTTOM, WHEEL_X, deckBottomY } from './board';
 import { rotZ, type V3 } from './math';
-import { entryTrickFor, splitGrindBase, type EntryTrick } from './grindEntry';
+import { hopTrickFor, type HopTrick } from './grindTricks';
 
 export type GrindSide = 'frontside' | 'backside';
+/** The end of the board a trick out of a grind pops off: the rider's tail, or their nose (a nollie). */
+export type PopEnd = 'tail' | 'nose';
 
 // ----- The bar -----
 
@@ -128,17 +131,107 @@ const BEARINGS: Record<Contact, Bearing> = {
 };
 
 /**
- * What a slide levers off popping out: the edge of the bar on the side the
- * pop pushes down, so the rest of the deck rises clear of it.
+ * What the board levers off popping out of the grind: the truck it rides
+ * (on both trucks, the popped end's), or for a slide the edge of the bar on
+ * the side the pop pushes down, so the rest of the deck rises clear of it.
  */
-const slidePivot = (x: number): V3 => ({ x, y: deckBottomY(x), z: 0 });
-const SLIDE_PIVOTS: Partial<Record<Contact, V3>> = {
-  middle: slidePivot(-BAR_HALF),
-  nose: slidePivot(SLIDE_X + BAR_HALF),
-  tail: slidePivot(-SLIDE_X - BAR_HALF),
-  'tail blunt': slidePivot(-BLUNT_EDGE),
-  'nose blunt': slidePivot(BLUNT_EDGE),
+function popPivot(contact: Contact, nose: boolean): V3 {
+  const slidePivot = (x: number): V3 => ({ x, y: deckBottomY(x), z: 0 });
+  switch (contact) {
+    case 'trucks': return BEARINGS[nose ? 'nose truck' : 'tail truck'].at;
+    case 'middle': return slidePivot((nose ? 1 : -1) * BAR_HALF);
+    case 'nose': return slidePivot(SLIDE_X + BAR_HALF);
+    case 'tail': return slidePivot(-SLIDE_X - BAR_HALF);
+    case 'tail blunt': return slidePivot(-BLUNT_EDGE);
+    case 'nose blunt': return slidePivot(BLUNT_EDGE);
+    default: return BEARINGS[contact].at;
+  }
+}
+
+/**
+ * The ends of the board free to pop a trick out of a grind. Weight centered
+ * over the bar (both trucks, the middle of the deck) can be thrown onto either
+ * end, so a 50-50 or a boardslide can be popped out off the tail or the nose.
+ * Riding one end (a truck, a kick, a blunt), only that end is over the bar to
+ * snap: a 5-0 or a tailslide pops out off the tail, a nosegrind, a crooked
+ * grind, or a noseslide off the nose.
+ */
+const popEnds = (contact: Contact): readonly PopEnd[] => {
+  const x = BEARINGS[contact].at.x;
+  return x === 0 ? ['tail', 'nose'] : x < 0 ? ['tail'] : ['nose'];
 };
+
+// ----- Names -----
+
+/** Joins the entry trick to the grind in a trick's base name. */
+const ENTRY_JOINER = ' into ';
+/** Marks the pop end of a trick out, and ends its name. */
+const NOLLIE = 'Nollie ';
+const OUT = ' Out';
+
+/** "Kickflip" + "Frontside Lipslide" → "Kickflip into Frontside Lipslide". */
+export const joinGrindBase = (entry: string, grind: string) => `${entry}${ENTRY_JOINER}${grind}`;
+
+/**
+ * "Backside 5-0 Grind" + "Kickflip" off the tail → "Backside 5-0 Grind Kickflip Out";
+ * "Crooked Grind" + "Kickflip" off the nose → "Crooked Grind Nollie Kickflip Out".
+ */
+export const joinGrindExit = (grind: string, exit: string, end: PopEnd) =>
+  `${grind} ${end === 'nose' ? NOLLIE : ''}${exit}${OUT}`;
+
+/** Grind names, longest first, so a short name never claims the start of a longer one. */
+const NAMES_LONGEST_FIRST = Object.keys(GRINDS).sort((a, b) => b.length - a.length);
+const SIDE_LEAD = /^(frontside|fs|backside|bs)\s+/i;
+
+export interface GrindExitName {
+  /** The flatground trick, e.g. 'Kickflip'. */
+  base: string;
+  end: PopEnd;
+}
+
+/**
+ * A trick's base name in parts: the trick popped into the grind (if any), the
+ * grind with its side, and the trick popped out of it (if any). An "Out" that
+ * doesn't follow a known grind is left on the grind, which then names none.
+ */
+export function splitGrindBase(base: string): { entry: string | null; grind: string; exit: GrindExitName | null } {
+  const at = base.search(/\s+into\s+/i);
+  const entry = at < 0 ? null : base.slice(0, at);
+  const grind = at < 0 ? base : base.slice(at).replace(/^\s+into\s+/i, '');
+  const out = /\s+out$/i.exec(grind);
+  if (!out) return { entry, grind, exit: null };
+  const body = grind.slice(0, out.index);
+  const lead = SIDE_LEAD.exec(body)?.[0] ?? '';
+  const name = NAMES_LONGEST_FIRST.find((n) => body.startsWith(`${n} `, lead.length));
+  if (!name) return { entry, grind, exit: null };
+  const split = lead.length + name.length;
+  const trick = body.slice(split).trim();
+  const nollie = trick.toLowerCase().startsWith(NOLLIE.toLowerCase());
+  return {
+    entry,
+    grind: body.slice(0, split),
+    exit: { base: nollie ? trick.slice(NOLLIE.length).trim() : trick, end: nollie ? 'nose' : 'tail' },
+  };
+}
+
+/** The catalog grind a name with or without its side names, if any. */
+function grindDef(grind: string): { name: string; def: GrindDef; side: GrindSide | null } | null {
+  let name = grind.trim();
+  let side: GrindSide | null = null;
+  const lead = SIDE_LEAD.exec(name);
+  if (lead) {
+    side = /^f/i.test(lead[1]) ? 'frontside' : 'backside';
+    name = name.slice(lead[0].length);
+  }
+  const def = GRINDS[name];
+  return def ? { name, def, side } : null;
+}
+
+/** The ends a trick out of this grind ("5-0 Grind", "Backside Nosegrind") can pop off; none for an unknown name. */
+export function exitEndsFor(grind: string): readonly PopEnd[] {
+  const found = grindDef(grind);
+  return found ? popEnds(found.def.contact) : [];
+}
 
 export interface GrindSpec {
   /** Catalog name without the side, e.g. '50-50 Grind'. */
@@ -165,32 +258,34 @@ export interface GrindSpec {
   /** Pops off the end off the nose. */
   exitNose: boolean;
   /** The flatground trick popped into the grind, if any. */
-  entry: EntryTrick | null;
+  entry: HopTrick | null;
+  /** The flatground trick popped out of it off the end, if any; `exitNose` says which end. */
+  exit: HopTrick | null;
 }
 
 /**
  * The grind a trick names, or null for anything else. The base may lead
  * with its side ("Frontside ", "Backside ", "FS ", "BS "); without one it
  * takes the side most often skated. It may also lead with a flatground trick
- * to pop into it ("Kickflip into Frontside Lipslide"); one that can't be
- * popped into a grind (see canEnterGrind) makes the whole name no grind.
+ * to pop into it ("Kickflip into Frontside Lipslide") and end with one to pop
+ * out of it off the tail or the nose ("Frontside 5-0 Grind Kickflip Out",
+ * "Crooked Grind Nollie Kickflip Out"). A trick that can't be popped into or
+ * out of a grind (see canEnterGrind), or off an end the grind doesn't ride
+ * (see exitEndsFor), makes the whole name no grind.
  */
 export function grindSpecFor(trick: Pick<Trick, 'base' | 'stance'>): GrindSpec | null {
-  const { entry: entryBase, grind } = splitGrindBase(trick.base);
-  const entry = entryBase == null ? null : entryTrickFor(entryBase, trick.stance);
+  const { entry: entryBase, grind, exit: exitName } = splitGrindBase(trick.base);
+  const entry = entryBase == null ? null : hopTrickFor(entryBase, trick.stance);
   if (entryBase != null && !entry) return null;
-  let name = grind.trim();
-  let side: GrindSide | null = null;
-  const lead = /^(frontside|fs|backside|bs)\s+/i.exec(name);
-  if (lead) {
-    side = /^f/i.test(lead[1]) ? 'frontside' : 'backside';
-    name = name.slice(lead[0].length);
-  }
-  const def = GRINDS[name];
-  if (!def) return null;
-  side ??= def.side;
+  const found = grindDef(grind);
+  if (!found) return null;
+  const { name, def } = found;
+  const side = found.side ?? def.side;
+  const exit = exitName == null ? null : hopTrickFor(exitName.base, exitName.end === 'nose' ? 'nollie' : 'regular');
+  if (exitName != null && (!exit || !popEnds(def.contact).includes(exitName.end))) return null;
   const reversed = entry?.reverses ?? false;
-  const exitNose = def.contact === 'nose truck' || def.contact === 'nose' || def.contact === 'nose blunt';
+  // Without a trick out, the board pops off the end it rides, or the tail.
+  const exitNose = exitName ? exitName.end === 'nose' : popEnds(def.contact)[0] === 'nose';
   const slide = def.contact !== 'trucks' && !def.contact.endsWith(' truck');
   return {
     base: name,
@@ -199,8 +294,7 @@ export function grindSpecFor(trick: Pick<Trick, 'base' | 'stance'>): GrindSpec |
     dir: trick.stance === 'fakie' ? -1 : 1,
     slide,
     contact: BEARINGS[def.contact],
-    pivot: SLIDE_PIVOTS[def.contact]
-      ?? BEARINGS[def.contact === 'trucks' ? (exitNose ? 'nose truck' : 'tail truck') : def.contact].at,
+    pivot: popPivot(def.contact, exitNose),
     yaw: def.yaw,
     pitch: def.pitch,
     roll: def.roll,
@@ -216,5 +310,6 @@ export function grindSpecFor(trick: Pick<Trick, 'base' | 'stance'>): GrindSpec |
     popNose: trick.stance === 'nollie',
     exitNose,
     entry,
+    exit,
   };
 }

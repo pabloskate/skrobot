@@ -24,7 +24,7 @@ import {
   type BackgroundSceneId,
   type FallVariant,
 } from '../TrickAnimation';
-import { LIGHT, PALETTE, cameraLift, fallSink, makeCamera, type Camera } from './camera';
+import { LIGHT, PALETTE, cameraLift, fallSink, makeCamera, type Camera, type SceneCamera } from './camera';
 import { drawBackdrop } from './backdrop';
 import { boardShadowPoints, drawBoard, wheelRoll, type BoardBar } from './board';
 import { resetKeys } from './draw';
@@ -49,7 +49,8 @@ import { tiltHead, type Rig } from './skeleton';
  * Grinds and slides (grind.ts) are Scene-only: the robot ollies onto a flat
  * bar that scrolls with the plaza, locks into the trick, and pops off the
  * end. The same props drive them; the trick's base picks the grind and its
- * side ("Backside Smith Grind").
+ * side ("Backside Smith Grind"), and any tricks popped into and out of it
+ * ("Kickflip into Backside Smith Grind Kickflip Out").
  */
 
 /** A head move layered on the rider's own, and optionally a face. */
@@ -102,6 +103,8 @@ interface Props {
   /** Render one frozen frame at this absolute time (seconds). */
   fixedTime?: number;
   leadIn?: LeadIn;
+  /** Where the crane films from; the stock 3/4 view when omitted. Keep it inside SCENE_CAMERA_BOUNDS. */
+  camera?: SceneCamera;
 }
 
 function grindExpression(t: number, plan: GrindPlan): Expression {
@@ -131,16 +134,21 @@ function cast(p: V3): V3 {
   return { x: p.x - LIGHT.x * t, y: GROUND, z: p.z - LIGHT.z * t };
 }
 
-/** Hull of cast points, each widened by `r` so thin limbs still shade. */
+/**
+ * Hull of cast points, each widened by `r` so thin limbs still shade. The
+ * hull is taken on the ground (x, z) and clipped to the near plane before
+ * projecting, so a bar's shadow running past the camera stays whole.
+ */
 function shadowPath(cam: Camera, pts: V3[], r: number): string {
   const out: P2[] = [];
   for (const p of pts) {
     const c = cast(p);
     for (const [dx, dz] of [[r, 0], [-r, 0], [0, r], [0, -r]] as const) {
-      out.push(cam.project({ x: c.x + dx, y: GROUND, z: c.z + dz }));
+      out.push({ x: c.x + dx, y: c.z + dz });
     }
   }
-  return pathOf(hull(out));
+  const ground = cam.clipPolygon(hull(out).map((q) => ({ x: q.x, y: GROUND, z: q.y })));
+  return ground.length < 3 ? '' : pathOf(ground.map((p) => cam.project(p)));
 }
 
 function robotShadow(cam: Camera, rig: Rig): string[] {
@@ -170,6 +178,7 @@ export default function TrickScene({
   riderStance = 'regular',
   fixedTime,
   leadIn,
+  camera,
 }: Props) {
   const idBase = useId().replace(/:/g, '');
   const skateStyle = useMemo(() => resolveSkateStyle(robot.skateStyle), [robot.skateStyle]);
@@ -204,7 +213,7 @@ export default function TrickScene({
   const lift = plan && grind
     ? grindCameraLift(plan, t, grind.frame.rail, falling ? fallSink(headHeight) : 0)
     : cameraLift(f.motion.flight, skateStyle.popHeight, headHeight, falling);
-  const cam = makeCamera(lift);
+  const cam = makeCamera(lift, camera);
 
   const viewTop = -SKY_PAD;
   const viewBottom = H;
@@ -335,6 +344,7 @@ export default function TrickScene({
       data-time={t.toFixed(3)}
       data-grind={plan ? `${plan.spec.side} ${plan.spec.base}` : undefined}
       data-grind-entry={plan?.entry ? plan.entry.trick.base : undefined}
+      data-grind-exit={plan?.exit ? `${plan.spec.exitNose ? 'Nollie ' : ''}${plan.exit.trick.base}` : undefined}
       data-grind-phase={grind ? grind.frame.phase : undefined}
       data-bar-x0={span ? span.x0.toFixed(1) : undefined}
     >

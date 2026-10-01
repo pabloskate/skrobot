@@ -18,6 +18,7 @@ const ALLOWED_FEATURE_IMPORTS: Record<string, readonly string[]> = {
   analytics: [],
   auth: [],
   billing: [],
+  explorer: ['robots', 'tricks'],
   gallery: ['records', 'robots', 'skater', 'tricks'],
   game: ['records', 'robots', 'tricks'],
   home: ['records', 'robots', 'skater'],

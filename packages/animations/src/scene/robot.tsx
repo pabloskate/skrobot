@@ -35,7 +35,15 @@ export interface RobotLook {
 }
 
 const HEAD: BoxSpec = { f: 14, u: 15, s: 18, r: 8.5 };
-const TORSO: BoxSpec = { f: 11, u: 25, s: 15.5, r: 8.5, taper: 0.7 };
+/** The rig frames the torso 14 above the hip joints and 25 either way, so its
+ *  base would hang 11 below them and bury the thigh roots, which paint behind
+ *  it: the legs read as hung from the back of the body, with the knees
+ *  tucking under it. The base is raised to sit just under the hip joints
+ *  instead, so each thigh comes out from beneath it. The top (shoulders, neck)
+ *  stays where the rig put it. */
+const TORSO_FRAME_U = 25;
+const TORSO_BASE_RAISE = 8;
+const TORSO: BoxSpec = { f: 11, u: TORSO_FRAME_U - TORSO_BASE_RAISE / 2, s: 15.5, r: 8.5, taper: 0.7 };
 const SHOE: BoxSpec = { f: SHOE_HALF_LENGTH, u: SHOE_HALF_HEIGHT, s: 6, r: 3.6 };
 /** Sole thickness. The whole shoe is filled sole-cream, then the upper is
  *  painted over it, so only the band a real sole would show stays cream. */
@@ -194,10 +202,10 @@ export function drawRobot(cam: Camera, rig: Rig, look: RobotLook, expression: Ex
   };
 
   const torso = newGroup('torso');
-  roundedBox(torso, cam, rig.torso, TORSO, look.body);
+  roundedBox(torso, cam, shiftFrame(rig.torso, 0, TORSO_BASE_RAISE / 2, 0), TORSO, look.body);
 
   const head = newGroup('head');
-  tube(head, cam, rig.torso.at(0, TORSO.u - 4, 0), rig.head.at(-1, -HEAD.u + 1, 0), 8, limb);
+  tube(head, cam, rig.torso.at(0, TORSO_FRAME_U - 4, 0), rig.head.at(-1, -HEAD.u + 1, 0), 8, limb);
   drawAntenna(head, cam, rig.head, look);
   roundedBox(head, cam, rig.head, HEAD, look.body, { outline: OUTLINE * 1.1 });
   // The screen turns away gradually: fade it across the last stretch before

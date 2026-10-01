@@ -25,12 +25,16 @@ import {
 import {
   GRIND_BASES,
   GRIND_ENTRY_BASES,
+  GRIND_EXIT_BASES,
   GRIND_SIDES,
   ROBOTS,
+  exitEndsFor,
   grindTrick,
   robotById,
   tricksForStance,
+  type GrindExit,
   type GrindSideName,
+  type PopEnd,
 } from './data';
 import ContactSheet from './ContactSheet';
 import styles from './Playground.module.css';
@@ -69,6 +73,24 @@ const APP_MODES = [
 ] as const;
 
 type AppMode = (typeof APP_MODES)[number]['id'];
+
+const POP_ENDS: PopEnd[] = ['tail', 'nose'];
+const POP_END_LABELS: Record<PopEnd, string> = { tail: 'Off the tail', nose: 'Off the nose (nollie)' };
+
+/** "nose:Kickflip" ↔ { base: 'Kickflip', end: 'nose' }; '' is a plain pop off. */
+const exitValue = (exit: GrindExit) => `${exit.end}:${exit.base}`;
+function parseExit(value: string): GrindExit | null {
+  const at = value.indexOf(':');
+  return at < 0 ? null : { end: value.slice(0, at) as PopEnd, base: value.slice(at + 1) };
+}
+
+/** Why a grind allows the trick-out ends it does. */
+function exitRule(ends: readonly PopEnd[]): string {
+  if (ends.length > 1) return 'Centered on the bar (both trucks or the middle): pop out off either end';
+  return ends[0] === 'nose'
+    ? 'Only the nose end is on the bar: tricks out pop off the nose (nollie), not the tail'
+    : 'Only the tail end is on the bar: tricks out pop off the tail, no nollie tricks';
+}
 
 const STYLE_CONTROLS = [
   {
@@ -128,6 +150,8 @@ export default function App() {
   const [grindSide, setGrindSide] = useState<GrindSideName>('Frontside');
   /** Flatground trick popped into the grind; '' is a plain ollie on. */
   const [entryTrick, setEntryTrick] = useState('');
+  /** Flatground trick popped out of it, as `${end}:${base}` (see parseExit); '' is a plain pop off. */
+  const [exitTrick, setExitTrick] = useState('');
   const [selectedStance, setSelectedStance] = useState<Stance>('regular');
   const [selectedRiderStance, setSelectedRiderStance] = useState<RiderStance>('regular');
   const [landed, setLanded] = useState<boolean | null>(null);
@@ -152,10 +176,15 @@ export default function App() {
 
   const availableTricks = useMemo(() => tricksForStance(selectedStance), [selectedStance]);
 
+  const exitEnds = exitEndsFor(selectedGrind);
+  const exit = parseExit(exitTrick);
+
   const currentTrick = useMemo(() => {
-    if (discipline === 'grinds') return grindTrick(selectedGrind, grindSide, selectedStance, entryTrick || undefined);
+    if (discipline === 'grinds') {
+      return grindTrick(selectedGrind, grindSide, selectedStance, entryTrick || undefined, parseExit(exitTrick) ?? undefined);
+    }
     return availableTricks.find((t) => t.base === selectedBase) ?? availableTricks[0];
-  }, [availableTricks, discipline, entryTrick, grindSide, selectedBase, selectedGrind, selectedStance]);
+  }, [availableTricks, discipline, entryTrick, exitTrick, grindSide, selectedBase, selectedGrind, selectedStance]);
   const grindSpec = discipline === 'grinds' ? grindSpecFor(currentTrick) : null;
   // Grinds need the bar, and only the Scene renderer has one.
   const activeView: ViewMode = discipline === 'grinds' ? 'scene' : viewMode;
@@ -191,6 +220,7 @@ export default function App() {
       fixedTime: inspectionTime,
       discipline,
       entryTrick: discipline === 'grinds' && entryTrick ? entryTrick : null,
+      exitTrick: discipline === 'grinds' && exit ? `${exit.end === 'nose' ? 'Nollie ' : ''}${exit.base}` : null,
       view: activeView,
       backgroundSceneId,
       fallVariant,
@@ -201,6 +231,7 @@ export default function App() {
       currentTrick,
       discipline,
       entryTrick,
+      exit,
       fallVariant,
       landed,
       playbackMode,
@@ -275,12 +306,13 @@ export default function App() {
     ? [
       { label: 'Setup', time: 0 },
       { label: 'Pop', time: grind.pop },
-      ...(grind.trick === null ? [] : [{ label: 'Trick', time: grind.trick }]),
+      ...(grind.trickIn === null ? [] : [{ label: 'Trick in', time: grind.trickIn }]),
       { label: 'Lock', time: grind.lock },
       ...(grind.fail === null
         ? [
           { label: 'Hold', time: (grind.lock + grind.off) / 2 },
           { label: 'Pop off', time: grind.off },
+          ...(grind.trickOut === null ? [] : [{ label: 'Trick out', time: grind.trickOut }]),
           { label: 'Roll away', time: duration },
         ]
         : [
@@ -295,6 +327,12 @@ export default function App() {
       { label: 'Catch', time: ROLL_IN + FLIP_T * 0.88 },
       { label: landed === false ? 'Bail' : 'Roll away', time: duration },
     ];
+
+  const selectGrind = (next: string) => {
+    setSelectedGrind(next);
+    // A trick out off an end the new grind doesn't ride isn't one it can do.
+    if (exit && !exitEndsFor(next).includes(exit.end)) setExitTrick('');
+  };
 
   const changeDiscipline = (next: Discipline) => {
     setDiscipline(next);
@@ -482,7 +520,7 @@ export default function App() {
               aria-label="Grind"
               className={styles.trickSelect}
               value={selectedGrind}
-              onChange={(e) => setSelectedGrind(e.target.value)}
+              onChange={(e) => selectGrind(e.target.value)}
             >
               {GRIND_BASES.map((base) => (
                 <option key={base} value={base}>
@@ -505,6 +543,35 @@ export default function App() {
             </select>
           )}
         </div>
+
+        {discipline === 'grinds' && <div>
+          <h2 className={styles.sectionTitle}>Trick out of grind</h2>
+          <p className={styles.styleNote}>{exitRule(exitEnds)}</p>
+          <select
+            aria-label="Trick out of grind"
+            className={styles.trickSelect}
+            value={exitTrick}
+            onChange={(e) => setExitTrick(e.target.value)}
+          >
+            <option value="">None (pop off)</option>
+            {POP_ENDS.map((end) => {
+              const allowed = exitEnds.includes(end);
+              return (
+                <optgroup
+                  key={end}
+                  label={allowed ? POP_END_LABELS[end] : `${POP_END_LABELS[end]}: ${end} isn't on the bar`}
+                  disabled={!allowed}
+                >
+                  {GRIND_EXIT_BASES.map((base) => (
+                    <option key={base} value={exitValue({ base, end })}>
+                      {end === 'nose' ? `Nollie ${base}` : base} out
+                    </option>
+                  ))}
+                </optgroup>
+              );
+            })}
+          </select>
+        </div>}
 
         <div>
           <h2 className={styles.sectionTitle}>View</h2>

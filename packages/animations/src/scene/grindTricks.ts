@@ -4,15 +4,15 @@ import { FLIP_T, ROLL_IN, catchFraction, computeFrame, specFor, type Frame, type
 import { smoothstep } from './math';
 
 /**
- * A flatground trick popped into a grind ("Kickflip into Frontside Lipslide",
- * "Backside 180 into Frontside Nosegrind").
+ * A flatground trick popped into or out of a grind ("Kickflip into Frontside
+ * Lipslide", "Backside 5-0 Grind Kickflip Out").
  *
  * The grind owns the whole attempt: the roll-in, the hop onto the bar, the
- * lock, the pop off. The entry trick is a layer on top of the hop and owns
- * nothing else. It borrows the shared flatground physics for the rotation
- * (computeFrame, so the flip, shuv, spin, and catch clocks match flatground
- * and follow the robot's rotation speed), plays it over a window of the hop,
- * and hands back:
+ * lock, the pop off. A trick is a layer on top of one of the hops — onto the
+ * bar or off the end — and owns nothing else. It borrows the shared
+ * flatground physics for the rotation (computeFrame, so the flip, shuv, spin,
+ * and catch clocks match flatground and follow the robot's rotation speed),
+ * plays it over a window of the hop, and hands back:
  *
  * - `heading`: how far the rider has spun (180s, 360s, bigspins). The rider
  *   and the board's attitude turn with it, so it is part of the grind's pose.
@@ -37,23 +37,13 @@ import { smoothstep } from './math';
  * a turn past the rider, and a deck turned half way round is the same deck:
  * it locks exactly like the 180. A 360 comes back round to the plain grind.
  *
+ * A trick out pops off one end of the board, the rider's tail or (named
+ * "Nollie") their nose, and which ends are free to pop depends on the grind
+ * (see exitEndsFor in grindDefinitions.ts).
+ *
  * Only tricks that keep the board's long axis level qualify: dolphin flips
  * and impossibles pitch it end over end.
  */
-
-/** Joins the entry trick to the grind in a trick's base name. */
-export const ENTRY_JOINER = ' into ';
-
-/** "Kickflip" + "Frontside Lipslide" → "Kickflip into Frontside Lipslide". */
-export const joinGrindBase = (entry: string, grind: string) => `${entry}${ENTRY_JOINER}${grind}`;
-
-/** The entry trick (if any) and the grind of a trick's base name. */
-export function splitGrindBase(base: string): { entry: string | null; grind: string } {
-  const at = base.search(/\s+into\s+/i);
-  if (at < 0) return { entry: null, grind: base };
-  const rest = base.slice(at).replace(/^\s+into\s+/i, '');
-  return { entry: base.slice(0, at), grind: rest };
-}
 
 /** How the deck has turned under the feet (deg): flipped about its long axis, shuved about its vertical. */
 export interface TrickSpin {
@@ -63,12 +53,13 @@ export interface TrickSpin {
 
 export const NO_SPIN: TrickSpin = { flip: 0, yaw: 0 };
 
-export interface EntryTrick {
+/** A flatground trick played over a hop onto or off the bar. */
+export interface HopTrick {
   /** The flatground trick's name, e.g. 'Kickflip'. */
   base: string;
   /** Its flatground physics spec. */
   spec: Spec;
-  /** Extra apex (world units) the hop needs: flips and spins want hang time. */
+  /** Extra rise (world units) the hop needs: flips and spins want hang time. */
   lift: number;
   /** How high the feet ride over the deck (world units) while it turns under them. */
   feetLift: number;
@@ -76,8 +67,11 @@ export interface EntryTrick {
   reverses: boolean;
 }
 
-/** The flatground trick a grind can be popped from, or null if it can't be. */
-export function entryTrickFor(base: string, stance: Stance): EntryTrick | null {
+/**
+ * The flatground trick a hop can carry, or null if it can't. `stance` sets
+ * the end it pops off: 'nollie' pops the nose, anything else the tail.
+ */
+export function hopTrickFor(base: string, stance: Stance): HopTrick | null {
   const name = base.trim();
   const spec = specFor({ id: name, name, base: name, stance });
   const turnsBoard = spec.flips > 0 || spec.yaw > 0;
@@ -95,16 +89,32 @@ export function entryTrickFor(base: string, stance: Stance): EntryTrick | null {
 }
 
 /** Can this flatground trick be popped into a grind? */
-export const canEnterGrind = (base: string) => entryTrickFor(base, 'regular') !== null;
+export const canEnterGrind = (base: string) => hopTrickFor(base, 'regular') !== null;
 
-/** The entry trick as one attempt plays it: rider, and the robot's style. */
-export interface EntryPlan {
-  trick: EntryTrick;
+/** Can this flatground trick be popped out of a grind? The same tricks as into one; the grind decides which end. */
+export const canExitGrind = canEnterGrind;
+
+/**
+ * The rider popping a trick off one end of the board: the same feet and
+ * footing as on the bar, with the pop moved to that end and the flick to the
+ * other foot (a nollie flip pops with the front foot and flicks with the back).
+ */
+export function poppingOff(mechanics: RiderMechanics, nose: boolean): RiderMechanics {
+  return {
+    ...mechanics,
+    popFoot: nose ? mechanics.noseFoot : mechanics.tailFoot,
+    flickFoot: nose ? mechanics.tailFoot : mechanics.noseFoot,
+  };
+}
+
+/** A trick as one hop plays it: the rider popping it, and the robot's style. */
+export interface HopPlan {
+  trick: HopTrick;
   mechanics: RiderMechanics;
   style: SkateStyle;
 }
 
-/** Latest share of the hop the trick may be caught at: the board has the rest to settle into the lock. */
+/** Latest share of the hop the trick may be caught at: the board has the rest to settle. */
 const CATCH_BY = 0.85;
 
 /**
@@ -112,13 +122,13 @@ const CATCH_BY = 0.85;
  * speed from the pop, so the flick, the flip and the catch look as they do on
  * flatground; only a hop too short to catch it by CATCH_BY speeds it up.
  */
-export const entryRate = (entry: EntryPlan, upT: number) =>
-  Math.max(1, (catchFraction(entry.style) * FLIP_T) / (CATCH_BY * upT));
+export const hopRate = (hop: HopPlan, hopT: number) =>
+  Math.max(1, (catchFraction(hop.style) * FLIP_T) / (CATCH_BY * hopT));
 
 /** The flatground clock `tau` seconds after the pop, held at touchdown once the trick is done. */
-export const entryClock = (tau: number, rate: number) => ROLL_IN + Math.min(FLIP_T, Math.max(0, tau) * rate);
+export const hopClock = (tau: number, rate: number) => ROLL_IN + Math.min(FLIP_T, Math.max(0, tau) * rate);
 
-export interface EntryFrame {
+export interface HopFrame {
   /** The flatground physics at this moment of the trick. */
   flat: Frame;
   /** World yaw (deg) the rider has spun through. */
@@ -135,10 +145,10 @@ export interface EntryFrame {
 /** An angle with whole turns taken out: 720 → 0, 180 → 180, -540 → -180. */
 const wrapTurns = (deg: number) => deg - 360 * Math.trunc(deg / 360) || 0;
 
-/** The trick at flatground clock `t` (see entryClock); touchdown holds the finished rotation. */
-export function entryFrame(entry: EntryPlan, t: number): EntryFrame {
-  const f = computeFrame(t, entry.trick.spec, true, 'slam', 0.65, entry.style);
-  const turned = orientTrickRotation(entry.mechanics, f.spin3d);
+/** The trick at flatground clock `t` (see hopClock); touchdown holds the finished rotation. */
+export function hopFrame(hop: HopPlan, t: number): HopFrame {
+  const f = computeFrame(t, hop.trick.spec, true, 'slam', 0.65, hop.style);
+  const turned = orientTrickRotation(hop.mechanics, f.spin3d);
   const done = t >= ROLL_IN + FLIP_T;
   const rotation = f.motion.rotation;
   // The rider's spin is the heading; the deck's turn past it is the spin.
@@ -152,19 +162,33 @@ export function entryFrame(entry: EntryPlan, t: number): EntryFrame {
     },
     rotation,
     // Feet leave the deck as the board starts to turn and come back for the catch.
-    offDeck: entry.trick.feetLift > 0 ? smoothstep(rotation / 0.3) * (1 - smoothstep((rotation - 0.62) / 0.38)) : 0,
+    offDeck: hop.trick.feetLift > 0 ? smoothstep(rotation / 0.3) * (1 - smoothstep((rotation - 0.62) / 0.38)) : 0,
     // Flatground snaps the foot out with the pop; the hop is over in half the
     // time and the legs are already folded around it, so the flick eases out
     // over the first quarter of the spin instead.
-    flickOut: entry.trick.spec.flipDir ? flickExtension(rotation) * smoothstep(rotation / 0.25) : 0,
+    flickOut: hop.trick.spec.flipDir ? flickExtension(rotation) * smoothstep(rotation / 0.25) : 0,
   };
 }
 
-/** Where the deck rests once the trick is done, for the rest of the attempt. */
-export const settledSpin = (entry: EntryPlan): TrickSpin => entryFrame(entry, ROLL_IN + FLIP_T).spin;
+/** Where the deck rests once the trick is done. */
+export const settledSpin = (hop: HopPlan): TrickSpin => hopFrame(hop, ROLL_IN + FLIP_T).spin;
 
 /** How far round the rider ends up (deg, signed): 0, ±180, or ±360. */
-export const settledHeading = (entry: EntryPlan): number => entryFrame(entry, ROLL_IN + FLIP_T).heading;
+export const settledHeading = (hop: HopPlan): number => hopFrame(hop, ROLL_IN + FLIP_T).heading;
 
 /** Seconds after the pop the trick is half way round, for scrubbers and contact sheets. */
-export const entryMid = (entry: EntryPlan, rate: number) => (0.5 * catchFraction(entry.style) * FLIP_T) / rate;
+export const hopMid = (hop: HopPlan, rate: number) => (0.5 * catchFraction(hop.style) * FLIP_T) / rate;
+
+/**
+ * The deck turned by `first`, then by `then`, both about the rider's axes.
+ * `first` must be settled (whole flips and a half or whole shuv) so the sum is
+ * still a flip and a shuv. A half shuv points the deck's long axis the other
+ * way, so a flip after it rolls the other way about the deck's own axis.
+ */
+export function thenSpin(first: TrickSpin, then: TrickSpin): TrickSpin {
+  const reversed = Math.abs(Math.round(first.yaw / 180)) % 2 === 1;
+  return { flip: first.flip + (reversed ? -then.flip : then.flip), yaw: first.yaw + then.yaw };
+}
+
+/** A settled spin with whole turns taken out, for the deck at rest. */
+export const wrapSpin = (spin: TrickSpin): TrickSpin => ({ flip: wrapTurns(spin.flip), yaw: wrapTurns(spin.yaw) });
