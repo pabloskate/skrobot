@@ -1,12 +1,12 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { computeFrame, specFor, FLIP_T, GROUND, H, LAND_T, ROLL_IN, SKY_PAD, W } from '../TrickAnimation';
+import { computeFrame, specFor, FLIP_T, GROUND, H, LAND_T, ROLL_IN, SKY_PAD, W, X0 } from '../TrickAnimation';
 import { resolveSkateStyle } from '../skateStyle';
 import { resolveRiderMechanics } from '../stanceMechanics';
 import type { RiderStance, Robot, Stance, Trick } from '../types';
 import TrickScene from './TrickScene';
-import { DEFAULT_SCENE_CAMERA, SCENE_CAMERA_BOUNDS, cameraLift, clampSceneCamera, makeCamera, type SceneCamera } from './camera';
+import { DEFAULT_SCENE_CAMERA, SCENE_CAMERA_BOUNDS, SCENE_ZOOM, cameraLift, clampSceneCamera, clampZoom, makeCamera, zoomedViewBox, type SceneCamera } from './camera';
 import { grindCameraLift, planGrind } from './grind';
 import { BAR_HALF, BAR_Z, GRIND_BASES, exitEndsFor, grindSpecFor, joinGrindBase, joinGrindExit } from './grindDefinitions';
 import { solveGrindRig } from './grindRig';
@@ -167,6 +167,61 @@ describe('Scene camera', () => {
           }));
           expect(html, `${base} ${JSON.stringify(camera)} t=${t}`).not.toMatch(/NaN|Infinity|(?:height|width)="-/);
         }
+      }
+    }
+  });
+});
+
+describe('Scene zoom', () => {
+  const STOCK = { x: 0, y: -SKY_PAD, width: W, height: H + SKY_PAD };
+
+  it('is the stock picture at 1× and when none is given, and stays inside its bounds', () => {
+    expect(zoomedViewBox(1, STOCK)).toEqual(STOCK);
+    expect(clampZoom(undefined)).toBe(1);
+    expect(clampZoom(Number.NaN)).toBe(1);
+    expect(clampZoom(0.01)).toBe(SCENE_ZOOM.min);
+    expect(clampZoom(99)).toBe(SCENE_ZOOM.max);
+    const props = { robot, trick: trickOf('Kickflip', 'regular'), landed: true, riderStance: 'regular' as const, onDone: () => {}, fixedTime: 0.5 };
+    const ids = (html: string) => html.replace(/_R_[0-9a-z]+_/g, 'ID');
+    expect(ids(renderToStaticMarkup(createElement(TrickScene, { ...props, zoom: 1 })))).toBe(ids(renderToStaticMarkup(createElement(TrickScene, props))));
+  });
+
+  it('magnifies the picture without changing its shape: zooming in shows less, out shows more', () => {
+    for (const zoom of [SCENE_ZOOM.min, 0.75, 1.5, 2, SCENE_ZOOM.max]) {
+      const box = zoomedViewBox(zoom, STOCK);
+      expect(box.width * zoom, `${zoom}×`).toBeCloseTo(STOCK.width, 9);
+      expect(box.height * zoom, `${zoom}×`).toBeCloseTo(STOCK.height, 9);
+      expect(box.width / box.height, `${zoom}×`).toBeCloseTo(STOCK.width / STOCK.height, 9);
+      // Centered on the rider across the stage, whatever the zoom.
+      expect(box.x + box.width / 2, `${zoom}×`).toBeCloseTo(X0, 9);
+    }
+  });
+
+  it('keeps the rider\'s hips and the ground under them in the shot at every zoom', () => {
+    // The target is the resting hip and projects to the stage's anchor; the board
+    // sits on the ground straight below it. Zooming in is for a close look at the
+    // trick, so both have to survive it.
+    const cam = makeCamera(0);
+    const hips = cam.project({ x: X0, y: GROUND - 72, z: 0 });
+    const ground = cam.project({ x: X0, y: GROUND, z: 0 });
+    for (let zoom = SCENE_ZOOM.min; zoom <= SCENE_ZOOM.max + 1e-9; zoom += 0.05) {
+      const box = zoomedViewBox(zoom, STOCK);
+      for (const [name, p] of [['hips', hips], ['ground', ground]] as const) {
+        expect(p.x, `${name} x at ${zoom.toFixed(2)}×`).toBeGreaterThan(box.x);
+        expect(p.x, `${name} x at ${zoom.toFixed(2)}×`).toBeLessThan(box.x + box.width);
+        expect(p.y, `${name} y at ${zoom.toFixed(2)}×`).toBeGreaterThan(box.y);
+        expect(p.y, `${name} y at ${zoom.toFixed(2)}×`).toBeLessThan(box.y + box.height);
+      }
+    }
+  });
+
+  it('draws finite geometry zoomed all the way out and all the way in', () => {
+    for (const zoom of [SCENE_ZOOM.min, SCENE_ZOOM.max]) {
+      for (const t of [0, ROLL_IN + FLIP_T * 0.5, ROLL_IN + FLIP_T + LAND_T]) {
+        const html = renderToStaticMarkup(createElement(TrickScene, {
+          robot, trick: trickOf('Kickflip', 'regular'), landed: true, riderStance: 'regular', fixedTime: t, onDone: () => {}, zoom,
+        }));
+        expect(html, `${zoom}× t=${t}`).not.toMatch(/NaN|Infinity/);
       }
     }
   });

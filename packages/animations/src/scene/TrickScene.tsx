@@ -24,7 +24,7 @@ import {
   type BackgroundSceneId,
   type FallVariant,
 } from '../TrickAnimation';
-import { LIGHT, PALETTE, cameraLift, fallSink, makeCamera, type Camera, type SceneCamera } from './camera';
+import { LIGHT, PALETTE, cameraLift, fallSink, makeCamera, zoomedViewBox, type Camera, type SceneCamera } from './camera';
 import { drawBackdrop } from './backdrop';
 import { boardShadowPoints, drawBoard, wheelRoll, type BoardBar } from './board';
 import { resetKeys } from './draw';
@@ -105,6 +105,8 @@ interface Props {
   leadIn?: LeadIn;
   /** Where the crane films from; the stock 3/4 view when omitted. Keep it inside SCENE_CAMERA_BOUNDS. */
   camera?: SceneCamera;
+  /** Magnify the picture about the rider: 1 is stock, more is closer, less shows more of the plaza. Perspective stays the camera's. */
+  zoom?: number;
 }
 
 function grindExpression(t: number, plan: GrindPlan): Expression {
@@ -179,6 +181,7 @@ export default function TrickScene({
   fixedTime,
   leadIn,
   camera,
+  zoom = 1,
 }: Props) {
   const idBase = useId().replace(/:/g, '');
   const skateStyle = useMemo(() => resolveSkateStyle(robot.skateStyle), [robot.skateStyle]);
@@ -217,6 +220,8 @@ export default function TrickScene({
 
   const viewTop = -SKY_PAD;
   const viewBottom = H;
+  const view = zoomedViewBox(zoom, { x: 0, y: viewTop, width: W, height: H + SKY_PAD });
+  const viewBox = `${view.x.toFixed(2)} ${view.y.toFixed(2)} ${view.width.toFixed(2)} ${view.height.toFixed(2)}`;
   // During a lead-in the rider holds the t = 0 pose while the street keeps rolling.
   const streetDist = t < 0 ? t : grind ? grind.frame.streetDist : f.streetDist;
   const travel = (dist: number) => (dist / STREET_DASH_SECONDS) * STREET_DASH_PERIOD;
@@ -358,7 +363,7 @@ export default function TrickScene({
           else if (lead.skipTo != null && t < lead.skipTo) seek(lead.skipTo);
         }}
       >
-        <svg viewBox={`0 ${viewTop} ${W} ${H + SKY_PAD}`} xmlns="http://www.w3.org/2000/svg" style={{ display: 'block' }}>
+        <svg viewBox={viewBox} xmlns="http://www.w3.org/2000/svg" style={{ display: 'block' }}>
           <defs>
             {backdrop.defs}
             <filter id={shadowBlurId} x="-30%" y="-60%" width="160%" height="220%">

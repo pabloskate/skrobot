@@ -5,9 +5,11 @@ import {
   LAND_T,
   ROLL_IN,
   SCENE_CAMERA_BOUNDS,
+  SCENE_ZOOM,
   canEnterGrind,
   canExitGrind,
   clampSceneCamera,
+  clampZoom,
   exitEndsFor,
   grindSpecFor,
   grindTimelineFor,
@@ -57,6 +59,8 @@ export interface ExplorerState {
   out: GrindOut | null;
   /** A named angle, or a custom one the viewer dragged to. */
   camera: CameraPresetId | SceneCamera;
+  /** How far in the picture is magnified, whatever the angle: 1 is the stock framing. */
+  zoom: number;
 }
 
 export const STANCES: readonly Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
@@ -146,6 +150,7 @@ export const DEFAULT_STATE: Readonly<ExplorerState> = Object.freeze({
   into: null,
   out: null,
   camera: 'classic',
+  zoom: 1,
 });
 
 /** Keeps a trick out only if the grind rides the end it pops off. */
@@ -320,6 +325,23 @@ export function turnCamera(camera: SceneCamera, yaw: number, pitch: number): Sce
   return clampSceneCamera({ ...camera, yaw: camera.yaw + yaw, pitch: camera.pitch + pitch });
 }
 
+/** How much a key press, button, or notch of scrolling zooms by. */
+export const ZOOM_STEP = 1.2;
+
+/** `zoom` magnified by `factor`, kept in range and rounded so links stay short. */
+export const zoomBy = (zoom: number, factor: number) => clampZoom(Math.round(zoom * factor * 1000) / 1000);
+
+/** How close (in log zoom) the slider has to be to 1× to settle onto it. */
+const ZOOM_SNAP = 0.04;
+
+/** The slider's zoom for a position on its log scale, settling onto 1× when it's close. */
+export function zoomAt(position: number): number {
+  return Math.abs(position) < ZOOM_SNAP ? 1 : clampZoom(Math.exp(position));
+}
+
+/** Slider positions are logs of the zoom, so a step in and a step out feel the same. */
+export const ZOOM_RANGE = { min: Math.log(SCENE_ZOOM.min), max: Math.log(SCENE_ZOOM.max) } as const;
+
 export const cameraLabel = (state: ExplorerState) =>
   typeof state.camera === 'string' ? cameraPreset(state.camera).label : 'Your angle';
 
@@ -360,6 +382,13 @@ function parseCamera(value: string | null): ExplorerState['camera'] {
   return clampSceneCamera({ yaw, pitch, lens });
 }
 
+/** A zoom from a link, kept in range; anything that isn't a number is the stock framing. */
+function parseZoom(value: string | null): number {
+  if (value == null || value.trim() === '') return 1;
+  const zoom = Number(value);
+  return Number.isFinite(zoom) ? clampZoom(zoom) : 1;
+}
+
 const round = (n: number, places: number) => Number(n.toFixed(places));
 
 /** The explorer state a URL query describes; anything missing or unknown keeps its default. */
@@ -371,6 +400,7 @@ export function stateFromSearch(search: string): ExplorerState {
     stance: isStance(stanceParam) ? stanceParam : DEFAULT_STATE.stance,
     rider: params.get('rider') === 'goofy' ? 'goofy' : 'regular',
     camera: parseCamera(params.get('cam')),
+    zoom: parseZoom(params.get('zoom')),
   };
   const grind = fromSlug(GRIND_CHOICES, params.get('grind'));
   if (!grind) {
@@ -407,5 +437,6 @@ export function searchFromState(state: ExplorerState): string {
       ? state.camera
       : [round(state.camera.yaw, 1), round(state.camera.pitch, 1), round(state.camera.lens, 2)].join('_'));
   }
+  if (state.zoom !== 1) params.set('zoom', String(round(state.zoom, 2)));
   return `?${params.toString()}`;
 }

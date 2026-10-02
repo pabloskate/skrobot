@@ -1,9 +1,9 @@
 'use client';
 
-import { useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
-import { TbPlayerPauseFilled, TbPlayerPlayFilled, TbRefresh, TbRepeat, TbRepeatOff } from 'react-icons/tb';
+import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
+import { TbPlayerPauseFilled, TbPlayerPlayFilled, TbRefresh, TbRepeat, TbRepeatOff, TbZoomReset } from 'react-icons/tb';
 import { TrickScene, type RiderStance, type Robot, type SceneCamera, type Trick } from '@skrobot/animations';
-import { phaseAt, turnCamera, type Timeline } from './explorer';
+import { ZOOM_STEP, phaseAt, turnCamera, zoomBy, type Timeline } from './explorer';
 import { usePlayhead } from './usePlayhead';
 import CameraDial from './CameraDial';
 
@@ -21,6 +21,8 @@ const DRAG_SLOP = 5;
  */
 const DRAG_YAW = 0.35;
 const DRAG_PITCH = 0.25;
+/** Zoom per pixel of ctrl-scroll (a trackpad pinch arrives as one), as an exponent. */
+const WHEEL_ZOOM = 0.01;
 /** Arrow keys move the camera itself, this many degrees a press. */
 const KEY_TURN: Record<string, [number, number]> = {
   ArrowLeft: [6, 0],
@@ -35,12 +37,15 @@ interface Props {
   rider: RiderStance;
   timeline: Timeline;
   camera: SceneCamera;
+  /** Magnification of the picture, 1 stock. */
+  zoom: number;
   cameraLabel: string;
   customCamera: boolean;
   rate: number;
   loop: boolean;
   onCamera: (camera: SceneCamera) => void;
   onResetCamera: () => void;
+  onZoom: (zoom: number) => void;
   onRate: (rate: number) => void;
   onLoop: (loop: boolean) => void;
 }
@@ -61,27 +66,72 @@ const useInBrowser = () => useSyncExternalStore(noSubscription, () => true, () =
  * trick so a new trick starts from the top.
  */
 export default function ExplorerStage({
-  robot, trick, rider, timeline, camera, cameraLabel, customCamera, rate, loop,
-  onCamera, onResetCamera, onRate, onLoop,
+  robot, trick, rider, timeline, camera, zoom, cameraLabel, customCamera, rate, loop,
+  onCamera, onResetCamera, onZoom, onRate, onLoop,
 }: Props) {
   const { duration, phases } = timeline;
   const playhead = usePlayhead(duration, rate, loop);
   const phase = phaseAt(phases, playhead.time);
   const drag = useRef<{ id: number; x: number; y: number; from: SceneCamera; moved: boolean } | null>(null);
+  // Every finger or pointer on the stage; two of them are a pinch, not a drag.
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ distance: number; zoom: number } | null>(null);
+  const stage = useRef<HTMLDivElement>(null);
+  const latest = useRef({ zoom, onZoom });
   const [orbited, setOrbited] = useState(false);
   const inBrowser = useInBrowser();
 
+  useEffect(() => {
+    latest.current = { zoom, onZoom };
+  });
+
+  useEffect(() => {
+    const el = stage.current;
+    if (!el) return;
+    const onWheel = (event: WheelEvent) => {
+      // A trackpad pinch arrives as ctrl + wheel. Plain scrolling is left to the page.
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      latest.current.onZoom(zoomBy(latest.current.zoom, Math.exp(-event.deltaY * WHEEL_ZOOM)));
+    };
+    // Not passive: stopping the browser zooming the whole page needs preventDefault.
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
+  const pinchDistance = () => {
+    const [a, b] = [...pointers.current.values()];
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  };
+
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0 || drag.current) return;
-    drag.current = { id: event.pointerId, x: event.clientX, y: event.clientY, from: camera, moved: false };
+    if (event.button !== 0) return;
+    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     try {
       // Keep the drag when the pointer leaves the stage.
       event.currentTarget.setPointerCapture(event.pointerId);
     } catch {
       // The pointer is already gone; the drag still works while it's over the stage.
     }
+    if (pointers.current.size === 2) {
+      // A second finger turns the drag into a pinch.
+      drag.current = null;
+      pinch.current = { distance: pinchDistance() || 1, zoom };
+      return;
+    }
+    if (pointers.current.size > 2 || drag.current) return;
+    drag.current = { id: event.pointerId, x: event.clientX, y: event.clientY, from: camera, moved: false };
   };
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const point = pointers.current.get(event.pointerId);
+    if (point) {
+      point.x = event.clientX;
+      point.y = event.clientY;
+    }
+    if (pinch.current && pointers.current.size >= 2) {
+      onZoom(zoomBy(pinch.current.zoom, pinchDistance() / pinch.current.distance));
+      return;
+    }
     const d = drag.current;
     if (!d || d.id !== event.pointerId) return;
     const dx = event.clientX - d.x;
@@ -91,13 +141,19 @@ export default function ExplorerStage({
     setOrbited(true);
     onCamera(turnCamera(d.from, dx * DRAG_YAW, dy * DRAG_PITCH));
   };
+  const releasePointer = (id: number) => {
+    pointers.current.delete(id);
+    if (pointers.current.size < 2) pinch.current = null;
+  };
   const onPointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    releasePointer(event.pointerId);
     const d = drag.current;
     if (!d || d.id !== event.pointerId) return;
     drag.current = null;
     if (!d.moved) playhead.toggle();
   };
-  const onPointerCancel = () => {
+  const onPointerCancel = (event: PointerEvent<HTMLDivElement>) => {
+    releasePointer(event.pointerId);
     drag.current = null;
   };
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -106,6 +162,15 @@ export default function ExplorerStage({
     if (event.key === ' ' || event.key === 'Enter') {
       event.preventDefault();
       playhead.toggle();
+    } else if (event.key === '+' || event.key === '=') {
+      event.preventDefault();
+      onZoom(zoomBy(zoom, ZOOM_STEP));
+    } else if (event.key === '-' || event.key === '_') {
+      event.preventDefault();
+      onZoom(zoomBy(zoom, 1 / ZOOM_STEP));
+    } else if (event.key === '0') {
+      event.preventDefault();
+      onZoom(1);
     } else if (KEY_TURN[event.key]) {
       event.preventDefault();
       const [yaw, pitch] = KEY_TURN[event.key];
@@ -124,7 +189,8 @@ export default function ExplorerStage({
         className="explorer-stage"
         role="application"
         aria-roledescription="trick viewer"
-        aria-label={`${trick.name}. Drag or use the arrow keys to move the camera; tap or press space to ${playhead.playing ? 'pause' : 'play'}.`}
+        aria-label={`${trick.name}. Drag or use the arrow keys to move the camera; pinch, or press plus and minus, to zoom; tap or press space to ${playhead.playing ? 'pause' : 'play'}.`}
+        ref={stage}
         tabIndex={0}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -144,6 +210,7 @@ export default function ExplorerStage({
               playbackRate={playhead.playing ? rate : 0.05}
               showSpeedToggle={false}
               camera={camera}
+              zoom={zoom}
               onDone={ignoreDone}
             />
           ) : (
@@ -157,6 +224,19 @@ export default function ExplorerStage({
               <CameraDial camera={camera} />
               {cameraLabel}
             </span>
+            {zoom !== 1 && (
+              <button
+                type="button"
+                className="explorer-zoom-badge"
+                onPointerDown={(e) => e.stopPropagation()}
+                onPointerUp={(e) => e.stopPropagation()}
+                onClick={() => onZoom(1)}
+                aria-label={`Zoom ${zoom.toFixed(1)}×; reset to 1×`}
+              >
+                <TbZoomReset aria-hidden />
+                {zoom.toFixed(1)}×
+              </button>
+            )}
             {customCamera && (
               <button
                 type="button"
@@ -171,7 +251,7 @@ export default function ExplorerStage({
             )}
           </div>
         </div>
-        {!orbited && <span className="explorer-orbit-hint" aria-hidden>Drag to look around</span>}
+        {!orbited && <span className="explorer-orbit-hint" aria-hidden>Drag to look around · pinch to zoom</span>}
       </div>
 
       <div className="explorer-transport">

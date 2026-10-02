@@ -34,7 +34,9 @@ export { default as TrickScene, type HeadPose, type LeadIn } from './scene/Trick
 export {
   DEFAULT_SCENE_CAMERA,
   SCENE_CAMERA_BOUNDS,
+  SCENE_ZOOM,
   clampSceneCamera,
+  clampZoom,
   type SceneCamera,
 } from './scene/camera';
 /** Flat-bar grinds and slides — TrickScene only (the other renderers are flatground). */

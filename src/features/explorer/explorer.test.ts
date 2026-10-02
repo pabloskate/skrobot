@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SCENE_CAMERA, SCENE_CAMERA_BOUNDS, grindSpecFor } from '@skrobot/animations';
+import { DEFAULT_SCENE_CAMERA, SCENE_CAMERA_BOUNDS, SCENE_ZOOM, grindSpecFor } from '@skrobot/animations';
 import { TRICK_BY_ID } from '@/features/tricks';
 import {
   CAMERA_PRESETS,
@@ -11,6 +11,8 @@ import {
   INTO_CHOICES,
   OUT_CHOICES,
   STANCES,
+  ZOOM_RANGE,
+  ZOOM_STEP,
   outEndsFor,
   sceneCamera,
   searchFromState,
@@ -21,6 +23,8 @@ import {
   trickSteps,
   turnCamera,
   withGrind,
+  zoomAt,
+  zoomBy,
   type ExplorerState,
 } from './explorer';
 
@@ -130,6 +134,26 @@ describe('Trick Explorer camera', () => {
   });
 });
 
+describe('Trick Explorer zoom', () => {
+  it('steps in and out evenly and never leaves its range', () => {
+    expect(zoomBy(1, ZOOM_STEP)).toBeCloseTo(ZOOM_STEP, 3);
+    expect(zoomBy(zoomBy(1, ZOOM_STEP), 1 / ZOOM_STEP)).toBeCloseTo(1, 3);
+    expect(zoomBy(SCENE_ZOOM.max, ZOOM_STEP)).toBe(SCENE_ZOOM.max);
+    expect(zoomBy(SCENE_ZOOM.min, 1 / ZOOM_STEP)).toBe(SCENE_ZOOM.min);
+    expect(zoomBy(1, Number.NaN)).toBe(1);
+  });
+
+  it('maps the slider onto the zoom range, settling on 1× near the middle', () => {
+    expect(zoomAt(ZOOM_RANGE.min)).toBeCloseTo(SCENE_ZOOM.min, 9);
+    expect(zoomAt(ZOOM_RANGE.max)).toBeCloseTo(SCENE_ZOOM.max, 9);
+    expect(zoomAt(0)).toBe(1);
+    expect(zoomAt(0.03)).toBe(1);
+    expect(zoomAt(-0.03)).toBe(1);
+    expect(zoomAt(0.2)).toBeGreaterThan(1);
+    expect(zoomAt(-0.2)).toBeLessThan(1);
+  });
+});
+
 describe('Trick Explorer links', () => {
   it('round-trips flatground and grind states through the URL', () => {
     const states: ExplorerState[] = [
@@ -137,6 +161,8 @@ describe('Trick Explorer links', () => {
       { ...DEFAULT_STATE, trick: '360 Flip', stance: 'nollie', rider: 'goofy', camera: 'overhead' },
       grindState({ grind: 'Noseblunt Slide', side: 'Backside', into: 'Pop Shuvit', out: { base: 'Kickflip', end: 'nose' }, stance: 'switch' }),
       grindState({ grind: '50-50 Grind', camera: { yaw: 12.5, pitch: 33, lens: 0.8 } }),
+      { ...DEFAULT_STATE, trick: 'Heelflip', camera: 'head-on', zoom: 1.75 },
+      grindState({ grind: 'Lipslide', camera: { yaw: -10, pitch: 20, lens: 1.1 }, zoom: SCENE_ZOOM.min }),
     ];
     for (const state of states) expect(stateFromSearch(searchFromState(state)), searchFromState(state)).toEqual(state);
   });
@@ -144,6 +170,19 @@ describe('Trick Explorer links', () => {
   it('leaves defaults out of the link', () => {
     expect(searchFromState(DEFAULT_STATE)).toBe('?trick=kickflip');
     expect(searchFromState(grindState({ into: 'Kickflip', out: { base: 'Heelflip', end: 'nose' } }))).toBe('?grind=50-50-grind&in=kickflip&out=nollie-heelflip');
+    expect(searchFromState({ ...DEFAULT_STATE, zoom: 1.5 })).toBe('?trick=kickflip&zoom=1.5');
+  });
+
+  it('keeps a zoom from a link in range, and reads a missing or junk one as 1×', () => {
+    expect(stateFromSearch('?zoom=99').zoom).toBe(SCENE_ZOOM.max);
+    expect(stateFromSearch('?zoom=0').zoom).toBe(SCENE_ZOOM.min);
+    expect(stateFromSearch('?zoom=abc').zoom).toBe(1);
+    expect(stateFromSearch('?zoom=').zoom).toBe(1);
+    expect(stateFromSearch('?trick=heelflip').zoom).toBe(1);
+    // Links written before zoom existed keep opening exactly as they did.
+    expect(stateFromSearch('?trick=heelflip&cam=-30_12_1')).toEqual({
+      ...DEFAULT_STATE, trick: 'Heelflip', camera: { yaw: -30, pitch: 12, lens: 1 },
+    });
   });
 
   it('falls back to defaults for anything it does not know, and clamps custom angles', () => {

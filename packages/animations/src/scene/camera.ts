@@ -1,5 +1,5 @@
 import { GROUND, JUMP, X0 } from '../TrickAnimation';
-import { clamp01, mixHex, norm3, rad, sub3, type P2, type V3 } from './math';
+import { clamp01, mixHex, norm3, rad, smoothstep, sub3, type P2, type V3 } from './math';
 
 /**
  * Crane camera for TrickScene.
@@ -63,6 +63,46 @@ export const SCENE_CAMERA_BOUNDS = Object.freeze({
   pitch: Object.freeze({ min: 0, max: 60 }),
   lens: Object.freeze({ min: 0.65, max: 1.6 }),
 });
+
+/**
+ * Zoom is a magnification of the finished picture, not a second lens: the
+ * perspective stays whatever the lens made it, and everything (sky, ground,
+ * rider, ink) scales together. 1 is the stock framing.
+ */
+export const SCENE_ZOOM = Object.freeze({ min: 0.5, max: 2.5 });
+
+/** A zoom inside SCENE_ZOOM; a missing or invalid one is the stock framing. */
+export function clampZoom(zoom: number | undefined): number {
+  return zoom === undefined || !Number.isFinite(zoom) ? 1 : Math.max(SCENE_ZOOM.min, Math.min(SCENE_ZOOM.max, zoom));
+}
+
+export interface ViewBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** Where a zoomed-in view settles: a little below the hips, so the legs and the board (what a close look is for) stay in the shot. */
+const ZOOM_FOCUS_Y = 250;
+/** The zoom by which the view has settled on the rider. */
+const ZOOM_SETTLED = 2;
+
+/**
+ * The part of the stock picture a zoom shows. Zooming out grows the box about
+ * the stock framing; zooming in shrinks it and slides it toward the rider as
+ * it goes, so the rider stays centered instead of drifting off the bottom of
+ * the stage the way a zoom about a fixed point would.
+ */
+export function zoomedViewBox(zoom: number, stock: ViewBox): ViewBox {
+  const z = clampZoom(zoom);
+  const width = stock.width / z;
+  const height = stock.height / z;
+  const settle = smoothstep((z - 1) / (ZOOM_SETTLED - 1));
+  const cx = stock.x + stock.width / 2 + (ANCHOR_X - (stock.x + stock.width / 2)) * settle;
+  const cy = stock.y + stock.height / 2 + (ZOOM_FOCUS_Y - (stock.y + stock.height / 2)) * settle;
+  return { x: cx - width / 2, y: cy - height / 2, width, height };
+}
 
 const within = (value: number | undefined, fallback: number, bounds: { min: number; max: number }) =>
   value === undefined || !Number.isFinite(value) ? fallback : Math.max(bounds.min, Math.min(bounds.max, value));

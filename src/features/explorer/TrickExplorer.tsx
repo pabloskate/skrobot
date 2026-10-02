@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { TbArrowLeft, TbCheck, TbShare } from 'react-icons/tb';
-import { SCENE_CAMERA_BOUNDS } from '@skrobot/animations';
 import { ROBOT_BY_ID, ROBOTS } from '@/features/robots';
 import {
   CAMERA_PRESETS,
@@ -14,6 +13,8 @@ import {
   stateFromSearch,
   timelineFor,
   trickSteps,
+  zoomAt,
+  ZOOM_RANGE,
   type ExplorerState,
 } from './explorer';
 import CameraDial from './CameraDial';
@@ -99,12 +100,14 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
             rider={state.rider}
             timeline={timeline}
             camera={camera}
+            zoom={state.zoom}
             cameraLabel={cameraLabel(state)}
             customCamera={preset == null}
             rate={rate}
             loop={loop}
             onCamera={(next) => setState({ ...state, camera: next })}
             onResetCamera={() => setState({ ...state, camera: 'classic' })}
+            onZoom={(zoom) => setState({ ...state, zoom })}
             onRate={setRate}
             onLoop={setLoop}
           />
@@ -134,19 +137,20 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
                 );
               })}
             </div>
-            <label className="explorer-lens">
-              <span className="explorer-field-label">Lens</span>
-              <span className="explorer-lens-end">Fisheye</span>
+            <label className="explorer-zoom">
+              <span className="explorer-field-label">Zoom</span>
+              <span className="explorer-zoom-end">Out</span>
               <input
                 type="range"
-                min={SCENE_CAMERA_BOUNDS.lens.min}
-                max={SCENE_CAMERA_BOUNDS.lens.max}
+                min={ZOOM_RANGE.min}
+                max={ZOOM_RANGE.max}
                 step={0.01}
-                value={camera.lens}
-                onChange={(event) => setState({ ...state, camera: { ...camera, lens: Number(event.target.value) } })}
-                aria-label="Lens, from fisheye to long lens"
+                value={Math.log(state.zoom)}
+                onChange={(event) => setState({ ...state, zoom: zoomAt(Number(event.target.value)) })}
+                aria-label="Zoom, from out to in"
+                aria-valuetext={`${state.zoom.toFixed(1)}×`}
               />
-              <span className="explorer-lens-end">Long</span>
+              <span className="explorer-zoom-end">In</span>
             </label>
           </section>
 
