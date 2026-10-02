@@ -29,6 +29,7 @@ import {
 } from './explorer';
 
 const grindState = (patch: Partial<ExplorerState> = {}): ExplorerState => ({ ...DEFAULT_STATE, mode: 'grinds', ...patch });
+const flatState = (patch: Partial<ExplorerState> = {}): ExplorerState => ({ ...DEFAULT_STATE, mode: 'flatground', ...patch });
 
 /** A seeded generator, so shuffle sweeps are repeatable. */
 function seeded(seed: number): () => number {
@@ -45,7 +46,7 @@ describe('Trick Explorer catalog', () => {
     expect([...tiered].sort()).toEqual([...FLATGROUND_BASES].sort());
     for (const base of FLATGROUND_BASES) {
       for (const stance of STANCES) {
-        const trick = stageTrick({ ...DEFAULT_STATE, trick: base, stance });
+        const trick = stageTrick(flatState({ trick: base, stance }));
         expect(TRICK_BY_ID.get(trick.id), `${base} ${stance}`).toMatchObject({ base, stance });
       }
     }
@@ -67,7 +68,7 @@ describe('Trick Explorer catalog', () => {
   it('names a combo the way it is skated, stance first', () => {
     const trick = stageTrick(grindState({ stance: 'switch', grind: 'Crooked Grind', side: 'Backside', into: 'Kickflip', out: { base: 'Heelflip', end: 'nose' } }));
     expect(trick.name).toBe('Switch Kickflip into Backside Crooked Grind Nollie Heelflip Out');
-    expect(stageTrick({ ...DEFAULT_STATE, trick: 'Backside 180', stance: 'fakie' }).name).toBe('Half Cab');
+    expect(stageTrick(flatState({ trick: 'Backside 180', stance: 'fakie' })).name).toBe('Half Cab');
   });
 
   it('drops a trick out when the new grind does not ride the end it pops off', () => {
@@ -81,14 +82,14 @@ describe('Trick Explorer catalog', () => {
     expect(steps.map((s) => s.label)).toEqual(['Approach', 'Inward Heelflip', 'Frontside Lipslide', 'FS Bigspin out']);
     expect(steps[1].detail).toMatch(/^Pop an Inward Heelflip/);
     expect(steps[3].detail).toMatch(/^Pop an FS Bigspin off the tail/);
-    expect(trickSteps({ ...DEFAULT_STATE, trick: 'Kickflip' })[0].detail).not.toBe('');
+    expect(trickSteps(flatState({ trick: 'Kickflip' }))[0].detail).not.toBe('');
   });
 });
 
 describe('Trick Explorer timeline', () => {
   it('lists moments in order, inside the trick, with the tricks in and out of a combo', () => {
     const states = [
-      DEFAULT_STATE,
+      flatState(),
       grindState(),
       grindState({ into: 'Kickflip', out: { base: '360 Flip', end: 'tail' } }),
     ];
@@ -121,11 +122,11 @@ describe('Trick Explorer camera', () => {
   });
 
   it('swings travel-framed angles round for a trick rolling fakie, flatground or grind', () => {
-    const regular = sceneCamera({ ...DEFAULT_STATE, camera: 'head-on' });
-    expect(sceneCamera({ ...DEFAULT_STATE, stance: 'fakie', camera: 'head-on' }).yaw).toBe(-regular.yaw);
+    const regular = sceneCamera(flatState({ camera: 'head-on' }));
+    expect(sceneCamera(flatState({ stance: 'fakie', camera: 'head-on' })).yaw).toBe(-regular.yaw);
     expect(sceneCamera(grindState({ stance: 'fakie', camera: 'head-on' })).yaw).toBe(-regular.yaw);
-    expect(sceneCamera({ ...DEFAULT_STATE, stance: 'fakie', camera: 'overhead' }))
-      .toEqual(sceneCamera({ ...DEFAULT_STATE, camera: 'overhead' }));
+    expect(sceneCamera(flatState({ stance: 'fakie', camera: 'overhead' })))
+      .toEqual(sceneCamera(flatState({ camera: 'overhead' })));
   });
 
   it('turns the camera only as far as the bounds allow', () => {
@@ -158,19 +159,36 @@ describe('Trick Explorer links', () => {
   it('round-trips flatground and grind states through the URL', () => {
     const states: ExplorerState[] = [
       DEFAULT_STATE,
-      { ...DEFAULT_STATE, trick: '360 Flip', stance: 'nollie', rider: 'goofy', camera: 'overhead' },
+      flatState({ trick: '360 Flip', stance: 'nollie', rider: 'goofy', camera: 'overhead' }),
       grindState({ grind: 'Noseblunt Slide', side: 'Backside', into: 'Pop Shuvit', out: { base: 'Kickflip', end: 'nose' }, stance: 'switch' }),
       grindState({ grind: '50-50 Grind', camera: { yaw: 12.5, pitch: 33, lens: 0.8 } }),
-      { ...DEFAULT_STATE, trick: 'Heelflip', camera: 'head-on', zoom: 1.75 },
+      flatState({ trick: 'Heelflip', camera: 'head-on', zoom: 1.75 }),
       grindState({ grind: 'Lipslide', camera: { yaw: -10, pitch: 20, lens: 1.1 }, zoom: SCENE_ZOOM.min }),
     ];
     for (const state of states) expect(stateFromSearch(searchFromState(state)), searchFromState(state)).toEqual(state);
   });
 
   it('leaves defaults out of the link', () => {
-    expect(searchFromState(DEFAULT_STATE)).toBe('?trick=kickflip');
+    expect(searchFromState(DEFAULT_STATE)).toBe('?grind=50-50-grind');
+    expect(searchFromState(flatState())).toBe('?trick=kickflip');
     expect(searchFromState(grindState({ into: 'Kickflip', out: { base: 'Heelflip', end: 'nose' } }))).toBe('?grind=50-50-grind&in=kickflip&out=nollie-heelflip');
-    expect(searchFromState({ ...DEFAULT_STATE, zoom: 1.5 })).toBe('?trick=kickflip&zoom=1.5');
+    expect(searchFromState({ ...DEFAULT_STATE, zoom: 1.5 })).toBe('?grind=50-50-grind&zoom=1.5');
+  });
+
+  it('opens on a grind by default, and on flatground only when a link names a flatground trick', () => {
+    expect(DEFAULT_STATE.mode).toBe('grinds');
+    expect(grindSpecFor(stageTrick(DEFAULT_STATE))).not.toBeNull();
+    for (const bare of ['', '?', '?stance=switch&cam=head-on']) {
+      expect(stateFromSearch(bare).mode, bare).toBe('grinds');
+      expect(stateFromSearch(bare).grind, bare).toBe(DEFAULT_STATE.grind);
+    }
+    expect(stateFromSearch('')).toEqual(DEFAULT_STATE);
+    // A link naming a flatground trick, including one shared before grinds were the default.
+    expect(stateFromSearch('?trick=heelflip')).toEqual(flatState({ trick: 'Heelflip' }));
+    expect(stateFromSearch('?trick=kickflip')).toEqual(flatState());
+    // A grind link wins over a stray trick, and a trick nobody knows opens the default.
+    expect(stateFromSearch('?grind=lipslide&trick=heelflip').mode).toBe('grinds');
+    expect(stateFromSearch('?trick=moonwalk')).toEqual(DEFAULT_STATE);
   });
 
   it('keeps a zoom from a link in range, and reads a missing or junk one as 1×', () => {
@@ -180,9 +198,7 @@ describe('Trick Explorer links', () => {
     expect(stateFromSearch('?zoom=').zoom).toBe(1);
     expect(stateFromSearch('?trick=heelflip').zoom).toBe(1);
     // Links written before zoom existed keep opening exactly as they did.
-    expect(stateFromSearch('?trick=heelflip&cam=-30_12_1')).toEqual({
-      ...DEFAULT_STATE, trick: 'Heelflip', camera: { yaw: -30, pitch: 12, lens: 1 },
-    });
+    expect(stateFromSearch('?trick=heelflip&cam=-30_12_1')).toEqual(flatState({ trick: 'Heelflip', camera: { yaw: -30, pitch: 12, lens: 1 } }));
   });
 
   it('falls back to defaults for anything it does not know, and clamps custom angles', () => {
@@ -197,8 +213,8 @@ describe('Trick Explorer shuffle', () => {
   it('always lands on something new to watch, and only on combos the stage can animate', () => {
     for (let seed = 1; seed <= 200; seed++) {
       const random = seeded(seed);
-      const flat = shuffle(DEFAULT_STATE, random);
-      expect(flat.trick).not.toBe(DEFAULT_STATE.trick);
+      const flat = shuffle(flatState(), random);
+      expect(flat.trick).not.toBe(flatState().trick);
       const combo = shuffle(grindState(), random);
       if (combo.out) expect(outEndsFor(combo.grind)).toContain(combo.out.end);
       expect(grindSpecFor(stageTrick(combo)), stageTrick(combo).name).not.toBeNull();

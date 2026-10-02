@@ -141,7 +141,7 @@ export function grindDescription(grind: string): string {
 }
 
 export const DEFAULT_STATE: Readonly<ExplorerState> = Object.freeze({
-  mode: 'flatground',
+  mode: 'grinds',
   stance: 'regular',
   rider: 'regular',
   trick: 'Kickflip',
@@ -404,7 +404,10 @@ export function stateFromSearch(search: string): ExplorerState {
   };
   const grind = fromSlug(GRIND_CHOICES, params.get('grind'));
   if (!grind) {
-    return { ...base, trick: fromSlug(FLATGROUND_BASES, params.get('trick')) ?? DEFAULT_STATE.trick };
+    // Flatground is asked for by naming its trick; a link naming nothing the
+    // stage knows opens on the default grind.
+    const trick = fromSlug(FLATGROUND_BASES, params.get('trick'));
+    return trick ? { ...base, mode: 'flatground', trick } : base;
   }
   const outParam = params.get('out') ?? '';
   const nose = outParam.startsWith('nollie-');
