@@ -523,7 +523,7 @@ export function grindFrame(time: number, plan: GrindPlan): GrindFrame {
     const across = smoothstep((s - 0.25) / 0.5);
     const ramp = plan.entry ? ENTRY_LOCK_IN : LOCK_IN;
     const lockIn = smoothstep((s - ramp.from) / ramp.span);
-    const trick = plan.entry ? hopFrame(plan.entry, hopClock(tau, plan.entryRate)) : null;
+    const trick = plan.entry ? hopFrame(plan.entry, hopClock(tau, plan.entryRate), true) : null;
     const [noseFoot, tailFoot] = mixFeet(popFeet, spec.feet, smoothstep((s - 0.15) / 0.7));
     const ref = { x: X0, y: GROUND - rise, z: mix(plan.laneZ, plan.lockCenter.z, across) };
     // The pop turns the board about its middle, as on flatground: the tail

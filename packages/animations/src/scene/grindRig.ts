@@ -18,7 +18,7 @@ import {
   type GrindPlan,
 } from './grind';
 import { BAR_Z } from './grindDefinitions';
-import { NO_SPIN, hopClock, type TrickSpin } from './grindTricks';
+import { NO_SPIN, hopClock, landingOnRail, type TrickSpin } from './grindTricks';
 import {
   add3,
   clamp01,
@@ -469,7 +469,7 @@ function withHop(rig: Rig, frame: GrindFrame, plan: GrindPlan, mechanics: RiderM
   if (frame.t >= plan.lockAt) return rig;
   const tau = frame.t - plan.pop;
   const spec = plan.entry?.trick.spec ?? ollieFor(plan);
-  const f = computeFrame(tau < 0 ? Math.max(0, frame.t) : hopClock(tau, plan.entryRate), spec, true, 'slam', 0.65, style);
+  const f = landingOnRail(computeFrame(tau < 0 ? Math.max(0, frame.t) : hopClock(tau, plan.entryRate), spec, true, 'slam', 0.65, style), spec, style);
   const carried = moveRig(solveRig(f, spec, mechanics, style, 'landed'), { x: 0, y: frame.ref.y - f.board.y, z: frame.ref.z });
   // Both bodies must face the same board heading before we blend them.
   // Flatground already supplies the entry trick's spin; add only the turn

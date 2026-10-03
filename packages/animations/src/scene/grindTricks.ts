@@ -1,7 +1,7 @@
 import type { SkateStyle, Stance } from '../types';
 import { flickExtension, orientTrickRotation, type RiderMechanics } from '../stanceMechanics';
 import { FLIP_T, ROLL_IN, catchFraction, computeFrame, specFor, type Frame, type Spec } from '../TrickAnimation';
-import { smoothstep } from './math';
+import { clamp01, smoothstep } from './math';
 
 /**
  * A flatground trick popped into or out of a grind ("Kickflip into Frontside
@@ -145,9 +145,33 @@ export interface HopFrame {
 /** An angle with whole turns taken out: 720 → 0, 180 → 180, -540 → -180. */
 const wrapTurns = (deg: number) => deg - 360 * Math.trunc(deg / 360) || 0;
 
-/** The trick at flatground clock `t` (see hopClock); touchdown holds the finished rotation. */
-export function hopFrame(hop: HopPlan, t: number): HopFrame {
-  const f = computeFrame(t, hop.trick.spec, true, 'slam', 0.65, hop.style);
+/**
+ * The physics frame for a trick that lands on the bar. On flatground a body
+ * spin turns on until touchdown and the landing takes it up; on a rail the
+ * trucks lock on and would stop it dead. So into a grind the rider finishes
+ * the spin by the catch, easing off as it comes round, and arrives settled.
+ */
+export function landingOnRail(f: Frame, spec: Spec, style: SkateStyle): Frame {
+  if (!spec.bodyYaw || f.motion.flight < 0) return f;
+  const spun = Math.sin((clamp01(f.motion.flight / catchFraction(style)) * Math.PI) / 2);
+  const dir = spec.spinDir || 1;
+  // The board turns with the rider; any shuv of its own keeps its clock.
+  const carried = Math.min(spec.yaw, spec.bodyYaw);
+  return {
+    ...f,
+    spin3d: {
+      ...f.spin3d,
+      bodyYawDeg: dir * spun * spec.bodyYaw,
+      yawDeg: dir * (carried * spun + (spec.yaw - carried) * f.motion.rotation),
+    },
+  };
+}
+
+/** The trick at flatground clock `t` (see hopClock); touchdown holds the
+ *  finished rotation. `onRail`: the hop lands it on the bar (landingOnRail). */
+export function hopFrame(hop: HopPlan, t: number, onRail = false): HopFrame {
+  const flat = computeFrame(t, hop.trick.spec, true, 'slam', 0.65, hop.style);
+  const f = onRail ? landingOnRail(flat, hop.trick.spec, hop.style) : flat;
   const turned = orientTrickRotation(hop.mechanics, f.spin3d);
   const done = t >= ROLL_IN + FLIP_T;
   const rotation = f.motion.rotation;
