@@ -8,6 +8,7 @@ import {
   LAND_T,
   FALL_T,
   RobotAvatar,
+  SCENE_SETS,
   SKATE_STYLE_BOUNDS,
   SLOW_MOTION_PLAYBACK_RATE,
   TrickAnimation,
@@ -19,6 +20,7 @@ import {
   type BackgroundSceneId,
   type FallVariant,
   type RiderStance,
+  type SceneSet,
   type SkateStyle,
   type Stance,
 } from '@skrobot/animations';
@@ -161,6 +163,7 @@ export default function App() {
   const [playbackMode, setPlaybackMode] = useState<PlaybackMode>('normal');
   const [viewMode, setViewMode] = useState<ViewMode>('scene');
   const [backgroundSceneId, setBackgroundSceneId] = useState<BackgroundSceneId>(BACKGROUND_SCENE_OPTIONS[0].id);
+  const [sceneSet, setSceneSet] = useState<SceneSet>('plaza');
   const [fallVariant, setFallVariant] = useState<FallVariant>(FALL_VARIANT_OPTIONS[0].id);
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [skateStyle, setSkateStyle] = useState<SkateStyle>(
@@ -607,6 +610,22 @@ export default function App() {
           </div>
         </div>
 
+        {activeView === 'scene' && <div>
+          <h2 className={styles.sectionTitle}>Set</h2>
+          <div className={styles.optionGrid}>
+            {SCENE_SETS.map((option) => (
+              <button
+                key={option.id}
+                className={`${styles.optionBtn} ${sceneSet === option.id ? styles.optionBtnActive : ''}`}
+                onClick={() => setSceneSet(option.id)}
+                aria-pressed={sceneSet === option.id}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>}
+
         {activeView !== '3d' && activeView !== 'scene' && <div>
           <h2 className={styles.sectionTitle}>Background</h2>
           <div className={styles.optionGrid}>
@@ -661,6 +680,7 @@ export default function App() {
                 fallVariant={fallVariant}
                 riderStance={selectedRiderStance}
                 paused={paused}
+                set={sceneSet}
                 onDone={() => {}}
               />
             ) : activeView === '3d' || activeView === '3d-legacy' ? (

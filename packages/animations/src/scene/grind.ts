@@ -14,6 +14,7 @@ import {
   type FallVariant,
 } from '../TrickAnimation';
 import { WHEEL_BOTTOM } from './board';
+import { POP_RISE } from './rig';
 import { FOLLOW_POP } from './camera';
 import {
   CROUCH_START,
@@ -525,10 +526,12 @@ export function grindFrame(time: number, plan: GrindPlan): GrindFrame {
     const trick = plan.entry ? hopFrame(plan.entry, hopClock(tau, plan.entryRate)) : null;
     const [noseFoot, tailFoot] = mixFeet(popFeet, spec.feet, smoothstep((s - 0.15) / 0.7));
     const ref = { x: X0, y: GROUND - rise, z: mix(plan.laneZ, plan.lockCenter.z, across) };
-    // The pop turns the board about its middle, as on flatground, and levels
-    // off on flatground's clock; a trick's own pitch comes straight from the
-    // flatground physics, scaled to this pop.
-    const pop = trick ? (trick.flat.board.rot * POP_IN) / FLAT_POP : plan.popIn * (1 - smoothstep(tau / (0.3 * FLIP_T)));
+    // The pop turns the board about its middle, as on flatground: the tail
+    // strike tips it up over POP_RISE and it levels off on flatground's
+    // clock; a trick's own pitch comes straight from the flatground physics,
+    // scaled to this pop.
+    const strike = smoothstep(tau / POP_RISE);
+    const pop = strike * (trick ? (trick.flat.board.rot * POP_IN) / FLAT_POP : plan.popIn * (1 - smoothstep(tau / (0.3 * FLIP_T))));
     // The rider's spin carries the board round; the lock's own turn comes on top.
     const heading = trick?.heading ?? 0;
     const board = {

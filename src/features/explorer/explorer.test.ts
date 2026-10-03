@@ -8,11 +8,14 @@ import {
   FLATGROUND_TIERS,
   GRIND_CHOICES,
   GRIND_SIDES,
+  GRIND_TIERS,
   INTO_CHOICES,
+  INTO_TIERS,
   OUT_CHOICES,
   STANCES,
   ZOOM_RANGE,
   ZOOM_STEP,
+  grindMatchesSearch,
   outEndsFor,
   sceneCamera,
   searchFromState,
@@ -20,6 +23,7 @@ import {
   stageTrick,
   stateFromSearch,
   timelineFor,
+  trickInName,
   trickSteps,
   turnCamera,
   withGrind,
@@ -50,6 +54,31 @@ describe('Trick Explorer catalog', () => {
         expect(TRICK_BY_ID.get(trick.id), `${base} ${stance}`).toMatchObject({ base, stance });
       }
     }
+  });
+
+  it('shelves every grind and every trick into a grind in exactly one group, grinds apart from slides', () => {
+    expect(GRIND_TIERS.flatMap((tier) => tier.bases).sort()).toEqual([...GRIND_CHOICES].sort());
+    expect(INTO_TIERS.flatMap((tier) => tier.bases).sort()).toEqual([...INTO_CHOICES].sort());
+    const [grinds, slides] = GRIND_TIERS;
+    expect(grinds.bases).toContain('Crooked Grind');
+    expect(slides.bases).toEqual(expect.arrayContaining(['Boardslide', 'Noseblunt Slide']));
+    expect(grinds.bases.filter((grind) => slides.bases.includes(grind))).toEqual([]);
+  });
+
+  it('finds a grind by the name skaters say', () => {
+    expect(GRIND_CHOICES.filter((grind) => grindMatchesSearch(grind, 'crooks'))).toEqual(['Crooked Grind', 'Overcrooked Grind']);
+    expect(GRIND_CHOICES.filter((grind) => grindMatchesSearch(grind, 'fifty fifty'))).toEqual(['50-50 Grind']);
+    expect(GRIND_CHOICES.filter((grind) => grindMatchesSearch(grind, 'lip slide'))).toEqual(['Lipslide']);
+    expect(GRIND_CHOICES.filter((grind) => grindMatchesSearch(grind, '  '))).toEqual(GRIND_CHOICES);
+    expect(GRIND_CHOICES.filter((grind) => grindMatchesSearch(grind, 'moonwalk'))).toEqual([]);
+  });
+
+  it('names how the rider gets on the bar by their stance', () => {
+    expect(trickInName(grindState())).toBe('Ollie on');
+    expect(trickInName(grindState({ stance: 'switch' }))).toBe('Switch Ollie on');
+    expect(trickInName(grindState({ stance: 'nollie' }))).toBe('Nollie on');
+    expect(trickInName(grindState({ stance: 'fakie', into: 'Kickflip' }))).toBe('Fakie Kickflip');
+    expect(trickInName(grindState({ stance: 'nollie', into: 'Heelflip' }))).toBe('Nollie Heelflip');
   });
 
   it('only builds grind combos the stage can animate', () => {
@@ -164,6 +193,8 @@ describe('Trick Explorer links', () => {
       grindState({ grind: '50-50 Grind', camera: { yaw: 12.5, pitch: 33, lens: 0.8 } }),
       flatState({ trick: 'Heelflip', camera: 'head-on', zoom: 1.75 }),
       grindState({ grind: 'Lipslide', camera: { yaw: -10, pitch: 20, lens: 1.1 }, zoom: SCENE_ZOOM.min }),
+      flatState({ trick: 'Kickflip', set: 'plaza' }),
+      grindState({ grind: 'Crooked Grind', set: 'waterfront', camera: 'follow' }),
     ];
     for (const state of states) expect(stateFromSearch(searchFromState(state)), searchFromState(state)).toEqual(state);
   });
@@ -173,6 +204,14 @@ describe('Trick Explorer links', () => {
     expect(searchFromState(flatState())).toBe('?trick=kickflip');
     expect(searchFromState(grindState({ into: 'Kickflip', out: { base: 'Heelflip', end: 'nose' } }))).toBe('?grind=50-50-grind&in=kickflip&out=nollie-heelflip');
     expect(searchFromState({ ...DEFAULT_STATE, zoom: 1.5 })).toBe('?grind=50-50-grind&zoom=1.5');
+    expect(searchFromState({ ...DEFAULT_STATE, set: 'plaza' })).toBe('?grind=50-50-grind&set=plaza');
+  });
+
+  it('opens on the waterfront, and on the plaza when a link asks for it', () => {
+    expect(DEFAULT_STATE.set).toBe('waterfront');
+    expect(stateFromSearch('?grind=lipslide').set).toBe('waterfront');
+    expect(stateFromSearch('?trick=heelflip&set=plaza').set).toBe('plaza');
+    expect(stateFromSearch('?set=moon').set).toBe('waterfront');
   });
 
   it('opens on a grind by default, and on flatground only when a link names a flatground trick', () => {

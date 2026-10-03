@@ -25,6 +25,7 @@ the loaded web app or explicitly noted as not routed yet:
 - `auth` — passwordless sign-in UI, session state, logout.
 - `billing` — quota/upgrade screen and dormant Stripe API behavior.
 - `explorer` — Trick Explorer animation playground, routed as its own page at `/explore`; not yet linked from the app's navigation, so native reaches it only by URL.
+- `explorer3d` — Trick Explorer 3D preview at `/explore/3d` (three.js/WebGL); not linked from the app, so native reaches it only by URL. Needs WebGL 2 in the WebView; without it the stage says so instead of drawing.
 - `game` — S.K.A.T.E. rules and on-screen game mode.
 - `gallery` — flatground trick gallery with stance filters and optional curated video tips.
 - `home` — landing hero and flatground robot roster entry point.

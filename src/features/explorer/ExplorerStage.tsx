@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
 import { TbPlayerPauseFilled, TbPlayerPlayFilled, TbRefresh, TbRepeat, TbRepeatOff, TbZoomReset } from 'react-icons/tb';
-import { TrickScene, type RiderStance, type Robot, type SceneCamera, type Trick } from '@skrobot/animations';
+import type { RiderStance, Robot, SceneCamera, SceneSet, Trick } from '@skrobot/animations';
+import { TrickScene3D } from '@skrobot/animations/three';
 import { ZOOM_STEP, phaseAt, turnCamera, zoomBy, type Timeline } from './explorer';
 import { usePlayhead } from './usePlayhead';
 import CameraDial from './CameraDial';
@@ -39,6 +40,7 @@ interface Props {
   camera: SceneCamera;
   /** Magnification of the picture, 1 stock. */
   zoom: number;
+  set: SceneSet;
   cameraLabel: string;
   customCamera: boolean;
   rate: number;
@@ -54,9 +56,7 @@ const ignoreDone = () => {};
 const noSubscription = () => () => {};
 
 /**
- * The scene only renders in the browser: its geometry is floating-point
- * trig, which Node and the browser can round differently in the last digit,
- * and a hydration mismatch there isn't patched up.
+ * WebGL and the scene's geometry render only in the browser.
  */
 const useInBrowser = () => useSyncExternalStore(noSubscription, () => true, () => false);
 
@@ -66,7 +66,7 @@ const useInBrowser = () => useSyncExternalStore(noSubscription, () => true, () =
  * trick so a new trick starts from the top.
  */
 export default function ExplorerStage({
-  robot, trick, rider, timeline, camera, zoom, cameraLabel, customCamera, rate, loop,
+  robot, trick, rider, timeline, camera, zoom, set, cameraLabel, customCamera, rate, loop,
   onCamera, onResetCamera, onZoom, onRate, onLoop,
 }: Props) {
   const { duration, phases } = timeline;
@@ -185,6 +185,36 @@ export default function ExplorerStage({
 
   return (
     <section className="explorer-stage-card" aria-label="Trick stage">
+      <div className="explorer-stage-bar">
+        <h2 className="explorer-stage-title">{trick.name}</h2>
+        <div className="explorer-stage-camera">
+          <span className="explorer-cam-badge">
+            <CameraDial camera={camera} />
+            {cameraLabel}
+          </span>
+          {zoom !== 1 && (
+            <button
+              type="button"
+              className="explorer-zoom-badge"
+              onClick={() => onZoom(1)}
+              aria-label={`Zoom ${zoom.toFixed(1)}×; reset to 1×`}
+            >
+              <TbZoomReset aria-hidden />
+              {zoom.toFixed(1)}×
+            </button>
+          )}
+          {customCamera && (
+            <button
+              type="button"
+              className="explorer-cam-reset"
+              onClick={onResetCamera}
+              aria-label="Reset camera angle"
+            >
+              <TbRefresh aria-hidden />
+            </button>
+          )}
+        </div>
+      </div>
       <div
         className="explorer-stage"
         role="application"
@@ -200,7 +230,7 @@ export default function ExplorerStage({
       >
         <div className="explorer-scene" inert>
           {inBrowser ? (
-            <TrickScene
+            <TrickScene3D
               robot={robot}
               trick={trick}
               landed
@@ -208,48 +238,14 @@ export default function ExplorerStage({
               riderStance={rider}
               fixedTime={playhead.time}
               playbackRate={playhead.playing ? rate : 0.05}
-              showSpeedToggle={false}
               camera={camera}
               zoom={zoom}
+              set={set}
               onDone={ignoreDone}
             />
           ) : (
             <div className="explorer-scene-placeholder" />
           )}
-        </div>
-        <div className="explorer-hud">
-          <h2 className="explorer-hud-title">{trick.name}</h2>
-          <div className="explorer-hud-camera">
-            <span className="explorer-cam-badge">
-              <CameraDial camera={camera} />
-              {cameraLabel}
-            </span>
-            {zoom !== 1 && (
-              <button
-                type="button"
-                className="explorer-zoom-badge"
-                onPointerDown={(e) => e.stopPropagation()}
-                onPointerUp={(e) => e.stopPropagation()}
-                onClick={() => onZoom(1)}
-                aria-label={`Zoom ${zoom.toFixed(1)}×; reset to 1×`}
-              >
-                <TbZoomReset aria-hidden />
-                {zoom.toFixed(1)}×
-              </button>
-            )}
-            {customCamera && (
-              <button
-                type="button"
-                className="explorer-cam-reset"
-                onPointerDown={(e) => e.stopPropagation()}
-                onPointerUp={(e) => e.stopPropagation()}
-                onClick={onResetCamera}
-                aria-label="Reset camera angle"
-              >
-                <TbRefresh aria-hidden />
-              </button>
-            )}
-          </div>
         </div>
         {!orbited && <span className="explorer-orbit-hint" aria-hidden>Drag to look around · pinch to zoom</span>}
       </div>

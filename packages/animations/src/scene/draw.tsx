@@ -171,8 +171,37 @@ export function roundedBox(
 ): P2[] {
   const raw = boxHull(cam, frame, spec);
   const shape = clip ? clipConvex(raw, clip) : raw;
+  shadeShape(g, shape, cam.project(frame.origin).s, color, outline);
+  return shape;
+}
+
+/**
+ * Projected silhouette of a convex solid with rounded edges: the hull of
+ * `corners` (frame-local fwd / up / side), each swollen into a ball of
+ * radius `r`. Corners are the rounding's centers, so the solid reaches `r`
+ * past them.
+ */
+export function solidHull(cam: Camera, frame: Frame3, corners: ReadonlyArray<readonly [number, number, number]>, r: number): P2[] {
+  const unitF = norm3(frame.fwd);
+  const unitU = norm3(frame.up);
+  const unitS = norm3(frame.side);
+  const pts: P2[] = [];
+  for (const [f, u, s] of corners) {
+    const c = frame.at(f, u, s);
+    for (const d of SPHERE_DIRS) {
+      pts.push(cam.project(add3(c, add3(scale3(unitF, d.x * r), add3(scale3(unitU, d.y * r), scale3(unitS, d.z * r))))));
+    }
+  }
+  return hull(pts);
+}
+
+/**
+ * Paint a convex silhouette the way every rounded part is: ink outline,
+ * the shadow tone, and the lit tone nudged toward the sun. `s` is the
+ * perspective scale at the part, for the ink's width.
+ */
+export function shadeShape(g: Group, shape: P2[], s: number, color: string, outline = OUTLINE): void {
   const silhouette = pathOf(shape);
-  const s = cam.project(frame.origin).s;
   const k = nextKey('x');
   if (outline > 0) {
     g.outline.push(
@@ -200,7 +229,6 @@ export function roundedBox(
       <path d={pathOf(lit)} fill={tone(color, 0.6)} />
     </g>,
   );
-  return shape;
 }
 
 /** How squarely a surface faces the camera: 1 head-on, 0 edge-on, < 0 away. */

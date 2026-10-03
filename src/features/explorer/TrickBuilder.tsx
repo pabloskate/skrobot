@@ -6,16 +6,18 @@ import type { PopEnd } from '@skrobot/animations';
 import { trickMatchesSearch } from '@/features/tricks';
 import {
   FLATGROUND_TIERS,
-  GRIND_CHOICES,
   GRIND_SIDES,
-  INTO_CHOICES,
+  GRIND_TIERS,
+  INTO_TIERS,
   OUT_CHOICES,
   RIDERS,
   STANCES,
   flatgroundTrick,
+  grindMatchesSearch,
   outEndsFor,
   outName,
   shuffle,
+  trickInName,
   withGrind,
   type ExplorerMode,
   type ExplorerState,
@@ -45,6 +47,63 @@ interface Props {
   onChange: (next: ExplorerState) => void;
 }
 
+interface FieldProps {
+  state: ExplorerState;
+  set: (patch: Partial<ExplorerState>) => void;
+}
+
+/** How the trick is ridden. A flatground trick is named by it; a grind combo's belongs to its "Trick in". */
+function StanceField({ state, set, hint }: FieldProps & { hint?: string }) {
+  return (
+    <div className="explorer-field">
+      <span className="explorer-field-label" id="explorer-stance-label">
+        Stance {hint && <small>{hint}</small>}
+      </span>
+      <div className="explorer-segmented" role="radiogroup" aria-labelledby="explorer-stance-label">
+        {STANCES.map((stance) => (
+          <button
+            key={stance}
+            type="button"
+            role="radio"
+            aria-checked={state.stance === stance}
+            className={state.stance === stance ? 'active' : ''}
+            onClick={() => set({ stance })}
+          >
+            {capitalize(stance)}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+interface SearchProps {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  label: string;
+}
+
+function SearchField({ value, onChange, placeholder, label }: SearchProps) {
+  return (
+    <label className="explorer-search">
+      <TbSearch aria-hidden />
+      <input
+        type="search"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        aria-label={label}
+      />
+      {value && (
+        <button type="button" onClick={() => onChange('')} aria-label="Clear search">
+          <TbX aria-hidden />
+        </button>
+      )}
+    </label>
+  );
+}
+
 /** Pick what the robot skates: a flatground trick, or a grind combo built from three slots. */
 export default function TrickBuilder({ state, onChange }: Props) {
   const [query, setQuery] = useState('');
@@ -56,6 +115,12 @@ export default function TrickBuilder({ state, onChange }: Props) {
   const set = (patch: Partial<ExplorerState>) => onChange({ ...state, ...patch });
   const matches = (base: string) => trickMatchesSearch(flatgroundTrick(base, state.stance), query);
   const tiers = FLATGROUND_TIERS.map((tier) => ({ ...tier, bases: tier.bases.filter(matches) })).filter((tier) => tier.bases.length > 0);
+  const intoTiers = INTO_TIERS
+    .map((tier) => ({ ...tier, bases: tier.bases.filter((base) => trickMatchesSearch(flatgroundTrick(base, 'regular'), query)) }))
+    .filter((tier) => tier.bases.length > 0);
+  const grindTiers = GRIND_TIERS
+    .map((tier) => ({ ...tier, bases: tier.bases.filter((grind) => grindMatchesSearch(grind, query)) }))
+    .filter((tier) => tier.bases.length > 0);
 
   const chooseEnd = (end: PopEnd) => {
     setPreferredEnd(end);
@@ -80,30 +145,17 @@ export default function TrickBuilder({ state, onChange }: Props) {
             role="tab"
             aria-selected={state.mode === mode.id}
             className={state.mode === mode.id ? 'active' : ''}
-            onClick={() => set({ mode: mode.id })}
+            onClick={() => {
+              setQuery('');
+              set({ mode: mode.id });
+            }}
           >
             {mode.label}
           </button>
         ))}
       </div>
 
-      <div className="explorer-field">
-        <span className="explorer-field-label" id="explorer-stance-label">Stance</span>
-        <div className="explorer-segmented" role="radiogroup" aria-labelledby="explorer-stance-label">
-          {STANCES.map((stance) => (
-            <button
-              key={stance}
-              type="button"
-              role="radio"
-              aria-checked={state.stance === stance}
-              className={state.stance === stance ? 'active' : ''}
-              onClick={() => set({ stance })}
-            >
-              {capitalize(stance)}
-            </button>
-          ))}
-        </div>
-      </div>
+      {state.mode === 'flatground' && <StanceField state={state} set={set} />}
 
       <div className="explorer-field explorer-field-inline">
         <span className="explorer-field-label" id="explorer-rider-label">
@@ -127,21 +179,7 @@ export default function TrickBuilder({ state, onChange }: Props) {
 
       {state.mode === 'flatground' ? (
         <div className="explorer-picker">
-          <label className="explorer-search">
-            <TbSearch aria-hidden />
-            <input
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search tricks, like “tre flip”"
-              aria-label="Search tricks"
-            />
-            {query && (
-              <button type="button" onClick={() => setQuery('')} aria-label="Clear search">
-                <TbX aria-hidden />
-              </button>
-            )}
-          </label>
+          <SearchField value={query} onChange={setQuery} placeholder="Search tricks, like “tre flip”" label="Search tricks" />
           {tiers.length === 0 && <p className="explorer-empty">No trick matches “{query}”.</p>}
           {tiers.map((tier) => (
             <div key={tier.label} className="explorer-tier">
@@ -166,7 +204,7 @@ export default function TrickBuilder({ state, onChange }: Props) {
         <div className="explorer-picker">
           <div className="explorer-combo" role="tablist" aria-label="Build the combo">
             {([
-              ['into', 'Trick in', state.into ?? (state.stance === 'nollie' ? 'Nollie on' : 'Ollie on')],
+              ['into', 'Trick in', trickInName(state)],
               ['grind', 'Grind', `${state.side === 'Frontside' ? 'FS' : 'BS'} ${state.grind}`],
               ['out', 'Trick out', state.out ? outName(state.out) : 'Pop off'],
             ] as const).map(([id, label, value], i) => (
@@ -177,7 +215,10 @@ export default function TrickBuilder({ state, onChange }: Props) {
                   role="tab"
                   aria-selected={slot === id}
                   className={`explorer-slot ${slot === id ? 'active' : ''} ${(id === 'into' && !state.into) || (id === 'out' && !state.out) ? 'empty' : ''}`}
-                  onClick={() => setSlot(id)}
+                  onClick={() => {
+                    setQuery('');
+                    setSlot(id);
+                  }}
                 >
                   <span className="explorer-slot-label">{label}</span>
                   <span className="explorer-slot-value">{value}</span>
@@ -189,28 +230,40 @@ export default function TrickBuilder({ state, onChange }: Props) {
           <div className="explorer-slot-panel" role="tabpanel">
             {slot === 'into' && (
               <>
+                <StanceField state={state} set={set} hint="how you roll in" />
                 <p className="explorer-note">Flip, shuv, or spin your way onto the bar.</p>
-                <div className="explorer-chips">
-                  <button
-                    type="button"
-                    className={`explorer-chip explorer-chip-plain ${state.into == null ? 'active' : ''}`}
-                    aria-pressed={state.into == null}
-                    onClick={() => set({ into: null })}
-                  >
-                    {state.stance === 'nollie' ? 'Nollie on' : 'Ollie on'}
-                  </button>
-                  {INTO_CHOICES.map((base) => (
+                <SearchField value={query} onChange={setQuery} placeholder="Search tricks, like “tre flip”" label="Search tricks to pop in" />
+                {!query && (
+                  <div className="explorer-chips">
                     <button
-                      key={base}
                       type="button"
-                      className={`explorer-chip ${state.into === base ? 'active' : ''}`}
-                      aria-pressed={state.into === base}
-                      onClick={() => set({ into: base })}
+                      className={`explorer-chip explorer-chip-plain ${state.into == null ? 'active' : ''}`}
+                      aria-pressed={state.into == null}
+                      onClick={() => set({ into: null })}
                     >
-                      {base}
+                      {state.stance === 'nollie' ? 'Nollie on' : 'Ollie on'}
                     </button>
-                  ))}
-                </div>
+                  </div>
+                )}
+                {query && intoTiers.length === 0 && <p className="explorer-empty">No trick matches “{query}”.</p>}
+                {intoTiers.map((tier) => (
+                  <div key={tier.label} className="explorer-tier">
+                    <h3>{tier.label}</h3>
+                    <div className="explorer-chips">
+                      {tier.bases.map((base) => (
+                        <button
+                          key={base}
+                          type="button"
+                          className={`explorer-chip ${state.into === base ? 'active' : ''}`}
+                          aria-pressed={state.into === base}
+                          onClick={() => set({ into: base })}
+                        >
+                          {base}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </>
             )}
             {slot === 'grind' && (
@@ -229,19 +282,26 @@ export default function TrickBuilder({ state, onChange }: Props) {
                     </button>
                   ))}
                 </div>
-                <div className="explorer-chips">
-                  {GRIND_CHOICES.map((grind) => (
-                    <button
-                      key={grind}
-                      type="button"
-                      className={`explorer-chip ${state.grind === grind ? 'active' : ''}`}
-                      aria-pressed={state.grind === grind}
-                      onClick={() => onChange(withGrind(state, grind))}
-                    >
-                      {grind}
-                    </button>
-                  ))}
-                </div>
+                <SearchField value={query} onChange={setQuery} placeholder="Search grinds, like “crooks”" label="Search grinds" />
+                {grindTiers.length === 0 && <p className="explorer-empty">No grind matches “{query}”.</p>}
+                {grindTiers.map((tier) => (
+                  <div key={tier.label} className="explorer-tier">
+                    <h3>{tier.label}</h3>
+                    <div className="explorer-chips">
+                      {tier.bases.map((grind) => (
+                        <button
+                          key={grind}
+                          type="button"
+                          className={`explorer-chip ${state.grind === grind ? 'active' : ''}`}
+                          aria-pressed={state.grind === grind}
+                          onClick={() => onChange(withGrind(state, grind))}
+                        >
+                          {grind}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </>
             )}
             {slot === 'out' && (

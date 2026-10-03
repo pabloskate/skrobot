@@ -1,7 +1,8 @@
 import type { ReactElement } from 'react';
 import { GROUND, W, X0 } from '../TrickAnimation';
-import { PALETTE, facesCamera, lambert, tone, type Camera } from './camera';
-import { mixHex, pathOf, type V3 } from './math';
+import { PALETTE, lambert, tone, type Camera } from './camera';
+import { mixHex, type V3 } from './math';
+import { BLEED_L, BLEED_R, BLEED_Y, SPAN_HI, SPAN_LO, boxFaces, boxOnGround, groundQuad, repeats, worldPath } from './setKit';
 
 /**
  * Golden-hour skate plaza behind the TrickScene robot.
@@ -21,24 +22,8 @@ const LEDGE_H = 17;
 const LAWN_Z = LEDGE_FRONT_Z - LEDGE_DEPTH - 8;
 const TREE_Z = -440;
 const FAR_Z = -20000;
-const SPAN_LO = X0 - 2200;
-const SPAN_HI = X0 + 2400;
 
 const bgInk = mixHex(PALETTE.ink, PALETTE.concrete, 0.5);
-/** Screen-space layers run past the viewBox so a container wider or taller
- *  than the stage's aspect letterboxes into more scene, not a seam. */
-const BLEED_L = -W;
-const BLEED_R = 2 * W;
-const BLEED_Y = 320;
-
-/** Positions of a repeating pattern element after scrolling, within the span. */
-function repeats(offset: number, period: number, scroll: number): number[] {
-  const out: number[] = [];
-  const start = offset - scroll;
-  let x = SPAN_LO + ((((start - SPAN_LO) % period) + period) % period);
-  for (; x < SPAN_HI; x += period) out.push(x);
-  return out;
-}
 
 // Skyline blocks: [x, width, height] in viewBox units, repeating.
 const CITY_FAR: ReadonlyArray<readonly [number, number, number]> = [
@@ -73,17 +58,7 @@ function skyline(
   return <path key={key} d={d} fill={fill} />;
 }
 
-function groundQuad(cam: Camera, x0: number, x1: number, z0: number, z1: number): string {
-  const quad = cam.clipPolygon([
-    { x: x0, y: GROUND, z: z0 },
-    { x: x1, y: GROUND, z: z0 },
-    { x: x1, y: GROUND, z: z1 },
-    { x: x0, y: GROUND, z: z1 },
-  ]);
-  return pathOf(quad.map((p) => cam.project(p)));
-}
-
-/** Axis-aligned prop box standing on the ground; visible faces, flat lit. */
+/** A ledge: an outlined, sunlit box with waxed paint along its front lip. */
 function propBox(
   cam: Camera,
   key: string,
@@ -93,42 +68,20 @@ function propBox(
   z1: number,
   h: number,
   color: string,
-  paint?: string,
+  paint: string,
 ): ReactElement {
-  const y0 = GROUND;
-  const y1 = GROUND - h;
-  const P = (x: number, y: number, z: number): V3 => ({ x, y, z });
-  const faces: Array<{ n: V3; pts: V3[] }> = [
-    { n: { x: 0, y: -1, z: 0 }, pts: [P(x0, y1, z0), P(x1, y1, z0), P(x1, y1, z1), P(x0, y1, z1)] },
-    { n: { x: 0, y: 0, z: 1 }, pts: [P(x0, y0, z1), P(x1, y0, z1), P(x1, y1, z1), P(x0, y1, z1)] },
-    { n: { x: -1, y: 0, z: 0 }, pts: [P(x0, y0, z0), P(x0, y0, z1), P(x0, y1, z1), P(x0, y1, z0)] },
-    { n: { x: 1, y: 0, z: 0 }, pts: [P(x1, y0, z0), P(x1, y0, z1), P(x1, y1, z1), P(x1, y1, z0)] },
-  ];
-  const s = cam.project(P((x0 + x1) / 2, y1, z1)).s;
-  const els: ReactElement[] = [];
-  // Faces are clipped to the near plane: a camera swung toward the travel
-  // looks down the ledge row, whose far end runs past it.
-  const facePath = (pts: V3[]) => {
-    const clipped = cam.clipPolygon(pts);
-    return clipped.length < 3 ? null : pathOf(clipped.map((p) => cam.project(p)));
-  };
-  for (const [i, face] of faces.entries()) {
-    const c = face.pts[0];
-    if (!facesCamera(cam, c, face.n)) continue;
-    const d = facePath(face.pts);
-    if (!d) continue;
-    els.push(
-      <path key={i} d={d} fill={tone(color, lambert(face.n))}
-        stroke={bgInk} strokeWidth={1.1 * s} strokeLinejoin="round" />,
-    );
-  }
-  if (paint) {
-    // Painted lip along the front-top edge, like waxed curb paint.
-    const lip = 3.2;
-    const d = facePath([P(x0, y1, z1), P(x1, y1, z1), P(x1, y1 + lip, z1), P(x0, y1 + lip, z1)]);
-    if (d) els.push(<path key="paint" d={d} fill={tone(paint, lambert({ x: 0, y: 0, z: 1 }))} />);
-  }
-  return <g key={key}>{els}</g>;
+  const b = boxOnGround(x0, x1, z0, z1, h);
+  const s = cam.project({ x: (x0 + x1) / 2, y: b.top, z: z1 }).s;
+  const lip = 3.2;
+  const d = worldPath(cam, [
+    { x: x0, y: b.top, z: z1 }, { x: x1, y: b.top, z: z1 }, { x: x1, y: b.top + lip, z: z1 }, { x: x0, y: b.top + lip, z: z1 },
+  ]);
+  return (
+    <g key={key}>
+      {boxFaces(cam, b, color, { ink: bgInk, inkWidth: 1.1 * s })}
+      {d && <path key="paint" d={d} fill={tone(paint, lambert({ x: 0, y: 0, z: 1 }))} />}
+    </g>
+  );
 }
 
 export interface BackdropIds {

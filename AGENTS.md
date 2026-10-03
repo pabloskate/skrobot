@@ -55,7 +55,7 @@ src/
 │   ├── api/billing/      #   Dormant Stripe routes, disabled unless ENABLE_BILLING=true
 │   ├── api/me/           #   Current user + voice quota
 │   ├── tune/             #   /tune → robot behavior editor shell
-│   ├── explore/          #   /explore → Trick Explorer shell
+│   ├── explore/          #   /explore → Trick Explorer shell; /explore/3d → its three.js preview
 │   └── globals.css       #   all styling (class-based, mobile-first)
 ├── features/             # One folder per web feature; public API is index.ts
 │   ├── auth/             # Passwordless sign-in UI + server session/magic-link code
@@ -69,7 +69,8 @@ src/
 │   ├── skater/           # Player model: skate score (unlocks at 8 games, beta-gated), robot-ladder placement, adaptive rival robot
 │   ├── home/             # Landing screen / flatground robot choice
 │   ├── install/          # App Store handoff + Android PWA install guidance (web-only)
-│   ├── explorer/         # Trick Explorer: customer-facing animation playground (tricks + grind combos, camera angles, shareable links)
+│   ├── explorer/         # Trick Explorer: customer-facing animation playground (tricks + grind combos, camera angles, spots, shareable links)
+│   ├── explorer3d/       # /explore/3d preview: the explorer on the three.js renderer (@skrobot/animations/three), with an SVG comparison
 │   └── gallery/          # Flatground trick gallery + player trick book (search, stance filters, video tips, want-to-learn shelf, proven marks, consistency stats)
 ├── platform/             # Runtime infrastructure (Cloudflare env, D1 bindings)
 └── shared/               # Primitive domain-neutral helpers (online status, etc.)

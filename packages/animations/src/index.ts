@@ -39,6 +39,8 @@ export {
   clampZoom,
   type SceneCamera,
 } from './scene/camera';
+/** The sets TrickScene can be staged on. */
+export { SCENE_SETS, type SceneSet } from './scene/setKit';
 /** Flat-bar grinds and slides — TrickScene only (the other renderers are flatground). */
 export { grindTimelineFor, type GrindTimeline } from './scene/grind';
 /**

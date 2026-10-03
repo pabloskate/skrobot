@@ -15,14 +15,15 @@ If the answer is unclear, tighten the feature boundary before adding more code.
 | Route or API wiring | `src/app/` | Thin shells only. Move behavior into a feature. |
 | Web feature API | `src/features/<name>/index.ts` | Public web boundary. Other web features import this barrel. |
 | Game rules in the web app | `src/features/game/engine.ts` | Pure reducer; edit here for rule changes. |
-| On-screen gameplay | `src/features/game/` | Web UI may call reducer, robot model, trick catalog, and records. |
+| On-screen gameplay | `src/features/game/` | Web UI may call reducer, robot model, trick catalog, and records. `TrickAnimation.tsx` loads the shared three.js renderer for waterfront attempts, including the pick reel, replay, and slow motion. |
 | Robot set presentation | `src/features/game/RobotSetTurn.tsx` | Owns one set turn; `pickTimeline.ts` plans the reel and `PickReel.tsx` renders it. Eligible tricks and weighted selection stay in `engine.ts`. |
 | Voice gameplay | `src/features/voice/` | Web Live API client code plus resolver/prompts. |
 | Voice token mint | `src/features/voice/server/` | Server-only; imported directly only by `src/app/api/live-token`. |
 | Auth/session/quota | `src/features/auth/` | Client auth state in the barrel; server code under `server/`. |
 | Billing | `src/features/billing/` | Beta quota UI plus dormant Stripe server helpers. |
 | Tricks | `src/features/tricks/` | Catalog, difficulty, metadata, picker UI, and the default routed trick pool. Routed games currently use flatground only. |
-| Trick Explorer | `src/features/explorer/` | Customer-facing animation playground at `/explore`: flatground tricks and grind combos on the scene stage, scrubbable playback, camera angles, and shareable links. |
+| Trick Explorer | `src/features/explorer/` | Customer-facing animation playground at `/explore`: flatground tricks and grind combos on the three.js stage, scrubbable playback, camera angles, a choice of spot, and shareable links. |
+| Trick Explorer 3D | `src/features/explorer3d/` | Preview at `/explore/3d`: the explorer's tricks, cameras, and links on the three.js renderer, with a side-by-side comparison against the SVG scene. Reuses the explorer's picker, clock, and URL model; `/explore` also uses the three.js renderer. |
 | Gallery | `src/features/gallery/` | Flatground trick gallery plus the player trick book: browse the catalog with stance filters, curated video tips, personal proven/learning state, and per-trick consistency stats. |
 | Robots | `src/features/robots/` | Roster metadata, explicit per-trick land-rate/set-weight tables, profile/select/avatar UI, and the browser-local editor routed at `/tune`. Routed home currently exposes flatground robots only. |
 | Player skill / adaptive rival | `src/features/skater/` | Skate score (player-only curve fit + frontier fallback), robot-ladder placement, and a generated rival that copies the closest roster behavior table. All derived from the game log; nothing persisted. |
@@ -32,7 +33,7 @@ If the answer is unclear, tighten the feature boundary before adding more code.
 | Runtime infrastructure | `src/platform/server/` | Cloudflare env and bindings, D1, future logging/HTTP adapters. |
 | Shared primitives | `src/shared/` | Reserved for domain-neutral primitives only, such as online status. |
 | Expo companion app | `apps/mobile/` | Native WebView shell that loads the same web app; no alternate game implementation. |
-| Shared animations | `packages/animations/` | Reusable robot/avatar/trick animation components, physics model, push-off scene, and browser feedback helpers. |
+| Shared animations | `packages/animations/` | Reusable robot/avatar/trick animation components, physics model, push-off scene, and browser feedback helpers. The three.js renderer is a separate entry, `@skrobot/animations/three`, so three.js ships only to pages that import it. |
 | Animation playground | `skrobot-animations/` | Standalone Vite playground for animation iteration; consumes `@skrobot/animations` and owns only preview controls/fixtures. |
 | Frozen design references | `prototype/` | Static artifacts with no build step; see its README for the maintained product sources. |
 
@@ -53,6 +54,8 @@ imports so moving these files does not require app or playground changes.
 | Grind rider motion and handoff from flatground | `scene/grindRig.ts` |
 | Scene rendering and reusable lead-in presentation | `scene/TrickScene.tsx` |
 | Scene camera angles, lens, and the bounds every trick is framed for | `scene/camera.ts` (`SceneCamera`, `SCENE_CAMERA_BOUNDS`) |
+| The scene in WebGL (`TrickScene3D`, `@skrobot/animations/three`): per-frame stage state worked out exactly as TrickScene does, the camera recovered from `scene/camera.ts`, the robot/board/bar/plaza meshes and their cel and ink shaders, and the outline pass. It reads the motion solvers and never changes them | `three/` (`stage.ts`, `view.ts`, `robot3d.ts`, `board3d.ts`, `bar3d.ts`, `plaza3d.ts`, `materials.ts`, `post.ts`, `renderer.ts`) |
+| Scene sets (backdrops): the stock plaza, the bayside waterfront and its far panorama, and the ground/prop/shadow helpers they share. A set's sky and panorama are `FarLayer`s: separate SVGs under the scene that are painted once and slid with a transform, so only what moves is repainted each frame | `scene/backdrop.tsx`, `scene/waterfront.tsx` (composition), `scene/waterfrontProps.tsx`, `scene/waterfrontPanorama.tsx`, `scene/setKit.tsx` (`SceneSet`) |
 
 Motion solvers share the skeleton contract, not each other's private constants.
 Grind entry reuses the flatground solver for the hop; tricks into and out of a
@@ -70,20 +73,21 @@ route is importing server-only feature code. ESLint enforces the common cases;
 | Feature | May depend on | Must not depend on |
 |---|---|---|
 | `apps/mobile` | React Native/Expo, WebView, linking helpers | `src/*`, Cloudflare platform, web feature internals, game/domain packages |
-| `packages/animations` | React, package-local files | `src/*`, `skrobot-animations/*`, app/platform code |
+| `packages/animations` | React, three.js (only under `three/`), package-local files | `src/*`, `skrobot-animations/*`, app/platform code |
 | `skrobot-animations` | package-local files, `@skrobot/animations` | `src/*`; reusable animation behavior belongs in `packages/animations` |
 | `auth` | `platform/server` from server files | Gameplay, screens, other features |
 | `analytics` | `platform/server` from server files | Gameplay and screen features; AppShell supplies lifecycle context through the public tracking API |
 | `billing` | `platform/server` from server files | Auth UI, gameplay, screens, other features |
 | `tricks` | none | Other features |
-| `explorer` | `tricks`, `robots`, `@skrobot/animations` | Other features; it plays animations and never reads or writes player records |
+| `explorer` | `tricks`, `robots`, `@skrobot/animations`, `@skrobot/animations/three` | Other features; it plays animations and never reads or writes player records |
+| `explorer3d` | `explorer`, `robots`, `@skrobot/animations`, `@skrobot/animations/three` | Other features; `explorer` must not import it back |
 | `gallery` | `tricks`, `records`, `robots`, `skater` | Other features |
 | `records` | `tricks` | Other features; the catalog dependency is limited to legacy display-name migration into stable trick IDs |
 | `robots` | `tricks`, `records`, `@skrobot/animations` | Screens, game, voice, auth, billing, skater |
 | `skater` | `tricks`, `records`, `robots` | Screens, game, voice, auth, billing |
 | `home` | `robots`, `records`, `skater` | Game/voice flow internals; non-flatground roster setup |
 | `install` | none | Other features; AppShell supplies native-shell context |
-| `game` | `tricks`, `robots`, `records`, `@skrobot/animations` | Voice, home, auth, billing |
+| `game` | `tricks`, `robots`, `records`, `@skrobot/animations`, `@skrobot/animations/three` | Voice, home, auth, billing |
 | `voice` | `game`, `tricks`, `robots`, `records`, `auth`, `billing` | Home screens |
 | `platform/server` | platform-local modules only | Features, app UI, domain logic |
 | `shared` | shared-local modules only | Features, app, platform, domain logic |

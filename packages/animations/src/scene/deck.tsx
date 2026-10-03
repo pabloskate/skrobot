@@ -61,7 +61,8 @@ export function kickY(x: number): number {
 export const deckTopY = (x: number) => kickY(x) - THICKNESS / 2;
 export const deckBottomY = (x: number) => kickY(x) + THICKNESS / 2;
 
-function halfWidth(x: number): number {
+/** Half the deck's width at `x` along it: full through the middle, rounded off at the tips. */
+export function halfWidth(x: number): number {
   const ax = Math.abs(x);
   const start = TIP_X - CORNER_R;
   if (ax <= start) return HALF_W;

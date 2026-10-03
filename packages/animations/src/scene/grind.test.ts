@@ -6,7 +6,7 @@ import { resolveSkateStyle } from '../skateStyle';
 import { resolveRiderMechanics } from '../stanceMechanics';
 import type { RiderStance, Robot, SkateStyle, Stance } from '../types';
 import TrickScene from './TrickScene';
-import { HANGER_BOTTOM, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z, deckTopY } from './board';
+import { HANGER_BOTTOM, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z, deckTopY, drawBoard } from './board';
 import { fallSink, makeCamera } from './camera';
 import { facing } from './draw';
 import { drawRobot } from './robot';
@@ -307,6 +307,46 @@ describe('Grind body', () => {
       }
     }
     expect(underside).toBeGreaterThan(0);
+    expect(wrong.slice(0, 5)).toEqual([]);
+  }, 30_000);
+
+  it('keeps the far wheels behind the bar and the near ones in front, whichever side of the deck the camera sees', () => {
+    // A tilted 5-0 or a slide filmed low shows the camera the deck's
+    // underside. The far wheels must still go behind the bar there, not over
+    // it, and the deck under the whole running gear.
+    const cameras = [{ yaw: -26, pitch: 9, lens: 1 }, { yaw: -50, pitch: 0, lens: 1 }, { yaw: -75, pitch: 4, lens: 1 }, { yaw: 60, pitch: 0, lens: 1 }];
+    const look = { graphic: '#f2a541', stripe: '#ffffff' };
+    const bar = { el: createElement('g'), cover: createElement('g'), clipId: 'bar', z: BAR_Z, top: BAR_TOP_Y };
+    const keysOf = (node: unknown): string[] => {
+      if (Array.isArray(node)) return node.flatMap(keysOf);
+      return node && typeof node === 'object' && 'key' in node ? [String((node as { key: unknown }).key)] : [];
+    };
+    const seen = { top: 0, underside: 0 };
+    const wrong: string[] = [];
+    for (const { base, side, rider, stance, label } of everyGrind()) {
+      if (stance !== 'regular') continue;
+      const { plan, mechanics } = planFor(base, side, stance, rider, null);
+      for (const camera of cameras) {
+        for (let t = plan.lockAt; t < plan.off; t += 0.1) {
+          const { rig, frame } = solveGrindRig(t, plan, mechanics, NEUTRAL);
+          const cam = makeCamera(grindCameraLift(plan, t, frame.rail, 0), camera);
+          const board = drawBoard(cam, rig.board, look, { angle: 0, sweep: 0 }, bar);
+          const keys = keysOf((board.props as { children: unknown }).children);
+          const at = (key: string) => keys.indexOf(key);
+          const fromAbove = at('deck') > at('bar');
+          seen[fromAbove ? 'top' : 'underside']++;
+          if (!fromAbove && at('deck') !== 0) wrong.push(`${label} ${camera.yaw}° t=${t.toFixed(2)}: deck over the gear from below`);
+          for (const tx of [-WHEEL_X, WHEEL_X]) {
+            for (const wz of [-WHEEL_Z, WHEEL_Z]) {
+              const far = rig.board.point({ x: tx, y: WHEEL_Y, z: wz }).z < BAR_Z - 0.5;
+              if (far !== at(`wheel${tx}${wz}`) < at('bar')) wrong.push(`${label} ${camera.yaw}° t=${t.toFixed(2)} wheel ${tx},${wz}`);
+            }
+          }
+        }
+      }
+    }
+    expect(seen.top).toBeGreaterThan(0);
+    expect(seen.underside).toBeGreaterThan(0);
     expect(wrong.slice(0, 5)).toEqual([]);
   }, 30_000);
 

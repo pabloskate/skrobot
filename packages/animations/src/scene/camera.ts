@@ -136,6 +136,13 @@ export interface Camera {
    * relative to the stock view: less as the camera swings to face the travel.
    */
   drift: number;
+  /**
+   * How far (viewBox units at lens 1) the crane's swing has slid things at
+   * infinity, such as a far skyline, from where the stock view shows them.
+   */
+  pan: number;
+  /** Magnification of things at infinity: 1 at the stock lens, more on a long lens. */
+  farScale: number;
   /** Whether a point is in front of the near plane. */
   sees(p: V3): boolean;
   /** Clip a world segment against the near plane. */
@@ -145,6 +152,7 @@ export interface Camera {
 }
 
 const STOCK_COS_YAW = Math.cos(rad(DEFAULT_SCENE_CAMERA.yaw));
+const STOCK_YAW = rad(DEFAULT_SCENE_CAMERA.yaw);
 
 export function makeCamera(lift: number, view: Readonly<SceneCamera> = DEFAULT_SCENE_CAMERA): Camera {
   const yaw = rad(view.yaw);
@@ -208,6 +216,8 @@ export function makeCamera(lift: number, view: Readonly<SceneCamera> = DEFAULT_S
     eye,
     horizonY: ANCHOR_Y - focal * Math.tan(pitch),
     drift: cosA / STOCK_COS_YAW,
+    pan: FOCAL * (yaw - STOCK_YAW),
+    farScale: view.lens,
     sees: (p) => depthOf(p) <= limit,
     clip,
     clipPolygon,

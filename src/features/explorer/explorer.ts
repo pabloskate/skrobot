@@ -5,6 +5,7 @@ import {
   LAND_T,
   ROLL_IN,
   SCENE_CAMERA_BOUNDS,
+  SCENE_SETS,
   SCENE_ZOOM,
   canEnterGrind,
   canExitGrind,
@@ -19,9 +20,18 @@ import {
   type PopEnd,
   type RiderStance,
   type SceneCamera,
+  type SceneSet,
   type SkateStyle,
 } from '@skrobot/animations';
-import { TRICKS, TRICK_BY_NAME, trickDescription, type Stance, type Trick } from '@/features/tricks';
+import {
+  TRICKS,
+  TRICK_BY_NAME,
+  trickDescription,
+  trickDiscipline,
+  trickMatchesSearch,
+  type Stance,
+  type Trick,
+} from '@/features/tricks';
 
 /**
  * The Trick Explorer's model: what's on the stage (one flatground trick, or a
@@ -61,6 +71,8 @@ export interface ExplorerState {
   camera: CameraPresetId | SceneCamera;
   /** How far in the picture is magnified, whatever the angle: 1 is the stock framing. */
   zoom: number;
+  /** The spot the robot skates: the bayside waterfront, or the stock plaza. */
+  set: SceneSet;
 }
 
 export const STANCES: readonly Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
@@ -109,8 +121,30 @@ export const GRIND_CHOICES: readonly string[] = [...GRIND_BASES].sort(
   (a, b) => (TRICK_BY_NAME.get(a)?.difficulty ?? 10) - (TRICK_BY_NAME.get(b)?.difficulty ?? 10),
 );
 
+const isSlide = (grind: string) => {
+  const trick = TRICK_BY_NAME.get(grind);
+  return trick != null && trickDiscipline(trick) === 'slide';
+};
+
+/** The grinds on the trucks, then the slides on the deck, each easiest first. */
+export const GRIND_TIERS: readonly TrickTier[] = [
+  { label: 'Grinds', bases: GRIND_CHOICES.filter((grind) => !isSlide(grind)) },
+  { label: 'Slides', bases: GRIND_CHOICES.filter(isSlide) },
+];
+
+/** Whether a grind answers a search, by its name or what skaters call it ("crooks", "50 50"). */
+export function grindMatchesSearch(grind: string, query: string): boolean {
+  const trick = TRICK_BY_NAME.get(grind);
+  return trick ? trickMatchesSearch(trick, query) : grind.toLowerCase().includes(query.trim().toLowerCase());
+}
+
 /** Flatground tricks that can be popped into a grind. */
 export const INTO_CHOICES: readonly string[] = FLATGROUND_BASES.filter(canEnterGrind);
+
+/** The tricks that can be popped into a grind, grouped the way flatground tricks are. */
+export const INTO_TIERS: readonly TrickTier[] = FLATGROUND_TIERS
+  .map(({ label, bases }) => ({ label, bases: bases.filter((base) => INTO_CHOICES.includes(base)) }))
+  .filter((tier) => tier.bases.length > 0);
 
 /**
  * Tricks offered out of a grind: the flips, shuvs, 180s, and bigspins the
@@ -151,6 +185,7 @@ export const DEFAULT_STATE: Readonly<ExplorerState> = Object.freeze({
   out: null,
   camera: 'classic',
   zoom: 1,
+  set: 'waterfront',
 });
 
 /** Keeps a trick out only if the grind rides the end it pops off. */
@@ -168,6 +203,12 @@ function grindBase(state: ExplorerState): string {
   const sided = `${state.side} ${state.grind}`;
   const out = state.out ? joinGrindExit(sided, state.out.base, state.out.end) : sided;
   return state.into ? joinGrindBase(state.into, out) : out;
+}
+
+/** How the rider gets on the bar: "Ollie on", "Switch Ollie on", "Nollie on", or the trick popped in ("Fakie Kickflip"). */
+export function trickInName(state: ExplorerState): string {
+  if (state.stance === 'nollie' && !state.into) return 'Nollie on';
+  return `${STANCE_LEAD[state.stance]}${state.into ?? 'Ollie on'}`;
 }
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -401,6 +442,7 @@ export function stateFromSearch(search: string): ExplorerState {
     rider: params.get('rider') === 'goofy' ? 'goofy' : 'regular',
     camera: parseCamera(params.get('cam')),
     zoom: parseZoom(params.get('zoom')),
+    set: SCENE_SETS.find((option) => option.id === params.get('set'))?.id ?? DEFAULT_STATE.set,
   };
   const grind = fromSlug(GRIND_CHOICES, params.get('grind'));
   if (!grind) {
@@ -441,5 +483,6 @@ export function searchFromState(state: ExplorerState): string {
       : [round(state.camera.yaw, 1), round(state.camera.pitch, 1), round(state.camera.lens, 2)].join('_'));
   }
   if (state.zoom !== 1) params.set('zoom', String(round(state.zoom, 2)));
+  if (state.set !== DEFAULT_STATE.set) params.set('set', state.set);
   return `?${params.toString()}`;
 }

@@ -22,6 +22,9 @@ export const TOE_REACH = 3.6;
 /** Shoe box half extents (robot.tsx draws them) so soles sit on the grip. */
 export const SHOE_HALF_HEIGHT = 4;
 export const SHOE_HALF_LENGTH = 12;
+export const SHOE_HALF_WIDTH = 6;
+/** Rounding of the shoe box's edges. */
+export const SHOE_ROUND = 3.6;
 /** Deck half-width across the rails (board.tsx draws it). */
 export const DECK_HALF_WIDTH = 8.6;
 export const SHOULDER = { x: 2, y: -32, z: 17 } as const;

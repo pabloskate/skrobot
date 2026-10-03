@@ -24,14 +24,16 @@ import {
   type BackgroundSceneId,
   type FallVariant,
 } from '../TrickAnimation';
-import { LIGHT, PALETTE, cameraLift, fallSink, makeCamera, zoomedViewBox, type Camera, type SceneCamera } from './camera';
+import { PALETTE, cameraLift, fallSink, makeCamera, zoomedViewBox, type Camera, type SceneCamera, type ViewBox } from './camera';
 import { drawBackdrop } from './backdrop';
 import { boardShadowPoints, drawBoard, wheelRoll, type BoardBar } from './board';
 import { resetKeys } from './draw';
+import { drawWaterfront, waterfrontIds } from './waterfront';
+import { shadowPath, type FarLayer, type SceneSet } from './setKit';
 import { barSpan, grindCameraLift, grindStreetDist, planGrind, type GrindPlan } from './grind';
 import { BAR_TOP_Y, BAR_Z, grindSpecFor } from './grindDefinitions';
 import { solveGrindRig } from './grindRig';
-import { clamp01, easeOutCubic, hull, mixHex, pathOf, type P2, type V3 } from './math';
+import { clamp01, easeOutCubic, mixHex, type V3 } from './math';
 import { barShadowParts, drawBar } from './rail';
 import { drawRobot, type Expression } from './robot';
 import { solveRig } from './rig';
@@ -107,6 +109,8 @@ interface Props {
   camera?: SceneCamera;
   /** Magnify the picture about the rider: 1 is stock, more is closer, less shows more of the plaza. Perspective stays the camera's. */
   zoom?: number;
+  /** The backdrop: the stock plaza, or the bayside waterfront. */
+  set?: SceneSet;
 }
 
 function grindExpression(t: number, plan: GrindPlan): Expression {
@@ -130,27 +134,36 @@ const BAR_REACH = 52;
 const hipX = (rig: Rig) => (rig.legs[0].hip.x + rig.legs[1].hip.x) / 2;
 const hipZ = (rig: Rig) => (rig.legs[0].hip.z + rig.legs[1].hip.z) / 2;
 
-/** Where a point's shadow falls on the ground along the sun's rays. */
-function cast(p: V3): V3 {
-  const t = Math.max(0, GROUND - p.y) / -LIGHT.y;
-  return { x: p.x - LIGHT.x * t, y: GROUND, z: p.z - LIGHT.z * t };
-}
+const percent = (share: number) => `${(share * 100).toFixed(4)}%`;
 
 /**
- * Hull of cast points, each widened by `r` so thin limbs still shade. The
- * hull is taken on the ground (x, z) and clipped to the near plane before
- * projecting, so a bar's shadow running past the camera stays whole.
+ * A far layer of the set as its own SVG under the scene's, framed to match
+ * it exactly. One that slides gets its own compositing layer, so moving it
+ * is a transform the browser applies without repainting anything.
  */
-function shadowPath(cam: Camera, pts: V3[], r: number): string {
-  const out: P2[] = [];
-  for (const p of pts) {
-    const c = cast(p);
-    for (const [dx, dz] of [[r, 0], [-r, 0], [0, r], [0, -r]] as const) {
-      out.push({ x: c.x + dx, y: c.z + dz });
-    }
-  }
-  const ground = cam.clipPolygon(hull(out).map((q) => ({ x: q.x, y: GROUND, z: q.y })));
-  return ground.length < 3 ? '' : pathOf(ground.map((p) => cam.project(p)));
+function FarSvg({ layer, view }: { layer: FarLayer; view: ViewBox }) {
+  const { box, shift } = layer;
+  return (
+    <svg
+      viewBox={`${box.x} ${box.y} ${box.width} ${box.height}`}
+      preserveAspectRatio="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      style={{
+        position: 'absolute',
+        left: percent((box.x - view.x) / view.width),
+        top: percent((box.y - view.y) / view.height),
+        width: percent(box.width / view.width),
+        height: percent(box.height / view.height),
+        maxWidth: 'none',
+        pointerEvents: 'none',
+        ...(shift === undefined ? null : { transform: `translateX(${percent(shift / box.width)})`, willChange: 'transform' }),
+      }}
+    >
+      {layer.defs && <defs>{layer.defs}</defs>}
+      {layer.art}
+    </svg>
+  );
 }
 
 function robotShadow(cam: Camera, rig: Rig): string[] {
@@ -182,6 +195,7 @@ export default function TrickScene({
   leadIn,
   camera,
   zoom = 1,
+  set = 'plaza',
 }: Props) {
   const idBase = useId().replace(/:/g, '');
   const skateStyle = useMemo(() => resolveSkateStyle(robot.skateStyle), [robot.skateStyle]);
@@ -234,7 +248,9 @@ export default function TrickScene({
     haze: `${idBase}-haze`,
   };
   const shadowBlurId = `${idBase}-shadow`;
-  const backdrop = drawBackdrop(cam, scroll, ids, viewTop, viewBottom);
+  const backdrop: { defs: ReactElement; layers: ReactElement[]; far?: FarLayer[] } = set === 'waterfront'
+    ? drawWaterfront(cam, scroll, waterfrontIds(idBase), view)
+    : drawBackdrop(cam, scroll, ids, viewTop, viewBottom);
   // The bar is laid out in street distance, so it scrolls with the plaza.
   const span = plan ? barSpan(plan, streetDist) : null;
 
@@ -333,6 +349,7 @@ export default function TrickScene({
       className={`trick-anim trick-anim--3d trick-scene ${isPlaying && staticTime == null ? 'trick-anim--moving' : ''}`}
       style={{ background: PALETTE.concrete }}
       data-renderer="scene"
+      data-set={set}
       data-rider-stance={riderStance}
       data-nose-foot={mechanics.noseFoot}
       data-toe-side={mechanics.orientationSign}
@@ -363,7 +380,9 @@ export default function TrickScene({
           else if (lead.skipTo != null && t < lead.skipTo) seek(lead.skipTo);
         }}
       >
-        <svg viewBox={viewBox} xmlns="http://www.w3.org/2000/svg" style={{ display: 'block' }}>
+        {backdrop.far?.map((layer) => <FarSvg key={layer.key} layer={layer} view={view} />)}
+        {/* Positioned, so it paints over the far layers before it. */}
+        <svg viewBox={viewBox} xmlns="http://www.w3.org/2000/svg" style={{ display: 'block', position: 'relative' }}>
           <defs>
             {backdrop.defs}
             <filter id={shadowBlurId} x="-30%" y="-60%" width="160%" height="220%">

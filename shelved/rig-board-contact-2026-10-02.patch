@@ -1,0 +1,698 @@
+diff --git a/packages/animations/src/scene/rig.ts b/packages/animations/src/scene/rig.ts
+index c270177..edf83c6 100644
+--- a/packages/animations/src/scene/rig.ts
++++ b/packages/animations/src/scene/rig.ts
+@@ -32,6 +32,7 @@ import {
+   type Rig,
+   frameOf,
+   moveFrame,
++  type Frame3,
+   solveLeg,
+   softFloor,
+   hermite,
+@@ -48,6 +49,7 @@ import { flickExtension, orientTrickRotation, type RiderMechanics } from '../sta
+ import {
+   FLIP_T,
+   FOOT_Y,
++  GROUND,
+   JUMP,
+   ROLL_IN,
+   clampFootReach,
+@@ -57,7 +59,9 @@ import {
+   type Pt,
+   type Spec,
+ } from '../TrickAnimation';
+-import { add3, clamp01, rad, rotX, rotY, rotZ, scale3, smoothstep, sub3, type V3 } from './math';
++import { add3, clamp01, cross3, dot3, rad, rotX, rotY, rotZ, scale3, smoothstep, sub3, type V3 } from './math';
++import { WHEEL_BOTTOM } from './board';
++import { BOARD_HULL, soleDepth, type BoardSweep, type DeckFrame } from './boardVolume';
+ 
+ /**
+  * Physics frame → world-space skeleton.
+@@ -77,6 +81,18 @@ import { add3, clamp01, rad, rotX, rotY, rotZ, scale3, smoothstep, sub3, type V3
+  * - the hips ride between the feet and slide back over the heels as they
+  *   sink, the torso hinges over the toes, the arms balance out
+  *   along the board, and the head steadies and watches the board in the air.
++ *
++ * The physics was drawn side-on, where the deck is a line, so two things are
++ * settled here against the board's real volume (boardVolume.ts):
++ *
++ * - the pop: the tail strikes the ground and the board pivots up off it
++ *   rather than sinking through it, tipped only as far as a front foot riding
++ *   the nose up can let it go;
++ * - the feet stand on the grip, never in it, and through a flip they lift
++ *   clear of the whole cylinder the rolling rails, trucks and wheels sweep,
++ *   ahead of the roll, then come back down onto the grip as it comes round.
++ *   The hips give them the room (the leg clearance below), so a flip is
++ *   ridden with the knees tucked up, as it is on a real board.
+  */
+ 
+ /** Fraction of a frontside half spin the shoulders take (see New 3D). */
+@@ -98,11 +114,32 @@ const TUCK_FREE = 12;
+ const LEG_CLEAR = 29;
+ /** Flight fraction where the feet start settling onto their touchdown spots. */
+ const CATCH_START = 0.86;
++/** Flight fraction by which the feet have left their stance for their flight marks. */
++const TAKEOFF_END = 0.18;
+ /** Seconds a fall takes to hand the hips over to the fall physics. */
+ const FALL_HANDOFF = 0.24;
+ /** Head nod (deg) toward the board while it's in the air. */
+ const LOOK_DOWN_TRICK = 16;
+ 
++// ----- Board contact -----
++
++/** The pop's nose-up pitch (deg): the physics' side-on snap is kept up to
++ *  POP_PITCH_KNEE and eased in to no more than POP_PITCH_MAX, the most a tail
++ *  strike tips this board with a front foot riding the nose. */
++const POP_PITCH_KNEE = 20;
++const POP_PITCH_MAX = 40;
++/** Seconds the tail takes to snap down to the ground. */
++const POP_SNAP = 0.045;
++/** How far ahead of the roll the feet lift: they are clear of the whole
++ *  swept cylinder once the board has rolled 90/ROLL_LEAD degrees, and stay
++ *  clear until it is that far from coming round. */
++const ROLL_LEAD = 2.2;
++/** Gap under a sole (world units) over which it settles flat onto the deck. */
++const FOOT_SETTLE = 7;
++/** Seconds after a missed landing's touchdown that the feet stop holding to
++ *  the board: the rider is coming off it. */
++const FALL_RELEASE = 0.18;
++
+ // ----- Hip trajectory -----
+ 
+ interface FlightArc {
+@@ -217,6 +254,95 @@ function hipState(f: Frame, spec: Spec, style: SkateStyle, clearance: number): H
+   };
+ }
+ 
++// ----- Board contact -----
++
++/** Soft cap: `x` unchanged up to `knee`, easing in toward `max` past it. */
++function softCap(x: number, knee: number, max: number): number {
++  const a = Math.abs(x);
++  if (a <= knee) return x;
++  return Math.sign(x) * (knee + (max - knee) * Math.tanh((a - knee) / (max - knee)));
++}
++
++/**
++ * The board's pitch. In the air it is the physics' pitch, with the pop
++ * tipped no further than the board goes (POP_PITCH_MAX) and the tail
++ * snapping down over POP_SNAP rather than between two frames. An
++ * impossible's pitch is its wrap, and a fall's is the fall's: both pass
++ * through.
++ */
++function popPitch(f: Frame, spec: Spec): number {
++  if (spec.roll || f.motion.flight < 0 || f.motion.flight >= 1) return f.board.rot;
++  return softCap(f.board.rot, POP_PITCH_KNEE, POP_PITCH_MAX) * smoothstep((f.t - ROLL_IN) / POP_SNAP);
++}
++
++/** How the feet keep to the board this frame. */
++interface Contact {
++  /** How far ahead of the board's roll and spin the soles keep clear (see soleDepth). */
++  sweep: BoardSweep;
++  /** 0 → 1: how firmly the feet are kept on and out of the board; let go in a fall. */
++  hold: number;
++}
++
++function boardContact(f: Frame, spec: Spec, landed: boolean): Contact {
++  const airborne = f.motion.flight >= 0 && f.motion.flight < 1;
++  // Clear of a rotation from once it has turned 90/ROLL_LEAD degrees until
++  // it is that far from done.
++  const ahead = (degrees: number) => {
++    const lead = airborne ? Math.min(f.motion.rotation, 1 - f.motion.rotation) * degrees * ROLL_LEAD : 0;
++    return Math.sin(rad(Math.min(90, Math.max(0, lead))));
++  };
++  return {
++    // The board turning under the feet, not with them as in a 180.
++    sweep: { roll: ahead(Math.abs(spec.flips) * 360), spin: ahead(Math.abs(spec.yaw - spec.bodyYaw)) },
++    hold: landed || f.motion.flight < 1 ? 1 : 1 - smoothstep((f.t - ROLL_IN - FLIP_T) / FALL_RELEASE),
++  };
++}
++
++/** `v` turned by `angle` (rad) about the unit axis `n`. */
++function turnAbout(v: V3, n: V3, angle: number): V3 {
++  const c = Math.cos(angle);
++  const s = Math.sin(angle);
++  return add3(add3(scale3(v, c), scale3(cross3(n, v), s)), scale3(n, dot3(n, v) * (1 - c)));
++}
++
++/** The frame turned about `pivot`, by `k` of the turn that brings its up to `toUp`. */
++function tiltFrame(frame: Frame3, pivot: V3, toUp: V3, k: number): Frame3 {
++  const axis = cross3(frame.up, toUp);
++  const sin = Math.hypot(axis.x, axis.y, axis.z);
++  if (sin < 1e-9) return frame;
++  const n = scale3(axis, 1 / sin);
++  const angle = Math.atan2(sin, dot3(frame.up, toUp)) * k;
++  const fwd = turnAbout(frame.fwd, n, angle);
++  const up = turnAbout(frame.up, n, angle);
++  const side = turnAbout(frame.side, n, angle);
++  return frameOf(
++    add3(pivot, turnAbout(sub3(frame.origin, pivot), n, angle)),
++    (d) => add3(add3(scale3(fwd, d.x), scale3(up, -d.y)), scale3(side, d.z)),
++  );
++}
++
++/**
++ * A foot set down on the board: lifted along the deck's up until its sole
++ * is out of the board (and, through a flip, out of the roll's sweep), then
++ * settled flat on the deck as it nears it, turning on the ankle so the shin
++ * stays where it is. Feet off to the side of the board are left alone.
++ */
++function onTheBoard(deck: DeckFrame, contact: Contact, shoe: Frame3, ankle: V3): { shoe: Frame3; ankle: V3 } {
++  if (contact.hold <= 0) return { shoe, ankle };
++  const up = scale3(deck.down, -1);
++  const raise = (s: Frame3, a: V3) => {
++    const depth = soleDepth(deck, s, contact.sweep);
++    if (!(depth > 0)) return { shoe: s, ankle: a, depth };
++    const by = scale3(up, depth * contact.hold);
++    return { shoe: moveFrame(s, by), ankle: add3(a, by), depth };
++  };
++  const set = raise(shoe, ankle);
++  const settle = (1 - smoothstep(-set.depth / FOOT_SETTLE)) * contact.hold;
++  if (!(settle > 0)) return { shoe: set.shoe, ankle: set.ankle };
++  const flat = raise(tiltFrame(set.shoe, set.ankle, up, settle), set.ankle);
++  return { shoe: flat.shoe, ankle: flat.ankle };
++}
++
+ export function solveRig(
+   f: Frame,
+   spec: Spec,
+@@ -257,18 +383,34 @@ export function solveRig(
+   // ----- Board -----
+   const flipDeg = oriented.flipDeg;
+   const spinP = f.motion.rotation;
+-  const pitchDeg = f.board.rot + (spec.forwardFlip ? Math.sin(spinP * Math.PI) * 42 : 0);
++  const pitchDeg = popPitch(f, spec) + (spec.forwardFlip ? Math.sin(spinP * Math.PI) * 42 : 0);
+   const yawDeg = oriented.yawDeg;
+-  const center: V3 = { x: f.board.x, y: f.board.y, z: 0 };
++  const physical: V3 = { x: f.board.x, y: f.board.y, z: 0 };
+   const popFoot = spec.roll !== 0 ? (spec.nollie ? f.footR : f.footL) : null;
+-  const pivot: V3 = popFoot ? { x: f.body.x + popFoot.x, y: f.body.y + popFoot.y, z: 0 } : center;
+-  const boardDir = (local: V3) => rotY(rotZ(rotX(local, flipDeg), pitchDeg), yawDeg);
+-  const boardPoint = (local: V3): V3 => {
++  const pivot: V3 = popFoot ? { x: f.body.x + popFoot.x, y: f.body.y + popFoot.y, z: 0 } : physical;
++  const unrolled = (local: V3) => rotY(rotZ(local, pitchDeg), yawDeg);
++  const boardDir = (local: V3) => unrolled(rotX(local, flipDeg));
++  const posed = (local: V3): V3 => {
+     const q = rotX(local, flipDeg);
+-    const off: V3 = { x: center.x - pivot.x + q.x, y: center.y - pivot.y + q.y, z: center.z - pivot.z + q.z };
+-    const r = rotY(rotZ(off, pitchDeg), yawDeg);
+-    return { x: pivot.x + r.x, y: pivot.y + r.y, z: pivot.z + r.z };
++    return add3(pivot, unrolled({ x: physical.x - pivot.x + q.x, y: physical.y - pivot.y + q.y, z: q.z }));
++  };
++  // The board stands on the ground, never in it: a pop pivots it up off its
++  // tail (or its back wheels, before the tail reaches the ground).
++  let sink = 0;
++  for (const p of BOARD_HULL) sink = Math.max(sink, posed(p).y - (GROUND + WHEEL_BOTTOM));
++  const center: V3 = { x: physical.x, y: physical.y - sink, z: 0 };
++  const boardPoint = (local: V3): V3 => {
++    const p = posed(local);
++    return { x: p.x, y: p.y - sink, z: p.z };
+   };
++  const deck: DeckFrame = {
++    origin: boardPoint({ x: 0, y: 0, z: 0 }),
++    along: unrolled({ x: 1, y: 0, z: 0 }),
++    down: unrolled({ x: 0, y: 1, z: 0 }),
++    across: unrolled({ x: 0, y: 0, z: 1 }),
++    rollDeg: flipDeg,
++  };
++  const contact = boardContact(f, spec, landed);
+ 
+   // ----- Feet (board space, straight from the physics) -----
+   const fallTurn = (p: V3): V3 => {
+@@ -288,24 +430,34 @@ export function solveRig(
+   if (spec.flipDir && f.motion.flight >= 0 && f.motion.flight < 1) flickOut = flickExtension(spinP);
+   const flickZ = -spec.flipDir * toeDir * 9 * skateStyle.flickStrength * flickOut;
+   const flickDir = -spec.flipDir * toeDir;
+-  // Catch: a real rider's feet land on the board before the board lands on
+-  // the ground. The shared physics keeps some feet tucked until touchdown
+-  // (a tre flip's scoop foot) and then plants them in one frame, so ease both
+-  // feet onto their touchdown spots, relative to the deck, over the end of
+-  // the flight.
++  // The shared physics moves the feet between their stance and their flight
++  // marks in single frames, at both ends of the flight. Ease them instead,
++  // relative to the deck: `toward` takes a foot `k` of the way to where it
++  // stands on the board in another frame.
+   let footR = f.footR;
+   let footL = f.footL;
+-  const catchK = f.motion.flight >= 0 && f.motion.flight < 1
+-    ? smoothstep((f.motion.flight - CATCH_START) / (1 - CATCH_START))
+-    : 0;
++  const toward = (now: Pt, other: Frame, then: Pt, k: number): Pt => ({
++    x: now.x + (other.body.x + then.x - other.board.x - (f.body.x + now.x - f.board.x)) * k,
++    y: now.y + (other.body.y + then.y - other.board.y - (f.body.y + now.y - f.board.y)) * k,
++  });
++  const airborne = f.motion.flight >= 0 && f.motion.flight < 1;
++  // Takeoff: the feet leave from where they stood, the front foot dragging
++  // up the grip toward the nose as the back foot comes off the tail.
++  const takeoffK = airborne ? 1 - smoothstep(f.motion.flight / TAKEOFF_END) : 0;
++  if (takeoffK > 0) {
++    const stand = computeFrame(ROLL_IN - 1e-4, spec, landed, landed ? 'slam' : outcome, 0.65, skateStyle);
++    footR = toward(footR, stand, stand.footR, takeoffK);
++    footL = toward(footL, stand, stand.footL, takeoffK);
++  }
++  // Catch: a real rider's feet land on the board before the board lands on
++  // the ground. The physics keeps some feet tucked until touchdown (a tre
++  // flip's scoop foot) and then plants them, so ease both feet onto their
++  // touchdown spots over the end of the flight.
++  const catchK = airborne ? smoothstep((f.motion.flight - CATCH_START) / (1 - CATCH_START)) : 0;
+   if (catchK > 0) {
+     const touch = computeFrame(ROLL_IN + FLIP_T + 1e-4, spec, landed, landed ? 'slam' : outcome, 0.65, skateStyle);
+-    const onto = (now: Pt, then: Pt): Pt => ({
+-      x: now.x + (touch.body.x + then.x - touch.board.x - (f.body.x + now.x - f.board.x)) * catchK,
+-      y: now.y + (touch.body.y + then.y - touch.board.y - (f.body.y + now.y - f.board.y)) * catchK,
+-    });
+-    footR = onto(footR, touch.footR);
+-    footL = onto(footL, touch.footL);
++    footR = toward(footR, touch, touch.footR, catchK);
++    footL = toward(footL, touch, touch.footL, catchK);
+   }
+   const noseChannel = clampFootReach(footR);
+   const tailChannel = clampFootReach(footL);
+@@ -347,7 +499,8 @@ export function solveRig(
+       fromBoard(shoeCenter),
+     ));
+     const hipLocal: V3 = { x: 0, y: 0, z: side === 'left' ? -HIP_Z : HIP_Z };
+-    return { side, isNose, flicking, shoe, hipLocal, ankle: fromBoard({ x: foot.x, y: foot.y - ANKLE_LIFT, z: laneZ }) };
++    const placed = onTheBoard(deck, contact, shoe, fromBoard({ x: foot.x, y: foot.y - ANKLE_LIFT, z: laneZ }));
++    return { side, isNose, flicking, hipLocal, ...placed };
+   };
+   const plans = [footPlan('left'), footPlan('right')] as const;
+ 
+@@ -399,7 +552,7 @@ export function solveRig(
+     // foot, like a real stance.
+     const kneeAim = rad(plan.isNose ? KNEE_AIM_FRONT : KNEE_AIM_BACK);
+     const pole = boardSpaceDir({ x: Math.cos(kneeAim), y: -0.12, z: toeDir * Math.sin(kneeAim) });
+-    const solved = solveLeg(hipJoint, plan.ankle, pole, plan.shoe.up);
++    const solved = solveLeg(hipJoint, plan.ankle, pole, plan.shoe.up, true);
+     return {
+       side: plan.side,
+       hip: hipJoint,
+diff --git a/packages/animations/src/scene/boardVolume.ts b/packages/animations/src/scene/boardVolume.ts
+new file mode 100644
+index 0000000..b881ce6
+--- /dev/null
++++ b/packages/animations/src/scene/boardVolume.ts
+@@ -0,0 +1,205 @@
++import { HANGER_BOTTOM, WHEEL_HALF_W, WHEEL_INNER, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z } from './board';
++import { BOTTOM_LOCAL, TIP_X, TOP_LOCAL, deckBottomY, deckTopY } from './deck';
++import { dot3, rad, sub3, type V3 } from './math';
++import { DECK_HALF_WIDTH, SHOE_HALF_HEIGHT, SHOE_HALF_LENGTH, SHOE_HALF_WIDTH, SHOE_ROUND, type Frame3 } from './skeleton';
++
++/**
++ * The skateboard as a solid the rider has to stay out of.
++ *
++ * The rig places the board and the feet from the shared physics, which was
++ * drawn side-on: there the deck is a line, and a flip only squashes it. In
++ * the round the deck is a slab as wide as a shoe is long, and rolling it
++ * swings its rails and then its trucks and wheels up through the space over
++ * the grip. So the rider's feet ride on the board's real volume (sized to the
++ * widest board drawn, Board3D's) rather than on a line.
++ *
++ * The volume is described the way it moves in a flip: as cross-sections
++ * about the roll axis (board-local x through the origin, y down), one per
++ * station along the board.
++ */
++
++/** Board3D draws its deck and axles this much wider than the SVG board. */
++export const BOARD_WIDTH_SCALE = 1.2;
++
++/** The 3D deck's half-width at `x` along it, rounding off at the tips. */
++export function boardHalfWidth(x: number): number {
++  const start = TIP_X - 9.5;
++  const u = Math.max(0, (Math.abs(x) - start) / 9.5);
++  return u >= 1 ? 0 : DECK_HALF_WIDTH * BOARD_WIDTH_SCALE * Math.sqrt(1 - u * u);
++}
++
++/** Board-local points that must stay on or above the ground: the deck's outline and every wheel's rim. */
++export const BOARD_HULL: readonly V3[] = (() => {
++  const pts: V3[] = [...TOP_LOCAL, ...BOTTOM_LOCAL];
++  for (const x of [-WHEEL_X, WHEEL_X]) {
++    for (const z of [-WHEEL_Z, WHEEL_Z]) {
++      for (let k = 0; k < 16; k++) {
++        const a = (k / 16) * Math.PI * 2;
++        pts.push({ x: x + Math.sin(a) * WHEEL_R, y: WHEEL_Y + Math.cos(a) * WHEEL_R, z });
++      }
++    }
++  }
++  return pts;
++})();
++
++/** One box of a cross-section: across z0..z1, board-local y0..y1 (y down). */
++interface Section { z0: number; z1: number; y0: number; y1: number }
++
++/** Half-length of a truck along the board: its baseplate. */
++const TRUCK_HALF_LENGTH = 4.2;
++
++/** The board's cross-section at `x`: the deck, and over a truck its hanger and wheels. */
++function sections(x: number): Section[] {
++  const s = BOARD_WIDTH_SCALE;
++  const out: Section[] = [];
++  const half = boardHalfWidth(x);
++  if (half > 0) out.push({ z0: -half, z1: half, y0: deckTopY(x), y1: deckBottomY(x) });
++  for (const axle of [-WHEEL_X, WHEEL_X]) {
++    const dx = Math.abs(x - axle);
++    if (dx < TRUCK_HALF_LENGTH) out.push({ z0: -WHEEL_INNER * s, z1: WHEEL_INNER * s, y0: deckBottomY(x), y1: HANGER_BOTTOM });
++    if (dx < WHEEL_R) {
++      const r = Math.sqrt(WHEEL_R * WHEEL_R - dx * dx);
++      for (const side of [-1, 1]) {
++        const z = side * WHEEL_Z * s;
++        out.push({ z0: z - WHEEL_HALF_W * s, z1: z + WHEEL_HALF_W * s, y0: WHEEL_Y - r, y1: WHEEL_Y + r });
++      }
++    }
++  }
++  return out;
++}
++
++/**
++ * The highest point of a box rolled by (cos, sin) over the strip z0..z1 of
++ * the unrolled frame, as unrolled y (y down); Infinity if the strip misses
++ * it. A rolled point (y, z) sits at Y = y·cos − z·sin, Z = y·sin + z·cos
++ * (scene/math rotX). The top of a convex outline over a strip peaks at one
++ * of its corners or at an end of the strip.
++ */
++function stripTop(box: Section, cos: number, sin: number, z0: number, z1: number): number {
++  let top = Infinity;
++  for (const y of [box.y0, box.y1]) {
++    for (const z of [box.z0, box.z1]) {
++      const at = y * sin + z * cos;
++      if (at >= z0 && at <= z1) top = Math.min(top, y * cos - z * sin);
++    }
++  }
++  for (const z of [z0, z1]) {
++    // The vertical line at z: keep min ≤ k·Y + offset ≤ max for both of the box's bands.
++    let lo = -Infinity;
++    let hi = Infinity;
++    const band = (k: number, offset: number, min: number, max: number) => {
++      if (Math.abs(k) < 1e-9) {
++        if (offset < min || offset > max) lo = Infinity;
++        return;
++      }
++      lo = Math.max(lo, Math.min((min - offset) / k, (max - offset) / k));
++      hi = Math.min(hi, Math.max((min - offset) / k, (max - offset) / k));
++    };
++    band(cos, z * sin, box.y0, box.y1);
++    band(-sin, z * cos, box.z0, box.z1);
++    if (lo <= hi) top = Math.min(top, lo);
++  }
++  return top;
++}
++
++/**
++ * How far each station's cross-section reaches from the roll axis: the
++ * cylinder a roll sweeps. Eased along the board (never below the true reach)
++ * so a foot sliding past a truck rises over its wheels instead of stepping.
++ */
++const SWEEP_EASE = 0.7;
++const SWEEP_STEP = 1;
++const SWEEP: readonly number[] = (() => {
++  const reach: number[] = [];
++  for (let x = -TIP_X; x <= TIP_X + 1e-9; x += SWEEP_STEP) {
++    let r = 0;
++    for (const box of sections(x)) {
++      for (const y of [box.y0, box.y1]) for (const z of [box.z0, box.z1]) r = Math.max(r, Math.hypot(y, z));
++    }
++    reach.push(r);
++  }
++  return reach.map((_, i) => Math.max(...reach.map((r, j) => r - SWEEP_EASE * SWEEP_STEP * Math.abs(i - j))));
++})();
++
++function sweptRadius(x: number): number {
++  const i = (Math.max(-TIP_X, Math.min(TIP_X, x)) + TIP_X) / SWEEP_STEP;
++  const i0 = Math.max(0, Math.min(SWEEP.length - 2, Math.floor(i)));
++  const u = Math.max(0, Math.min(1, i - i0));
++  return SWEEP[i0] + (SWEEP[i0 + 1] - SWEEP[i0]) * u;
++}
++
++/**
++ * The unrolled board: the roll axis's origin, the board's axes before its
++ * roll (pitch and yaw only), and the roll (deg). The rider's feet keep to
++ * this frame through a flip, as a rider's feet follow the board's pitch and
++ * heading while it rolls beneath them.
++ */
++export interface DeckFrame {
++  origin: V3;
++  along: V3;
++  down: V3;
++  across: V3;
++  rollDeg: number;
++}
++
++/**
++ * How much of the board's motion the feet stay clear of, ahead of time
++ * (each 0 → 1): `roll`, the cylinder a flip's rolling rails, trucks and
++ * wheels sweep about the board's long axis; `spin`, the disc a shuvit's
++ * deck sweeps turning under the feet (and with a roll, that cylinder turned
++ * round with it). The rider lifts out of the way before the board comes
++ * round, not as it arrives.
++ */
++export interface BoardSweep {
++  roll: number;
++  spin: number;
++}
++
++const STILL: BoardSweep = { roll: 0, spin: 0 };
++
++/** The rounded sole, sampled over its whole footprint: shoe-local (fwd, up, side). */
++const SOLE_STEP = 3;
++const SOLE: ReadonlyArray<{ f: number; u: number; s: number }> = (() => {
++  const pts: Array<{ f: number; u: number; s: number }> = [];
++  for (let f = -SHOE_HALF_LENGTH; f <= SHOE_HALF_LENGTH + 1e-9; f += SOLE_STEP) {
++    for (let s = -SHOE_HALF_WIDTH; s <= SHOE_HALF_WIDTH + 1e-9; s += SOLE_STEP) {
++      const df = Math.max(0, Math.abs(f) - (SHOE_HALF_LENGTH - SHOE_ROUND));
++      const ds = Math.max(0, Math.abs(s) - (SHOE_HALF_WIDTH - SHOE_ROUND));
++      const r2 = SHOE_ROUND * SHOE_ROUND - df * df - ds * ds;
++      if (r2 >= 0) pts.push({ f, u: -(SHOE_HALF_HEIGHT - SHOE_ROUND + Math.sqrt(r2)), s });
++    }
++  }
++  return pts;
++})();
++/** Each sole sample stands for the strip of the board half a step either side of it, so nothing slips between them. */
++const STRIP = SOLE_STEP / 2 + 0.1;
++
++/**
++ * How far the sole is into the board along the deck's up (positive), or
++ * clear of it (negative); -Infinity when no part of the shoe is over the
++ * board or within its sweep.
++ */
++export function soleDepth(deck: DeckFrame, shoe: Frame3, sweep: BoardSweep = STILL): number {
++  const cos = Math.cos(rad(deck.rollDeg));
++  const sin = Math.sin(rad(deck.rollDeg));
++  let depth = -Infinity;
++  for (const p of SOLE) {
++    const rel = sub3(shoe.at(p.f, p.u, p.s), deck.origin);
++    const x = dot3(rel, deck.along);
++    const z = dot3(rel, deck.across);
++    let top = Infinity;
++    if (Math.abs(x) <= TIP_X) {
++      for (const box of sections(x)) top = Math.min(top, stripTop(box, cos, sin, z - STRIP, z + STRIP));
++      const near = Math.max(0, Math.abs(z) - STRIP);
++      const r = sweptRadius(x);
++      if (sweep.roll > 0 && near < r) top = Math.min(top, -sweep.roll * Math.sqrt(r * r - near * near));
++    }
++    if (sweep.spin > 0) {
++      // Turning, the board passes every station within its length under the sole.
++      const reach = Math.max(0, Math.hypot(x, z) - STRIP);
++      if (reach <= TIP_X) top = Math.min(top, -sweep.spin * Math.max(-deckTopY(reach), sweep.roll * sweptRadius(reach)));
++    }
++    if (top < Infinity) depth = Math.max(depth, dot3(rel, deck.down) - top);
++  }
++  return depth;
++}
+diff --git a/packages/animations/src/three/zz_probe.test.ts b/packages/animations/src/three/zz_probe.test.ts
+new file mode 100644
+index 0000000..22e5f20
+--- /dev/null
++++ b/packages/animations/src/three/zz_probe.test.ts
+@@ -0,0 +1,46 @@
++/// <reference types="node" />
++import process from 'node:process';
++import { it } from 'vitest';
++import { resolveSkateStyle } from '../skateStyle';
++import type { RiderStance, Robot, Trick, Stance } from '../types';
++import { planStage, stageFrame } from './stage';
++import { legBoardCollision } from './boardCollision';
++import { kneeBetween } from '../scene/grindRig';
++import { moveFrame, type LegRig, type BoardRig } from '../scene/skeleton';
++import type { FallVariant } from '../TrickAnimation';
++
++const robot: Robot = { id: 'r', name: 'r', avatar: { body: '#7ec8e3', accent: '#e05c7a', variant: 0 }, skateStyle: { popHeight: 0.92, rotationSpeed: 1.08, flickStrength: 0.95 } };
++const BASES = ['Ollie','Ollie North','Kickflip','Heelflip','Double Kickflip','Double Heelflip','Varial Kickflip','Varial Heelflip','Hardflip','Inward Heelflip','Pressure Flip','Dolphin Flip','360 Flip','360 Double Kickflip','Laser Flip','Pop Shuvit','Frontside Shuvit','Late Backside Shuvit','Late Frontside Shuvit','Late Kickflip','360 Shuvit','Frontside 360 Shuvit','Bigspin','FS Bigspin','Bigspin Flip','FS Bigspin Flip','Bigspin Heelflip','FS Bigspin Heelflip','Frontside 180','Backside 180','Backside Flip','Frontside Flip','Backside Heelflip','Frontside Heelflip','Backside 360','Frontside 360','Backside 360 Kickflip','Frontside 360 Kickflip','Impossible','Frontside 50-50 Grind','Backside 5-0 Grind','Kickflip into Backside Boardslide','Backside 180 into Frontside Nosegrind'];
++const hits = (b: BoardRig, l: LegRig) => { const c = legBoardCollision(b, l); return c.shoe || c.shin || c.thigh; };
++const lifted = (l: LegRig, h: number): LegRig => { const by = { x: 0, y: -h, z: 0 }; const ankle = { x: l.ankle.x, y: l.ankle.y - h, z: l.ankle.z }; return { ...l, ankle, knee: kneeBetween(l.hip, ankle, l.knee), shoe: moveFrame(l.shoe, by) }; };
++const depth = (b: BoardRig, l: LegRig) => { if (!hits(b, l)) return 0; let lo = 0, hi = 80; for (let i = 0; i < 16; i++) { const m = (lo + hi) / 2; if (hits(b, lifted(l, m))) lo = m; else hi = m; } return hi; };
++const MODE = process.env.PROBE_MODE ?? 'landed';
++it('probe', () => {
++  const style = resolveSkateStyle(robot.skateStyle);
++  const rows: string[] = [];
++  let total = 0;
++  const outcomes: Array<[boolean, FallVariant]> = MODE === 'falls' ? [[false, 'slam'], [false, 'bail'], [false, 'shank']] : [[true, 'slam']];
++  const stances: Stance[] = MODE === 'stances' ? ['regular', 'fakie', 'switch', 'nollie'] : ['regular'];
++  for (const base of BASES) for (const stance of stances) for (const riderStance of ['regular', 'goofy'] as RiderStance[]) for (const [landed, fall] of outcomes) {
++    const trick: Trick = { id: base, name: base, base, stance };
++    const stage = planStage(robot, trick, { landed, riderStance, style, fall, shankProgress: 0.65 });
++    let hit = 0, worst = 0, worstT = 0, jump = 0, jumpT = 0, kj = 0, kjT = 0; const parts = { shoe: 0, shin: 0, thigh: 0 };
++    let prev: ReturnType<typeof stageFrame> | null = null;
++    for (let t = 0; t <= stage.end; t += 1 / 120) {
++      const fr = stageFrame(stage, t, 1);
++      const { rig } = fr;
++      let any = false;
++      rig.legs.forEach((leg, i) => {
++        const c = legBoardCollision(rig.board, leg);
++        if (c.shoe) parts.shoe++; if (c.shin) parts.shin++; if (c.thigh) parts.thigh++;
++        if (c.shoe || c.shin || c.thigh) { any = true; const d = depth(rig.board, leg); if (d > worst) { worst = d; worstT = t; } }
++        if (prev) { const k = prev.rig.legs[i].knee; const kd = Math.hypot(k.x - leg.knee.x, k.y - leg.knee.y, k.z - leg.knee.z); if (kd > kj) { kj = kd; kjT = t; } const p = prev.rig.legs[i].ankle; const dd = Math.hypot(p.x - leg.ankle.x, p.y - leg.ankle.y, p.z - leg.ankle.z); if (dd > jump) { jump = dd; jumpT = t; } }
++      });
++      prev = fr;
++      if (any) hit++;
++    }
++    total += hit;
++    if (worst > 0.5 || jump > 8 || kj > 8) rows.push(`${(base + ' ' + stance).padEnd(44)} ${riderStance.padEnd(6)} ${landed ? 'land' : fall.padEnd(5)} hit=${String(hit).padStart(3)} S${parts.shoe} N${parts.shin} T${parts.thigh} worst=${worst.toFixed(1)}@${worstT.toFixed(2)} jump=${jump.toFixed(1)}@${jumpT.toFixed(2)} knee=${kj.toFixed(1)}@${kjT.toFixed(2)}`);
++  }
++  console.log(`PROBE total hit frames=${total}\n` + rows.join('\n'));
++}, 600000);
+diff --git a/packages/animations/src/three/zz_smooth.test.ts b/packages/animations/src/three/zz_smooth.test.ts
+new file mode 100644
+index 0000000..0e5d9e4
+--- /dev/null
++++ b/packages/animations/src/three/zz_smooth.test.ts
+@@ -0,0 +1,28 @@
++import { it } from 'vitest';
++import { resolveSkateStyle } from '../skateStyle';
++import type { Robot, Trick } from '../types';
++import { planStage, stageFrame } from './stage';
++import type { V3 } from '../scene/math';
++
++const robot: Robot = { id: 'r', name: 'r', avatar: { body: '#7ec8e3', accent: '#e05c7a', variant: 0 }, skateStyle: { popHeight: 0.92, rotationSpeed: 1.08, flickStrength: 0.95 } };
++const d = (a: V3, b: V3) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
++it('smooth', () => {
++  const style = resolveSkateStyle(robot.skateStyle);
++  const env = (globalThis as unknown as { process: { env: Record<string, string | undefined> } }).process.env;
++  const base = env.TRACE ?? 'Kickflip';
++  const [a, b, dt] = (env.WIN ?? '0.54,0.70,0.008333').split(',').map(Number);
++  const trick: Trick = { id: base, name: base, base, stance: 'regular' };
++  const stage = planStage(robot, trick, { landed: true, riderStance: 'regular', style, fall: 'slam', shankProgress: 0.65 });
++  const rows: string[] = [];
++  let prev = stageFrame(stage, a - dt, 1).rig;
++  for (let t = a; t <= b; t += dt) {
++    const { rig } = stageFrame(stage, t, 1);
++    const cells = rig.legs.map((l, i) => {
++      const p = prev.legs[i];
++      return `${l.flicking ? 'F' : 'B'} ank${d(l.ankle, p.ankle).toFixed(1).padStart(5)} knee${d(l.knee, p.knee).toFixed(1).padStart(5)} toe${d(l.shoe.at(12, 0, 0), p.shoe.at(12, 0, 0)).toFixed(1).padStart(5)}`;
++    }).join(' | ');
++    rows.push(`t=${t.toFixed(3)} pitch=${rig.board.pitchDeg.toFixed(1).padStart(6)} boardΔ${d(rig.board.point({ x: -48, y: 0, z: 0 }), prev.board.point({ x: -48, y: 0, z: 0 })).toFixed(1).padStart(5)} hipΔ${d(rig.legs[0].hip, prev.legs[0].hip).toFixed(1).padStart(5)} | ${cells}`);
++    prev = rig;
++  }
++  console.log(base + '\n' + rows.join('\n'));
++}, 600000);
+diff --git a/packages/animations/src/three/zz_trace.test.ts b/packages/animations/src/three/zz_trace.test.ts
+new file mode 100644
+index 0000000..2a216b4
+--- /dev/null
++++ b/packages/animations/src/three/zz_trace.test.ts
+@@ -0,0 +1,25 @@
++/// <reference types="node" />
++import process from 'node:process';
++import { it } from 'vitest';
++import { resolveSkateStyle } from '../skateStyle';
++import type { Robot, Trick } from '../types';
++import { planStage, stageFrame } from './stage';
++import { computeFrame } from '../TrickAnimation';
++
++const robot: Robot = { id: 'r', name: 'r', avatar: { body: '#7ec8e3', accent: '#e05c7a', variant: 0 }, skateStyle: { popHeight: 0.92, rotationSpeed: 1.08, flickStrength: 0.95 } };
++it('trace', () => {
++  const style = resolveSkateStyle(robot.skateStyle);
++  for (const base of (process.env.TRACE ?? 'Kickflip').split(',')) {
++    const trick: Trick = { id: base, name: base, base, stance: 'regular' };
++    const stage = planStage(robot, trick, { landed: true, riderStance: 'regular', style, fall: 'slam', shankProgress: 0.65 });
++    const rows: string[] = [];
++    const [a, b, dt] = (process.env.WIN ?? '0.54,0.64,0.005').split(',').map(Number);
++    for (let t = a; t <= b; t += dt) {
++      const { rig } = stageFrame(stage, t, 1);
++      const f = computeFrame(t, stage.spec, true, 'slam', 0.65, style);
++      const legs = rig.legs.map((l) => `${l.flicking ? 'F' : 'B'} ank=(${l.ankle.x.toFixed(1)},${l.ankle.y.toFixed(1)},${l.ankle.z.toFixed(1)}) hip.y=${l.hip.y.toFixed(1)}`).join(' | ');
++      rows.push(`t=${t.toFixed(3)} rot=${f.board.rot.toFixed(1)} pitch=${rig.board.pitchDeg.toFixed(1)} flip=${rig.board.flipDeg.toFixed(0)} cy=${rig.board.center.y.toFixed(1)} fby=${f.board.y.toFixed(1)} | ${legs}`);
++    }
++    console.log(base + '\n' + rows.join('\n'));
++  }
++}, 600000);
+diff --git a/packages/animations/src/three/zz_trace2.test.ts b/packages/animations/src/three/zz_trace2.test.ts
+new file mode 100644
+index 0000000..9aa6c5f
+--- /dev/null
++++ b/packages/animations/src/three/zz_trace2.test.ts
+@@ -0,0 +1,33 @@
++/// <reference types="node" />
++import process from 'node:process';
++import { it } from 'vitest';
++import { resolveSkateStyle } from '../skateStyle';
++import type { Robot, Trick } from '../types';
++import { planStage, stageFrame } from './stage';
++import { legBoardCollision } from './boardCollision';
++import { dot3, sub3 } from '../scene/math';
++
++const robot: Robot = { id: 'r', name: 'r', avatar: { body: '#7ec8e3', accent: '#e05c7a', variant: 0 }, skateStyle: { popHeight: 0.92, rotationSpeed: 1.08, flickStrength: 0.95 } };
++it('trace', () => {
++  const style = resolveSkateStyle(robot.skateStyle);
++  for (const spec of (process.env.TRACE ?? 'Double Heelflip@0.66-0.74,Frontside 360 Shuvit@0.63-0.71').split(',')) {
++    const [base, win] = spec.split('@'); const [a, b] = win.split('-').map(Number);
++    const trick: Trick = { id: base, name: base, base, stance: 'regular' };
++    const stage = planStage(robot, trick, { landed: true, riderStance: 'regular', style, fall: 'slam', shankProgress: 0.65 });
++    const rows: string[] = [];
++    for (let t = a; t <= b; t += 1 / 240) {
++      const { rig } = stageFrame(stage, t, 1);
++      const o = rig.board.point({ x: 0, y: 0, z: 0 });
++      const cells = rig.legs.map((l) => {
++        const c = legBoardCollision(rig.board, l);
++        const rel = sub3(l.shoe.origin, o);
++        const bx = dot3(rel, rig.board.dir({ x: 1, y: 0, z: 0 }));
++        const bz = dot3(rel, rig.board.dir({ x: 0, y: 0, z: 1 }));
++        const bu = dot3(rel, rig.board.dir({ x: 0, y: -1, z: 0 }));
++        return `${l.flicking ? 'F' : 'B'}${c.shoe ? 'S' : '.'}${c.shin ? 'N' : '.'}${c.thigh ? 'T' : '.'} shoe@board(${bx.toFixed(1)},${bu.toFixed(1)},${bz.toFixed(1)})`;
++      });
++      rows.push(`t=${t.toFixed(4)} flip=${rig.board.flipDeg.toFixed(0)} yaw=${rig.board.yawDeg.toFixed(0)} pitch=${rig.board.pitchDeg.toFixed(1)} | ${cells.join(' | ')}`);
++    }
++    console.log(base + '\n' + rows.join('\n'));
++  }
++}, 600000);
+diff --git a/packages/animations/src/three/zz_trace3.test.ts b/packages/animations/src/three/zz_trace3.test.ts
+new file mode 100644
+index 0000000..14bd02c
+--- /dev/null
++++ b/packages/animations/src/three/zz_trace3.test.ts
+@@ -0,0 +1,35 @@
++/// <reference types="node" />
++import process from 'node:process';
++import { it } from 'vitest';
++import { resolveSkateStyle } from '../skateStyle';
++import type { Robot, Trick } from '../types';
++import { planStage, stageFrame } from './stage';
++import { capsuleIntersectsBoard } from './boardCollision';
++import { roundedBoxGeometry } from './geometry';
++import { dot3, sub3, rotY, rotZ } from '../scene/math';
++import { soleDepth } from '../scene/boardVolume';
++
++const robot: Robot = { id: 'r', name: 'r', avatar: { body: '#7ec8e3', accent: '#e05c7a', variant: 0 }, skateStyle: { popHeight: 0.92, rotationSpeed: 1.08, flickStrength: 0.95 } };
++it('trace', () => {
++  const style = resolveSkateStyle(robot.skateStyle);
++  const [base, ts, legIdx] = (process.env.TRACE ?? 'Double Heelflip@0.70@F').split('@');
++  const trick: Trick = { id: base, name: base, base, stance: 'regular' };
++  const stage = planStage(robot, trick, { landed: true, riderStance: 'regular', style, fall: 'slam', shankProgress: 0.65 });
++  const { rig } = stageFrame(stage, Number(ts), 1);
++  const leg = rig.legs.find((l) => (legIdx === 'F') === l.flicking)!;
++  const b = rig.board;
++  const un = (v: { x: number; y: number; z: number }) => rotY(rotZ(v, b.pitchDeg), b.yawDeg);
++  const deck = { origin: b.point({ x: 0, y: 0, z: 0 }), along: un({ x: 1, y: 0, z: 0 }), down: un({ x: 0, y: 1, z: 0 }), across: un({ x: 0, y: 0, z: 1 }), rollDeg: b.flipDeg };
++  console.log(`soleDepth sweep0=${soleDepth(deck, leg.shoe, { roll: 0, spin: 0 }).toFixed(2)} sweep1=${soleDepth(deck, leg.shoe, { roll: 1, spin: 0 }).toFixed(2)} flip=${b.flipDeg.toFixed(1)} shoeUp·deckUp=${(-dot3(leg.shoe.up, deck.down)).toFixed(2)}`);
++  const g = roundedBoxGeometry({ f: 12, u: 4, s: 6, r: 3.6 }, 4);
++  const pos = g.getAttribute('position');
++  const inside: string[] = [];
++  for (let i = 0; i < pos.count; i++) {
++    const p = leg.shoe.at(pos.getX(i), pos.getY(i), pos.getZ(i));
++    if (capsuleIntersectsBoard(b, p, p, 0.05)) {
++      const rel = sub3(p, deck.origin);
++      inside.push(`shoeLocal(${pos.getX(i).toFixed(1)},${pos.getY(i).toFixed(1)},${pos.getZ(i).toFixed(1)}) deck(${dot3(rel, deck.along).toFixed(1)},${(-dot3(rel, deck.down)).toFixed(1)},${dot3(rel, deck.across).toFixed(1)})`);
++    }
++  }
++  console.log(`inside ${inside.length}/${pos.count}\n` + inside.slice(0, 30).join('\n'));
++}, 600000);

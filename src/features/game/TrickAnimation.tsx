@@ -1,12 +1,21 @@
 'use client';
 
 import type { ComponentProps } from 'react';
-import { TrickScene } from '@skrobot/animations';
+import dynamic from 'next/dynamic';
+import type { TrickScene3D } from '@skrobot/animations/three';
 import { usePlayerStance } from './gamePreferences';
 
-type Props = ComponentProps<typeof TrickScene>;
+const GameTrickScene = dynamic(
+  () => import('@skrobot/animations/three').then((animations) => animations.TrickScene3D),
+  {
+    ssr: false,
+    loading: () => <div className="game-stage-placeholder" role="status">Loading skate spot…</div>,
+  },
+);
+
+type Props = ComponentProps<typeof TrickScene3D>;
 
 export default function PlayerStanceTrickAnimation(props: Props) {
   const stance = usePlayerStance();
-  return <TrickScene {...props} riderStance={stance} />;
+  return <GameTrickScene showSpeedToggle set="waterfront" {...props} riderStance={stance} />;
 }

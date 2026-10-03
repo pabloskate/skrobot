@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./three": "./src/three/index.ts",
     "./trick-animation-3d.css": "./src/TrickAnimation3D.css",
     "./push-off-animation.css": "./src/PushOffAnimation.css"
   },
@@ -16,6 +17,10 @@
   },
   "devDependencies": {
     "@types/react": "^19.2.14",
+    "@types/three": "^0.185.4",
     "typescript": "~6.0.2"
+  },
+  "dependencies": {
+    "three": "^0.185.1"
   }
 }

@@ -29,6 +29,7 @@ import {
   LOOK_DOWN_OLLIE,
   type LegRig,
   type ArmRig,
+  type Frame3,
   type Rig,
   frameOf,
   moveFrame,
@@ -49,6 +50,7 @@ import {
   FLIP_T,
   FOOT_Y,
   JUMP,
+  LIFT,
   ROLL_IN,
   clampFootReach,
   computeFrame,
@@ -57,7 +59,9 @@ import {
   type Pt,
   type Spec,
 } from '../TrickAnimation';
-import { add3, clamp01, rad, rotX, rotY, rotZ, scale3, smoothstep, sub3, type V3 } from './math';
+import { add3, clamp01, cross3, dot3, rad, rotX, rotY, rotZ, scale3, smoothstep, sub3, type V3 } from './math';
+import { legInBoard, soleClearance } from './boardClearance';
+import { kickY } from './deck';
 
 /**
  * Physics frame → world-space skeleton.
@@ -77,6 +81,17 @@ import { add3, clamp01, rad, rotX, rotY, rotZ, scale3, smoothstep, sub3, type V3
  * - the hips ride between the feet and slide back over the heels as they
  *   sink, the torso hinges over the toes, the arms balance out
  *   along the board, and the head steadies and watches the board in the air.
+ *
+ * The physics places the feet side-on, where the board is a line, so it
+ * never makes room for the board's volume. Two things here do:
+ *
+ * - the board tucks the feet: each trick's flight is measured once against
+ *   the board's real volume (boardClearance.ts), and each foot is picked up
+ *   ahead of the moment a popped, rolling, or spinning board would pass
+ *   through it, then set back down. The hips rise to give the legs that
+ *   room, so a flip is ridden with the knees tucked up;
+ * - an impossible wraps around the scooping foot (wrapBoard) instead of
+ *   turning end over end through the legs.
  */
 
 /** Fraction of a frontside half spin the shoulders take (see New 3D). */
@@ -102,6 +117,60 @@ const CATCH_START = 0.86;
 const FALL_HANDOFF = 0.24;
 /** Head nod (deg) toward the board while it's in the air. */
 const LOOK_DOWN_TRICK = 16;
+
+// ----- Board tuck -----
+
+/** Seconds a foot starts lifting before the board needs the room, and takes
+ *  to come back down after. */
+const TUCK_LEAD = 0.12;
+const TUCK_LAG = 0.1;
+/** Room a tucked foot keeps from the board. */
+const TUCK_MARGIN = 0.4;
+/** Overlap too slight to tuck for: a sole set down on the grip. */
+const TUCK_SLACK = 0.5;
+/** Times each trick's tuck is posed again and checked. */
+const TUCK_PASSES = 8;
+/** Extra lift tried at a time for a foot whose shin or thigh is still in
+ *  the board, and the most it gets before that's given up on. */
+const LEG_STEP = 3;
+const LEG_LIFT = 15;
+/** Samples a trick's tuck is measured at, from the pop through touchdown. */
+const TUCK_SAMPLES = 96;
+
+/** Share of the flight the physics eases a pop back to level over. */
+const POP_EASE = 0.3;
+/** Seconds the tail strike takes to tip the board up to its pop angle (the
+ *  physics does it between two frames). */
+export const POP_RISE = 0.08;
+/** Share of the flight over which the feet go from where they stood to the
+ *  physics' flight marks (it moves them between two frames). */
+const TAKEOFF_END = 0.12;
+/** A pop's pitch (deg) is the physics' up to POP_PITCH_KNEE, easing in to no
+ *  more than POP_PITCH_MAX: as far as a tail strike tips a board with a foot
+ *  riding the nose up. */
+const POP_PITCH_KNEE = 25;
+const POP_PITCH_MAX = 45;
+/** How far over the board's middle (world units) the physics turns the feet
+ *  it carries with the deck: its FOOT_Y - 6 stance against the hips' LIFT. */
+const GLUED_PIVOT = LIFT - FOOT_Y + 6;
+/** How far (deg) the board turns under the feet before they stop riding it. */
+const RIDE_TURN = 50;
+
+// ----- Impossible wrap -----
+
+/** How far (deg) the scooping toes dip, tilting the wrap off vertical so
+ *  the nose comes up outside the legs and goes round under the heels. */
+const WRAP_TILT = 38;
+/** Distance from the wrap's axis (along the scooping foot) to the deck. */
+const WRAP_RADIUS = 8.6;
+/** How far the board slides out toward the toes as it wraps, so it goes
+ *  round the forefoot and clear of the shin. */
+const WRAP_TOE_SHIFT = 13;
+/** The wrap pose is all in by the time the board has come this far round
+ *  (sine of half its pitch: 0.35 is about 40 degrees, early in the strike). */
+const WRAP_IN = 0.35;
+/** Knee aim (deg from the nose toward the toes) while the board wraps. */
+const WRAP_KNEE_AIM = 10;
 
 // ----- Hip trajectory -----
 
@@ -217,12 +286,142 @@ function hipState(f: Frame, spec: Spec, style: SkateStyle, clearance: number): H
   };
 }
 
+/** Soft cap: `x` unchanged up to `knee`, easing in toward `max` past it. */
+function softCap(x: number, knee: number, max: number): number {
+  const a = Math.abs(x);
+  if (a <= knee) return x;
+  return Math.sign(x) * (knee + (max - knee) * Math.tanh((a - knee) / (max - knee)));
+}
+
+/**
+ * The board's pitch in the air. The physics snaps a pop from flat to its
+ * full angle between two frames; here the tail strike tips it up over the
+ * first POP_RISE seconds instead, and no further than POP_PITCH_MAX. An
+ * impossible's pitch is its wrap and is only eased in.
+ */
+function popPitch(f: Frame, spec: Spec): number {
+  if (f.motion.flight < 0 || f.motion.flight >= 1) return f.board.rot;
+  const pitch = spec.roll ? f.board.rot : softCap(f.board.rot, POP_PITCH_KNEE, POP_PITCH_MAX);
+  return pitch * smoothstep((f.t - ROLL_IN) / POP_RISE);
+}
+
+type Outcome = 'landed' | FallVariant;
+/** How far each foot (left, right) is lifted, along its sole's up, off the
+ *  physics' placement. */
+type Tuck = readonly [number, number];
+
 export function solveRig(
   f: Frame,
   spec: Spec,
   mechanics: RiderMechanics,
   skateStyle: SkateStyle,
-  outcome: 'landed' | FallVariant = 'landed',
+  outcome: Outcome = 'landed',
+): Rig {
+  return poseRig(f, spec, mechanics, skateStyle, outcome, boardTuck(spec, mechanics, skateStyle, outcome, f.t));
+}
+
+// ----- Board tuck -----
+
+interface TuckTrack {
+  times: number[];
+  /** Per foot (left, right): how far it must lift to clear the board at each time. */
+  need: [number[], number[]];
+}
+
+const TUCK_TRACKS = new Map<string, TuckTrack>();
+
+/**
+ * Measure, once per trick, where the flight would put the board
+ * through each foot, and how far that foot must lift to clear it.
+ *
+ * Lifting a foot ahead of one moment can carry it into the board at another
+ * (a rolling, pitched deck has parts above the foot too), and a shoe can
+ * clear the board with its shin or thigh still across a rail. So each
+ * moment is posed again with the tuck it actually gets, and wherever the
+ * shoe is still in the board, or the leg is, that foot lifts further. Extra
+ * lift for a leg that never comes clear is dropped: it would only look
+ * worse. The wrap foot of an impossible is left out: the board is posed
+ * around it (wrapBoard), so it clears it by construction.
+ */
+function tuckTrack(spec: Spec, mechanics: RiderMechanics, style: SkateStyle, outcome: Outcome): TuckTrack {
+  const key = JSON.stringify([spec, mechanics, style, outcome]);
+  const known = TUCK_TRACKS.get(key);
+  if (known) return known;
+  const landed = outcome === 'landed';
+  const free = (leg: LegRig) => spec.roll === 0 || leg.side !== mechanics.popFoot;
+  const track: TuckTrack = { times: [], need: [[], []] };
+  const frames: Frame[] = [];
+  for (let k = 0; k <= TUCK_SAMPLES; k++) {
+    const t = ROLL_IN + (FLIP_T * k) / TUCK_SAMPLES;
+    track.times.push(t);
+    frames.push(computeFrame(t, spec, landed, landed ? 'slam' : outcome, 0.65, style));
+    track.need[0].push(0);
+    track.need[1].push(0);
+  }
+  const legExtra = frames.map(() => [0, 0]);
+  const legStuck = frames.map(() => [false, false]);
+  // Moments to check: all of them, then only those near a change.
+  let check = frames.map(() => true);
+  for (let pass = 0; pass < TUCK_PASSES && check.some(Boolean); pass++) {
+    const changed = frames.map(() => false);
+    frames.forEach((f, k) => {
+      if (!check[k]) return;
+      const tuck = tuckAt(track, f.t);
+      const rig = poseRig(f, spec, mechanics, style, outcome, tuck);
+      rig.legs.forEach((leg, i) => {
+        if (!free(leg)) return;
+        const left = soleClearance(rig.board, leg.shoe, leg.shoe.up);
+        legStuck[k][i] = left <= TUCK_SLACK && legInBoard(rig.board, leg);
+        const more = left > TUCK_SLACK ? left + TUCK_MARGIN : legStuck[k][i] && legExtra[k][i] < LEG_LIFT ? LEG_STEP : 0;
+        if (!more) return;
+        if (left <= TUCK_SLACK) legExtra[k][i] += more;
+        track.need[i][k] = tuck[i] + more;
+        changed[k] = true;
+      });
+    });
+    check = track.times.map((t) => track.times.some((u, j) => changed[j] && u - t < TUCK_LEAD && t - u < TUCK_LAG));
+  }
+  legStuck.forEach((stuck, k) => stuck.forEach((s, i) => { if (s) track.need[i][k] -= legExtra[k][i]; }));
+  if (TUCK_TRACKS.size >= 512) TUCK_TRACKS.clear();
+  TUCK_TRACKS.set(key, track);
+  return track;
+}
+
+/** How far the board lifts each foot (left, right) at clock time `t`. */
+export function boardTuck(spec: Spec, mechanics: RiderMechanics, style: SkateStyle, outcome: Outcome, t: number): Tuck {
+  return tuckAt(tuckTrack(spec, mechanics, style, outcome), t);
+}
+
+/** Each foot's lift at `t`: up ahead of every moment it needs the room, and
+ *  back down after, each eased so the foot never jumps. */
+function tuckAt(track: TuckTrack, t: number): Tuck {
+  const lift = (need: number[]) => {
+    let best = 0;
+    for (let k = 0; k < need.length; k++) {
+      if (need[k] <= best) continue;
+      const ahead = track.times[k] - t;
+      const ease = ahead >= 0 ? 1 - smoothstep(ahead / TUCK_LEAD) : 1 - smoothstep(-ahead / TUCK_LAG);
+      best = Math.max(best, need[k] * ease);
+    }
+    return best;
+  };
+  return [lift(track.need[0]), lift(track.need[1])];
+}
+
+/** `v` turned by `deg` about the unit axis `n` (rotZ's sense about +z). */
+function turnAbout(v: V3, n: V3, deg: number): V3 {
+  const c = Math.cos(rad(deg));
+  const s = Math.sin(rad(deg));
+  return add3(add3(scale3(v, c), scale3(cross3(n, v), s)), scale3(n, dot3(n, v) * (1 - c)));
+}
+
+function poseRig(
+  f: Frame,
+  spec: Spec,
+  mechanics: RiderMechanics,
+  skateStyle: SkateStyle,
+  outcome: Outcome,
+  tuck: Tuck,
 ): Rig {
   const landed = outcome === 'landed';
   // Slams and bails come down with the trick's rotation complete, but the
@@ -254,21 +453,31 @@ export function solveRig(
     + restingHeadYaw * uprightP
     + restingBodyYaw * (1 - uprightP);
 
-  // ----- Board -----
   const flipDeg = oriented.flipDeg;
   const spinP = f.motion.rotation;
-  const pitchDeg = f.board.rot + (spec.forwardFlip ? Math.sin(spinP * Math.PI) * 42 : 0);
+  const flight = f.motion.flight;
+  const airborne = flight >= 0 && flight < 1;
+  const boardPitch = popPitch(f, spec);
+  const pitchDeg = boardPitch + (spec.forwardFlip ? Math.sin(spinP * Math.PI) * 42 : 0);
   const yawDeg = oriented.yawDeg;
+  // 0 → 1: how far an impossible's board has come round from flat — the
+  // share of the wrap pose (tilt, toe shift, radius) it is ridden in.
+  const wrap = spec.roll !== 0 ? smoothstep(Math.abs(Math.sin(rad(pitchDeg) / 2)) / WRAP_IN) : 0;
+  // The scooping toes dip with the wrap, tilting it off vertical.
+  const wrapRoll = -toeDir * WRAP_TILT * wrap;
   const center: V3 = { x: f.board.x, y: f.board.y, z: 0 };
-  const popFoot = spec.roll !== 0 ? (spec.nollie ? f.footR : f.footL) : null;
-  const pivot: V3 = popFoot ? { x: f.body.x + popFoot.x, y: f.body.y + popFoot.y, z: 0 } : center;
-  const boardDir = (local: V3) => rotY(rotZ(rotX(local, flipDeg), pitchDeg), yawDeg);
-  const boardPoint = (local: V3): V3 => {
-    const q = rotX(local, flipDeg);
-    const off: V3 = { x: center.x - pivot.x + q.x, y: center.y - pivot.y + q.y, z: center.z - pivot.z + q.z };
-    const r = rotY(rotZ(off, pitchDeg), yawDeg);
-    return { x: pivot.x + r.x, y: pivot.y + r.y, z: pivot.z + r.z };
-  };
+  // The feet stand on the board through the tail strike and ride its pitch
+  // (about the board's own axis across it). The physics eases a pop level
+  // over POP_EASE of the flight; the feet let go as it does, and as soon as
+  // the board starts turning under them — rolling into a flip or spinning
+  // away in a shuv — since then they're no longer standing on it. Ollies and
+  // late shuvits stay on it: the physics carries those feet with the deck.
+  const physicsRides = glued(spec) || (spec.late && !spec.flips);
+  const underFeet = (deg: number) => 1 - smoothstep(Math.abs(deg) / RIDE_TURN);
+  const riding = spec.roll !== 0 || !airborne ? 0
+    : (physicsRides ? 1 : 1 - smoothstep(flight / POP_EASE)) * underFeet(flipDeg) * underFeet(yawDeg - oriented.bodyYawDeg);
+  const ridePitch = boardPitch * riding;
+  const ride = (v: V3) => (ridePitch ? rotY(rotZ(rotY(v, -yawDeg), ridePitch), yawDeg) : v);
 
   // ----- Feet (board space, straight from the physics) -----
   const fallTurn = (p: V3): V3 => {
@@ -295,17 +504,37 @@ export function solveRig(
   // the flight.
   let footR = f.footR;
   let footL = f.footL;
-  const catchK = f.motion.flight >= 0 && f.motion.flight < 1
-    ? smoothstep((f.motion.flight - CATCH_START) / (1 - CATCH_START))
-    : 0;
+  // The physics turns those feet it carries with the deck about a point
+  // GLUED_PIVOT over the board's middle, by its own pitch. Set them back flat:
+  // they ride the board's real pitch below, like every other foot.
+  if (physicsRides && airborne) {
+    const pivot: Pt = { x: f.board.x - f.body.x, y: f.board.y - f.body.y - GLUED_PIVOT };
+    const flat = (p: Pt): Pt => {
+      const q = rotZ({ x: p.x - pivot.x, y: p.y - pivot.y, z: 0 }, -f.board.rot);
+      return { x: pivot.x + q.x, y: pivot.y + q.y };
+    };
+    footR = flat(footR);
+    footL = flat(footL);
+  }
+  // `toward` takes a foot `k` of the way to where it stands on the board, in
+  // another frame of the physics, relative to the deck.
+  const toward = (now: Pt, other: Frame, then: Pt, k: number): Pt => ({
+    x: now.x + (other.body.x + then.x - other.board.x - (f.body.x + now.x - f.board.x)) * k,
+    y: now.y + (other.body.y + then.y - other.board.y - (f.body.y + now.y - f.board.y)) * k,
+  });
+  // Takeoff: the physics moves the feet from where they stood to their
+  // flight marks between two frames. They leave from where they stood.
+  const takeoffK = airborne ? 1 - smoothstep(flight / TAKEOFF_END) : 0;
+  if (takeoffK > 0) {
+    const stand = computeFrame(ROLL_IN - 1e-4, spec, landed, landed ? 'slam' : outcome, 0.65, skateStyle);
+    footR = toward(footR, stand, stand.footR, takeoffK);
+    footL = toward(footL, stand, stand.footL, takeoffK);
+  }
+  const catchK = airborne ? smoothstep((flight - CATCH_START) / (1 - CATCH_START)) : 0;
   if (catchK > 0) {
     const touch = computeFrame(ROLL_IN + FLIP_T + 1e-4, spec, landed, landed ? 'slam' : outcome, 0.65, skateStyle);
-    const onto = (now: Pt, then: Pt): Pt => ({
-      x: now.x + (touch.body.x + then.x - touch.board.x - (f.body.x + now.x - f.board.x)) * catchK,
-      y: now.y + (touch.body.y + then.y - touch.board.y - (f.body.y + now.y - f.board.y)) * catchK,
-    });
-    footR = onto(footR, touch.footR);
-    footL = onto(footL, touch.footL);
+    footR = toward(footR, touch, touch.footR, catchK);
+    footL = toward(footL, touch, touch.footL, catchK);
   }
   const noseChannel = clampFootReach(footR);
   const tailChannel = clampFootReach(footL);
@@ -333,23 +562,65 @@ export function solveRig(
       flick = flickDir * flickOut * reach;
     }
     const laneZ = restLane + flick;
-    const rake = restRake + fullTurn * flickOut;
-    const toe = toeAt(rake);
-    const along = rotY({ x: 1, y: 0, z: 0 }, toeDir * rake);
+    // An impossible's scooping foot squares up across the board and its
+    // toes dip with the wrap, turning on the ankle, so the board can go
+    // round it.
+    const wrapped = spec.roll !== 0 && mechanics.popFoot === side;
+    const rake = (restRake + fullTurn * flickOut) * (wrapped ? 1 - wrap : 1);
+    const dip = wrapped ? wrapRoll : 0;
+    const toe = rotX(toeAt(rake), dip);
+    const down = rotX({ x: 0, y: 1, z: 0 }, dip);
+    const along = rotX(rotY({ x: 1, y: 0, z: 0 }, toeDir * rake), dip);
+    const ankle: V3 = { x: foot.x, y: foot.y - ANKLE_LIFT, z: laneZ };
     // The ankle sits over the heel end, so the shoe reaches forward from it.
-    const shoeCenter: V3 = {
-      x: foot.x + toe.x * TOE_REACH,
+    const shoeCenter = add3(ankle, rotX(sub3({
+      x: foot.x + toeAt(rake).x * TOE_REACH,
       y: foot.y + 2 - SHOE_HALF_HEIGHT,
-      z: laneZ + toe.z * TOE_REACH,
-    };
-    const shoe = frameOf(fromBoard(shoeCenter), (d) => sub3(
-      fromBoard({ x: shoeCenter.x + toe.x * d.x + along.x * d.z, y: shoeCenter.y + d.y, z: shoeCenter.z + toe.z * d.x + along.z * d.z }),
+      z: laneZ + toeAt(rake).z * TOE_REACH,
+    }, ankle), dip));
+    const placed = frameOf(fromBoard(shoeCenter), (d) => sub3(
+      fromBoard(add3(shoeCenter, add3(add3(scale3(toe, d.x), scale3(down, d.y)), scale3(along, d.z)))),
       fromBoard(shoeCenter),
     ));
+    // Riding the deck, the foot goes up (or down) with the end of the board
+    // under it. Then the board's tuck lifts it clear.
+    const sole = placed.at(0, -SHOE_HALF_HEIGHT, 0);
+    const by = add3(sub3(add3(center, ride(sub3(sole, center))), sole), scale3(placed.up, tuck[side === 'left' ? 0 : 1]));
     const hipLocal: V3 = { x: 0, y: 0, z: side === 'left' ? -HIP_Z : HIP_Z };
-    return { side, isNose, flicking, shoe, hipLocal, ankle: fromBoard({ x: foot.x, y: foot.y - ANKLE_LIFT, z: laneZ }) };
+    return { side, isNose, flicking, shoe: moveFrame(placed, by), hipLocal, ankle: add3(fromBoard(ankle), by) };
   };
   const plans = [footPlan('left'), footPlan('right')] as const;
+
+  // ----- Board -----
+  let boardDir = (local: V3) => rotY(rotZ(rotX(local, flipDeg), pitchDeg), yawDeg);
+  let boardPoint = (local: V3): V3 => add3(center, boardDir(local));
+  if (spec.roll !== 0) ({ dir: boardDir, point: boardPoint } = wrapBoard(plans[mechanics.popFoot === 'left' ? 0 : 1].shoe));
+
+  /**
+   * An impossible wraps around the scooping foot: the board turns about an
+   * axis running heel to toe along that shoe, grip toward the foot, and
+   * slides from the tail toward the middle as the physics' scoop does.
+   * The toes dip, so the axis is tilted off level and the wrap off
+   * vertical: the nose comes up outside the legs and goes round under the
+   * heels. The board leans with the foot, its width along the axis, and
+   * sits WRAP_RADIUS out from it and shifted toward the toes, so it goes
+   * round the forefoot instead of through the shoe and shin.
+   */
+  function wrapBoard(shoe: Frame3): { dir: (local: V3) => V3; point: (local: V3) => V3 } {
+    const pivot = shoe.origin;
+    // The axis across the board, tilted with the dipping toes (signed +z so
+    // a pitch turns the board as rotZ does), and the way out to the deck.
+    const axis = rotX({ x: 0, y: 0, z: 1 }, wrapRoll);
+    const out = rotX({ x: 0, y: 1, z: 0 }, wrapRoll);
+    // The board's center before the wrap turns it: where the physics has
+    // it, eased onto the wrap's radius and toward the toes.
+    const rel = sub3(center, pivot);
+    const across = dot3(rel, axis) + toeDir * WRAP_TOE_SHIFT * wrap;
+    const radius = dot3(rel, out) + (WRAP_RADIUS - kickY(0) - dot3(rel, out)) * wrap;
+    const rest = add3({ x: rel.x, y: 0, z: 0 }, add3(scale3(axis, across), scale3(out, radius)));
+    const dir = (local: V3) => turnAbout(rotX(local, wrapRoll), axis, pitchDeg);
+    return { dir, point: (local) => add3(pivot, turnAbout(add3(rest, rotX(local, wrapRoll)), axis, pitchDeg)) };
+  }
 
   // ----- Hips -----
   // The hips ride between the feet along the board.
@@ -396,8 +667,9 @@ export function solveRig(
   const leg = (plan: (typeof plans)[number]): LegRig => {
     const hipJoint = bodyPoint(plan.hipLocal);
     // Knees track over the toes, the back one pinched in toward the front
-    // foot, like a real stance.
-    const kneeAim = rad(plan.isNose ? KNEE_AIM_FRONT : KNEE_AIM_BACK);
+    // foot, like a real stance. Through an impossible's wrap they come up
+    // and forward instead, out of the way of a board going round the toes.
+    const kneeAim = rad((plan.isNose ? KNEE_AIM_FRONT : KNEE_AIM_BACK) * (1 - wrap) + WRAP_KNEE_AIM * wrap);
     const pole = boardSpaceDir({ x: Math.cos(kneeAim), y: -0.12, z: toeDir * Math.sin(kneeAim) });
     const solved = solveLeg(hipJoint, plan.ankle, pole, plan.shoe.up);
     return {
@@ -455,7 +727,7 @@ export function solveRig(
   const headOrigin = add3(neckTop, headDir({ x: 4, y: 0, z: 0 }));
 
   return {
-    board: { center, point: boardPoint, dir: boardDir, flipDeg, yawDeg, pitchDeg },
+    board: { center: boardPoint({ x: 0, y: 0, z: 0 }), point: boardPoint, dir: boardDir, flipDeg, yawDeg, pitchDeg },
     legs: [leg(plans[0]), leg(plans[1])],
     arms: [arm('left'), arm('right')],
     torso: frameOf(torsoPoint({ x: 1, y: -14, z: 0 }), torsoDir),

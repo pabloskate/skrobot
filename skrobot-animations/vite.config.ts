@@ -11,6 +11,10 @@ export default defineConfig({
         replacement: fileURLToPath(new URL('../packages/animations/src/TrickAnimation3D.css', import.meta.url)),
       },
       {
+        find: '@skrobot/animations/three',
+        replacement: fileURLToPath(new URL('../packages/animations/src/three/index.ts', import.meta.url)),
+      },
+      {
         find: '@skrobot/animations',
         replacement: fileURLToPath(new URL('../packages/animations/src/index.ts', import.meta.url)),
       },

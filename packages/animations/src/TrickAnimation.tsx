@@ -1117,6 +1117,7 @@ export {
   X0,
   SKY_PAD,
   FOOT_Y,
+  LIFT,
   JUMP,
   ROLL_IN,
   FLIP_T,

@@ -293,7 +293,15 @@ function blendFrame(a: Frame3, b: Frame3, w: number): Frame3 {
 }
 
 /** The knee nearest `near` that keeps both leg bones whole between `hip` and `ankle`. */
-function kneeBetween(hip: V3, ankle: V3, near: V3): V3 {
+/** `ankle`, pulled toward `hip` if it's further than a straight leg reaches. */
+function withinReach(hip: V3, ankle: V3): V3 {
+  const d = sub3(ankle, hip);
+  const len = Math.hypot(d.x, d.y, d.z);
+  const reach = THIGH + SHIN - 1e-6;
+  return len <= reach ? ankle : add3(hip, scale3(d, reach / len));
+}
+
+export function kneeBetween(hip: V3, ankle: V3, near: V3): V3 {
   const d = sub3(ankle, hip);
   const len = Math.max(1e-6, Math.hypot(d.x, d.y, d.z));
   const u = scale3(d, 1 / len);
@@ -309,6 +317,25 @@ function kneeBetween(hip: V3, ankle: V3, near: V3): V3 {
  * to the caller. `wholeLegs` keeps the knees where both leg bones stay whole,
  * for poses close enough that the knee never crosses the hip-ankle line.
  */
+/**
+ * Where a blended leg's knee points: `w` of the way round the hip-ankle line
+ * from `a`'s knee to `b`'s. Swinging round the leg rather than cutting
+ * straight across keeps the knee from flipping through the line when the
+ * two poses bend it opposite ways.
+ */
+function swungKnee(hip: V3, ankle: V3, a: LegRig, b: LegRig, w: number): V3 {
+  const axis = norm3(sub3(ankle, hip));
+  const out = (leg: LegRig) => {
+    const d = sub3(leg.knee, hip);
+    return norm3(sub3(d, scale3(axis, dot3(d, axis))));
+  };
+  const from = out(a);
+  const to = out(b);
+  const turn = Math.atan2(dot3(cross3(from, to), axis), dot3(from, to)) * w;
+  const swung = add3(scale3(from, Math.cos(turn)), scale3(cross3(axis, from), Math.sin(turn)));
+  return add3(scale3(add3(hip, ankle), 0.5), swung);
+}
+
 function blendRig(a: Rig, b: Rig, w: number, wholeLegs = false): Rig {
   const lerp = (x: number, y: number) => x + (y - x) * w;
   return {
@@ -317,8 +344,8 @@ function blendRig(a: Rig, b: Rig, w: number, wholeLegs = false): Rig {
       const m = b.legs[i];
       const hip = lerp3(l.hip, m.hip, w);
       const ankle = lerp3(l.ankle, m.ankle, w);
-      const knee = lerp3(l.knee, m.knee, w);
-      return { ...m, hip, knee: wholeLegs ? kneeBetween(hip, ankle, knee) : knee, ankle, shoe: blendFrame(l.shoe, m.shoe, w) };
+      const knee = wholeLegs ? kneeBetween(hip, ankle, swungKnee(hip, ankle, l, m, w)) : lerp3(l.knee, m.knee, w);
+      return { ...m, hip, knee, ankle, shoe: blendFrame(l.shoe, m.shoe, w) };
     }) as [LegRig, LegRig],
     arms: a.arms.map((arm, i) => {
       const m = b.arms[i];
@@ -390,9 +417,11 @@ function planted(rig: Rig, board: BoardRig, k: number, allowLift: boolean): Rig 
     const x = dot3(rel, ax);
     const gap = dot3(rel, ay) - deckTopY(x);
     const kept = allowLift ? gap * smoothstep((Math.abs(gap) - PLANT_HOLD) / (PLANT_FREE - PLANT_HOLD)) : 0;
-    const by = scale3(ay, (kept - gap) * k);
+    // Only as far as the leg reaches: a foot pressing a popped end down
+    // leaves it once the leg is straight.
+    const ankle = withinReach(leg.hip, add3(leg.ankle, scale3(ay, (kept - gap) * k)));
+    const by = sub3(ankle, leg.ankle);
     if (Math.hypot(by.x, by.y, by.z) < 1e-9) return leg;
-    const ankle = add3(leg.ankle, by);
     return { ...leg, knee: kneeBetween(leg.hip, ankle, leg.knee), ankle, shoe: moveFrame(leg.shoe, by) };
   }) as [LegRig, LegRig];
   return { ...rig, legs };

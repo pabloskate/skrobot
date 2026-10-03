@@ -2098,6 +2098,18 @@ main:has(.rps-arena) > .screen {
   padding: 0;
 }
 
+.game-stage-placeholder {
+  display: grid;
+  width: 100%;
+  aspect-ratio: 500 / 404;
+  place-items: center;
+  border-radius: var(--radius) var(--radius) 0 0;
+  color: var(--ink);
+  background: linear-gradient(180deg, #b2abdb, #f6cebc 48%, #b5cbd0);
+  font-size: 14px;
+  font-weight: 600;
+}
+
 .attempt-panel .trick-anim {
   position: relative;
   display: grid;
@@ -5169,7 +5181,6 @@ main:has(.rps-arena) > .screen {
 
 .explorer {
   --explorer-line: #e4e1ee;
-  --explorer-glass: rgba(255, 255, 255, 0.86);
   --explorer-thumb: 18px;
   min-height: 100vh;
   padding-bottom: calc(32px + env(safe-area-inset-bottom));
@@ -5397,32 +5408,32 @@ main:has(.rps-arena) > .screen {
   box-shadow: none;
 }
 
-.explorer-hud {
-  position: absolute;
-  inset: 0;
+/* What's playing and how it's filmed: a caption bar above the picture, so
+   nothing covers the scene. It holds one height whether the title takes one
+   line or two, so the stage never jumps when a reset button shows up mid-drag. */
+.explorer-stage-bar {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 12px;
-  pointer-events: none;
+  min-height: 54px;
+  padding: 8px 12px;
 }
 
-.explorer-hud-title {
-  max-width: 64%;
+.explorer-stage-title {
+  display: -webkit-box;
+  min-width: 0;
   margin: 0;
-  padding: 7px 12px;
-  border-radius: 14px;
+  overflow: hidden;
   color: var(--ink);
-  background: var(--explorer-glass);
-  box-shadow: 0 2px 10px rgba(34, 26, 78, 0.12);
-  backdrop-filter: blur(8px);
   font-size: 15px;
   font-weight: 800;
   line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
-.explorer-hud-camera {
+.explorer-stage-camera {
   display: flex;
   flex-shrink: 0;
   align-items: center;
@@ -5433,14 +5444,14 @@ main:has(.rps-arena) > .screen {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px 4px 5px;
+  height: 32px;
+  padding: 0 10px 0 5px;
   border-radius: 999px;
   color: var(--purple-dark);
-  background: var(--explorer-glass);
-  box-shadow: 0 2px 10px rgba(34, 26, 78, 0.12);
-  backdrop-filter: blur(8px);
+  background: var(--purple-soft);
   font-size: 12px;
   font-weight: 800;
+  white-space: nowrap;
 }
 
 .explorer-cam-reset {
@@ -5451,10 +5462,8 @@ main:has(.rps-arena) > .screen {
   border: none;
   border-radius: 50%;
   color: var(--purple-dark);
-  background: var(--explorer-glass);
-  box-shadow: 0 2px 10px rgba(34, 26, 78, 0.12);
+  background: var(--bg);
   cursor: pointer;
-  pointer-events: auto;
 }
 
 .explorer-cam-reset svg {
@@ -5471,13 +5480,11 @@ main:has(.rps-arena) > .screen {
   border: none;
   border-radius: 999px;
   color: var(--purple-dark);
-  background: var(--explorer-glass);
-  box-shadow: 0 2px 10px rgba(34, 26, 78, 0.12);
-  backdrop-filter: blur(8px);
+  background: var(--bg);
   font-size: 12px;
   font-weight: 800;
+  font-variant-numeric: tabular-nums;
   cursor: pointer;
-  pointer-events: auto;
 }
 
 .explorer-zoom-badge svg {
@@ -6153,6 +6160,23 @@ main:has(.rps-arena) > .screen {
   background: #f8f7fb;
 }
 
+/* Inside a slot's panel the panel's own gap spaces the rows. */
+.explorer-slot-panel .explorer-field {
+  margin-top: 0;
+}
+
+.explorer-slot-panel .explorer-search {
+  background: #fff;
+}
+
+.explorer-slot-panel .explorer-tier h3 {
+  margin: 0 0 8px;
+}
+
+.explorer-slot-panel .explorer-empty {
+  margin: 0;
+}
+
 .explorer-note {
   margin: 0;
   color: var(--muted);
@@ -6228,5 +6252,41 @@ main:has(.rps-arena) > .screen {
 @media (prefers-reduced-motion: reduce) {
   .explorer-orbit-hint {
     animation: none;
+  }
+}
+
+/* ---------- Trick Explorer 3D (/explore/3d) ---------- */
+
+.explorer3d-scenes--compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  background: var(--ink, #221a4e);
+}
+
+.explorer3d-pane {
+  position: relative;
+  margin: 0;
+  min-width: 0;
+}
+
+.explorer3d-pane figcaption {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(34, 26, 78, 0.6);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+}
+
+/* Side by side wants the room: on wide screens the stage takes more of it. */
+@media (min-width: 960px) {
+  .explorer3d--compare .explorer-layout {
+    grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr);
   }
 }

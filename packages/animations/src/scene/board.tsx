@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import { PALETTE, facesCamera, lambert, tone, type Camera } from './camera';
-import { OUTLINE, facing, newGroup, renderGroup, roundedBox, type BoxSpec } from './draw';
+import { OUTLINE, facing, newGroup, renderGroup, roundedBox, shadeShape, solidHull, type BoxSpec } from './draw';
 import { BOTTOM_LOCAL, TOP_LOCAL, deckBottomY, deckTopY, drawDeck, kickY, THICKNESS } from './deck';
 import { clamp01, hull, mixHex, norm3, pathOf, rad, type P2, type V3 } from './math';
 import { frameOf, type BoardRig } from './skeleton';
@@ -8,7 +8,7 @@ import { frameOf, type BoardRig } from './skeleton';
 /**
  * Skateboard for TrickScene: a solid popsicle deck (grip top, painted
  * bottom, maple ply band) on silver trucks (a baseplate and a hanger that
- * widens down to the axle) and cream wheels with metal hubs. Each wheel
+ * flares from a narrow neck out to the axle) and cream wheels with metal hubs. Each wheel
  * carries one printed mark that turns with the distance rolled, smeared over
  * the angle it sweeps in a displayed frame, so a fast wheel reads as a
  * spinning blur instead of strobing. The deck keeps the physics renderers'
@@ -29,13 +29,31 @@ export const WHEEL_Y = WHEEL_BOTTOM - WHEEL_R;
 /** Board-local depth of the bottom of a truck hanger: what rides a bar in a
  *  grind. The wheels dip WHEEL_BOTTOM - HANGER_BOTTOM past the contact. */
 export const HANGER_BOTTOM = 9.9;
-const WHEEL_HALF_W = WHEEL_R * 0.46;
+export const WHEEL_HALF_W = WHEEL_R * 0.46;
 /** The wheels' inner faces stay this far from the centerline, clear of a bar. */
-const WHEEL_INNER = 5;
+export const WHEEL_INNER = 5;
 export const WHEEL_Z = WHEEL_INNER + WHEEL_HALF_W;
-/** Truck parts: the baseplate flat against the deck, the hanger widening toward the axle. */
-const PLATE: BoxSpec = { f: 5.2, u: 0.7, s: 4.4, r: 0.65 };
-const HANGER: BoxSpec = { f: 2.5, u: 4.85, s: 3.7, r: 1.2, taper: 1.35 };
+/**
+ * A truck, top to bottom the way a real one reads head-on: a baseplate flat
+ * against the deck, the kingpin's bushing (a narrow urethane neck), and the
+ * hanger, which rises to a short hump under the bushing and slopes out into
+ * thin wings that carry the axle into the wheels. Narrow where it meets the
+ * deck, widest at the axle. Board-local half extents, y down from the deck.
+ */
+const PLATE: BoxSpec = { f: 4.2, u: 0.55, s: 2.6, r: 0.5 };
+const BUSHING: BoxSpec = { f: 1.5, u: 1.75, s: 1.45, r: 1.2 };
+/** Where the plate ends and the bushing gives way to the hanger. */
+const PLATE_BOTTOM = 1.2;
+const HUMP_TOP = 4.5;
+/**
+ * The hanger's corners (its surface reaches HANGER_ROUND past them): the
+ * hump under the bushing, and the wings, whose tops sit just over the axle
+ * and whose ends meet the wheels' inner faces. Its underside runs flat at
+ * HANGER_BOTTOM, where a grind rests.
+ */
+const HANGER_ROUND = 0.8;
+const HUMP = { f: 1.9, s: 1.1 };
+const WING = { f: 1.2, s: WHEEL_INNER - HANGER_ROUND, top: WHEEL_Y - 1.3 };
 /**
  * Share of true rolling speed the wheels turn at. Full speed (about nine
  * turns a second) is a blur the eye can't follow on a wheel this small.
@@ -93,9 +111,11 @@ export function wheelRoll(dist: number, touchdownDist: number, dir: 1 | -1, land
 /**
  * A flat bar under the board. Running gear beyond the bar's centerline
  * (the far wheels of a truck straddling it, a truck hanging off the far
- * side) paints before the bar and the rest after it, and the deck stays on
- * top. Where the deck itself dips below the bar's top on the far side (the
- * nose of a smith or feeble), `cover` repaints the bar over just that part.
+ * side) paints before the bar and the rest after it, whichever side of the
+ * deck the camera sees. Seen from above, the deck stays on top, and where it
+ * dips below the bar's top on the far side (the nose of a smith or feeble),
+ * `cover` repaints the bar over just that part. Seen from below (a tilted
+ * 5-0 or nosegrind from a low angle), the deck goes under all of it.
  */
 export interface BoardBar {
   el: ReactElement;
@@ -154,14 +174,32 @@ export function drawBoard(cam: Camera, board: BoardRig, look: BoardLook, spin: W
   const wheelUp = norm3(board.dir({ x: 0, y: -1, z: 0 }));
   const wheelFwd = norm3(board.dir({ x: 1, y: 0, z: 0 }));
   for (const tx of [-WHEEL_X, WHEEL_X]) {
-    // One truck: a thin baseplate under the deck and a hanger that widens
-    // from it down to the axle, painted as a single silhouette.
+    // One truck, painted as a single silhouette: a baseplate under the
+    // deck, the bushing, and a hanger flaring from a hump out to the axle.
     const underside = kickY(tx) + THICKNESS / 2;
     const truck = newGroup(`truck${tx}`);
     const frameAt = (y: number) => frameOf(board.point({ x: tx, y, z: 0 }), board.dir);
-    roundedBox(truck, cam, frameAt(HANGER_BOTTOM - HANGER.u), HANGER, PALETTE.metal, { outline: OUTLINE * 0.85 });
-    roundedBox(truck, cam, frameAt(underside + PLATE.u - 0.3), PLATE, PALETTE.metal, { outline: OUTLINE * 0.85 });
-    const pt = cam.project(board.point({ x: tx, y: HANGER_BOTTOM - HANGER.u, z: 0 }));
+    // Board y is down and a frame's up is up: corners sit at u = -y.
+    const humpTop = -(HUMP_TOP + HANGER_ROUND);
+    const bottom = -(HANGER_BOTTOM - HANGER_ROUND);
+    const wingTop = -(WING.top + HANGER_ROUND);
+    const corners: Array<[number, number, number]> = [];
+    for (const sf of [-1, 1]) {
+      for (const ss of [-1, 1]) {
+        corners.push(
+          [sf * HUMP.f, humpTop, ss * HUMP.s], [sf * HUMP.f, bottom, ss * HUMP.s],
+          [sf * WING.f, wingTop, ss * WING.s], [sf * WING.f, bottom, ss * WING.s],
+        );
+      }
+    }
+    // The hanger's middle: where the truck sorts against the wheels and scales its ink.
+    const pt = cam.project(board.point({ x: tx, y: (HUMP_TOP + HANGER_BOTTOM) / 2, z: 0 }));
+    const ink = { outline: OUTLINE * 0.85 };
+    const hanger = () => shadeShape(truck, solidHull(cam, frameAt(0), corners, HANGER_ROUND), pt.s, PALETTE.metal, ink.outline);
+    const bushing = () => roundedBox(truck, cam, frameAt((PLATE_BOTTOM + HUMP_TOP) / 2), BUSHING, look.graphic, ink);
+    const plate = () => roundedBox(truck, cam, frameAt(underside + (PLATE_BOTTOM - underside) / 2), PLATE, PALETTE.metal, ink);
+    // Nearest the camera paints last: the plate from above, the hanger from below.
+    for (const paint of seeingTop ? [hanger, bushing, plate] : [plate, bushing, hanger]) paint();
     parts.push({ depth: pt.depth, z: board.point({ x: tx, y: WHEEL_Y, z: 0 }).z, el: renderGroup(truck) });
     for (const wz of [-WHEEL_Z, WHEEL_Z]) {
       const c = board.point({ x: tx, y: WHEEL_Y, z: wz });
@@ -230,15 +268,16 @@ export function drawBoard(cam: Camera, board: BoardRig, look: BoardLook, spin: W
     }
   }
   parts.sort((a, b) => a.depth - b.depth);
-  let running = parts.map((p) => p.el);
+  // On a bar, the gear beyond its centerline is behind it from either side
+  // of the deck, so the bar always goes between the far gear and the near.
+  const beyond = (p: Part) => bar != null && p.z < bar.z - 0.5;
+  const running = [
+    ...parts.filter(beyond).map((p) => p.el),
+    ...(bar ? [<g key="bar">{bar.el}</g>] : []),
+    ...parts.filter((p) => !beyond(p)).map((p) => p.el),
+  ];
   let cover: ReactElement | null = null;
   if (bar && seeingTop) {
-    const beyond = (p: Part) => p.z < bar.z - 0.5;
-    running = [
-      ...parts.filter(beyond).map((p) => p.el),
-      <g key="bar">{bar.el}</g>,
-      ...parts.filter((p) => !beyond(p)).map((p) => p.el),
-    ];
     // The deck below the bar's top and beyond it: its screen footprint.
     const dipped = (outline: V3[]) => clipPlane(clipPlane(outline, (p) => p.y - bar.top - 1), (p) => bar.z - p.z);
     const pts = [...dipped(top), ...dipped(bottom)];
@@ -264,13 +303,16 @@ export function drawBoard(cam: Camera, board: BoardRig, look: BoardLook, spin: W
     }
   }
 
+  // From above, the deck covers its running gear (and the bar under it, but
+  // for the dipped part the cover puts back). From below, the gear and the
+  // bar cover the deck: the bar is between the camera and the underside
+  // wherever the two overlap.
   return (
     <g key="board">
-      {bar && !seeingTop ? <g key="bar">{bar.el}</g> : null}
-      {seeingTop ? running : null}
-      {deck}
+      {seeingTop ? null : deck}
+      {running}
+      {seeingTop ? deck : null}
       {cover}
-      {seeingTop ? null : running}
     </g>
   );
 }

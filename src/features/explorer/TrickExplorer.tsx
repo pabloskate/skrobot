@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { TbArrowLeft, TbCheck, TbShare } from 'react-icons/tb';
+import { SCENE_SETS } from '@skrobot/animations';
 import { ROBOT_BY_ID, ROBOTS } from '@/features/robots';
 import {
   CAMERA_PRESETS,
@@ -101,6 +102,7 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
             timeline={timeline}
             camera={camera}
             zoom={state.zoom}
+            set={state.set}
             cameraLabel={cameraLabel(state)}
             customCamera={preset == null}
             rate={rate}
@@ -114,6 +116,8 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
         </div>
 
         <div className="explorer-panel-col">
+          <TrickBuilder state={state} onChange={setState} />
+
           <section className="explorer-card" aria-labelledby="explorer-camera-title">
             <div className="explorer-card-head">
               <h2 id="explorer-camera-title">Camera</h2>
@@ -152,9 +156,24 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
               />
               <span className="explorer-zoom-end">In</span>
             </label>
+            <div className="explorer-field explorer-field-inline">
+              <span className="explorer-field-label" id="explorer-set-label">Spot</span>
+              <div className="explorer-segmented explorer-segmented-compact" role="radiogroup" aria-labelledby="explorer-set-label">
+                {SCENE_SETS.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={state.set === option.id}
+                    className={state.set === option.id ? 'active' : ''}
+                    onClick={() => setState({ ...state, set: option.id })}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </section>
-
-          <TrickBuilder state={state} onChange={setState} />
 
           {steps.length > 0 && (
             <section className="explorer-card explorer-steps" aria-labelledby="explorer-steps-title">

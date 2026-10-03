@@ -10,9 +10,11 @@ export default defineConfig({
     include: ['src/**/*.test.ts', 'tests/**/*.test.ts', 'scripts/**/*.test.ts', 'packages/animations/src/**/*.test.ts', 'skrobot-animations/src/blender-prototype/**/*.test.ts'],
   },
   resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
-      '@skrobot/animations': fileURLToPath(new URL('./packages/animations/src/index.ts', import.meta.url)),
-    },
+    alias: [
+      { find: /^@\//, replacement: `${fileURLToPath(new URL('./src', import.meta.url))}/` },
+      // The three.js stage entry before the package root.
+      { find: /^@skrobot\/animations\/three$/, replacement: fileURLToPath(new URL('./packages/animations/src/three/index.ts', import.meta.url)) },
+      { find: /^@skrobot\/animations$/, replacement: fileURLToPath(new URL('./packages/animations/src/index.ts', import.meta.url)) },
+    ],
   },
 })
