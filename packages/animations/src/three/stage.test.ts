@@ -176,21 +176,20 @@ describe('TrickScene3D stage', () => {
     expect(deepest).toBeGreaterThan(-0.05);
   });
 
-  it('lifts a popped tail clear of the asphalt with the knees, leaving the body where TrickScene puts it', () => {
+  it('takes a board out of the asphalt with the knees, leaving the body where TrickScene puts it', () => {
     const style = resolveSkateStyle(robot.skateStyle);
     const gap = (a: V3, b: V3) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
-    let lifted = 0;
     let bodyOff = 0;
     let boneOff = 0;
     for (const trick of TRICKS) {
       const stage = planStage(robot, trick, { landed: true, riderStance: 'regular', style, fall: 'slam', shankProgress: 0.65 });
-      // Every displayed frame and then some: the pop snaps the tail down between two of them.
+      // Every displayed frame and then some. (The tail strike tips the board
+      // up as it rises, so a pop rarely sinks the tail any more.)
       for (let t = 0; t <= stage.end; t += 1 / 120) {
         const shared = stage.grind
           ? solveGrindRig(t, stage.grind, stage.mechanics, style).rig
           : solveRig(computeFrame(t, stage.spec, true, 'slam', 0.65, style), stage.spec, stage.mechanics, style, 'landed');
         const { rig } = stageFrame(stage, t, 1);
-        if (shared.board.center.y - rig.board.center.y > 1) lifted++;
         bodyOff = Math.max(
           bodyOff,
           gap(shared.head.origin, rig.head.origin),
@@ -201,7 +200,6 @@ describe('TrickScene3D stage', () => {
         for (const leg of rig.legs) boneOff = Math.max(boneOff, Math.abs(gap(leg.hip, leg.knee) - THIGH), Math.abs(gap(leg.knee, leg.ankle) - SHIN));
       }
     }
-    expect(lifted).toBeGreaterThan(0);
     expect(bodyOff).toBeLessThan(1e-9);
     expect(boneOff).toBeLessThan(1e-6);
   });

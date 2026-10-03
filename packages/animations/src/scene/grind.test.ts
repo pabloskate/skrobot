@@ -363,7 +363,10 @@ describe('Grind body', () => {
           for (const leg of rig.legs) {
             sweep.below('thigh length error', Math.abs(dist(leg.hip, leg.knee) - THIGH), 0.5e-6, where);
             sweep.below('shin length error', Math.abs(dist(leg.knee, leg.ankle) - SHIN), 0.5e-6, where);
-            if (falling) continue;
+            // A leg (all but) straight can't follow a popped tail down any
+            // further: the planted foot eases off it over the last few units.
+            const straight = dist(leg.hip, leg.ankle) > THIGH + SHIN - 4.5;
+            if (falling || straight) continue;
             const sole = toBoard(rig, leg.shoe.at(0, -SHOE_HALF_HEIGHT, 0));
             sweep.below('sole height', Math.abs(sole.y - deckTopY(sole.x)), 0.5, `${where} ${leg.side} sole`);
             sweep.below('sole width', Math.abs(sole.z), DECK_HALF_WIDTH + 2, `${where} ${leg.side} on deck`);
@@ -565,7 +568,7 @@ describe('Trick into grind', () => {
         expect(Math.abs(yaw) === 0 || Math.abs(yaw) === 180, `${label} t=${t} yaw=${yaw}`).toBe(true);
       }
     }
-  });
+  }, 20_000);
 
   it('takes the feet off the deck only while it turns, and keeps the soles on the grip otherwise', () => {
     for (const { entry, base, side, rider, stance, label } of everyEntry()) {

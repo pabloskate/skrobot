@@ -710,19 +710,25 @@ function computeFrame(
     // Late tricks run the rotation on a delayed clock (spinP); for non-late
     // tricks spinP === catchP so this is a no-op.
     sy = spec.flips ? Math.cos(rad(spinP * spec.flips * 360 * shankFlipScale)) : 1;
+    // The feet catch a flip or the board's own shuv early, but a body spin
+    // has the whole rider's momentum behind it: it turns steadily until
+    // touchdown, carrying the board round with it, and never stops in the air.
+    const carriedYaw = Math.min(spec.yaw, spec.bodyYaw);
+    const boardYaw = carriedYaw * p + (spec.yaw - carriedYaw) * spinP;
     if (spec.yaw) {
-      const c = Math.cos(rad(spinP * spec.yaw * shankYawScale));
+      const c = Math.cos(rad(boardYaw * shankYawScale));
       // A clean spin (no flip) reads better passing through the signed thin
       // edge; combined with a flip the scaleY rotation already carries it.
       sx = spec.flips ? 0.2 + 0.8 * Math.abs(c) : signedSquash(c);
     }
-    if (spec.bodyYaw) bodySX = signedSquash(Math.cos(rad(catchP * spec.bodyYaw * shankBodyScale)));
-    // Raw angles for the 3D renderer — same clocks (spinP/catchP) as the
-    // squash factors above, so late tricks and shanks carry over for free.
+    if (spec.bodyYaw) bodySX = signedSquash(Math.cos(rad(p * spec.bodyYaw * shankBodyScale)));
+    // Raw angles for the 3D renderer — same clocks (spinP/catchP, and the
+    // flight for a body spin) as the squash factors above, so late tricks
+    // and shanks carry over for free.
     flipDeg = spec.flipDir * spinP * spec.flips * 360 * shankFlipScale;
-    yawDeg = (spec.spinDir || 1) * spinP * spec.yaw * shankYawScale;
+    yawDeg = (spec.spinDir || 1) * boardYaw * shankYawScale;
     forwardPitchDeg = spec.forwardFlip ? spec.dir * spinP * 180 * shankYawScale : 0;
-    bodyYawDeg = (spec.spinDir || 1) * catchP * spec.bodyYaw * shankBodyScale;
+    bodyYawDeg = (spec.spinDir || 1) * p * spec.bodyYaw * shankBodyScale;
     // Impossible: one continuous wrap from the popped angle through a full
     // end-over-end revolution. A separate pop-taper + linear roll used to
     // nearly cancel mid-flight (board almost stops rotating, then restarts),

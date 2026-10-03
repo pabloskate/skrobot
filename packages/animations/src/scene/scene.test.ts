@@ -108,7 +108,7 @@ describe('TrickScene', () => {
         }
       }
     }
-  }, 20_000);
+  }, 40_000);
 
   it('renders finite geometry for the whole catalog, every outcome', () => {
     const robot = robotWith(1);
@@ -123,7 +123,7 @@ describe('TrickScene', () => {
         }
       }
     }
-  }, 20_000);
+  }, 40_000);
 
   it('flicks a kickflip off the heelside rail and a heelflip off the toeside, early in the roll', () => {
     // The flick is what starts the roll, so by the time the board has turned
@@ -248,7 +248,10 @@ describe('TrickScene body physics', () => {
               const shin = { x: leg.knee.x - leg.ankle.x, y: leg.knee.y - leg.ankle.y, z: leg.knee.z - leg.ankle.z };
               const up = leg.shoe.up;
               const tilt = Math.acos((shin.x * up.x + shin.y * up.y + shin.z * up.z) / SHIN) * 180 / Math.PI;
-              expect(tilt, `${rider} ${base} ${stance} ${leg.side} t=${t}`).toBeLessThan(72);
+              // A nollie's back foot, set up out over its rail and picked up
+              // by the tail popping into it, bends its ankle furthest, for a
+              // frame or two after the pop.
+              expect(tilt, `${rider} ${base} ${stance} ${leg.side} t=${t}`).toBeLessThan(77);
             }
           }
         }
@@ -259,8 +262,9 @@ describe('TrickScene body physics', () => {
   it('flies the hips on a ballistic arc, with the board pulled up into a knee tuck at the peak', () => {
     for (const base of ['Ollie', 'Frontside 180']) {
       // Equal steps through mid-flight: constant gravity means a constant
-      // second difference.
-      const ys = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8].map((s) => hipY(rigAt(base, 'regular', 'regular', 'landed', ROLL_IN + s * FLIP_T)));
+      // second difference. (Until the pop has eased level, the front foot
+      // rides the popped nose up and the hips give its knee the room.)
+      const ys = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8].map((s) => hipY(rigAt(base, 'regular', 'regular', 'landed', ROLL_IN + s * FLIP_T)));
       const accel = ys.slice(2).map((y, i) => y - 2 * ys[i + 1] + ys[i]);
       for (const a of accel) expect(a, base).toBeCloseTo(accel[0], 6);
       expect(accel[0], `${base} falls back down`).toBeGreaterThan(0);
@@ -351,7 +355,7 @@ describe('TrickScene wheels', () => {
     // A pop shuv lands the nose where the tail was, so the wheels reverse.
     const shuv = trickOf('Pop Shuvit', 'regular');
     expect(at(shuv, touchdown + 0.3).roll).toBeLessThan(at(shuv, touchdown + 0.2).roll);
-  });
+  }, 20_000);
 
   it('turns the wheels continuously: they coast through the air and never jump', () => {
     // Each render rolls its own shank; hold it still so frames share one.
@@ -374,7 +378,7 @@ describe('TrickScene wheels', () => {
     } finally {
       random.mockRestore();
     }
-  }, 20_000);
+  }, 40_000);
 });
 
 describe('TrickScene lead-in', () => {

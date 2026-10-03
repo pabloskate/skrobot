@@ -35,7 +35,7 @@ import {
   sub3,
   type V3,
 } from './math';
-import { solveRig } from './rig';
+import { SETUP_HANG, SETUP_RAMP, solveRig } from './rig';
 import {
   ANKLE_LIFT,
   DECK_HALF_WIDTH,
@@ -134,6 +134,12 @@ export function boardRigAt(center: V3, pose: BoardPose, spin: TrickSpin = NO_SPI
   };
 }
 
+/** 0 → 1: how far an exit flip's flicking foot has set up on the bar: in
+ *  over SETUP_RAMP ahead of the pop off, handing over to the flick after. */
+function exitSetup(t: number, off: number): number {
+  return smoothstep((t - off + EXIT_SETUP_LEAD) / SETUP_RAMP) * (1 - smoothstep((t - off) / 0.35));
+}
+
 function bodyOn(g: GrindFrame, plan: GrindPlan, mechanics: RiderMechanics): Rig {
   const toeDir = mechanics.orientationSign;
   // The feet stand on the board's attitude; a deck flipping under them is
@@ -164,7 +170,14 @@ function bodyOn(g: GrindFrame, plan: GrindPlan, mechanics: RiderMechanics): Rig 
     const toe = rotY({ x: 0, y: 0, z: toeDir }, toeDir * rake);
     const along = rotY({ x: 1, y: 0, z: 0 }, toeDir * rake);
     const flicking = trick != null && trick.mechanics.flickFoot === side;
-    const lane = toeDir * SHOE_TOESIDE - toe.z * TOE_REACH + (flicking ? flickDir * g.flickOut * flickReach : 0);
+    const flick = flicking ? flickDir * g.flickOut * flickReach : 0;
+    // Setting up a flip out of the grind, its flicking foot shuffles out on
+    // the bar before the pop off, as on flatground (see rig.ts SETUP_HANG).
+    const exit = plan.exit;
+    const setup = exit && exit.trick.spec.flipDir && exit.mechanics.flickFoot === side
+      ? -exit.trick.spec.flipDir * toeDir * SETUP_HANG * exitSetup(g.t, plan.off)
+      : 0;
+    const lane = toeDir * SHOE_TOESIDE - toe.z * TOE_REACH + (Math.abs(setup) > Math.abs(flick) ? setup : flick);
     // The sole sits 2 below the foot point (see solveRig's shoe placement), on
     // the deck where the shoe's center is, which the toe reaches past the foot.
     const footY = deckTopY(x + toe.x * TOE_REACH) - 2 - feetLift;
@@ -293,12 +306,24 @@ function blendFrame(a: Frame3, b: Frame3, w: number): Frame3 {
 }
 
 /** The knee nearest `near` that keeps both leg bones whole between `hip` and `ankle`. */
-/** `ankle`, pulled toward `hip` if it's further than a straight leg reaches. */
+/** A point the knee should bend toward once `leg`'s ankle moves to
+ *  `ankle`: the way it bent before, across the new hip-ankle line. (Its old
+ *  position can end up on the new line, or past it, and flip the knee.) */
+function bentAsBefore(leg: LegRig, ankle: V3): V3 {
+  const axis = norm3(sub3(leg.ankle, leg.hip));
+  const d = sub3(leg.knee, leg.hip);
+  const out = sub3(d, scale3(axis, dot3(d, axis)));
+  return add3(scale3(add3(leg.hip, ankle), 0.5), out);
+}
+
+/** `ankle`, pulled toward `hip` if it's further than a straight leg reaches,
+ *  easing into that over the last REACH_EASE so the foot never stops dead. */
 function withinReach(hip: V3, ankle: V3): V3 {
   const d = sub3(ankle, hip);
   const len = Math.hypot(d.x, d.y, d.z);
-  const reach = THIGH + SHIN - 1e-6;
-  return len <= reach ? ankle : add3(hip, scale3(d, reach / len));
+  const from = THIGH + SHIN - 1e-6 - REACH_EASE;
+  if (len <= from) return ankle;
+  return add3(hip, scale3(d, (from + REACH_EASE * Math.tanh((len - from) / REACH_EASE)) / len));
 }
 
 export function kneeBetween(hip: V3, ankle: V3, near: V3): V3 {
@@ -392,6 +417,9 @@ export interface GrindRig {
   falling: boolean;
 }
 
+/** Seconds before the pop off the bar that an exit flip starts setting up. */
+const EXIT_SETUP_LEAD = 0.45;
+
 /** Share of the hop onto the bar after which the flatground rider hands over to the grind's. */
 const HANDOVER_FROM = 0.55;
 
@@ -402,6 +430,8 @@ const HANDOVER_FROM = 0.55;
  * a kick they rest a little into.
  */
 const PLANT_HOLD = 8;
+/** How far short of a straight leg a planted foot starts easing off the deck. */
+const REACH_EASE = 4;
 const PLANT_FREE = 16;
 
 /**
@@ -422,7 +452,7 @@ function planted(rig: Rig, board: BoardRig, k: number, allowLift: boolean): Rig 
     const ankle = withinReach(leg.hip, add3(leg.ankle, scale3(ay, (kept - gap) * k)));
     const by = sub3(ankle, leg.ankle);
     if (Math.hypot(by.x, by.y, by.z) < 1e-9) return leg;
-    return { ...leg, knee: kneeBetween(leg.hip, ankle, leg.knee), ankle, shoe: moveFrame(leg.shoe, by) };
+    return { ...leg, knee: kneeBetween(leg.hip, ankle, bentAsBefore(leg, ankle)), ankle, shoe: moveFrame(leg.shoe, by) };
   }) as [LegRig, LegRig];
   return { ...rig, legs };
 }

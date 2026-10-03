@@ -401,24 +401,39 @@ describe('computeFrame', () => {
   });
 
   it('rotation style makes the catch earlier while preserving the exact final trick', () => {
-    const spec = specFor(trick('Backside 180', 'regular'));
+    const spec = specFor(trick('Kickflip', 'regular'));
     const slow = style({ rotationSpeed: SKATE_STYLE_BOUNDS.rotationSpeed.min });
     const fast = style({ rotationSpeed: SKATE_STYLE_BOUNDS.rotationSpeed.max });
     const beforeSlowCatch = ROLL_IN + FLIP_T * 0.8;
     const slowFrame = computeFrame(beforeSlowCatch, spec, true, 'slam', 0.65, slow);
     const fastFrame = computeFrame(beforeSlowCatch, spec, true, 'slam', 0.65, fast);
 
-    expect(Math.abs(fastFrame.spin3d.bodyYawDeg)).toBeGreaterThan(Math.abs(slowFrame.spin3d.bodyYawDeg));
-    expect(fastFrame.spin3d.bodyYawDeg).toBeCloseTo(180, 5);
-    expect(Math.abs(slowFrame.spin3d.bodyYawDeg)).toBeLessThan(180);
+    expect(Math.abs(fastFrame.spin3d.flipDeg)).toBeGreaterThan(Math.abs(slowFrame.spin3d.flipDeg));
+    expect(fastFrame.spin3d.flipDeg).toBeCloseTo(360, 5);
+    expect(Math.abs(slowFrame.spin3d.flipDeg)).toBeLessThan(360);
 
     const end = endTime(true);
-    expect(computeFrame(end, spec, true, 'slam', 0.65, slow).spin3d.bodyYawDeg).toBeCloseTo(180, 5);
-    expect(computeFrame(end, spec, true, 'slam', 0.65, fast).spin3d.bodyYawDeg).toBeCloseTo(180, 5);
+    expect(computeFrame(end, spec, true, 'slam', 0.65, slow).spin3d.flipDeg).toBeCloseTo(360, 5);
+    expect(computeFrame(end, spec, true, 'slam', 0.65, fast).spin3d.flipDeg).toBeCloseTo(360, 5);
 
     const justBeforeTouchdown = ROLL_IN + FLIP_T - 1e-6;
-    expect(computeFrame(justBeforeTouchdown, spec, true, 'slam', 0.65, slow).spin3d.bodyYawDeg)
-      .toBeCloseTo(180, 3);
+    expect(computeFrame(justBeforeTouchdown, spec, true, 'slam', 0.65, slow).spin3d.flipDeg)
+      .toBeCloseTo(360, 3);
+  });
+
+  it('carries a body spin round until touchdown, whatever the style: momentum never stops in the air', () => {
+    for (const base of ['Backside 180', 'Frontside 360', 'Bigspin Flip', 'Backside Flip']) {
+      const spec = specFor(trick(base, 'regular'));
+      for (const rotationSpeed of [SKATE_STYLE_BOUNDS.rotationSpeed.min, SKATE_STYLE_BOUNDS.rotationSpeed.max]) {
+        const s = style({ rotationSpeed });
+        const yaw = (p: number) => computeFrame(ROLL_IN + FLIP_T * p, spec, true, 'slam', 0.65, s).spin3d.bodyYawDeg;
+        // Steady through the whole flight, still turning just before touchdown.
+        const steps = [0.2, 0.5, 0.8, 0.95].map((p) => Math.abs(yaw(p)));
+        for (let i = 1; i < steps.length; i++) expect(steps[i], base).toBeGreaterThan(steps[i - 1]);
+        expect(Math.abs(yaw(0.95)), base).toBeLessThan(spec.bodyYaw);
+        expect(Math.abs(yaw(1 - 1e-6)), base).toBeCloseTo(spec.bodyYaw, 3);
+      }
+    }
   });
 
   it('flick style changes the flick foot reach without moving the pop foot', () => {
@@ -468,22 +483,28 @@ describe('computeFrame', () => {
     }
   });
 
-  it('every rotation completes exactly at the catch and holds through landing', () => {
+  it('every rotation completes exactly at the catch, or for a body spin at touchdown, and holds through landing', () => {
     for (const base of BASES) {
       for (const stance of STANCES) {
         const spec = specFor(trick(base, stance));
-        // Catch point: 85% through the flight ends the spin clocks (late
-        // tricks finish even earlier); sample just after to dodge rounding.
+        // Catch point: 85% through the flight ends the flip and shuv clocks
+        // (late tricks finish even earlier); sample just after to dodge
+        // rounding. A body spin, and the board it carries, turns on to
+        // touchdown.
         const atCatch = computeFrame(ROLL_IN + FLIP_T * 0.9, spec, true, 'slam').spin3d;
+        const atTouchdown = computeFrame(ROLL_IN + FLIP_T - 1e-9, spec, true, 'slam').spin3d;
         const landedFrame = computeFrame(endTime(true), spec, true, 'slam').spin3d;
-        for (const s of [atCatch, landedFrame]) {
+        for (const s of [atCatch, atTouchdown, landedFrame]) {
           expect(s.flipDeg).toBeCloseTo(spec.flipDir * spec.flips * 360, 5);
-          expect(s.yawDeg).toBeCloseTo((spec.spinDir || 1) * spec.yaw, 5);
-          expect(s.bodyYawDeg).toBeCloseTo((spec.spinDir || 1) * spec.bodyYaw, 5);
           if (spec.forwardFlip) {
             expect(s.forwardPitchDeg).toBeCloseTo(spec.dir * 180, 5);
           }
         }
+        for (const s of [atTouchdown, landedFrame]) {
+          expect(s.yawDeg).toBeCloseTo((spec.spinDir || 1) * spec.yaw, 5);
+          expect(s.bodyYawDeg).toBeCloseTo((spec.spinDir || 1) * spec.bodyYaw, 5);
+        }
+        if (!spec.bodyYaw) expect(atCatch.yawDeg).toBeCloseTo((spec.spinDir || 1) * spec.yaw, 5);
       }
     }
   });
@@ -516,10 +537,11 @@ describe('computeFrame', () => {
   it('shank under-rotates flip and body spin by the same progress', () => {
     const progress = 0.7;
     const spec = specFor(trick('Backside Flip', 'regular'));
-    const atCatch = computeFrame(ROLL_IN + FLIP_T * 0.9, spec, false, 'shank', progress).spin3d;
-    expect(atCatch.flipDeg).toBeCloseTo(spec.flipDir * spec.flips * 360 * progress, 5);
-    expect(atCatch.yawDeg).toBeCloseTo((spec.spinDir || 1) * spec.yaw * progress, 5);
-    expect(atCatch.bodyYawDeg).toBeCloseTo((spec.spinDir || 1) * spec.bodyYaw * progress, 5);
+    // At touchdown: the flip is caught earlier, the body spin turns until then.
+    const atTouchdown = computeFrame(ROLL_IN + FLIP_T - 1e-9, spec, false, 'shank', progress).spin3d;
+    expect(atTouchdown.flipDeg).toBeCloseTo(spec.flipDir * spec.flips * 360 * progress, 5);
+    expect(atTouchdown.yawDeg).toBeCloseTo((spec.spinDir || 1) * spec.yaw * progress, 5);
+    expect(atTouchdown.bodyYawDeg).toBeCloseTo((spec.spinDir || 1) * spec.bodyYaw * progress, 5);
   });
 
   it('shank holds incomplete spin on the ground (no unwind to start)', () => {

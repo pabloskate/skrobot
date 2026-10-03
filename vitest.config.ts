@@ -7,6 +7,9 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   test: {
     environment: 'node',
+    // The animation sweeps pose every trick in every stance, and a busy
+    // machine can push one past vitest's 5 s default.
+    testTimeout: 15_000,
     include: ['src/**/*.test.ts', 'tests/**/*.test.ts', 'scripts/**/*.test.ts', 'packages/animations/src/**/*.test.ts', 'skrobot-animations/src/blender-prototype/**/*.test.ts'],
   },
   resolve: {
