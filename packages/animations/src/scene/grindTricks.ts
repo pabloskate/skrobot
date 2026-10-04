@@ -121,9 +121,19 @@ const CATCH_BY = 0.85;
  * Flatground seconds per second of the hop. The trick plays at flatground
  * speed from the pop, so the flick, the flip and the catch look as they do on
  * flatground; only a hop too short to catch it by CATCH_BY speeds it up.
+ *
+ * `toTouchdown`: the hop lands on the ground, where a body spin keeps turning
+ * until the very end of the flight. The clock must get there by touchdown, or
+ * a hop shorter than the flight (a fast spinner catches early, so the catch
+ * alone doesn't ask for it) lands with the last of the turn still to come and
+ * the rider snaps round on touchdown.
  */
-export const hopRate = (hop: HopPlan, hopT: number) =>
-  Math.max(1, (catchFraction(hop.style) * FLIP_T) / (CATCH_BY * hopT));
+export const hopRate = (hop: HopPlan, hopT: number, toTouchdown = false) =>
+  Math.max(
+    1,
+    (catchFraction(hop.style) * FLIP_T) / (CATCH_BY * hopT),
+    toTouchdown && hop.trick.spec.bodyYaw ? FLIP_T / hopT : 0,
+  );
 
 /** The flatground clock `tau` seconds after the pop, held at touchdown once the trick is done. */
 export const hopClock = (tau: number, rate: number) => ROLL_IN + Math.min(FLIP_T, Math.max(0, tau) * rate);

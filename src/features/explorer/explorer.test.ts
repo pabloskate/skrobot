@@ -203,6 +203,8 @@ describe('Trick Explorer links', () => {
     expect(searchFromState(DEFAULT_STATE)).toBe('?grind=50-50-grind');
     expect(searchFromState(flatState())).toBe('?trick=kickflip');
     expect(searchFromState(grindState({ into: 'Kickflip', out: { base: 'Heelflip', end: 'nose' } }))).toBe('?grind=50-50-grind&in=kickflip&out=nollie-heelflip');
+    expect(searchFromState(grindState({ out: { base: 'Backside Heelflip', end: 'nose' } }))).toBe('?grind=50-50-grind&out=nollie-backside-heelflip');
+    expect(stateFromSearch('?grind=50-50-grind&out=frontside-flip').out).toEqual({ base: 'Frontside Flip', end: 'tail' });
     expect(searchFromState({ ...DEFAULT_STATE, zoom: 1.5 })).toBe('?grind=50-50-grind&zoom=1.5');
     expect(searchFromState({ ...DEFAULT_STATE, set: 'plaza' })).toBe('?grind=50-50-grind&set=plaza');
   });

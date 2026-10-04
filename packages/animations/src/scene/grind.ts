@@ -325,7 +325,7 @@ export function planGrind(
     popOut,
     popIn: (spec.popNose ? 1 : -1) * POP_IN,
     entryRate: entry ? hopRate(entry, upT) : 1,
-    exitRate: exit ? hopRate(exit, offT) : 1,
+    exitRate: exit ? hopRate(exit, offT, true) : 1,
     laneZ: BAR_Z - far * Math.max(far === 1 ? BEHIND_GAP : APPROACH_GAP, far * (BAR_Z - lockCenter.z) + CROSS_MIN),
     lockCenter,
     apex,

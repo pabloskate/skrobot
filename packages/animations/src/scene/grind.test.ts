@@ -13,6 +13,7 @@ import { drawRobot } from './robot';
 import {
   barSpan,
   grindCameraLift,
+  grindFrame,
   grindStreetDist,
   grindTimelineFor,
   planGrind,
@@ -891,10 +892,13 @@ describe('Spin into grind', () => {
 });
 
 describe('Trick out of grind', () => {
-  // Board-only tricks (a flip, a shuv, both), the rider's own half turn, and a bigspin's of both.
-  const EXITS = ['Kickflip', 'Heelflip', 'Pop Shuvit', 'Frontside Shuvit', '360 Flip', 'Backside 180', 'Frontside 180', 'Bigspin', 'FS Bigspin'];
+  // Board-only tricks (a flip, a shuv, both), the rider's own half turn, a flip on it, and a bigspin's of both.
+  const EXITS = [
+    'Kickflip', 'Heelflip', 'Pop Shuvit', 'Frontside Shuvit', '360 Flip', 'Backside 180', 'Frontside 180',
+    'Backside Flip', 'Frontside Flip', 'Backside Heelflip', 'Frontside Heelflip', 'Bigspin', 'FS Bigspin',
+  ];
   /** Exits that turn the rider round to ride away the other way. */
-  const TURNS = /180|Bigspin/;
+  const TURNS = /180|side (Flip|Heelflip)|Bigspin/;
   // Every grind by what rides the bar: centered on it, or one end of the board.
   const BOTH_ENDS = ['50-50 Grind', 'Boardslide', 'Lipslide'];
   const TAIL_END = ['5-0 Grind', 'Smith Grind', 'Feeble Grind', 'Salad Grind', 'Suski Grind', 'Tailslide', 'Bluntslide'];
@@ -991,6 +995,35 @@ describe('Trick out of grind', () => {
     expect(grindSpecFor({ base: 'Frontside Nosegrind', stance: 'regular' })?.exitNose).toBe(true);
   });
 
+  it('turns the rider steadily through to touchdown, whatever the robot\'s rotation speed', () => {
+    // A fast spinner catches early, but a body spin runs to the end of the
+    // flight: it must not arrive at touchdown with the last of the turn left
+    // to snap round in one frame.
+    const FRAME = 1 / 60;
+    for (const rotationSpeed of [0.8, 1, 1.25, 1.5]) {
+      const style = resolveSkateStyle({ popHeight: 1, rotationSpeed, flickStrength: 1 });
+      for (const exit of ['Backside 180', 'Frontside 180', 'Bigspin', 'FS Bigspin', 'Frontside Flip']) {
+        for (const base of GRINDS) {
+          for (const end of exitEndsFor(base)) {
+            const { plan } = exitPlan(exit, end, base, 'backside', 'regular', 'regular', null, style);
+            const label = `${base} ${end} ${exit} rs ${rotationSpeed}`;
+            const turn = Math.abs(plan.endHeading - plan.heading);
+            let prev = grindFrame(plan.off, plan).heading;
+            let worst = 0;
+            for (let t = plan.off + FRAME; t <= plan.land + 0.2; t += FRAME) {
+              const heading = grindFrame(t, plan).heading;
+              worst = Math.max(worst, Math.abs(heading - prev));
+              prev = heading;
+            }
+            // The turn spread evenly over the hop, with room for a little speed-up.
+            expect(worst, label).toBeLessThan((turn / plan.offT) * FRAME * 2 + 1e-6);
+            expect(grindFrame(plan.land, plan).heading, label).toBeCloseTo(plan.endHeading, 6);
+          }
+        }
+      }
+    }
+  });
+
   it('composes a trick out after the deck the trick in left turned', () => {
     const v: V3[] = [{ x: 30, y: 4, z: 7 }, { x: -12, y: -6, z: 3 }];
     const pose = { yaw: 20, pitch: -8, roll: 5 };
@@ -1057,7 +1090,7 @@ describe('Trick out of grind', () => {
   });
 
   it('takes the feet off the deck only while it turns, and flicks with the foot off the other end', () => {
-    for (const { exit, end, base, side, rider, stance, label } of everyExit(STANCES, ['Kickflip', 'Heelflip', 'Pop Shuvit', 'Backside 180', 'Bigspin'])) {
+    for (const { exit, end, base, side, rider, stance, label } of everyExit(STANCES, ['Kickflip', 'Heelflip', 'Pop Shuvit', 'Backside 180', 'Backside Flip', 'Frontside Heelflip', 'Bigspin'])) {
       const { plan, mechanics } = exitPlan(exit, end, base, side, stance, rider, null);
       let lifted = 0;
       let flicked = 0;
@@ -1072,7 +1105,7 @@ describe('Trick out of grind', () => {
           expect(flicking.side, label).toBe(end === 'nose' ? mechanics.tailFoot : mechanics.noseFoot);
           // Measured across the board's heading: out of a slide it is still turning back from across the bar.
           const across = dot3(sub3(flicking.shoe.origin, rig.board.center), rotY({ x: 0, y: 0, z: 1 }, frame.pose.yaw));
-          expect(Math.sign(across) * rig.toeDir, `${label} t=${t.toFixed(2)}`).toBe(exit === 'Heelflip' ? 1 : -1);
+          expect(Math.sign(across) * rig.toeDir, `${label} t=${t.toFixed(2)}`).toBe(/Heelflip/.test(exit) ? 1 : -1);
         }
         if (frame.offDeck > 0.001 || (t >= plan.pop && t < plan.lockAt)) continue;
         for (const leg of rig.legs) {

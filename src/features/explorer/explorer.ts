@@ -147,8 +147,8 @@ export const INTO_TIERS: readonly TrickTier[] = FLATGROUND_TIERS
   .filter((tier) => tier.bases.length > 0);
 
 /**
- * Tricks offered out of a grind: the flips, shuvs, 180s, and bigspins the
- * animation package verifies off both ends, not the whole catalog.
+ * Tricks offered out of a grind: the flips, shuvs, 180s, 180 flips, and
+ * bigspins the animation package verifies off both ends, not the whole catalog.
  */
 export const OUT_CHOICES: readonly string[] = [
   'Kickflip',
@@ -158,6 +158,10 @@ export const OUT_CHOICES: readonly string[] = [
   '360 Flip',
   'Frontside 180',
   'Backside 180',
+  'Backside Flip',
+  'Frontside Flip',
+  'Backside Heelflip',
+  'Frontside Heelflip',
   'Bigspin',
   'FS Bigspin',
 ].filter(canExitGrind);
