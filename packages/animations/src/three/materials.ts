@@ -36,6 +36,8 @@ export const INK_PROP = 2;
  * the line runs unbroken along it. Pieces of one garment (a tee and its
  * sleeves) share a `garment` number instead: where they meet there's no
  * line at all, only where one passes clearly in front of the other.
+ * Garments numbered from FEATURES up are the features of a face (the skull,
+ * its nose and ears), which outline themselves over a much smaller step.
  */
 export function inkInfo(id: number, priority: number, width: number, ink: number, into = new Vector4(), solid = 0, garment = 0): Vector4 {
   const surface = garment > 0 ? GARMENT + garment : solid;
@@ -44,6 +46,8 @@ export function inkInfo(id: number, priority: number, width: number, ink: number
 
 /** Where garment numbers start in the ink record's surface field; solids number below it. */
 export const GARMENT = 32;
+/** Garment numbers from here up are a face's features: see inkInfo. */
+export const FEATURES = 16;
 
 /**
  * The cel light, in view space: up and to the right on screen, like

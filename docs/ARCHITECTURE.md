@@ -22,7 +22,7 @@ If the answer is unclear, tighten the feature boundary before adding more code.
 | Auth/session/quota | `src/features/auth/` | Client auth state in the barrel; server code under `server/`. |
 | Billing | `src/features/billing/` | Beta quota UI plus dormant Stripe server helpers. |
 | Tricks | `src/features/tricks/` | Catalog, difficulty, metadata, picker UI, and the default routed trick pool. Routed games currently use flatground only. |
-| Trick Explorer | `src/features/explorer/` | Customer-facing animation playground at `/explore`: flatground tricks and grind combos on the three.js stage, scrubbable playback, camera angles, a choice of spot and of skater (robot or human), and shareable links. |
+| Trick Explorer | `src/features/explorer/` | Customer-facing animation playground at `/explore`: flatground tricks and grind combos on the three.js stage, scrubbable playback, camera angles, a choice of spot (including El Toro's 20 stair, flatground tricks only) and of skater (robot or human), and shareable links. |
 | Trick Explorer 3D | `src/features/explorer3d/` | Preview at `/explore/3d`: the explorer's tricks, cameras, and links on the three.js renderer, with a side-by-side comparison against the SVG scene. Reuses the explorer's picker, clock, and URL model; `/explore` also uses the three.js renderer. |
 | Gallery | `src/features/gallery/` | Flatground trick gallery plus the player trick book: browse the catalog with stance filters, curated video tips, personal proven/learning state, and per-trick consistency stats. |
 | Robots | `src/features/robots/` | Roster metadata, explicit per-trick land-rate/set-weight tables, profile/select/avatar UI, and the browser-local editor routed at `/tune`. Routed home currently exposes flatground robots only. |
@@ -33,7 +33,7 @@ If the answer is unclear, tighten the feature boundary before adding more code.
 | Runtime infrastructure | `src/platform/server/` | Cloudflare env and bindings, D1, future logging/HTTP adapters. |
 | Shared primitives | `src/shared/` | Reserved for domain-neutral primitives only, such as online status. |
 | Expo companion app | `apps/mobile/` | Native WebView shell that loads the same web app; no alternate game implementation. |
-| Shared animations | `packages/animations/` | Reusable robot/avatar/trick animation components, physics model, push-off scene, and browser feedback helpers. The three.js renderer is a separate entry, `@skrobot/animations/three`, so three.js ships only to pages that import it. |
+| Shared animations | `packages/animations/` | Reusable robot/avatar/trick animation components, physics model, push-off scene, and browser feedback helpers. The three.js renderer is a separate entry, `@skrobot/animations/three`, so three.js ships only to pages that import it; filming a trick to MP4 is another, `@skrobot/animations/three/video`, so the encoder loads only when someone downloads a video. |
 | Animation playground | `skrobot-animations/` | Standalone Vite playground for animation iteration; consumes `@skrobot/animations` and owns only preview controls/fixtures. |
 | Frozen design references | `prototype/` | Static artifacts with no build step; see its README for the maintained product sources. |
 
@@ -54,8 +54,9 @@ imports so moving these files does not require app or playground changes.
 | Grind rider motion and handoff from flatground | `scene/grindRig.ts` |
 | Scene rendering and reusable lead-in presentation | `scene/TrickScene.tsx` |
 | Scene camera angles, lens, and the bounds every trick is framed for | `scene/camera.ts` (`SceneCamera`, `SCENE_CAMERA_BOUNDS`) |
-| The scene in WebGL (`TrickScene3D`, `@skrobot/animations/three`): per-frame stage state worked out exactly as TrickScene does, the camera recovered from `scene/camera.ts`, the robot/board/bar/plaza meshes and their cel and ink shaders, and the outline pass; the human skater (`human3d.ts`) rides the same rig, with a person's arms (`humanRig.ts`). It reads the motion solvers and never changes them | `three/` (`stage.ts`, `view.ts`, `robot3d.ts`, `human3d.ts`, `humanGeometry.ts`, `humanMaterials.ts`, `humanRig.ts`, `board3d.ts`, `bar3d.ts`, `plaza3d.ts`, `materials.ts`, `post.ts`, `renderer.ts`) |
-| Scene sets (backdrops): the stock plaza, the bayside waterfront and its far panorama, and the ground/prop/shadow helpers they share. A set's sky and panorama are `FarLayer`s: separate SVGs under the scene that are painted once and slid with a transform, so only what moves is repainted each frame | `scene/backdrop.tsx`, `scene/waterfront.tsx` (composition), `scene/waterfrontProps.tsx`, `scene/waterfrontPanorama.tsx`, `scene/setKit.tsx` (`SceneSet`) |
+| The scene in WebGL (`TrickScene3D`, `@skrobot/animations/three`): per-frame stage state worked out exactly as TrickScene does, the camera recovered from `scene/camera.ts`, the robot/board/bar/plaza meshes and their cel and ink shaders, and the outline pass; the human skater (`human3d.ts`) rides the same rig, with a person's arms (`humanRig.ts`). It reads the motion solvers and never changes them. El Toro's 20 stair is 3D-only: `scene/stairs.ts` sizes it at the robot's scale and plans the drop (the flatground trick on a clock stretched to the hang time, carried down a real ballistic arc); `stage.ts` solves frames down it and `elToro3d.ts` builds the set, with rail shadows cast per pixel | `three/` (`stage.ts`, `elToro3d.ts`, `view.ts`, `robot3d.ts`, `human3d.ts`, `humanGeometry.ts`, `humanMaterials.ts`, `humanRig.ts`, `board3d.ts`, `bar3d.ts`, `plaza3d.ts`, `materials.ts`, `post.ts`, `renderer.ts`) |
+| Filming an attempt to MP4 (`recordTrickVideo`, `@skrobot/animations/three/video`): the same stage and renderer drawn off screen at a steady frame rate, the waterfront panorama painted under each frame (`WaterfrontFarImage`), encoded with WebCodecs and muxed by mediabunny | `three/video.ts`, `three/waterfrontFar.tsx` |
+| Scene sets (backdrops): the stock plaza, the bayside waterfront and its far panorama, and the ground/prop/shadow helpers they share. A set's sky and panorama are `FarLayer`s: separate SVGs under the scene that are painted once and slid with a transform, so only what moves is repainted each frame | `scene/backdrop.tsx`, `scene/waterfront.tsx` (composition), `scene/waterfrontProps.tsx`, `scene/waterfrontPanorama.tsx`, `scene/setKit.tsx` (`SceneSet`; `StageSet` adds the 3D-only El Toro) |
 
 Motion solvers share the skeleton contract, not each other's private constants.
 Grind entry reuses the flatground solver for the hop; tricks into and out of a
@@ -79,7 +80,7 @@ route is importing server-only feature code. ESLint enforces the common cases;
 | `analytics` | `platform/server` from server files | Gameplay and screen features; AppShell supplies lifecycle context through the public tracking API |
 | `billing` | `platform/server` from server files | Auth UI, gameplay, screens, other features |
 | `tricks` | none | Other features |
-| `explorer` | `tricks`, `robots`, `@skrobot/animations`, `@skrobot/animations/three` | Other features; it plays animations and never reads or writes player records |
+| `explorer` | `tricks`, `robots`, `@skrobot/animations`, `@skrobot/animations/three`, `@skrobot/animations/three/video` (loaded on demand) | Other features; it plays animations and never reads or writes player records |
 | `explorer3d` | `explorer`, `robots`, `@skrobot/animations`, `@skrobot/animations/three` | Other features; `explorer` must not import it back |
 | `gallery` | `tricks`, `records`, `robots`, `skater` | Other features |
 | `records` | `tricks` | Other features; the catalog dependency is limited to legacy display-name migration into stable trick IDs |

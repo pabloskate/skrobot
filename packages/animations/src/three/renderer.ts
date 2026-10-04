@@ -26,7 +26,8 @@ import type { BoardLook } from '../scene/board';
 import type { RobotLook } from '../scene/robot';
 import { Bar3D } from './bar3d';
 import { Board3D } from './board3d';
-import type { SceneSet } from '../scene/setKit';
+import type { StageSet } from '../scene/setKit';
+import { ElToro3D } from './elToro3d';
 import { Plaza3D } from './plaza3d';
 import { Waterfront3D } from './waterfront3d';
 import { blurMaterial, copyMaterial, dustMaterial, EDGE_TILE, edgeMaterial, fxaaMaterial, inkMaterial, shadowChannel } from './post';
@@ -48,7 +49,7 @@ interface SetPiece {
   /** Prop shadows in street coordinates (shadow channel 4), slid with the street; null for none. */
   shadowGeometry: BufferGeometry | null;
   propInk: string;
-  update(view: StageView, scroll: number, size: { width: number; height: number }, shadow: Texture, shadowOpacity: [number, number, number]): void;
+  update(view: StageView, scroll: number, size: { width: number; height: number }, shadow: Texture, shadowOpacity: [number, number, number], frame: StageFrame): void;
   dispose(): void;
 }
 
@@ -120,7 +121,7 @@ export class SceneRenderer {
   private readonly fxaaQuad: FullScreenQuad;
   private size = { width: 1, height: 1, ratio: 1 };
 
-  constructor(canvas: HTMLCanvasElement, look: RendererLook, set: SceneSet = 'plaza') {
+  constructor(canvas: HTMLCanvasElement, look: RendererLook, set: StageSet = 'plaza') {
     this.renderer = new WebGLRenderer({ canvas, antialias: false, alpha: true, premultipliedAlpha: true, powerPreference: 'high-performance' });
     this.renderer.autoClear = false;
     this.renderer.setClearColor(0x000000, 0);
@@ -129,7 +130,7 @@ export class SceneRenderer {
 
     this.rider = look.skater === 'human' ? new Human3D() : new Robot3D(look.robot);
     this.board = new Board3D(look.board);
-    this.set = set === 'waterfront' ? new Waterfront3D() : new Plaza3D();
+    this.set = set === 'waterfront' ? new Waterfront3D() : set === 'el-toro' ? new ElToro3D() : new Plaza3D();
     this.setLight = set === 'waterfront';
     this.scene.add(this.set.group, this.bar.group, this.board.group, this.rider.group);
     this.overlayScene.add(this.set.overlay);
@@ -206,7 +207,7 @@ export class SceneRenderer {
     this.board.update(frame.rig.board, frame.wheels, view);
     this.bar.update(frame.span);
     this.writeShadows(frame);
-    this.set.update(view, frame.scroll, { width, height }, this.shadowA.texture, shadowOpacity);
+    this.set.update(view, frame.scroll, { width, height }, this.shadowA.texture, shadowOpacity, frame);
     this.propShadows.position.x = -frame.scroll;
     this.writeDust(frame);
 
@@ -298,14 +299,16 @@ export class SceneRenderer {
   private writeShadows(frame: StageFrame) {
     const position: number[] = [];
     const channel: number[] = [];
+    // On the asphalt, or down a stair set at the level of the step they fall on.
+    const level = frame.stairs?.shadowY ?? 0;
     const add = (polygon: GroundPolygon, c: readonly number[]) => {
       if (polygon.length < 3) return;
       const at = (i: number) => toThree({ x: polygon[i].x, y: 0, z: polygon[i].z });
       const first = at(0);
       for (let i = 1; i < polygon.length - 1; i++) {
         for (const p of [first, at(i), at(i + 1)]) {
-          // Laid on the asphalt (three's y = 0), whatever toThree made of the physics y.
-          position.push(p[0], 0, p[2]);
+          // Laid at the shadows' level, whatever toThree made of the physics y.
+          position.push(p[0], level, p[2]);
           channel.push(...c);
         }
       }

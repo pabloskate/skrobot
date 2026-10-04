@@ -19,6 +19,7 @@ import {
   shuffle,
   trickInName,
   withGrind,
+  withMode,
   type ExplorerMode,
   type ExplorerState,
 } from './explorer';
@@ -147,7 +148,7 @@ export default function TrickBuilder({ state, onChange }: Props) {
             className={state.mode === mode.id ? 'active' : ''}
             onClick={() => {
               setQuery('');
-              set({ mode: mode.id });
+              onChange(withMode(state, mode.id));
             }}
           >
             {mode.label}

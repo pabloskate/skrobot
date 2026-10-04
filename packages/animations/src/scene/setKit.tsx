@@ -19,6 +19,21 @@ export const SCENE_SETS: ReadonlyArray<{ id: SceneSet; label: string }> = [
 ];
 
 /**
+ * Where the three.js stage (TrickScene3D) can film: TrickScene's sets, plus
+ * El Toro's 20 stair (scene/stairs.ts), which only the 3D stage builds.
+ * Flatground tricks go down the stairs there.
+ */
+export type StageSet = SceneSet | 'el-toro';
+
+export const STAGE_SETS: ReadonlyArray<{ id: StageSet; label: string }> = [
+  ...SCENE_SETS,
+  { id: 'el-toro', label: 'El Toro' },
+];
+
+/** The SVG set to draw a stage set with: El Toro has no SVG build, so the plaza stands in. */
+export const sceneSetFor = (set: StageSet): SceneSet => (set === 'el-toro' ? 'plaza' : set);
+
+/**
  * A stretch of a set that never changes as the trick plays, only slides: the
  * sky, or a skyline at infinity drifting with the street. TrickScene draws
  * each one as its own SVG under the scene, so the browser paints it once and

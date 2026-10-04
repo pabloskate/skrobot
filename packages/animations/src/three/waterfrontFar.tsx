@@ -167,3 +167,29 @@ function farLayers(cam: Camera, scroll: number, view: ViewBox, idBase: string): 
 export default function WaterfrontFar({ cam, scroll, view, idBase }: { cam: Camera; scroll: number; view: ViewBox; idBase: string }): ReactElement {
   return <>{farLayers(cam, scroll, view, idBase).map((layer) => <FarSvg key={layer.key} layer={layer} view={view} />)}</>;
 }
+
+/**
+ * The same panorama as one standalone SVG, `width` × `height` pixels, for
+ * filming (video.ts) where there is no page to layer it in: each layer
+ * clipped to its box and slid by its shift, just as FarSvg places it.
+ */
+export function WaterfrontFarImage({ cam, scroll, view, width, height }: { cam: Camera; scroll: number; view: ViewBox; width: number; height: number }): ReactElement {
+  return (
+    <svg
+      viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}
+      width={width}
+      height={height}
+      preserveAspectRatio="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      {farLayers(cam, scroll, view, 'film').map(({ key, box, shift, defs, art }) => (
+        <g key={key} transform={shift === undefined ? undefined : `translate(${num(shift)} 0)`}>
+          <svg x={box.x} y={box.y} width={box.width} height={box.height} viewBox={`${box.x} ${box.y} ${box.width} ${box.height}`} preserveAspectRatio="none">
+            {defs && <defs>{defs}</defs>}
+            {art}
+          </svg>
+        </g>
+      ))}
+    </svg>
+  );
+}

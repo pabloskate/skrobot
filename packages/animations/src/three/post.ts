@@ -11,7 +11,7 @@ import {
 import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
 import { PALETTE } from '../scene/camera';
 import { BAY } from '../scene/waterfrontPanorama';
-import { GARMENT, INK_PROP, INK_ROBOT, rgb } from './materials';
+import { FEATURES, GARMENT, INK_PROP, INK_ROBOT, rgb } from './materials';
 
 /**
  * Screen passes for TrickScene3D.
@@ -52,6 +52,12 @@ export const EDGE_TILE = 8;
  * two surfaces slant away together, so the seam's ends run apart in depth.
  */
 const GARMENT_GAP = 4;
+/**
+ * The same for a face's features: a nose outlines itself only where it
+ * stands out over the cheek behind it, down its far side and under its tip,
+ * and never round its base, where it rises out of the face.
+ */
+const FEATURE_GAP = 1;
 
 const GLSL_DEPTH = /* glsl */ `
 uniform float uNear;
@@ -222,11 +228,12 @@ export function inkMaterial() {
             bool sameSurface = surface > 0.5 && abs(surface - ownSurface) < 0.5;
             // Pieces of one garment: no seam where they meet, only a line where one is clearly in front.
             bool garment = sameSurface && surface > ${GARMENT}.0 - 0.5;
+            float gap = surface > ${GARMENT + FEATURES}.0 - 0.5 ? ${FEATURE_GAP.toFixed(1)} : ${GARMENT_GAP.toFixed(1)};
             bool crease = sameSurface && !garment && abs(other.g - own.g) > 0.5 / 255.0;
             bool front = crease
               ? other.g > own.g
               : garment
-                ? oz < z - ${GARMENT_GAP.toFixed(1)}
+                ? oz < z - gap
                 : oz < z - uTouch || (abs(oz - z) <= uTouch && other.g > own.g);
             if (!front) continue;
             float width = other.b * 4.0 * uFocalPx / oz;

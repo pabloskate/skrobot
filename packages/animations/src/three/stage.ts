@@ -17,7 +17,7 @@ import {
   type Frame,
   type Spec,
 } from '../TrickAnimation';
-import { LIGHT, cameraLift, fallSink } from '../scene/camera';
+import { FOLLOW_POP, LIGHT, cameraLift, fallSink } from '../scene/camera';
 import { WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z, boardShadowPoints, wheelRoll, type WheelSpin } from '../scene/board';
 import { barSpan, grindCameraLift, grindStreetDist, planGrind, type GrindPlan } from '../scene/grind';
 import { grindSpecFor, type GrindSpec } from '../scene/grindDefinitions';
@@ -26,7 +26,19 @@ import { clamp01, easeOutCubic, hull, mixHex, type V3 } from '../scene/math';
 import { barShadowParts, type BarSpan } from '../scene/rail';
 import type { Expression, RobotLook } from '../scene/robot';
 import { solveRig } from '../scene/rig';
-import { moveFrame, tiltHead, type LegRig, type Rig } from '../scene/skeleton';
+import { LAND_OMEGA, LAND_ZETA, SQUAT_FLOOR, moveFrame, tiltHead, type LegRig, type Rig } from '../scene/skeleton';
+import type { StageSet } from '../scene/setKit';
+import {
+  STAIR_DROP,
+  landingImpact,
+  planStairs,
+  stairClock,
+  stairDeckHeight,
+  stairDistance,
+  stairGround,
+  stairLift,
+  type StairPlan,
+} from '../scene/stairs';
 import type { HeadPose } from '../scene/TrickScene';
 import { BOTTOM_LOCAL, TOP_LOCAL } from '../scene/deck';
 import type { Skater } from '../skaters';
@@ -46,6 +58,8 @@ import { humanRig } from './humanRig';
 export interface StagePlan {
   spec: Spec;
   grind: GrindPlan | null;
+  /** Down El Toro's 20 stair (a flatground trick on that set); null on flat ground. */
+  stairs: StairPlan | null;
   mechanics: RiderMechanics;
   style: SkateStyle;
   landed: boolean;
@@ -63,23 +77,26 @@ export interface StagePlan {
 export function planStage(
   robot: Robot,
   trick: Trick,
-  options: { landed: boolean; riderStance: RiderStance; style: SkateStyle; fall: FallVariant; shankProgress: number; skater?: Skater },
+  options: { landed: boolean; riderStance: RiderStance; style: SkateStyle; fall: FallVariant; shankProgress: number; skater?: Skater; set?: StageSet },
 ): StagePlan {
-  const { landed, riderStance, style, fall, shankProgress, skater = 'robot' } = options;
+  const { landed, riderStance, style, fall, shankProgress, skater = 'robot', set = 'plaza' } = options;
   const spec = specFor(trick);
   const grindSpec: GrindSpec | null = grindSpecFor(trick);
   const mechanics = resolveRiderMechanics(riderStance, spec.stance);
   const grind = grindSpec ? planGrind(grindSpec, mechanics, style, landed, fall) : null;
+  // Grinds stay on their flat bar: El Toro's stairs are for flatground tricks.
+  const stairs = set === 'el-toro' && !grind ? planStairs(spec, style, landed) : null;
   const accent = readableAccent(robot.avatar.accent);
   return {
     spec,
     grind,
+    stairs,
     mechanics,
     style,
     landed,
     fall,
     shankProgress,
-    end: grind?.end ?? ROLL_IN + FLIP_T + (landed ? LAND_T : FALL_T),
+    end: grind?.end ?? stairs?.end ?? ROLL_IN + FLIP_T + (landed ? LAND_T : FALL_T),
     look: { body: robot.avatar.body, accent, variant: robot.avatar.variant },
     skater,
     board: { graphic: accent, stripe: mixHex(robot.avatar.body, '#ffffff', 0.35) },
@@ -106,6 +123,12 @@ export interface StageFrame {
   scroll: number;
   /** The bar's ends this frame, for a grind. */
   span: BarSpan | null;
+  /**
+   * Down a stair set: which way the stairs fall in world x (the travel), and
+   * the height (three's y) the cast shadows are laid at — the step the
+   * rider's shadow falls on. Null on flat ground, where shadows lie on the asphalt.
+   */
+  stairs: { dir: 1 | -1; shadowY: number } | null;
   wheels: WheelSpin;
   expression: Expression;
   dust: Puff[];
@@ -140,11 +163,15 @@ function expressionAt(t: number, landed: boolean): Expression {
  * The ground hull of points cast along the sun onto the asphalt, each
  * widened by `r` (setKit's shadowPath, kept on the ground), and cut off where
  * the ground ends at `minZ` (a sea wall) so it never lands on water.
+ *
+ * Given a `plane` (a physics height), points are cast along the sun's line
+ * onto that level instead, from above or below it: on a stair set every
+ * surface finds its shadow by casting itself onto the same level (elToro3d.ts).
  */
-export function groundHull(pts: V3[], r: number, minZ = -Infinity): GroundPolygon {
+export function groundHull(pts: V3[], r: number, minZ = -Infinity, plane?: number): GroundPolygon {
   const out: Array<{ x: number; y: number }> = [];
   for (const p of pts) {
-    const t = Math.max(0, ASPHALT - p.y) / -LIGHT.y;
+    const t = (plane == null ? Math.max(0, ASPHALT - p.y) : plane - p.y) / -LIGHT.y;
     const c = { x: p.x - LIGHT.x * t, z: p.z - LIGHT.z * t };
     for (const [dx, dz] of [[r, 0], [-r, 0], [0, r], [0, -r]] as const) out.push({ x: c.x + dx, y: c.z + dz });
   }
@@ -163,19 +190,36 @@ export function groundHull(pts: V3[], r: number, minZ = -Infinity): GroundPolygo
 }
 
 /** The rider's cast silhouettes: torso and head together, then each leg and arm. */
-export function bodyShadows(rig: Rig): GroundPolygon[] {
+export function bodyShadows(rig: Rig, plane?: number): GroundPolygon[] {
   const box = (frame: Rig['torso'], f: number, u: number, s: number) => {
     const pts: V3[] = [];
     for (const a of [-f, f]) for (const b of [-u, u]) for (const c of [-s, s]) pts.push(frame.at(a, b, c));
     return pts;
   };
-  const out = [groundHull([...box(rig.torso, 10, 23, 14), ...box(rig.head, 13, 14, 17)], 1)];
-  for (const leg of rig.legs) out.push(groundHull([leg.hip, leg.knee, leg.ankle, leg.shoe.at(8, 0, 0), leg.shoe.at(-8, 0, 0)], 3.5));
-  for (const arm of rig.arms) out.push(groundHull([arm.shoulder, arm.elbow, arm.hand], 3));
+  const out = [groundHull([...box(rig.torso, 10, 23, 14), ...box(rig.head, 13, 14, 17)], 1, -Infinity, plane)];
+  for (const leg of rig.legs) out.push(groundHull([leg.hip, leg.knee, leg.ankle, leg.shoe.at(8, 0, 0), leg.shoe.at(-8, 0, 0)], 3.5, -Infinity, plane));
+  for (const arm of rig.arms) out.push(groundHull([arm.shoulder, arm.elbow, arm.hand], 3, -Infinity, plane));
   return out;
 }
 
 const DUST_T = 0.36;
+
+/** A puff of dust `progress` (0 → 1) through its life, kicked up off the ground (a physics height) at (x, z). */
+export function dustPuffs(progress: number, atX: number, strength: number, atZ = 0, ground = ASPHALT): Puff[] {
+  const grow = easeOutCubic(progress);
+  const fade = (1 - progress) ** 2;
+  const out: Puff[] = [];
+  for (let i = 0; i < 6; i++) {
+    const side = i % 2 === 0 ? -1 : 1;
+    const spread = (0.35 + (i % 3) * 0.3) * side;
+    out.push({
+      center: { x: atX + spread * 40 * grow, y: ground - 14 * grow * (1 - grow * 0.4) - (i % 3) * 2, z: atZ + ((i % 3) - 1) * 10 * grow },
+      radius: (2.4 + 4.6 * grow) * strength,
+      opacity: 0.85 * fade,
+    });
+  }
+  return out;
+}
 
 /** Board-local points that must stay on or above the asphalt: the deck's outline and every wheel's rim. */
 const BOARD_HULL: V3[] = (() => {
@@ -193,7 +237,7 @@ const BOARD_HULL: V3[] = (() => {
 
 /**
  * The board and feet lifted until no part of the board is under the
- * asphalt. The grind hop pops the board about its middle at deck height, so
+ * asphalt (or, given `groundUnder`, the ground's physics height under a point). The grind hop pops the board about its middle at deck height, so
  * the tail and back wheels swing below the ground (TrickScene paints the
  * board over its ground, which hides it). Lifting by just the overlap pivots
  * the pop on the tail touching the ground instead, as a real one does. The
@@ -201,9 +245,12 @@ const BOARD_HULL: V3[] = (() => {
  * knees take it up, and the hips, torso, arms, and head stay exactly where
  * TrickScene draws them, rising over the frames its rider does.
  */
-export function onTheGround(rig: Rig): Rig {
+export function onTheGround(rig: Rig, groundUnder: (p: V3) => number = () => ASPHALT): Rig {
   let sunk = 0;
-  for (const p of BOARD_HULL) sunk = Math.max(sunk, rig.board.point(p).y - ASPHALT);
+  for (const local of BOARD_HULL) {
+    const p = rig.board.point(local);
+    sunk = Math.max(sunk, p.y - groundUnder(p));
+  }
   if (sunk <= 0) return rig;
   const up = (p: V3): V3 => ({ x: p.x, y: p.y - sunk, z: p.z });
   const by = { x: 0, y: -sunk, z: 0 };
@@ -223,6 +270,7 @@ export function onTheGround(rig: Rig): Rig {
  * which sets how far the wheel's printed mark smears over a displayed frame.
  */
 export function stageFrame(stage: StagePlan, t: number, rate: number, headPose?: HeadPose | null): StageFrame {
+  if (stage.stairs) return stairFrame(stage, stage.stairs, t, rate, headPose);
   const { spec, grind: plan, mechanics, style, landed, fall, shankProgress } = stage;
   const clock = Math.max(0, Math.min(t, stage.end));
   const f: Frame = computeFrame(clock, spec, landed, fall, shankProgress, style);
@@ -255,19 +303,7 @@ export function stageFrame(stage: StagePlan, t: number, rate: number, headPose?:
 
   // Pop and touchdown dust.
   const dust: Puff[] = [];
-  const puff = (progress: number, atX: number, strength: number, atZ = 0) => {
-    const grow = easeOutCubic(progress);
-    const fade = (1 - progress) ** 2;
-    for (let i = 0; i < 6; i++) {
-      const side = i % 2 === 0 ? -1 : 1;
-      const spread = (0.35 + (i % 3) * 0.3) * side;
-      dust.push({
-        center: { x: atX + spread * 40 * grow, y: ASPHALT - 14 * grow * (1 - grow * 0.4) - (i % 3) * 2, z: atZ + ((i % 3) - 1) * 10 * grow },
-        radius: (2.4 + 4.6 * grow) * strength,
-        opacity: 0.85 * fade,
-      });
-    }
-  };
+  const puff = (progress: number, atX: number, strength: number, atZ = 0) => dust.push(...dustPuffs(progress, atX, strength, atZ));
   const hipX = (rig.legs[0].hip.x + rig.legs[1].hip.x) / 2;
   const hipZ = (rig.legs[0].hip.z + rig.legs[1].hip.z) / 2;
   if (plan && grind) {
@@ -297,6 +333,7 @@ export function stageFrame(stage: StagePlan, t: number, rate: number, headPose?:
     lift,
     scroll,
     span,
+    stairs: null,
     wheels: { angle, sweep: angle - roll(shutterDist) },
     expression: headPose?.expression ?? (plan ? grindExpression(t, plan) : expressionAt(f.t, landed)),
     dust,
@@ -305,6 +342,178 @@ export function stageFrame(stage: StagePlan, t: number, rate: number, headPose?:
       bar: span ? barShadowParts(span).map((pts) => groundHull(pts.map((p) => (p.y >= GROUND ? { ...p, y: ASPHALT } : p)), 0.8)) : [],
       board: groundHull(boardShadowPoints(rig.board), 1.5),
       body: bodyShadows(rig),
+      boardOpacity: 0.34 * heightFade(boardHeight),
+      bodyOpacity: 0.3 * heightFade(bodyHeight),
+    },
+  };
+}
+
+// ----- Down the stairs -----
+
+/** The whole rider and board, moved by a world-space offset. */
+function shiftRig(rig: Rig, by: V3): Rig {
+  const move = (p: V3): V3 => ({ x: p.x + by.x, y: p.y + by.y, z: p.z + by.z });
+  return {
+    ...rig,
+    board: { ...rig.board, center: move(rig.board.center), point: (local) => move(rig.board.point(local)) },
+    legs: rig.legs.map((l) => ({ ...l, hip: move(l.hip), knee: move(l.knee), ankle: move(l.ankle), shoe: moveFrame(l.shoe, by) })) as [LegRig, LegRig],
+    arms: rig.arms.map((a) => ({ ...a, shoulder: move(a.shoulder), elbow: move(a.elbow), hand: move(a.hand) })) as Rig['arms'],
+    torso: moveFrame(rig.torso, by),
+    head: moveFrame(rig.head, by),
+  };
+}
+
+/**
+ * The landing off nine feet. The flatground rig's touchdown spring takes the
+ * speed its own pop arrives with; the drop arrives faster, so the knees take
+ * the difference too: the body sinks further into the landing, on the same
+ * spring, never past the deepest squat the legs allow.
+ */
+function absorbDrop(rig: Rig, stairs: StairPlan, t: number, popHeight: number): Rig {
+  const u = t - stairs.land;
+  if (u <= 0) return rig;
+  const wd = LAND_OMEGA * Math.sqrt(1 - LAND_ZETA * LAND_ZETA);
+  const sink = (landingImpact(stairs, popHeight) / wd) * Math.exp(-LAND_ZETA * LAND_OMEGA * u) * Math.sin(wd * u);
+  const room = Math.max(0, rig.hipOverDeck - SQUAT_FLOOR - 1);
+  const e = sink > 0 && room > 0 ? room * Math.tanh(sink / room) : 0;
+  if (e < 1e-3) return rig;
+  const by = { x: 0, y: e, z: 0 };
+  const down = (p: V3): V3 => ({ x: p.x, y: p.y + e, z: p.z });
+  return {
+    ...rig,
+    legs: rig.legs.map((l) => {
+      const hip = down(l.hip);
+      return { ...l, hip, knee: kneeBetween(hip, l.ankle, down(l.knee)) };
+    }) as [LegRig, LegRig],
+    arms: rig.arms.map((a) => ({ ...a, shoulder: down(a.shoulder), elbow: down(a.elbow), hand: down(a.hand) })) as Rig['arms'],
+    torso: moveFrame(rig.torso, by),
+    head: moveFrame(rig.head, by),
+    hipOverDeck: rig.hipOverDeck - e,
+  };
+}
+
+/**
+ * Seconds either side the camera averages the drop over, and how far ahead
+ * of the rider it runs down the stairs. It rises with part of the pop, as
+ * the flatground crane does, then eases down the stairs like a
+ * filmer who knows where the landing is: arriving late would leave a
+ * zoomed-in frame no room under the board at touchdown.
+ */
+const CAMERA_FOLLOW = 0.05;
+const CAMERA_LEAD = 0.03;
+
+/** The crane's height down the stairs: the deck's (some of it over the lip), smoothed so the camera never jerks at the pop or the landing. */
+function stairCameraHeight(stairs: StairPlan, t: number): number {
+  let sum = 0;
+  let total = 0;
+  for (let k = -6; k <= 6; k++) {
+    const w = Math.exp(-((k / 2.4) ** 2) / 2);
+    // Up with part of the pop, never ahead of it; down the stairs a little ahead.
+    const spread = (k / 2.4) * CAMERA_FOLLOW;
+    sum += w * (FOLLOW_POP * Math.max(0, stairDeckHeight(stairs, t + spread)) + Math.min(0, stairDeckHeight(stairs, t + CAMERA_LEAD + spread)));
+    total += w;
+  }
+  return sum / total;
+}
+
+/**
+ * The height (over the top landing) of the ground the sun casts a point's
+ * shadow on: down the sun's line from `p` until it meets a step, `u` being
+ * the rider's distance down the stairs.
+ */
+function shadowGround(p: V3, u: number, dir: 1 | -1): number {
+  const at = (s: number) => {
+    const q = { x: p.x - LIGHT.x * s, y: p.y - LIGHT.y * s };
+    return { up: ASPHALT - q.y, ground: stairGround(u + dir * (q.x - X0)) };
+  };
+  let lo = 0;
+  let hi = 0;
+  for (let s = 4; s < 3000; s += 4) {
+    const q = at(s);
+    if (q.up <= q.ground) {
+      hi = s;
+      break;
+    }
+    lo = s;
+  }
+  if (hi === 0) return at(lo).ground;
+  for (let i = 0; i < 6; i++) {
+    const mid = (lo + hi) / 2;
+    const q = at(mid);
+    if (q.up <= q.ground) hi = mid;
+    else lo = mid;
+  }
+  return at(hi).ground;
+}
+
+/**
+ * One frame of a flatground trick down El Toro's 20 stair. The trick and
+ * the rider are solved exactly as on flat ground, on the stairs' stretched
+ * clock (stairClock), then carried down the drop together; the street rolls
+ * at the stairs' speed, the crane follows the drop, dust kicks up off the lip
+ * and the landing, and the shadows fall on the steps.
+ */
+function stairFrame(stage: StagePlan, stairs: StairPlan, t: number, rate: number, headPose?: HeadPose | null): StageFrame {
+  const { spec, mechanics, style, landed, fall, shankProgress } = stage;
+  const clock = Math.max(0, Math.min(t, stage.end));
+  const at = (time: number) => computeFrame(stairClock(stairs, time), spec, landed, fall, shankProgress, style);
+  const f = at(clock);
+  // Distance down the stairs (the lip at 0), and the street rolled by it.
+  const distance = (time: number) => stairDistance(stairs, time, time < 0 ? time : at(Math.min(time, stage.end)).streetDist);
+  const u = distance(t);
+  const dir = stairs.dir;
+  // The rider is solved on flat ground and then carried down by `drop`; the
+  // ground pass keeps the board out of the steps as they lie before that
+  // carry (a low pop off the lip rises slower than its flatground arc, and
+  // would otherwise sink the tail into the top landing).
+  const drop = stairLift(stairs, clock, style.popHeight);
+  const stepUnder = (p: V3) => ASPHALT - (stairGround(u + dir * (p.x - X0)) - drop);
+  const solved = clearFeet(onTheGround(solveRig(f, spec, mechanics, style, landed ? 'landed' : fall), stepUnder));
+  const absorbed = absorbDrop(solved, stairs, clock, style.popHeight);
+  const tilted = headPose ? { ...absorbed, head: tiltHead(absorbed.head, headPose.pitch, headPose.roll) } : absorbed;
+  const posed = stage.skater === 'human' ? humanRig(tilted) : tilted;
+  const rig = shiftRig(posed, { x: 0, y: -drop, z: 0 });
+  const falling = !landed && f.motion.flight >= 1;
+  const headHeight = GROUND - solved.head.origin.y;
+  const lift = stairCameraHeight(stairs, clock) - (falling ? fallSink(headHeight) : 0);
+
+  const touchdownU = distance(stairs.land);
+  const roll = (d: number) => wheelRoll(d, touchdownU, dir, rig.board.yawDeg);
+  const angle = roll(u);
+
+  // Dust off the lip at the pop and off the bottom at touchdown, left behind where it was kicked up.
+  const dust: Puff[] = [];
+  const kick = (from: number, x: number, ground: number, strength: number) => {
+    const p = (clock - from) / DUST_T;
+    if (p >= 0 && p < 1) dust.push(...dustPuffs(p, x - dir * (u - distance(from)), strength, 0, ground));
+  };
+  kick(stairs.pop, X0 + (spec.nollie ? 32 : -32), ASPHALT, 0.8);
+  kick(stairs.land, X0, ASPHALT + STAIR_DROP, landed ? 1 : 0.8);
+
+  // Shadows go down onto the step under the rider's.
+  const hips = { x: (rig.legs[0].hip.x + rig.legs[1].hip.x) / 2, y: (rig.legs[0].hip.y + rig.legs[1].hip.y) / 2, z: 0 };
+  const middle = { x: (hips.x + rig.board.center.x) / 2, y: (hips.y + rig.board.center.y) / 2, z: 0 };
+  const shadowY = shadowGround(middle, u, dir);
+  const plane = ASPHALT - shadowY;
+  const deck = stairDeckHeight(stairs, clock);
+  const boardHeight = Math.max(0, deck - shadowY);
+  const bodyHeight = Math.max(0, GROUND - f.body.y + drop - 60 - shadowY);
+  const heightFade = (h: number) => 1 - 0.55 * clamp01(h / JUMP);
+
+  return {
+    t,
+    rig,
+    lift,
+    scroll: u * dir,
+    span: null,
+    stairs: { dir, shadowY },
+    wheels: { angle, sweep: angle - roll(distance(t - rate / 60)) },
+    expression: headPose?.expression ?? expressionAt(f.t, landed),
+    dust,
+    shadows: {
+      bar: [],
+      board: groundHull(boardShadowPoints(rig.board), 1.5, -Infinity, plane),
+      body: bodyShadows(rig, plane),
       boardOpacity: 0.34 * heightFade(boardHeight),
       bodyOpacity: 0.3 * heightFade(bodyHeight),
     },

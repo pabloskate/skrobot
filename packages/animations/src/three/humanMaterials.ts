@@ -56,9 +56,16 @@ const base = () => ({ uInfo: { value: new Vector4() }, uDepthBias: { value: 0 } 
 // ---------- The face ----------
 
 /**
- * The face, painted on the skull: eyes with whites, brows, and a mouth, in
- * the four expressions the robot's visor shows. Laid out in the face's
- * (side, up) plane, on the front of the skull only.
+ * The face, painted on the skull: eyes, brows, and a mouth, in the four
+ * expressions the robot's visor shows. Laid out in the face's (side, up)
+ * plane, on the front of the skull only; the nose is modelled, and inked by
+ * the outline pass where it stands out over the cheek.
+ *
+ * Eyes as a grown-up's: almond openings wider than they're tall, set an eye
+ * apart, the whites showing either side of a brown iris whose top the upper
+ * lid covers, so the gaze is relaxed instead of a stare; the lid drawn as a
+ * line that thickens to the outer corner, brows low and nearly straight over
+ * them.
  */
 const FACE_FRAG = /* glsl */ `
 ${GLSL_TARGETS}
@@ -72,6 +79,8 @@ uniform vec3 uWhiteLit;
 uniform vec3 uWhiteShade;
 uniform vec3 uIrisLit;
 uniform vec3 uIrisShade;
+uniform vec3 uPupilLit;
+uniform vec3 uPupilShade;
 uniform vec3 uBrowLit;
 uniform vec3 uBrowShade;
 uniform vec3 uMouthLit;
@@ -82,6 +91,15 @@ uniform vec3 uLipShade;
 uniform int uExpression;
 uniform vec4 uInfo;
 
+/** An eye's opening, centered at c, h its half height: an almond tipped up toward the outer corner. */
+float almond(vec2 m, vec2 c, float h) {
+  vec2 q = m - c;
+  q.y -= 0.14 * q.x;
+  // Fuller over the iris than under it.
+  float ry = q.y > 0.0 ? h : h * 0.72;
+  return ellipse(q, vec2(0.0), vec2(1.7, ry));
+}
+
 void main() {
   float l = toonLit(vNormal);
   vec3 color = cel(uSkinShade, uSkinLit, l);
@@ -91,44 +109,52 @@ void main() {
     vec2 m = vec2(abs(p.x), p.y);
     float white = 1e3;
     float iris = 1e3;
+    float pupil = 1e3;
     float line = 1e3;
     float brow = 1e3;
     float mouth = 1e3;
     float lip = 1e3;
     float teeth = 1e3;
+    const vec2 EYE = vec2(3.75, 0.45);
     if (uExpression == 0 || uExpression == 1) {
-      float h = uExpression == 1 ? 1.25 : 2.05;
-      float dy = uExpression == 1 ? -0.25 : 0.0;
-      white = ellipse(m, vec2(4.0, 0.6 + dy), vec2(1.75, h));
-      iris = max(ellipse(m, vec2(3.82, 0.45 + dy), vec2(1.3, 1.45)), white);
-      // The upper lid, heavier toward the outer corner.
-      line = arc(m, vec2(2.3, 0.6 + dy + h * 0.55), vec2(4.0, 0.6 + dy + h * 1.18), vec2(5.95, 0.65 + dy + h * 0.5)) - 0.36;
-      line = min(line, segment(m, vec2(5.7, 0.65 + dy + h * 0.5), vec2(6.35, 0.95 + dy + h * 0.5)) - 0.3);
+      float h = uExpression == 1 ? 0.66 : 1.05;
+      float dy = uExpression == 1 ? -0.12 : 0.0;
+      vec2 c = EYE + vec2(0.0, dy);
+      white = almond(m, c, h);
+      // The iris sits high, so the lid covers its top.
+      vec2 ic = c + vec2(-0.08, h * 0.32);
+      iris = max(length(m - ic) - 0.95, white);
+      pupil = max(length(m - ic) - 0.45, white);
+      // The upper lid: along the top of the opening, thickening outward, past the outer corner.
+      float lid = arc(m, c + vec2(-1.72, 0.02), c + vec2(-0.1, h * 2.15), c + vec2(1.85, 0.45));
+      line = lid - mix(0.18, 0.38, smoothstep(c.x - 1.2, c.x + 1.7, m.x));
       if (uExpression == 0) {
-        brow = arc(m, vec2(1.9, 3.75), vec2(4.0, 4.6), vec2(6.4, 3.9)) - 0.55;
-        lip = arc(p, vec2(-2.5, -6.25), vec2(0.0, -7.05), vec2(2.5, -6.25)) - 0.3;
+        brow = arc(m, vec2(1.95, 2.55), vec2(3.7, 3.15), vec2(5.65, 2.6)) - mix(0.5, 0.3, smoothstep(2.0, 5.6, m.x));
+        lip = arc(p, vec2(-2.3, -6.3), vec2(0.0, -6.95), vec2(2.3, -6.3)) - 0.27;
       } else {
-        brow = arc(m, vec2(1.7, 2.95), vec2(3.8, 3.5), vec2(6.4, 3.75)) - 0.6;
-        lip = segment(p, vec2(-1.7, -6.6), vec2(1.7, -6.6)) - 0.32;
+        brow = arc(m, vec2(1.8, 2.2), vec2(3.6, 2.6), vec2(5.6, 2.75)) - mix(0.55, 0.32, smoothstep(2.0, 5.6, m.x));
+        lip = segment(p, vec2(-1.6, -6.6), vec2(1.6, -6.6)) - 0.28;
       }
     } else if (uExpression == 2) {
-      line = arc(m, vec2(2.4, 0.2), vec2(4.0, 2.4), vec2(5.6, 0.2)) - 0.5;
-      brow = arc(m, vec2(1.9, 4.3), vec2(4.0, 5.1), vec2(6.4, 4.4)) - 0.55;
+      // Smiling eyes: the lids pushed up into arcs.
+      line = arc(m, vec2(2.35, 0.25), vec2(3.75, 1.55), vec2(5.3, 0.45)) - 0.3;
+      brow = arc(m, vec2(1.95, 2.9), vec2(3.7, 3.6), vec2(5.65, 3.0)) - mix(0.5, 0.3, smoothstep(2.0, 5.6, m.x));
       // An open grin: a straight top, a round bottom, teeth along the top.
-      vec2 q = p - vec2(0.0, -5.95);
-      float grin = max(q.y - 0.0, length(q / vec2(2.85, 2.2)) - 1.0);
+      vec2 q = p - vec2(0.0, -6.0);
+      float grin = max(q.y - 0.0, length(q / vec2(2.7, 2.0)) - 1.0);
       mouth = grin * 2.0;
-      teeth = max(mouth, -(q.y + 0.7));
+      teeth = max(mouth, -(q.y + 0.65));
     } else {
       // Squeezed shut: > <.
-      line = min(segment(m, vec2(2.4, 1.6), vec2(5.4, 0.5)), segment(m, vec2(2.4, -0.6), vec2(5.4, 0.5))) - 0.42;
-      brow = arc(m, vec2(1.7, 4.4), vec2(3.6, 4.4), vec2(6.3, 3.3)) - 0.55;
+      line = min(segment(m, vec2(2.5, 1.25), vec2(5.2, 0.45)), segment(m, vec2(2.5, -0.45), vec2(5.2, 0.45))) - 0.32;
+      brow = arc(m, vec2(1.8, 3.1), vec2(3.6, 3.15), vec2(5.6, 2.3)) - 0.5;
       vec2 q = p - vec2(0.0, -6.5);
-      mouth = roundRect(q, vec2(0.0), vec2(2.55, 0.95), 0.8);
-      teeth = max(mouth, abs(q.y) - 0.32);
+      mouth = roundRect(q, vec2(0.0), vec2(2.4, 0.9), 0.8);
+      teeth = max(mouth, abs(q.y) - 0.3);
     }
     color = mix(color, cel(uWhiteShade, uWhiteLit, l), fill(white));
     color = mix(color, cel(uIrisShade, uIrisLit, l), fill(iris));
+    color = mix(color, cel(uPupilShade, uPupilLit, l), fill(pupil));
     color = mix(color, cel(uLipShade, uLipLit, l), fill(lip));
     color = mix(color, cel(uMouthShade, uMouthLit, l), fill(mouth));
     color = mix(color, cel(uWhiteShade, uWhiteLit, l), fill(teeth));
@@ -143,6 +169,7 @@ export interface FacePaint {
   skin: string;
   white: string;
   iris: string;
+  pupil: string;
   brow: string;
   mouth: string;
   lip: string;
@@ -153,6 +180,7 @@ export function humanFaceMaterial(paint: FacePaint) {
     ...toneUniforms('uSkin', paint.skin),
     ...toneUniforms('uWhite', paint.white),
     ...toneUniforms('uIris', paint.iris),
+    ...toneUniforms('uPupil', paint.pupil),
     ...toneUniforms('uBrow', paint.brow),
     ...toneUniforms('uMouth', paint.mouth),
     ...toneUniforms('uLip', paint.lip),
@@ -351,8 +379,8 @@ void main() {
     float r = length(vLocal.yz);
     vec2 p = vec2(vLocal.x, around * r);
     seam = abs(around) * r - 0.16;
-    float pocket = roundRect(p, vec2(uLength * 0.6, 0.0), vec2(uLength * 0.17, 3.5), 0.6);
-    float flap = roundRect(p, vec2(uLength * 0.6 - uLength * 0.12, 0.0), vec2(uLength * 0.05, 3.7), 0.5);
+    float pocket = roundRect(p, vec2(uLength * 0.6, 0.0), vec2(uLength * 0.17, 4.6), 0.8);
+    float flap = roundRect(p, vec2(uLength * 0.6 - uLength * 0.12, 0.0), vec2(uLength * 0.05, 4.8), 0.6);
     seam = max(seam, -pocket);
     fillIn = min(pocket, flap);
     seam = min(seam, abs(pocket) - 0.18);
@@ -370,7 +398,8 @@ void main() {
 `;
 
 export function pantsMaterial(colors: { cloth: string; seam: string }, part: { thigh: boolean; length: number; out: 1 | -1 }) {
-  return sceneMaterial(TOON_VERT, PANTS_FRAG, {
+  // A shin is drawn in the world (its cuff rests on the shoe) and painted by its rest pose.
+  return sceneMaterial(part.thigh ? TOON_VERT : REST_VERT, PANTS_FRAG, {
     ...toneUniforms('uCloth', colors.cloth),
     ...toneUniforms('uSeam', colors.seam),
     uLength: { value: part.length + (part.thigh ? 0 : PANT_HEM) },

@@ -2,25 +2,26 @@ import { describe, expect, it } from 'vitest';
 import { computeFrame, specFor, FLIP_T, ROLL_IN } from '../TrickAnimation';
 import { add3, dot3, norm3, scale3, sub3, type V3 } from '../scene/math';
 import { solveRig } from '../scene/rig';
-import { SHIN, THIGH } from '../scene/skeleton';
+import { TIP_X } from '../scene/deck';
 import { resolveSkateStyle } from '../skateStyle';
 import { resolveRiderMechanics } from '../stanceMechanics';
 import type { Robot, Stance, Trick } from '../types';
-import { DoubleSide, Matrix4, Mesh, type BufferGeometry, type Material } from 'three';
+import { DoubleSide, Group, Matrix4, Mesh, Vector3, type BufferGeometry, type Material } from 'three';
 import { capsuleIntersectsBoard } from './boardCollision';
-import { Human3D } from './human3d';
+import { Human3D, clearOfShoe } from './human3d';
 import { clearFeet } from './footContact';
-import { TEE, shinRadius, thighRadius } from './humanGeometry';
+import { HUMAN_FOREARM, HUMAN_SCALE, HUMAN_SHIN, HUMAN_THIGH, HUMAN_UPPER_ARM, TEE, shinRadius, thighRadius } from './humanGeometry';
 import { dirToThree, toThree } from './view';
-import { HUMAN_FOREARM, HUMAN_UPPER_ARM, humanRig } from './humanRig';
+import { humanRig } from './humanRig';
 import { onTheGround, planStage, stageFrame } from './stage';
 import { stageView } from './view';
 
 /**
  * The human skater rides the robot's rig: the same trick, frame for frame,
- * in a different body. These pin that the body only changes the arms, and
- * that the pants — roomier than the robot's legs — still never take the
- * board, through every flip, shuv, and spin in every stance.
+ * in a grown-up's body. These pin that the board and feet are the robot's
+ * exactly, with the person standing taller over them, and that the pants —
+ * roomier than the robot's legs — still never take the board, through every
+ * flip, shuv, and spin in every stance.
  */
 
 const robot: Robot = {
@@ -38,7 +39,7 @@ const TRICKS: Trick[] = [
 const len = (a: V3, b: V3) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 
 describe('human skater', () => {
-  it('skates exactly the robot\'s trick: same board, feet, legs, torso, and head, longer arms pointing the same way', () => {
+  it('skates exactly the robot\'s trick: same board and feet, the body grown over them, arms pointing the same way', () => {
     const style = resolveSkateStyle(robot.skateStyle);
     for (const trick of TRICKS) {
       const options = { landed: true, riderStance: 'goofy' as const, style, fall: 'slam' as const, shankProgress: 0.65 };
@@ -51,19 +52,35 @@ describe('human skater', () => {
         expect(b.board.center).toEqual(a.board.center);
         for (const [k, leg] of b.legs.entries()) {
           const was = a.legs[k];
-          expect([leg.hip, leg.knee, leg.ankle, leg.shoe.origin, leg.shoe.fwd]).toEqual([was.hip, was.knee, was.ankle, was.shoe.origin, was.shoe.fwd]);
+          expect([leg.ankle, leg.shoe.origin, leg.shoe.fwd]).toEqual([was.ankle, was.shoe.origin, was.shoe.fwd]);
+          // A person's leg, whole, from higher hips to the same ankle.
+          expect(len(leg.hip, leg.knee)).toBeCloseTo(HUMAN_THIGH, 6);
+          expect(len(leg.knee, leg.ankle)).toBeCloseTo(HUMAN_SHIN, 6);
         }
-        expect(b.torso.origin).toEqual(a.torso.origin);
-        expect(b.head.origin).toEqual(a.head.origin);
+        expect([b.torso.fwd, b.torso.up, b.head.fwd, b.head.up]).toEqual([a.torso.fwd, a.torso.up, a.head.fwd, a.head.up]);
         for (const [k, arm] of b.arms.entries()) {
           const was = a.arms[k];
-          expect(len(arm.shoulder, arm.elbow)).toBeCloseTo(HUMAN_UPPER_ARM, 6);
-          expect(len(arm.elbow, arm.hand)).toBeCloseTo(HUMAN_FOREARM, 6);
+          expect(len(arm.shoulder, arm.elbow)).toBeCloseTo(HUMAN_UPPER_ARM * HUMAN_SCALE, 6);
+          expect(len(arm.elbow, arm.hand)).toBeCloseTo(HUMAN_FOREARM * HUMAN_SCALE, 6);
           expect(dot3(norm3(sub3(arm.elbow, arm.shoulder)), norm3(sub3(was.elbow, was.shoulder)))).toBeCloseTo(1, 6);
           expect(dot3(norm3(sub3(arm.hand, arm.elbow)), norm3(sub3(was.hand, was.elbow)))).toBeCloseTo(1, 6);
         }
       }
     }
+  });
+
+  it('stands about two boards tall over the deck, where the robot stands one and a half', () => {
+    const style = resolveSkateStyle(robot.skateStyle);
+    const trick = TRICKS[0];
+    const options = { landed: true, riderStance: 'regular' as const, style, fall: 'slam' as const, shankProgress: 0.65 };
+    const robotRig = stageFrame(planStage(robot, trick, options), -0.5, 1).rig;
+    const humanRig = stageFrame(planStage(robot, trick, { ...options, skater: 'human' }), -0.5, 1).rig;
+    const board = 2 * TIP_X;
+    // Crown over the deck: the robot's head box, the person's skull and beanie (each about 6 over the head frame).
+    const crown = (rig: typeof robotRig) => rig.board.center.y - rig.head.origin.y + 6;
+    expect(crown(robotRig) / board).toBeLessThan(1.45);
+    expect(crown(humanRig) / board).toBeGreaterThan(1.75);
+    expect(crown(humanRig) / board).toBeLessThan(2.1);
   });
 
   it('builds every part outside out and poses it unmirrored, so no near wall is culled', () => {
@@ -102,7 +119,6 @@ describe('human skater', () => {
   it('wears the tee over the pants: no leg ever comes through it, crouched, popped, grinding, or fallen', () => {
     const style = resolveSkateStyle(robot.skateStyle);
     const human = new Human3D();
-    const shin = shinRadius(SHIN);
     const inside: string[] = [];
     const cases: Array<{ base: string; fall?: 'slam' | 'bail'; rider: 'regular' | 'goofy' }> = [
       { base: 'Kickflip', rider: 'regular' },
@@ -122,13 +138,13 @@ describe('human skater', () => {
         human.update(rig, 'focus', stageView(0));
         let tee: BufferGeometry | null = null;
         human.group.traverse((o) => {
-          if (o instanceof Mesh && o.geometry.getAttribute('rest')) tee = o.geometry;
+          if (o instanceof Mesh && (o.material as Material).side === DoubleSide) tee = o.geometry;
         });
         const pos = (tee as BufferGeometry | null)!.getAttribute('position');
         for (const leg of rig.legs) {
           const bones = [
-            { a: toThree(leg.hip), b: toThree(leg.knee), r: (s: number) => thighRadius(s / THIGH) },
-            { a: toThree(leg.knee), b: toThree(leg.ankle), r: shin },
+            { a: toThree(leg.hip), b: toThree(leg.knee), r: thighRadius },
+            { a: toThree(leg.knee), b: toThree(leg.ankle), r: shinRadius },
           ];
           for (const bone of bones) {
             const u = [bone.b[0] - bone.a[0], bone.b[1] - bone.a[1], bone.b[2] - bone.a[2]];
@@ -149,6 +165,89 @@ describe('human skater', () => {
     expect(inside.slice(0, 8)).toEqual([]);
   }, 60_000);
 
+  it('hangs the tee over the seat of the pants: the waistband never shows through it, riding, crouched, or grinding', () => {
+    const style = resolveSkateStyle(robot.skateStyle);
+    const human = new Human3D();
+    // Group order: head, neck, tee, seat.
+    const tee = human.group.children[2] as Mesh;
+    const seat = human.group.children[3] as Mesh;
+    const through: string[] = [];
+    const p = new Vector3();
+    const q = new Vector3();
+    const n = new Vector3();
+    for (const [base, rider] of [['Ollie', 'regular'], ['Kickflip', 'goofy'], ['360 Flip', 'regular'], ['Backside 180', 'goofy'], ['Frontside 50-50 Grind', 'regular']] as const) {
+      const trick = { id: base, name: base, base, stance: 'regular' as const };
+      const stage = planStage(robot, trick, { landed: true, riderStance: rider, style, fall: 'slam', shankProgress: 0.65, skater: 'human' });
+      for (let i = 0; i <= 30; i++) {
+        const t = (stage.end * i) / 30;
+        human.update(stageFrame(stage, t, 1).rig, 'focus', stageView(0));
+        human.group.updateMatrixWorld(true);
+        const teePos = tee.geometry.getAttribute('position');
+        const teeNormal = tee.geometry.getAttribute('normal');
+        const teeRest = tee.geometry.getAttribute('rest');
+        const seatPos = seat.geometry.getAttribute('position');
+        let deepest = 0;
+        for (let k = 0; k < seatPos.count; k++) {
+          p.fromBufferAttribute(seatPos, k).applyMatrix4(seat.matrixWorld);
+          // The nearest point of the tee, and which side of it the seat is on.
+          let best = Infinity;
+          let at = -1;
+          for (let j = 0; j < teePos.count; j++) {
+            const d = q.fromBufferAttribute(teePos, j).distanceToSquared(p);
+            if (d < best) { best = d; at = j; }
+          }
+          // Under the hem the seat shows, as it should.
+          if (teeRest.getY(at) < TEE.hem + 2.5) continue;
+          q.fromBufferAttribute(teePos, at);
+          n.fromBufferAttribute(teeNormal, at);
+          deepest = Math.max(deepest, p.sub(q).dot(n));
+        }
+        if (deepest > 0.3) through.push(`${base} ${rider} t=${t.toFixed(2)}: ${deepest.toFixed(2)} out`);
+      }
+    }
+    human.dispose();
+    expect(through.slice(0, 8)).toEqual([]);
+  }, 60_000);
+
+  it('takes the pant legs into the shoes, never out through their sides or soles', () => {
+    const style = resolveSkateStyle(robot.skateStyle);
+    const human = new Human3D();
+    // Group order per leg: thigh, shin, shoe — the last six children.
+    const legs = human.group.children.slice(-6);
+    const poking: string[] = [];
+    const cases: Array<{ base: string; rider: 'regular' | 'goofy' }> = [
+      { base: 'Kickflip into Frontside Noseslide Nollie Backside Flip Out', rider: 'regular' },
+      { base: 'Backside Boardslide', rider: 'goofy' },
+      { base: 'Frontside 50-50 Grind', rider: 'regular' },
+      { base: 'Kickflip', rider: 'goofy' },
+      { base: 'Impossible', rider: 'regular' },
+    ];
+    const p = new Vector3();
+    for (const { base, rider } of cases) {
+      const trick = { id: base, name: base, base, stance: 'regular' as const };
+      const stage = planStage(robot, trick, { landed: true, riderStance: rider, style, fall: 'slam', shankProgress: 0.65, skater: 'human' });
+      for (let i = 0; i <= 40; i++) {
+        const t = (stage.end * i) / 40;
+        human.update(stageFrame(stage, t, 1).rig, 'focus', stageView(0));
+        human.group.updateMatrixWorld(true);
+        for (const leg of [0, 3]) {
+          const shin = legs[leg + 1] as Mesh;
+          const shoe = legs[leg + 2] as Group;
+          const toShoe = new Matrix4().copy(shoe.matrixWorld).invert();
+          const pos = shin.geometry.getAttribute('position');
+          let showing = 0;
+          for (let k = 0; k < pos.count; k++) {
+            p.fromBufferAttribute(pos, k).applyMatrix4(toShoe);
+            if (!clearOfShoe(p.x, p.y, p.z, 0)) showing++;
+          }
+          if (showing > 0) poking.push(`${base} ${rider} t=${t.toFixed(2)}: ${showing} points`);
+        }
+      }
+    }
+    human.dispose();
+    expect(poking.slice(0, 8)).toEqual([]);
+  }, 60_000);
+
   it('keeps the back of the tee down over the seat when the thighs come up', () => {
     const style = resolveSkateStyle(robot.skateStyle);
     const human = new Human3D();
@@ -162,7 +261,7 @@ describe('human skater', () => {
         human.update(rig, 'focus', stageView(0));
         let tee: BufferGeometry | null = null;
         human.group.traverse((o) => {
-          if (o instanceof Mesh && o.geometry.getAttribute('rest')) tee = o.geometry;
+          if (o instanceof Mesh && (o.material as Material).side === DoubleSide) tee = o.geometry;
         });
         const geometry = tee as BufferGeometry | null;
         const pos = geometry!.getAttribute('position');
@@ -176,7 +275,7 @@ describe('human skater', () => {
         for (let k = 0; k < pos.count; k++) {
           if (rest.getY(k) > TEE.hem + 0.5 || rest.getX(k) > -5 || Math.abs(rest.getZ(k)) > 9) continue;
           const height = (pos.getX(k) - middle[0]) * up[0] + (pos.getY(k) - middle[1]) * up[1] + (pos.getZ(k) - middle[2]) * up[2];
-          if (height > 2.5) lifted.push(`${base} ${rider} t=${t.toFixed(2)}: hem ${height.toFixed(1)} above the hips`);
+          if (height > 2.5 * HUMAN_SCALE) lifted.push(`${base} ${rider} t=${t.toFixed(2)}: hem ${height.toFixed(1)} above the hips`);
         }
       }
     }
@@ -214,18 +313,17 @@ describe('human skater', () => {
         return { a: add3(a, scale3(dir, s0)), b: add3(a, scale3(dir, s1)), ra: radius(s0), rb: radius(s1) };
       });
     };
-    const shin = shinRadius(SHIN);
     const through: string[] = [];
     for (const base of BASES) {
       for (const stance of STANCES) {
         const mechanics = resolveRiderMechanics('regular', stance);
         const spec = specFor({ id: base, name: base, base, stance });
         for (let t = ROLL_IN - 0.15; t <= ROLL_IN + FLIP_T; t += 1 / 60) {
-          const rig = clearFeet(onTheGround(solveRig(computeFrame(t, spec, true, 'slam', 0.65, style), spec, mechanics, style, 'landed')));
+          const rig = humanRig(clearFeet(onTheGround(solveRig(computeFrame(t, spec, true, 'slam', 0.65, style), spec, mechanics, style, 'landed'))));
           for (const leg of rig.legs) {
             const parts = [
-              ...chain(leg.hip, leg.knee, THIGH, (s) => thighRadius(s / THIGH)),
-              ...chain(leg.knee, leg.ankle, SHIN, shin),
+              ...chain(leg.hip, leg.knee, HUMAN_THIGH, thighRadius),
+              ...chain(leg.knee, leg.ankle, HUMAN_SHIN, shinRadius),
             ];
             if (parts.some((p) => capsuleIntersectsBoard(rig.board, p.a, p.b, p.ra, p.rb))) {
               through.push(`${base} ${stance} ${leg.side} t=${t.toFixed(3)}`);

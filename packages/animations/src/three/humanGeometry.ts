@@ -1,16 +1,35 @@
 import type { BufferGeometry } from 'three';
 import { smoothstep } from '../scene/math';
 import { loftGeometry } from './geometry';
-import { HUMAN_FOREARM, HUMAN_UPPER_ARM } from './humanRig';
+import { SHIN, THIGH } from '../scene/skeleton';
 import type { Vec3 } from './view';
 
 /**
  * The skater's body, cut like clothes over a person. Every piece is built in
  * the local axes of the frame that carries it (x forward or along the bone,
  * y up, z to the right), as a loft: a cross-section swept along an axis,
- * changing size and center as it goes. Proportions are a stylized teen's —
- * a head a fifth of the height, long legs, hands to mid-thigh.
+ * changing size and center as it goes. Proportions are a young adult's —
+ * a head about a seventh of the height, long legs, hands to mid-thigh.
+ *
+ * Modelled at the robot's scale, where the rig's own numbers are, and drawn
+ * HUMAN_SCALE bigger (the head HUMAN_HEAD): standing over the robot's board
+ * and feet, that's a grown-up about two boards tall. The pant legs are the
+ * exception, cut at the person's size, because they have to fit both the
+ * board's clearance and the shoes.
  */
+
+// ---------- Size ----------
+
+/** How much bigger than modelled the person is drawn, and the rig grown: hips up, and the legs' bones. */
+export const HUMAN_SCALE = 1.42;
+/** How much bigger than modelled the head is drawn: a grown-up's head is a smaller share of them than a kid's. */
+export const HUMAN_HEAD = 1.2;
+/** The person's leg bones (world units). */
+export const HUMAN_THIGH = THIGH * HUMAN_SCALE;
+export const HUMAN_SHIN = SHIN * HUMAN_SCALE;
+/** Shoulder joint to elbow, and elbow to wrist, as modelled. */
+export const HUMAN_UPPER_ARM = 19;
+export const HUMAN_FOREARM = 17;
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
@@ -85,19 +104,34 @@ export function earGeometry(mirror: 1 | -1): BufferGeometry {
   });
 }
 
-/** The nose: a soft wedge, narrow at the bridge, rounding out to the tip and nostrils. */
+/** The nose: where its bridge leaves the face between the eyes, and where its underside meets the lip. */
+export const NOSE = { top: 1, bottom: -4.4 } as const;
+
+/**
+ * The nose: a wedge standing off the face, narrow along the bridge from
+ * between the eyes, rounding out to the tip, with the nostrils' wings
+ * either side of its base and the underside turning back in to the lip.
+ * Its back is buried in the skull; what shows is how far it stands out.
+ */
 export function noseGeometry(): BufferGeometry {
-  const y0 = -4.6;
-  const length = 4.4;
-  const face = skullAt(-2.4);
+  const length = NOSE.top - NOSE.bottom;
+  /** How far the nose stands out in front of the face, and its half width, down from the bridge. */
+  const out = profile([[0, 0.3], [0.35, 1.2], [0.7, 2.55], [0.82, 2.85], [0.93, 2.25], [1, 1.1]]);
+  const half = profile([[0, 0.95], [0.45, 1.05], [0.72, 1.45], [0.87, 1.95], [1, 1.6]]);
+  /** How far the nose's back is buried behind the face: little, so its sides slope into the cheeks instead of standing up off them. */
+  const BURIED = 0.7;
+  const front = (t: number) => {
+    const s = skullAt(NOSE.top - t * length);
+    return s.depth + s.forward;
+  };
   return loftGeometry({
     length,
-    radius: (t) => [lerp(0.9, 1.9, smoothstep(t)), lerp(0.9, 1.75, smoothstep(t))],
-    offset: (t) => [lerp(face.depth + face.forward - 0.6, face.depth + face.forward + 0.3, smoothstep(1 - t)), 0],
-    caps: [0.75, 0.4],
-    warp: (along, a, b) => [a, y0 + length - along, b],
-    stations: 10,
-    radial: 20,
+    radius: (t) => [out(t) + BURIED, half(t)],
+    offset: (t) => [front(t) - BURIED, 0],
+    caps: [0.4, 0.3],
+    warp: (along, a, b) => [a, NOSE.top - along, b],
+    stations: 22,
+    radial: 28,
   });
 }
 
@@ -211,7 +245,7 @@ export function beanieGeometry(): BufferGeometry {
 export const TEE = { hem: -21, top: 19 } as const;
 
 const teeDepth = profile([[0, 11.4], [0.18, 10.8], [0.4, 10], [0.68, 10], [0.88, 9.6], [1, 8.6]]);
-const teeWidth = profile([[0, 16.2], [0.14, 15.6], [0.36, 15], [0.68, 15.6], [0.88, 16.2], [1, 16.2]]);
+const teeWidth = profile([[0, 14.8], [0.14, 14.3], [0.36, 13.7], [0.68, 14.2], [0.88, 14.7], [1, 14.6]]);
 const teeForward = profile([[0, 0.2], [0.36, 0.3], [0.68, 1], [1, 0.4]]);
 
 /**
@@ -298,25 +332,23 @@ export const upperArmGeometry = () => limb(HUMAN_UPPER_ARM, profile([[0, ARM_RAD
 export const forearmGeometry = () => limb(HUMAN_FOREARM, profile([[0, ARM_RADII.elbow], [0.22, ARM_RADII.forearm], [1, ARM_RADII.wrist]]));
 
 /**
- * Pant legs. Room in the thigh, then cut slimmer down the shin: the rig
- * tucks the feet to clear a board as thick as the robot's legs, and the
- * pants have to fit that room (boardClearance's LIMB_RADII, a little over).
- * The hem runs on past the ankle and breaks over the shoe.
+ * Pant legs, cut at the person's size (world units): room in the thigh,
+ * then slimmer down the shin to an ankle that drops into the shoe's collar.
+ * The hem runs on past the ankle and breaks over the shoe, kept narrower
+ * than the shoe so it never shows through its sides. The rig tucks the feet
+ * to clear a board as thick as the robot's legs; where these roomier legs
+ * would still take it, humanRig swings the knee aside.
  */
-export const PANT_RADII = { hip: 8.4, knee: 6, ankle: 5.2 } as const;
-export const PANT_HEM = 3.8;
-/** A pant leg's radius down the thigh (0 at the hip, 1 at the knee). */
-export const thighRadius = profile([[0, PANT_RADII.hip], [0.35, 8], [0.75, 7], [1, PANT_RADII.knee]]);
-/** A pant leg's radius down the shin, by distance from the knee (to SHIN at the ankle, then the hem). */
-export function shinRadius(shin: number): (along: number) => number {
-  const r = profile([[0, PANT_RADII.knee], [1, PANT_RADII.ankle], [1 + (PANT_HEM / shin) * 0.5, 5.9], [1 + PANT_HEM / shin, 6.3]]);
-  return (along) => r(along / shin);
-}
-export const thighGeometry = (thigh: number) => limb(thigh, thighRadius);
-export const shinGeometry = (shin: number) => {
-  const r = shinRadius(shin);
-  return limb(shin, (t) => r(t * (shin + PANT_HEM)), [1, 0.12], PANT_HEM);
-};
+export const PANT_RADII = { hip: 10.9, knee: 7.8, ankle: 5.6 } as const;
+export const PANT_HEM = 3.6;
+const thighProfile = profile([[0, PANT_RADII.hip], [0.35, 10.4], [0.75, 9.1], [1, PANT_RADII.knee]]);
+const shinProfile = profile([[0, PANT_RADII.knee], [1, PANT_RADII.ankle], [1 + (PANT_HEM / HUMAN_SHIN) * 0.5, 5.9], [1 + PANT_HEM / HUMAN_SHIN, 6.1]]);
+/** A pant leg's radius by distance down the thigh from the hip. */
+export const thighRadius = (along: number) => thighProfile(along / HUMAN_THIGH);
+/** A pant leg's radius by distance down the shin from the knee (to HUMAN_SHIN at the ankle, then the hem). */
+export const shinRadius = (along: number) => shinProfile(along / HUMAN_SHIN);
+export const thighGeometry = () => limb(HUMAN_THIGH, (t) => thighRadius(t * HUMAN_THIGH));
+export const shinGeometry = () => limb(HUMAN_SHIN, (t) => shinRadius(t * (HUMAN_SHIN + PANT_HEM)), [1, 0.12], PANT_HEM);
 
 // ---------- Hands ----------
 

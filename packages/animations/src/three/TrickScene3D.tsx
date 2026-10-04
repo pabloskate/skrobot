@@ -6,7 +6,7 @@ import { resolveSkateStyle } from '../skateStyle';
 import { useTrickPlayback } from '../useTrickPlayback';
 import { randomFallVariant, randomShankProgress, type FallVariant } from '../TrickAnimation';
 import { DEFAULT_SCENE_CAMERA, type SceneCamera } from '../scene/camera';
-import type { SceneSet } from '../scene/setKit';
+import type { StageSet } from '../scene/setKit';
 import type { LeadIn } from '../scene/TrickScene';
 import type { Skater } from '../skaters';
 import { SceneRenderer } from './renderer';
@@ -49,8 +49,8 @@ interface Props {
   camera?: SceneCamera;
   /** Magnify the picture about the rider, 1 stock. */
   zoom?: number;
-  /** The backdrop: the stock plaza, or the bayside waterfront. */
-  set?: SceneSet;
+  /** The backdrop: the stock plaza, the bayside waterfront, or El Toro's 20 stair (flatground tricks go down it). */
+  set?: StageSet;
   /** Who rides: the robot (its look from `robot`), or a human skater in its place. */
   skater?: Skater;
 }
@@ -83,10 +83,10 @@ export default function TrickScene3D({
   const [shankProgress] = useState(randomShankProgress);
   const fall = forcedFall ?? fallVariant ?? randomizedFall;
   const stage = useMemo(
-    () => planStage(robot, trick, { landed, riderStance, style, fall, shankProgress, skater }),
+    () => planStage(robot, trick, { landed, riderStance, style, fall, shankProgress, skater, set }),
     // The trick's name and id don't change what is skated.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [robot, trick.base, trick.stance, landed, riderStance, style, fall, shankProgress, skater],
+    [robot, trick.base, trick.stance, landed, riderStance, style, fall, shankProgress, skater, set],
   );
   const {
     time, firstRun, isPlaying, staticTime, speedToggleVisible, effectivePlaybackRate,

@@ -5304,6 +5304,88 @@ main:has(.rps-arena) > .screen {
   height: 18px;
 }
 
+.explorer-actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Download a video: quieter than Share, and it fills up as the video is made. */
+.explorer-download {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 999px;
+  color: #fff;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.34) calc(var(--progress, 0) * 100%), transparent 0),
+    rgba(255, 255, 255, 0.16);
+  font-size: 14px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: transform 0.08s ease;
+}
+
+.explorer-download:hover {
+  background-color: rgba(255, 255, 255, 0.26);
+}
+
+.explorer-download:active {
+  transform: scale(0.96);
+}
+
+.explorer-download svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Wide enough for "Download", so the pill holds still while it counts up. */
+@media (min-width: 520px) {
+  .explorer-download {
+    min-width: 128px;
+  }
+}
+
+/* Phones: an icon beside Share, with the percentage in its place while filming. */
+@media (max-width: 519px) {
+  .explorer-download {
+    width: 40px;
+    padding: 0;
+    font-size: 12px;
+  }
+
+  .explorer-download:not(.filming) .explorer-download-label {
+    display: none;
+  }
+}
+
+/* Narrow phones: Share goes round too, so the title keeps to one line. */
+@media (max-width: 419px) {
+  .explorer-share {
+    justify-content: center;
+    width: 40px;
+    padding: 0;
+  }
+
+  .explorer-share-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
 /* Layout */
 
 .explorer-layout {

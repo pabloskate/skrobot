@@ -69,7 +69,7 @@ src/
 │   ├── skater/           # Player model: skate score (unlocks at 8 games, beta-gated), robot-ladder placement, adaptive rival robot
 │   ├── home/             # Landing screen / flatground robot choice
 │   ├── install/          # App Store handoff + Android PWA install guidance (web-only)
-│   ├── explorer/         # Trick Explorer: customer-facing animation playground (tricks + grind combos, robot or human skater, camera angles, spots, shareable links)
+│   ├── explorer/         # Trick Explorer: customer-facing animation playground (tricks + grind combos, robot or human skater, camera angles, spots incl. El Toro's 20 stair, shareable links, MP4 download)
 │   ├── explorer3d/       # /explore/3d preview: the explorer on the three.js renderer (@skrobot/animations/three), with an SVG comparison
 │   └── gallery/          # Flatground trick gallery + player trick book (search, stance filters, video tips, want-to-learn shelf, proven marks, consistency stats)
 ├── platform/             # Runtime infrastructure (Cloudflare env, D1 bindings)

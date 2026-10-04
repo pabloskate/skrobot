@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
 import { TbPlayerPauseFilled, TbPlayerPlayFilled, TbRefresh, TbRepeat, TbRepeatOff, TbZoomReset } from 'react-icons/tb';
-import type { RiderStance, Robot, SceneCamera, SceneSet, Skater, Trick } from '@skrobot/animations';
+import type { RiderStance, Robot, SceneCamera, Skater, StageSet, Trick } from '@skrobot/animations';
 import { TrickScene3D } from '@skrobot/animations/three';
 import { ZOOM_STEP, phaseAt, turnCamera, zoomBy, type Timeline } from './explorer';
 import { usePlayhead } from './usePlayhead';
@@ -40,7 +40,7 @@ interface Props {
   camera: SceneCamera;
   /** Magnification of the picture, 1 stock. */
   zoom: number;
-  set: SceneSet;
+  set: StageSet;
   /** Who skates: the robot or the human skater. */
   skater: Skater;
   cameraLabel: string;

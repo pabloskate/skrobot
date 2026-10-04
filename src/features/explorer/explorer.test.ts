@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SCENE_CAMERA, SCENE_CAMERA_BOUNDS, SCENE_ZOOM, grindSpecFor } from '@skrobot/animations';
+import { DEFAULT_SCENE_CAMERA, FLIP_T, LAND_T, ROLL_IN, SCENE_CAMERA_BOUNDS, SCENE_ZOOM, grindSpecFor, stairTimeline } from '@skrobot/animations';
 import { TRICK_BY_ID } from '@/features/tricks';
 import {
   CAMERA_PRESETS,
@@ -26,7 +26,10 @@ import {
   trickInName,
   trickSteps,
   turnCamera,
+  videoFilename,
   withGrind,
+  withMode,
+  withSet,
   zoomAt,
   zoomBy,
   type ExplorerState,
@@ -130,6 +133,36 @@ describe('Trick Explorer timeline', () => {
     }
     const labels = timelineFor(states[2], undefined).phases.map((p) => p.label);
     expect(labels).toEqual(['Set up', 'Pop', 'Trick in', 'Lock', 'Pop off', 'Trick out', 'Land']);
+  });
+
+  it('runs a trick down El Toro for the drop’s longer hang time, timed to the stage', () => {
+    const style = { popHeight: 0.92, rotationSpeed: 1.08, flickStrength: 0.95 };
+    const { phases, duration } = timelineFor(flatState({ set: 'el-toro' }), style);
+    const stairs = stairTimeline(style);
+    expect(duration).toBe(stairs.end);
+    expect(duration).toBeGreaterThan(ROLL_IN + FLIP_T + LAND_T);
+    expect(phases.map((p) => p.label)).toEqual(['Set up', 'Pop', 'Peak', 'Catch', 'Land']);
+    for (let i = 1; i < phases.length; i++) expect(phases[i].time, phases[i].label).toBeGreaterThan(phases[i - 1].time);
+    expect(phases.at(-1)?.time).toBe(stairs.land);
+  });
+});
+
+describe('Trick Explorer spots', () => {
+  it('takes flatground tricks down El Toro, and grinds back to a spot with a bar', () => {
+    expect(withSet(grindState(), 'el-toro')).toMatchObject({ set: 'el-toro', mode: 'flatground' });
+    expect(withSet(flatState({ set: 'el-toro' }), 'plaza')).toMatchObject({ set: 'plaza', mode: 'flatground' });
+    expect(withSet(grindState(), 'plaza')).toMatchObject({ set: 'plaza', mode: 'grinds' });
+    expect(withMode(flatState({ set: 'el-toro' }), 'grinds')).toMatchObject({ set: DEFAULT_STATE.set, mode: 'grinds' });
+    expect(withMode(flatState({ set: 'plaza' }), 'grinds')).toMatchObject({ set: 'plaza', mode: 'grinds' });
+    expect(withMode(grindState(), 'flatground')).toMatchObject({ set: DEFAULT_STATE.set, mode: 'flatground' });
+  });
+
+  it('links to El Toro, never with a grind on it', () => {
+    const state = flatState({ set: 'el-toro', trick: '360 Flip', stance: 'nollie' });
+    expect(searchFromState(state)).toBe('?trick=360-flip&stance=nollie&set=el-toro');
+    expect(stateFromSearch(searchFromState(state))).toEqual(state);
+    expect(stateFromSearch('?set=el-toro')).toEqual(flatState({ set: 'el-toro' }));
+    expect(stateFromSearch('?grind=lipslide&set=el-toro')).toMatchObject({ mode: 'grinds', grind: 'Lipslide', set: DEFAULT_STATE.set });
   });
 });
 
@@ -257,6 +290,15 @@ describe('Trick Explorer links', () => {
     // A nollie trick out of a grind that only rides the tail is no trick out.
     expect(stateFromSearch('?grind=5-0-grind&out=nollie-kickflip').out).toBeNull();
     expect(stateFromSearch('?cam=999_-40_9').camera).toEqual({ yaw: SCENE_CAMERA_BOUNDS.yaw.max, pitch: SCENE_CAMERA_BOUNDS.pitch.min, lens: SCENE_CAMERA_BOUNDS.lens.max });
+  });
+});
+
+describe('Trick Explorer video', () => {
+  it('names the download after the trick, with its speed when slowed down', () => {
+    expect(videoFilename('Kickflip', 1)).toBe('kickflip.mp4');
+    expect(videoFilename('Fakie Hardflip', 0.25)).toBe('fakie-hardflip-0.25x.mp4');
+    expect(videoFilename(stageTrick(grindState()).name, 0.5)).toMatch(/^[a-z0-9]+(-[a-z0-9.]+)*\.mp4$/);
+    expect(videoFilename('???', 1)).toBe('trick.mp4');
   });
 });
 

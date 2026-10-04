@@ -5,8 +5,8 @@ import {
   LAND_T,
   ROLL_IN,
   SCENE_CAMERA_BOUNDS,
-  SCENE_SETS,
   SCENE_ZOOM,
+  STAGE_SETS,
   SKATERS,
   canEnterGrind,
   canExitGrind,
@@ -18,12 +18,13 @@ import {
   joinGrindBase,
   joinGrindExit,
   specFor,
+  stairTimeline,
   type PopEnd,
   type RiderStance,
   type SceneCamera,
-  type SceneSet,
   type SkateStyle,
   type Skater,
+  type StageSet,
 } from '@skrobot/animations';
 import {
   TRICKS,
@@ -73,8 +74,8 @@ export interface ExplorerState {
   camera: CameraPresetId | SceneCamera;
   /** How far in the picture is magnified, whatever the angle: 1 is the stock framing. */
   zoom: number;
-  /** The spot the robot skates: the bayside waterfront, or the stock plaza. */
-  set: SceneSet;
+  /** The spot the robot skates: the bayside waterfront, the stock plaza, or El Toro's 20 stair (flatground tricks only). */
+  set: StageSet;
   /** Who skates it: the robot, or the human skater. */
   skater: Skater;
 }
@@ -197,6 +198,19 @@ export const DEFAULT_STATE: Readonly<ExplorerState> = Object.freeze({
   skater: 'robot',
 });
 
+/** The spot El Toro's 20 stair is: flatground tricks go down it, and it has no bar to grind. */
+export const STAIR_SET: StageSet = 'el-toro';
+
+/** The state moved to another spot. A grind can't go to El Toro, so the stairs take the flatground trick. */
+export function withSet(state: ExplorerState, set: StageSet): ExplorerState {
+  return set === STAIR_SET ? { ...state, set, mode: 'flatground' } : { ...state, set };
+}
+
+/** The state switched to flatground or grinds. Grinds leave El Toro for the default spot's bar. */
+export function withMode(state: ExplorerState, mode: ExplorerMode): ExplorerState {
+  return mode === 'grinds' && state.set === STAIR_SET ? { ...state, mode, set: DEFAULT_STATE.set } : { ...state, mode };
+}
+
 /** Keeps a trick out only if the grind rides the end it pops off. */
 export function withGrind(state: ExplorerState, grind: string): ExplorerState {
   const out = state.out && outEndsFor(grind).includes(state.out.end) ? state.out : null;
@@ -291,6 +305,20 @@ export interface Timeline {
 
 /** The moments worth jumping to, and how long the trick runs (seconds). */
 export function timelineFor(state: ExplorerState, style: SkateStyle | undefined): Timeline {
+  if (state.mode === 'flatground' && state.set === STAIR_SET) {
+    // Down the stairs the flight is the drop's: longer the lower the robot pops.
+    const stairs = stairTimeline(style);
+    return {
+      duration: stairs.end,
+      phases: [
+        { label: 'Set up', time: 0 },
+        { label: 'Pop', time: stairs.pop + 0.06 },
+        { label: 'Peak', time: stairs.peak },
+        { label: 'Catch', time: stairs.catch },
+        { label: 'Land', time: stairs.land },
+      ],
+    };
+  }
   if (state.mode === 'flatground') {
     const land = ROLL_IN + FLIP_T;
     return {
@@ -451,27 +479,31 @@ export function stateFromSearch(search: string): ExplorerState {
     rider: params.get('rider') === 'goofy' ? 'goofy' : 'regular',
     camera: parseCamera(params.get('cam')),
     zoom: parseZoom(params.get('zoom')),
-    set: SCENE_SETS.find((option) => option.id === params.get('set'))?.id ?? DEFAULT_STATE.set,
+    set: STAGE_SETS.find((option) => option.id === params.get('set'))?.id ?? DEFAULT_STATE.set,
     skater: SKATERS.find((option) => option.id === params.get('skater'))?.id ?? DEFAULT_STATE.skater,
   };
   const grind = fromSlug(GRIND_CHOICES, params.get('grind'));
   if (!grind) {
     // Flatground is asked for by naming its trick; a link naming nothing the
-    // stage knows opens on the default grind.
+    // stage knows opens on the default grind (or, at El Toro, the default trick).
     const trick = fromSlug(FLATGROUND_BASES, params.get('trick'));
-    return trick ? { ...base, mode: 'flatground', trick } : base;
+    return trick ? { ...base, mode: 'flatground', trick } : withSet(base, base.set);
   }
   const outParam = params.get('out') ?? '';
   const nose = outParam.startsWith('nollie-');
   const outBase = fromSlug(OUT_CHOICES, nose ? outParam.slice('nollie-'.length) : outParam);
   return withGrind({
-    ...base,
-    mode: 'grinds',
+    ...withMode(base, 'grinds'),
     grind,
     side: params.get('side') === 'bs' ? 'Backside' : 'Frontside',
     into: fromSlug(INTO_CHOICES, params.get('in')) ?? null,
     out: outBase ? { base: outBase, end: nose ? 'nose' : 'tail' } : null,
   }, grind);
+}
+
+/** A downloaded video's file name: the trick, and its speed when slowed down ("kickflip-0.25x.mp4"). */
+export function videoFilename(trickName: string, rate: number): string {
+  return `${slug(trickName) || 'trick'}${rate === 1 ? '' : `-${rate}x`}.mp4`;
 }
 
 /** The URL query that reopens this state: only what's on the stage, defaults left out. */

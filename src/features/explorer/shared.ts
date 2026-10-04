@@ -22,6 +22,7 @@ export {
   timelineFor,
   trickSteps,
   turnCamera,
+  withSet,
   zoomAt,
   zoomBy,
   type ExplorerState,

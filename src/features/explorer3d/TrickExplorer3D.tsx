@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { TbArrowLeft } from 'react-icons/tb';
-import { SCENE_SETS } from '@skrobot/animations';
+import { STAGE_SETS } from '@skrobot/animations';
 import { ROBOT_BY_ID, ROBOTS } from '@/features/robots';
 import {
   CAMERA_PRESETS,
@@ -17,6 +17,7 @@ import {
   stateFromSearch,
   timelineFor,
   zoomAt,
+  withSet,
   type ExplorerState,
 } from '@/features/explorer';
 import Stage3D, { type StageView } from './Stage3D';
@@ -159,14 +160,14 @@ export default function TrickExplorer3D({ initialSearch = '' }: { initialSearch?
             <div className="explorer-field explorer-field-inline">
               <span className="explorer-field-label" id="explorer3d-set-label">Spot</span>
               <div className="explorer-segmented explorer-segmented-compact" role="radiogroup" aria-labelledby="explorer3d-set-label">
-                {SCENE_SETS.map((option) => (
+                {STAGE_SETS.map((option) => (
                   <button
                     key={option.id}
                     type="button"
                     role="radio"
                     aria-checked={state.set === option.id}
                     className={state.set === option.id ? 'active' : ''}
-                    onClick={() => setState({ ...state, set: option.id })}
+                    onClick={() => setState(withSet(state, option.id))}
                   >
                     {option.label}
                   </button>

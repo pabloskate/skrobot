@@ -2,6 +2,7 @@ import type { BufferGeometry } from 'three';
 import { smoothstep } from '../scene/math';
 import { SHOE_HALF_HEIGHT, SHOE_HALF_LENGTH, SHOE_HALF_WIDTH } from '../scene/skeleton';
 import { blobGeometry } from './geometry';
+import type { Vec3 } from './view';
 
 /**
  * The robot's skate shoe, in shoe-local axes (x toward the toe, y up, z
@@ -38,6 +39,11 @@ const HEEL = 0.86;
 const CAP = 1.8;
 const CAP_FROM = 4;
 
+/** The upper's half extents, how square it is across and in plan (blobGeometry), and where it sinks into the sole. */
+const UPPER_HALF: Vec3 = [LENGTH - PROUD, 1, HALF_WIDTH - PROUD];
+const UPPER_SQUARE = { side: 0.6, plan: 0.75 } as const;
+const UPPER_FLOOR = GROUND + SOLE_T - 1;
+
 const spring = (x: number) => SPRING * Math.max(0, (x - 5) / (LENGTH - 5)) ** 2;
 const width = (x: number) => HEEL + (1 - HEEL) * smoothstep((x + 8) / 12);
 const topline = (x: number) => TOE_TOP + (COLLAR_TOP - TOE_TOP) * (1 - smoothstep((x - COLLAR_END) / (TOE_START - COLLAR_END)));
@@ -56,13 +62,24 @@ export function shoeGeometries(): ShoeShape {
     (x, y, z) => [x, GROUND + SOLE_T / 2 + y + spring(x), z * width(x)],
   );
   // The upper sinks a little into the sole, so no seam opens between them.
-  const floor = GROUND + SOLE_T - 1;
   const upper = blobGeometry(
-    [LENGTH - PROUD, 1, HALF_WIDTH - PROUD],
-    { side: 0.6, plan: 0.75 },
-    (x, y, z) => [x, floor + ((topline(x) - floor) * (y + 1)) / 2 + spring(x), z * width(x)],
+    UPPER_HALF,
+    UPPER_SQUARE,
+    (x, y, z) => [x, UPPER_FLOOR + ((topline(x) - UPPER_FLOOR) * (y + 1)) / 2 + spring(x), z * width(x)],
   );
   return { sole, upper, toeCap: { split: GROUND + SOLE_T, rise: { by: CAP, from: CAP_FROM, to: LENGTH } } };
+}
+
+/**
+ * The upper's top over a point of the shoe's plan (shoe-local x and z): how
+ * high it is there, and how far out the point is (0 in the middle, 1 at the
+ * upper's edge, more beside it). What a pant cuff comes to rest on.
+ */
+export function upperTop(x: number, z: number): { height: number; out: number } {
+  const e = 2 / UPPER_SQUARE.plan;
+  const out = ((Math.abs(x) / UPPER_HALF[0]) ** e + (Math.abs(z / width(x)) / UPPER_HALF[2]) ** e) ** (1 / e);
+  const y = (1 - Math.min(1, out) ** (2 / UPPER_SQUARE.side)) ** (UPPER_SQUARE.side / 2);
+  return { height: UPPER_FLOOR + ((topline(x) - UPPER_FLOOR) * (y + 1)) / 2 + spring(x), out };
 }
 
 /**

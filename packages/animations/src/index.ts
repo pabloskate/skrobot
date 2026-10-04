@@ -39,8 +39,10 @@ export {
   clampZoom,
   type SceneCamera,
 } from './scene/camera';
-/** The sets TrickScene can be staged on. */
-export { SCENE_SETS, type SceneSet } from './scene/setKit';
+/** The sets TrickScene can be staged on, and the ones TrickScene3D can (those plus El Toro's 20 stair). */
+export { SCENE_SETS, STAGE_SETS, sceneSetFor, type SceneSet, type StageSet } from './scene/setKit';
+/** El Toro's 20 stair: its size, and the moments of a trick down it. */
+export { FOOT, STAIR_DROP, STAIR_RUN, STAIR_STEPS, stairTimeline, type StairTimeline } from './scene/stairs';
 /** Who rides in the three.js renderer: the robot or a human skater. */
 export { SKATERS, type Skater } from './skaters';
 /** Flat-bar grinds and slides — TrickScene only (the other renderers are flatground). */

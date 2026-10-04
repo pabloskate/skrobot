@@ -1,9 +1,11 @@
 /**
  * Explorer feature — the customer-facing Trick Explorer at /explore: watch any
  * flatground trick or grind combo the robot can skate, slowed down, scrubbed,
- * and filmed from any camera angle at either spot, by the robot or the human
- * skater, with a shareable URL for what's on stage.
- * Animation comes from @skrobot/animations/three; names and descriptions from tricks.
+ * and filmed from any camera angle at any spot (flatground tricks also go
+ * down El Toro's 20 stair), by the robot or the human skater, with a
+ * shareable URL for what's on stage and an MP4 of it to download.
+ * Animation comes from @skrobot/animations/three (filming from its video entry);
+ * names and descriptions from tricks.
  */
 export { default as TrickExplorer } from './TrickExplorer';
 
@@ -31,6 +33,7 @@ export {
   trickSteps,
   turnCamera,
   usePlayhead,
+  withSet,
   zoomAt,
   zoomBy,
   type ExplorerState,

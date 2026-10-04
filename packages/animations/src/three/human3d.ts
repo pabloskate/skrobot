@@ -1,9 +1,13 @@
 import { BufferAttribute, Group, Mesh, type BufferGeometry, type ShaderMaterial } from 'three';
 import { cross3, dot3, mixHex, norm3, scale3, smoothstep, sub3, add3, type V3 } from '../scene/math';
 import type { Expression } from '../scene/robot';
-import { SHIN, THIGH, shiftFrame, softFloor, type Frame3, type Rig } from '../scene/skeleton';
+import { SHOE_HALF_HEIGHT, shiftFrame, softFloor, type Frame3, type Rig } from '../scene/skeleton';
 import { Capsule } from './geometry';
 import {
+  HUMAN_HEAD,
+  HUMAN_SCALE,
+  HUMAN_SHIN,
+  HUMAN_THIGH,
   SEAT,
   SKULL_AT,
   shinRadius,
@@ -28,8 +32,8 @@ import {
   upperArmGeometry,
 } from './humanGeometry';
 import { beanieMaterial, humanFaceMaterial, pantsMaterial, seatMaterial, sleeveMaterial, sneakerMaterial, teeMaterial } from './humanMaterials';
-import { inkInfo, INK_ROBOT, toonMaterial } from './materials';
-import { shoeGeometries } from './shoe3d';
+import { FEATURES, inkInfo, INK_ROBOT, toonMaterial } from './materials';
+import { shoeGeometries, upperTop } from './shoe3d';
 import { dirToThree, toThree, type StageView, type Vec3 } from './view';
 
 /**
@@ -39,7 +43,8 @@ import { dirToThree, toThree, type StageView, type Vec3 } from './view';
  * robot's sculpted skate shoes in black suede with a side stripe.
  *
  * Posed from the same rig as the robot, so every trick, grind, and fall is
- * the same motion (humanRig.ts only gives the arms a person's reach). Drawn
+ * the same motion (humanRig.ts grows it to a grown-up's size over the same
+ * feet), and drawn the way humanGeometry.ts sizes it. Drawn
  * the same way too: two cel tones a color, ink outlines from the screen
  * pass, matte, and the body parts sorted for the outlines by the robot's
  * paint order.
@@ -62,7 +67,7 @@ export interface HumanLook {
 export const SKATER_LOOK: Readonly<HumanLook> = Object.freeze({
   skin: '#c98e62',
   hair: '#2e1d17',
-  eyes: '#2e1d17',
+  eyes: '#5b3a24',
   lips: '#8e4b3b',
   beanie: '#eaa53c',
   tee: '#ef6c4c',
@@ -77,6 +82,7 @@ export const SKATER_LOOK: Readonly<HumanLook> = Object.freeze({
 const INK = 1.05;
 const HEAD_INK = 1.1;
 const FINE_INK = 0.9;
+const NOSE_INK = 0.75;
 
 /**
  * Part ids for the outline pass. Above every id the sets and the board use,
@@ -84,10 +90,12 @@ const FINE_INK = 0.9;
  */
 const ID = {
   leftArm: 236, rightArm: 237, leftSleeve: 238, rightSleeve: 239, leftLeg: 240, rightLeg: 241,
-  leftShoe: 242, rightShoe: 243, torso: 244, head: 245, hair: 246, beanie: 247, seat: 248, neck: 249,
+  leftShoe: 242, rightShoe: 243, torso: 244, head: 245, hair: 246, beanie: 247, seat: 248, neck: 249, nose: 250, ears: 251,
 } as const;
 /** The tee and its sleeves are one garment: no seam inked at the shoulders, only where a sleeve passes in front of the body or behind it. */
 const TEE_GARMENT = 1;
+/** The face, its nose, and ears are one too, as features: only the nose's far side and tip, and the ears' rims, are inked over the face. */
+const FACE = FEATURES + 1;
 /** Paint order (back to front) where parts touch: the robot's, with clothes over what they cover. */
 const PRIORITY = { armFar: 40, legFar: 50, legNear: 55, seat: 58, neck: 59, torso: 60, head: 70, hair: 72, beanie: 74, armNear: 80 } as const;
 const OVER = 2;
@@ -107,50 +115,69 @@ const CURLS: ReadonlyArray<{ at: Vec3; size: number; turn: number; tip: number }
 
 const crossThree = (a: Vec3, b: Vec3): Vec3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 
-const setMatrix = (mesh: Mesh | Group, origin: Vec3, x: Vec3, y: Vec3, z: Vec3) => {
-  mesh.matrix.set(x[0], y[0], z[0], origin[0], x[1], y[1], z[1], origin[1], x[2], y[2], z[2], origin[2], 0, 0, 0, 1);
+/** Places a part at `origin` with axes `x`, `y`, `z`, drawn `s` times its modelled size (`across` scales y and z apart from x). */
+const setMatrix = (mesh: Mesh | Group, origin: Vec3, x: Vec3, y: Vec3, z: Vec3, s = 1, across = s) => {
+  mesh.matrix.set(
+    x[0] * s, y[0] * across, z[0] * across, origin[0],
+    x[1] * s, y[1] * across, z[1] * across, origin[1],
+    x[2] * s, y[2] * across, z[2] * across, origin[2],
+    0, 0, 0, 1,
+  );
   mesh.matrixWorldNeedsUpdate = true;
 };
 
-function placeFrame(mesh: Mesh | Group, frame: Frame3) {
-  setMatrix(mesh, toThree(frame.origin), dirToThree(frame.fwd), dirToThree(frame.up), dirToThree(frame.side));
+function placeFrame(mesh: Mesh | Group, frame: Frame3, s = 1) {
+  setMatrix(mesh, toThree(frame.origin), dirToThree(frame.fwd), dirToThree(frame.up), dirToThree(frame.side), s);
 }
 
 /**
  * A part that's the same either side of its own x-y plane (a shoe), placed
  * unmirrored whichever way the frame's side points: the rig's shoe frames
- * come out mirrored for some stances.
+ * come out mirrored for some stances. Drawn `s` times its size about the
+ * point `floor` below its origin, which stays put.
  */
-function placeSymmetric(mesh: Mesh | Group, frame: Frame3) {
+function placeSymmetric(mesh: Mesh | Group, frame: Frame3, s = 1, floor = 0): Placement {
   const x = dirToThree(frame.fwd);
   const y = dirToThree(frame.up);
   const z = crossThree(x, y);
-  setMatrix(mesh, toThree(frame.origin), x, y, z);
+  const o = toThree(frame.origin);
+  const drop = floor * (s - 1);
+  const at: Vec3 = [o[0] + y[0] * drop, o[1] + y[1] * drop, o[2] + y[2] * drop];
+  setMatrix(mesh, at, x, y, z, s);
+  return { o: at, x, y, z };
 }
 
 /**
  * A bone's mesh from `a` to `b` (x along it), rolled so its z lies along
- * `hinge` (any direction square-ish to the bone).
+ * `hinge` (any direction square-ish to the bone), drawn `along` times its
+ * modelled length and `across` times its modelled girth.
  */
-function placeBone(mesh: Mesh, a: V3, b: V3, hinge: V3) {
+function placeBone(mesh: Mesh, a: V3, b: V3, hinge: V3, along: number, across = along) {
+  const { o, x, y, z } = boneAxes(a, b, hinge);
+  setMatrix(mesh, o, x, y, z, along, across);
+}
+
+/** A bone's three-world placement: at `a`, x toward `b`, z along `hinge` squared to it. */
+function boneAxes(a: V3, b: V3, hinge: V3): Placement {
   const x = norm3(sub3(b, a));
   const z = norm3(sub3(hinge, scale3(x, dot3(hinge, x))));
   // The third axis is crossed in three's world: physics is y-down, its mirror image.
   const tx = dirToThree(x);
   const tz = dirToThree(z);
-  setMatrix(mesh, toThree(a), tx, crossThree(tz, tx), tz);
+  return { o: toThree(a), x: tx, y: crossThree(tz, tx), z: tz };
 }
 
-/** A frame's three-world placement: origin and axes. */
+/** A frame's three-world placement: origin, and axes as long as a modelled unit is drawn. */
 interface Placement {
   o: Vec3;
   x: Vec3;
   y: Vec3;
   z: Vec3;
 }
-const placementOf = (frame: Frame3): Placement => ({
-  o: toThree(frame.origin), x: dirToThree(frame.fwd), y: dirToThree(frame.up), z: dirToThree(frame.side),
+const placementOf = (frame: Frame3, s: number): Placement => ({
+  o: toThree(frame.origin), x: scale(dirToThree(frame.fwd), s), y: scale(dirToThree(frame.up), s), z: scale(dirToThree(frame.side), s),
 });
+const scale = (v: Vec3, s: number): Vec3 => [v[0] * s, v[1] * s, v[2] * s];
 
 /** A limb the cloth has to stay outside of: a bone from `a` to `b`, its radius by distance from `a`. */
 export interface ClothObstacle {
@@ -218,10 +245,12 @@ function topAbove(p: Vec3, up: Vec3, bone: ClothObstacle, u: Vec3, length: numbe
  * would carry it (linear blend skinning, done on the CPU: a tee is a couple
  * of thousand vertices), then kept off the limbs inside it. Built in the
  * second frame's local axes; `weight` is how much of a vertex the second
- * frame holds.
+ * frame holds. `unit` is how big a modelled unit is drawn: the cloth's
+ * give and drape are sized in modelled units too.
  */
 class TwoFrameSkin {
   readonly geometry: BufferGeometry;
+  private readonly unit: number;
   private readonly rest: Float32Array;
   private readonly weight: Float32Array;
   private readonly pos: Float32Array;
@@ -232,8 +261,9 @@ class TwoFrameSkin {
   private readonly neighborStart: Uint32Array;
   private readonly neighbors: Uint32Array;
 
-  constructor(geometry: BufferGeometry, weight: (x: number, y: number, z: number) => number) {
+  constructor(geometry: BufferGeometry, weight: (x: number, y: number, z: number) => number, unit = 1) {
     this.geometry = geometry;
+    this.unit = unit;
     this.rest = Float32Array.from(geometry.getAttribute('position').array);
     this.weight = new Float32Array(this.rest.length / 3);
     for (let i = 0; i < this.weight.length; i++) this.weight[i] = weight(this.rest[i * 3], this.rest[i * 3 + 1], this.rest[i * 3 + 2]);
@@ -270,8 +300,9 @@ class TwoFrameSkin {
    * than creases.
    */
   update(a: Placement, b: Placement, shiftA: Vec3, obstacles: readonly ClothObstacle[]) {
-    const up = b.y;
-    const { rest, weight, pos } = this;
+    const { rest, weight, pos, unit } = this;
+    const up = scale(b.y, 1 / Math.hypot(b.y[0], b.y[1], b.y[2]));
+    const clear = CLOTH_CLEAR * unit;
     for (let i = 0, k = 0; i < weight.length; i++, k += 3) {
       const w = weight[i];
       const x = rest[k], y = rest[k + 1], z = rest[k + 2];
@@ -293,17 +324,17 @@ class TwoFrameSkin {
       // Lying along the bone means moving down it, toward the knee.
       for (let k = 0; k < pos.length; k += 3) {
         const t = topAbove([pos[k], pos[k + 1], pos[k + 2]], up, bone, u, length);
-        if (t == null || t <= -CLOTH_CLEAR || t > DRAPE_MAX) continue;
+        if (t == null || t <= -clear || t > DRAPE_MAX * unit) continue;
         // Cloth behind the hip joint hangs down behind the seat; only what's out over the thigh rides up onto it.
-        const front = smoothstep(((pos[k] - bone.a[0]) * u[0] + (pos[k + 1] - bone.a[1]) * u[1] + (pos[k + 2] - bone.a[2]) * u[2]) / DRAPE_BEHIND);
-        const lift = (t + CLOTH_CLEAR) * fade * front;
+        const front = smoothstep(((pos[k] - bone.a[0]) * u[0] + (pos[k + 1] - bone.a[1]) * u[1] + (pos[k + 2] - bone.a[2]) * u[2]) / (DRAPE_BEHIND * unit));
+        const lift = (t + clear) * fade * front;
         const p: Vec3 = [pos[k] + up[0] * lift, pos[k + 1] + up[1] * lift, pos[k + 2] + up[2] * lift];
         // Lay it forward along the bone by most of the height it came up, then back onto the top there.
         const along = (p[0] - bone.a[0]) * u[0] + (p[1] - bone.a[1]) * u[1] + (p[2] - bone.a[2]) * u[2];
         const slide = Math.max(0, Math.min(length - along, lift * DRAPE_SLIDE));
         for (let c = 0; c < 3; c++) p[c] += u[c] * slide;
         const settle = topAbove(p, up, bone, u, length);
-        const rise = settle == null ? 0 : Math.max(0, settle + CLOTH_CLEAR) * fade * front;
+        const rise = settle == null ? 0 : Math.max(0, settle + clear) * fade * front;
         pos[k] = p[0] + up[0] * rise;
         pos[k + 1] = p[1] + up[1] * rise;
         pos[k + 2] = p[2] + up[2] * rise;
@@ -342,20 +373,22 @@ class TwoFrameSkin {
 
   /** Pushes every vertex inside a limb back out over it, easing in just before it touches. */
   private pushOut(obstacles: readonly ClothObstacle[]) {
-    const { pos } = this;
+    const { pos, unit } = this;
+    const clear = CLOTH_CLEAR * unit;
+    const soft = CLOTH_SOFT * unit;
     for (const bone of obstacles) {
       const ux = bone.b[0] - bone.a[0], uy = bone.b[1] - bone.a[1], uz = bone.b[2] - bone.a[2];
       const length = Math.hypot(ux, uy, uz) || 1e-6;
       const dx = ux / length, dy = uy / length, dz = uz / length;
       // Skip what's nowhere near: the bone's fattest reach, plus the soft band.
-      const reach = Math.max(bone.radius(0), bone.radius(length / 2), bone.radius(length)) + CLOTH_CLEAR + CLOTH_SOFT;
+      const reach = Math.max(bone.radius(0), bone.radius(length / 2), bone.radius(length)) + clear + soft;
       for (let k = 0; k < pos.length; k += 3) {
         const px = pos[k] - bone.a[0], py = pos[k + 1] - bone.a[1], pz = pos[k + 2] - bone.a[2];
         const s = Math.max(0, Math.min(length, px * dx + py * dy + pz * dz));
         const vx = px - dx * s, vy = py - dy * s, vz = pz - dz * s;
         const d = Math.hypot(vx, vy, vz);
         if (d >= reach || d < 1e-4) continue;
-        const to = softFloor(d, bone.radius(s) + CLOTH_CLEAR, CLOTH_SOFT);
+        const to = softFloor(d, bone.radius(s) + clear, soft);
         if (to <= d) continue;
         const k2 = to / d;
         pos[k] = bone.a[0] + dx * s + vx * k2;
@@ -363,6 +396,102 @@ class TwoFrameSkin {
         pos[k + 2] = bone.a[2] + dz * s + vz * k2;
       }
     }
+  }
+}
+
+/**
+ * Where a pant leg may be against its shoe, in the shoe's own (modelled)
+ * axes: above the upper, or inside it (hidden), but not low beside it or
+ * under the sole. `CUFF_BESIDE` is how far out past the upper's edge (a
+ * share of its reach) still counts as beside it; `margin` 1 keeps the
+ * cloth a little way off the upper's surface either side, 0 asks only
+ * whether it shows through.
+ */
+const CUFF_CLEAR = 0.3;
+const CUFF_BESIDE = 0.3;
+const CUFF_INSIDE = 0.06;
+const SOLE_UNDER = -SHOE_HALF_HEIGHT + 0.6;
+export function clearOfShoe(x: number, y: number, z: number, margin = 1): boolean {
+  if (y < SOLE_UNDER) return false;
+  const top = upperTop(x, z);
+  return top.out >= 1 + CUFF_BESIDE || top.out <= 1 - CUFF_INSIDE * margin || y >= top.height + CUFF_CLEAR * margin;
+}
+
+/** How fast a gathered hem eases back out to full width up the leg (share of its width per world unit). */
+const CUFF_EASE = 0.12;
+
+/**
+ * A pant leg's shin, drawn in the world each frame so it goes into the
+ * shoe instead of through it. Carried rigidly down the shin, the hem would
+ * run on out through the shoe's side wherever the shin comes in at a slant
+ * (a deck tipped in a slide, a foot rolled on the pop). Cloth gathers
+ * instead: each ring of the leg is drawn in round toward the shin, just as
+ * far as it takes to keep out of the shoe's sides, and the gathering eases
+ * off up the leg, so the hem tucks into the collar.
+ */
+class PantShin {
+  readonly geometry: BufferGeometry;
+  private readonly rest: Float32Array;
+  private readonly pos: Float32Array;
+  /** Each vertex's ring (by distance down the leg), the rings' distances, and how far each is drawn in. */
+  private readonly ring: Uint16Array;
+  private readonly ringAlong: Float32Array;
+  private readonly gather: Float32Array;
+
+  constructor(geometry: BufferGeometry) {
+    this.geometry = geometry;
+    this.rest = Float32Array.from(geometry.getAttribute('position').array);
+    this.pos = new Float32Array(this.rest.length);
+    const count = this.rest.length / 3;
+    const keys = [...new Set(Array.from({ length: count }, (_, i) => Math.round(this.rest[i * 3] * 20)))].sort((a, b) => a - b);
+    const index = new Map(keys.map((key, i) => [key, i]));
+    this.ring = Uint16Array.from({ length: count }, (_, i) => index.get(Math.round(this.rest[i * 3] * 20))!);
+    this.ringAlong = Float32Array.from(keys, (key) => key / 20);
+    this.gather = new Float32Array(keys.length);
+    // Paint goes on by the shin's own axes, however the hem is gathered.
+    geometry.setAttribute('rest', new BufferAttribute(this.rest, 3));
+    geometry.setAttribute('position', new BufferAttribute(this.pos, 3));
+  }
+
+  /** `bone` carries the shin; `shoe` is the shoe as drawn, `size` times its modelled size from its origin. */
+  update(bone: Placement, shoe: Placement, size: number) {
+    const { rest, pos, ring, ringAlong, gather } = this;
+    // A point `k` of the way out from the shin to vertex i, in the shoe's axes: is it clear of the shoe?
+    const clear = (i: number, k: number) => {
+      const x = rest[i], y = rest[i + 1] * k, z = rest[i + 2] * k;
+      let sx = 0, sy = 0, sz = 0;
+      for (let c = 0; c < 3; c++) {
+        const d = bone.o[c] + bone.x[c] * x + bone.y[c] * y + bone.z[c] * z - shoe.o[c];
+        sx += d * shoe.x[c];
+        sy += d * shoe.y[c];
+        sz += d * shoe.z[c];
+      }
+      return clearOfShoe(sx / size, sy / size, sz / size);
+    };
+    gather.fill(1);
+    for (let i = 0; i < rest.length; i += 3) {
+      if (clear(i, 1)) continue;
+      // The furthest out this point can be and stay clear, by bisection.
+      let lo = 0;
+      let hi = 1;
+      for (let step = 0; step < 8; step++) {
+        const mid = (lo + hi) / 2;
+        if (clear(i, mid)) lo = mid;
+        else hi = mid;
+      }
+      const r = ring[i / 3];
+      gather[r] = Math.min(gather[r], lo);
+    }
+    // Ease the gathering out along the leg both ways, so it reads as cloth drawn in, not a notch.
+    for (let r = 1; r < gather.length; r++) gather[r] = Math.min(gather[r], gather[r - 1] + CUFF_EASE * (ringAlong[r] - ringAlong[r - 1]));
+    for (let r = gather.length - 2; r >= 0; r--) gather[r] = Math.min(gather[r], gather[r + 1] + CUFF_EASE * (ringAlong[r + 1] - ringAlong[r]));
+    for (let i = 0; i < rest.length; i += 3) {
+      const k = gather[ring[i / 3]];
+      const x = rest[i], y = rest[i + 1] * k, z = rest[i + 2] * k;
+      for (let c = 0; c < 3; c++) pos[i + c] = bone.o[c] + bone.x[c] * x + bone.y[c] * y + bone.z[c] * z;
+    }
+    this.geometry.getAttribute('position').needsUpdate = true;
+    this.geometry.computeVertexNormals();
   }
 }
 
@@ -383,7 +512,10 @@ function hipsFrame(rig: Rig): Frame3 {
   };
 }
 
-const SHIN_RADIUS = shinRadius(SHIN);
+
+/** A grown-up's skate shoes: bigger than the robot's, grown about the middle of the sole so it stays on the grip. */
+const SHOE_SIZE = 1.15;
+const SOLE_FLOOR = -SHOE_HALF_HEIGHT;
 
 /** Where the torso frame's origin sits over the hips (skeleton-local: 14 up, 1 forward). */
 const CHEST_OVER_HIPS: Vec3 = [1, 14, 0];
@@ -406,7 +538,7 @@ interface ArmParts {
 
 interface LegParts {
   thigh: Mesh;
-  shin: Mesh;
+  shin: PantShin;
   shoe: Group;
   cloth: ShaderMaterial[];
   shoeMaterials: ShaderMaterial[];
@@ -444,7 +576,7 @@ export class Human3D {
     // Head: skull with the face painted on, ears, nose, neck; then hair and beanie over it.
     this.head.matrixAutoUpdate = false;
     this.face = material(humanFaceMaterial({
-      skin: look.skin, white: '#fbf4e8', iris: look.eyes, brow: look.hair, mouth: '#4a1e2a', lip: look.lips,
+      skin: look.skin, white: '#fbf4e8', iris: look.eyes, pupil: '#1c1210', brow: look.hair, mouth: '#4a1e2a', lip: look.lips,
     }));
     const skull = staticMesh(geometry(skullGeometry()), this.face);
     const earMaterial = skin();
@@ -475,7 +607,7 @@ export class Human3D {
 
     // Torso: the tee.
     const rib = darker(look.tee, 0.2);
-    this.tee = new TwoFrameSkin(geometry(teeGeometry()), (_x, y) => teeChestWeight(y));
+    this.tee = new TwoFrameSkin(geometry(teeGeometry()), (_x, y) => teeChestWeight(y), HUMAN_SCALE);
     this.torso = staticMesh(this.tee.geometry, material(teeMaterial({ tee: look.tee, rib, print: look.print, screen: '#271f58', glow: '#ff7aa2' })));
     this.torso.matrixAutoUpdate = false;
 
@@ -501,8 +633,7 @@ export class Human3D {
     this.arms = { left: arm('left'), right: arm('right') };
 
     // Legs: pants, and the robot's shoe in the skater's colors.
-    const thighShape = geometry(thighGeometry(THIGH));
-    const shinShape = geometry(shinGeometry(SHIN));
+    const thighShape = geometry(thighGeometry());
     const shoeShape = shoeGeometries();
     geometry(shoeShape.sole);
     geometry(shoeShape.upper);
@@ -510,8 +641,9 @@ export class Human3D {
     this.seat = staticMesh(geometry(seatGeometry()), material(seatMaterial({ cloth: look.pants, seam }, SEAT.top)));
     const leg = (side: 'left' | 'right'): LegParts => {
       const out = side === 'left' ? 1 : -1;
-      const thighMaterial = material(pantsMaterial({ cloth: look.pants, seam }, { thigh: true, length: THIGH, out }));
-      const shinMaterial = material(pantsMaterial({ cloth: look.pants, seam }, { thigh: false, length: SHIN, out }));
+      const thighMaterial = material(pantsMaterial({ cloth: look.pants, seam }, { thigh: true, length: HUMAN_THIGH, out }));
+      const shinMaterial = material(pantsMaterial({ cloth: look.pants, seam }, { thigh: false, length: HUMAN_SHIN, out }));
+      const shin = new PantShin(geometry(shinGeometry()));
       const sole = material(sneakerMaterial({ upper: look.shoe, sole: look.sole, stripe: look.stripe }, null));
       const upper = material(sneakerMaterial({ upper: look.shoe, sole: look.sole, stripe: look.stripe }, shoeShape.toeCap));
       const shoe = new Group();
@@ -519,7 +651,7 @@ export class Human3D {
       shoe.add(staticMesh(shoeShape.sole, sole), staticMesh(shoeShape.upper, upper));
       return {
         thigh: staticMesh(thighShape, thighMaterial),
-        shin: staticMesh(shinShape, shinMaterial),
+        shin,
         shoe,
         cloth: [thighMaterial, shinMaterial],
         shoeMaterials: [sole, upper],
@@ -529,13 +661,16 @@ export class Human3D {
 
     this.group.add(this.head, neck, this.torso, this.seat);
     for (const a of Object.values(this.arms)) this.group.add(a.sleeve, a.upper, a.fore, a.hand);
-    for (const l of Object.values(this.legs)) this.group.add(l.thigh, l.shin, l.shoe);
+    for (const l of Object.values(this.legs)) {
+      this.group.add(l.thigh, staticMesh(l.shin.geometry, l.cloth[1]), l.shoe);
+    }
 
     const ink = (materials: ShaderMaterial[], id: number, width = INK, garment = 0) => {
       for (const m of materials) inkInfo(id, 0, width, INK_ROBOT, m.uniforms.uInfo.value, 0, garment);
     };
-    ink(this.headMaterials, ID.head, HEAD_INK);
-    ink([earMaterial, noseMaterial], ID.head, FINE_INK);
+    ink([this.face], ID.head, HEAD_INK, FACE);
+    ink([earMaterial], ID.ears, FINE_INK, FACE);
+    ink([noseMaterial], ID.nose, NOSE_INK, FACE);
     ink([neckMaterial], ID.neck, FINE_INK);
     ink([this.hairMaterial], ID.hair, FINE_INK);
     ink([this.beanieMaterial], ID.beanie, HEAD_INK);
@@ -558,19 +693,19 @@ export class Human3D {
     const obstacles: ClothObstacle[] = [];
     for (const leg of rig.legs) {
       obstacles.push(
-        { a: toThree(leg.hip), b: toThree(leg.knee), radius: (s) => thighRadius(s / THIGH), drape: true },
-        { a: toThree(leg.knee), b: toThree(leg.ankle), radius: SHIN_RADIUS },
+        { a: toThree(leg.hip), b: toThree(leg.knee), radius: thighRadius, drape: true },
+        { a: toThree(leg.knee), b: toThree(leg.ankle), radius: shinRadius },
       );
     }
-    this.tee.update(placementOf(hips), placementOf(rig.torso), CHEST_OVER_HIPS, obstacles);
-    placeFrame(this.seat, hips);
-    placeFrame(this.head, shiftFrame(rig.head, SKULL_AT.f, SKULL_AT.u, 0));
+    this.tee.update(placementOf(hips, HUMAN_SCALE), placementOf(rig.torso, HUMAN_SCALE), CHEST_OVER_HIPS, obstacles);
+    placeFrame(this.seat, hips, HUMAN_SCALE);
+    placeFrame(this.head, shiftFrame(rig.head, SKULL_AT.f * HUMAN_HEAD, SKULL_AT.u * HUMAN_HEAD, 0), HUMAN_HEAD);
     const jaw = skullAt(-7.5);
     this.neck.set(
-      toThree(rig.torso.at(0.6, TEE.top - 4, 0)),
-      toThree(rig.head.at(SKULL_AT.f + jaw.forward - 3, SKULL_AT.u - 6.5, 0)),
-      4.5,
-      4.1,
+      toThree(rig.torso.at(0.6 * HUMAN_SCALE, (TEE.top - 4) * HUMAN_SCALE, 0)),
+      toThree(rig.head.at((SKULL_AT.f + jaw.forward - 3) * HUMAN_HEAD, (SKULL_AT.u - 6.5) * HUMAN_HEAD, 0)),
+      4.5 * HUMAN_SCALE,
+      4.1 * HUMAN_HEAD,
     );
     this.face.uniforms.uExpression.value = EXPRESSIONS[expression];
 
@@ -578,25 +713,25 @@ export class Human3D {
       const parts = this.arms[arm.side];
       const hinge = cross3(sub3(arm.elbow, arm.shoulder), sub3(arm.hand, arm.elbow));
       const bend = add3(hinge, scale3(rig.torso.side, 30));
-      placeBone(parts.sleeve, arm.shoulder, arm.elbow, bend);
-      placeBone(parts.upper, arm.shoulder, arm.elbow, bend);
-      placeBone(parts.fore, arm.elbow, arm.hand, bend);
+      placeBone(parts.sleeve, arm.shoulder, arm.elbow, bend, HUMAN_SCALE);
+      placeBone(parts.upper, arm.shoulder, arm.elbow, bend, HUMAN_SCALE);
+      placeBone(parts.fore, arm.elbow, arm.hand, bend, HUMAN_SCALE);
       // The hand hangs on with its palm to the body and the thumb forward.
       const x = norm3(sub3(arm.hand, arm.elbow));
       const out = scale3(rig.torso.side, arm.side === 'right' ? 1 : -1);
       const y = norm3(sub3(out, scale3(x, dot3(out, x))));
       const tx = dirToThree(x);
       const ty = dirToThree(y);
-      setMatrix(parts.hand, toThree(arm.hand), tx, ty, crossThree(tx, ty));
+      setMatrix(parts.hand, toThree(arm.hand), tx, ty, crossThree(tx, ty), HUMAN_SCALE);
     }
     for (const leg of rig.legs) {
       const parts = this.legs[leg.side];
       // The knee's hinge; a straight leg falls back to the way the toes point.
       const u = norm3(sub3(leg.ankle, leg.hip));
       const hinge = add3(cross3(sub3(leg.knee, leg.hip), sub3(leg.ankle, leg.knee)), scale3(cross3(leg.shoe.fwd, u), 40));
-      placeBone(parts.thigh, leg.hip, leg.knee, hinge);
-      placeBone(parts.shin, leg.knee, leg.ankle, hinge);
-      placeSymmetric(parts.shoe, leg.shoe);
+      placeBone(parts.thigh, leg.hip, leg.knee, hinge, 1);
+      const shoe = placeSymmetric(parts.shoe, leg.shoe, SHOE_SIZE, SOLE_FLOOR);
+      parts.shin.update(boneAxes(leg.knee, leg.ankle, hinge), shoe, SHOE_SIZE);
     }
 
     // Who paints over whom where parts touch: near and far by depth, as for the robot.

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { TbArrowLeft, TbCheck, TbShare } from 'react-icons/tb';
-import { SCENE_SETS } from '@skrobot/animations';
+import { STAGE_SETS } from '@skrobot/animations';
 import { ROBOT_BY_ID, ROBOTS } from '@/features/robots';
 import {
   CAMERA_PRESETS,
@@ -14,6 +14,8 @@ import {
   stateFromSearch,
   timelineFor,
   trickSteps,
+  videoFilename,
+  withSet,
   zoomAt,
   ZOOM_RANGE,
   type ExplorerState,
@@ -21,6 +23,7 @@ import {
 import CameraDial from './CameraDial';
 import ExplorerStage from './ExplorerStage';
 import TrickBuilder from './TrickBuilder';
+import VideoButton from './VideoButton';
 
 /** The explorer's robot: Swivel, skating in its own style (the human skater skates the same way). */
 const RIDER = ROBOT_BY_ID.get('shifty') ?? ROBOTS[0];
@@ -86,10 +89,16 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
           <span className="explorer-eyebrow">Skate Robot</span>
           <h1>Trick Explorer</h1>
         </div>
-        <button type="button" className="explorer-share" onClick={share}>
-          {shared ? <TbCheck aria-hidden /> : <TbShare aria-hidden />}
-          <span>{shared ? 'Link copied' : 'Share'}</span>
-        </button>
+        <div className="explorer-actions">
+          <VideoButton
+            video={{ robot: RIDER, trick, riderStance: state.rider, camera, zoom: state.zoom, set: state.set, skater: state.skater, rate }}
+            filename={videoFilename(trick.name, rate)}
+          />
+          <button type="button" className="explorer-share" onClick={share}>
+            {shared ? <TbCheck aria-hidden /> : <TbShare aria-hidden />}
+            <span className="explorer-share-label">{shared ? 'Link copied' : 'Share'}</span>
+          </button>
+        </div>
       </header>
 
       <div className="explorer-layout">
@@ -160,14 +169,14 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
             <div className="explorer-field explorer-field-inline">
               <span className="explorer-field-label" id="explorer-set-label">Spot</span>
               <div className="explorer-segmented explorer-segmented-compact" role="radiogroup" aria-labelledby="explorer-set-label">
-                {SCENE_SETS.map((option) => (
+                {STAGE_SETS.map((option) => (
                   <button
                     key={option.id}
                     type="button"
                     role="radio"
                     aria-checked={state.set === option.id}
                     className={state.set === option.id ? 'active' : ''}
-                    onClick={() => setState({ ...state, set: option.id })}
+                    onClick={() => setState(withSet(state, option.id))}
                   >
                     {option.label}
                   </button>
