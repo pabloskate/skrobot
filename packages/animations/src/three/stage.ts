@@ -29,8 +29,10 @@ import { solveRig } from '../scene/rig';
 import { moveFrame, tiltHead, type LegRig, type Rig } from '../scene/skeleton';
 import type { HeadPose } from '../scene/TrickScene';
 import { BOTTOM_LOCAL, TOP_LOCAL } from '../scene/deck';
+import type { Skater } from '../skaters';
 import { ASPHALT } from './view';
 import { clearFeet } from './footContact';
+import { humanRig } from './humanRig';
 
 /**
  * What TrickScene3D draws on one frame, worked out exactly the way TrickScene
@@ -52,6 +54,8 @@ export interface StagePlan {
   /** Clock time the attempt ends at. */
   end: number;
   look: RobotLook;
+  /** Who rides: the robot, or a human skater with a person's reach (humanRig.ts). */
+  skater: Skater;
   /** Underside graphic and its stripe. */
   board: { graphic: string; stripe: string };
 }
@@ -59,9 +63,9 @@ export interface StagePlan {
 export function planStage(
   robot: Robot,
   trick: Trick,
-  options: { landed: boolean; riderStance: RiderStance; style: SkateStyle; fall: FallVariant; shankProgress: number },
+  options: { landed: boolean; riderStance: RiderStance; style: SkateStyle; fall: FallVariant; shankProgress: number; skater?: Skater },
 ): StagePlan {
-  const { landed, riderStance, style, fall, shankProgress } = options;
+  const { landed, riderStance, style, fall, shankProgress, skater = 'robot' } = options;
   const spec = specFor(trick);
   const grindSpec: GrindSpec | null = grindSpecFor(trick);
   const mechanics = resolveRiderMechanics(riderStance, spec.stance);
@@ -77,6 +81,7 @@ export function planStage(
     shankProgress,
     end: grind?.end ?? ROLL_IN + FLIP_T + (landed ? LAND_T : FALL_T),
     look: { body: robot.avatar.body, accent, variant: robot.avatar.variant },
+    skater,
     board: { graphic: accent, stripe: mixHex(robot.avatar.body, '#ffffff', 0.35) },
   };
 }
@@ -223,7 +228,8 @@ export function stageFrame(stage: StagePlan, t: number, rate: number, headPose?:
   const f: Frame = computeFrame(clock, spec, landed, fall, shankProgress, style);
   const grind = plan ? solveGrindRig(t, plan, mechanics, style) : null;
   const solved = clearFeet(onTheGround(grind ? grind.rig : solveRig(f, spec, mechanics, style, landed ? 'landed' : fall)));
-  const rig = headPose ? { ...solved, head: tiltHead(solved.head, headPose.pitch, headPose.roll) } : solved;
+  const tilted = headPose ? { ...solved, head: tiltHead(solved.head, headPose.pitch, headPose.roll) } : solved;
+  const rig = stage.skater === 'human' ? humanRig(tilted) : tilted;
   const falling = grind ? grind.falling : !landed && f.motion.flight >= 1;
   // A presentation head move never shifts the camera or the attempt's motion.
   const headHeight = GROUND - solved.head.origin.y;

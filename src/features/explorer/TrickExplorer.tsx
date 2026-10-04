@@ -22,7 +22,7 @@ import CameraDial from './CameraDial';
 import ExplorerStage from './ExplorerStage';
 import TrickBuilder from './TrickBuilder';
 
-/** The explorer's one rider: Swivel, skating in its own style. */
+/** The explorer's robot: Swivel, skating in its own style (the human skater skates the same way). */
 const RIDER = ROBOT_BY_ID.get('shifty') ?? ROBOTS[0];
 /** Wait for the camera to settle before writing it into the address bar. */
 const URL_SYNC_MS = 250;
@@ -103,6 +103,7 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
             camera={camera}
             zoom={state.zoom}
             set={state.set}
+            skater={state.skater}
             cameraLabel={cameraLabel(state)}
             customCamera={preset == null}
             rate={rate}

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
 import { TbPlayerPauseFilled, TbPlayerPlayFilled, TbRefresh, TbRepeat, TbRepeatOff, TbZoomReset } from 'react-icons/tb';
-import { TrickScene, type RiderStance, type Robot, type SceneCamera, type SceneSet, type Trick } from '@skrobot/animations';
+import { TrickScene, type RiderStance, type Robot, type SceneCamera, type SceneSet, type Skater, type Trick } from '@skrobot/animations';
 import { TrickScene3D } from '@skrobot/animations/three';
 import { CameraDial, ZOOM_STEP, phaseAt, turnCamera, usePlayhead, zoomBy, type Timeline } from '@/features/explorer';
 
@@ -37,6 +37,8 @@ interface Props {
   camera: SceneCamera;
   zoom: number;
   set: SceneSet;
+  /** Who rides on the 3D stage; the SVG comparison only has the robot. */
+  skater: Skater;
   view: StageView;
   cameraLabel: string;
   customCamera: boolean;
@@ -62,7 +64,7 @@ const useInBrowser = () => useSyncExternalStore(noSubscription, () => true, () =
  * so a new trick starts from the top.
  */
 export default function Stage3D({
-  robot, trick, rider, timeline, camera, zoom, set, view, cameraLabel, customCamera, rate, loop,
+  robot, trick, rider, timeline, camera, zoom, set, skater, view, cameraLabel, customCamera, rate, loop,
   onCamera, onResetCamera, onZoom, onRate, onLoop,
 }: Props) {
   const { duration, phases } = timeline;
@@ -230,7 +232,7 @@ export default function Stage3D({
                 </figure>
               )}
               <figure className="explorer3d-pane">
-                <TrickScene3D {...sceneProps} />
+                <TrickScene3D {...sceneProps} skater={skater} />
                 {view === 'compare' && <figcaption>3D</figcaption>}
               </figure>
             </>

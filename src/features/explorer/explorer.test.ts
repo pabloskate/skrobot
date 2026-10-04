@@ -195,6 +195,8 @@ describe('Trick Explorer links', () => {
       grindState({ grind: 'Lipslide', camera: { yaw: -10, pitch: 20, lens: 1.1 }, zoom: SCENE_ZOOM.min }),
       flatState({ trick: 'Kickflip', set: 'plaza' }),
       grindState({ grind: 'Crooked Grind', set: 'waterfront', camera: 'follow' }),
+      flatState({ trick: 'Kickflip', skater: 'human' }),
+      grindState({ grind: 'Lipslide', side: 'Backside', skater: 'human', set: 'plaza' }),
     ];
     for (const state of states) expect(stateFromSearch(searchFromState(state)), searchFromState(state)).toEqual(state);
   });
@@ -207,6 +209,14 @@ describe('Trick Explorer links', () => {
     expect(stateFromSearch('?grind=50-50-grind&out=frontside-flip').out).toEqual({ base: 'Frontside Flip', end: 'tail' });
     expect(searchFromState({ ...DEFAULT_STATE, zoom: 1.5 })).toBe('?grind=50-50-grind&zoom=1.5');
     expect(searchFromState({ ...DEFAULT_STATE, set: 'plaza' })).toBe('?grind=50-50-grind&set=plaza');
+    expect(searchFromState({ ...DEFAULT_STATE, skater: 'human' })).toBe('?grind=50-50-grind&skater=human');
+  });
+
+  it('opens with the robot, and with the human skater when a link asks for one', () => {
+    expect(DEFAULT_STATE.skater).toBe('robot');
+    expect(stateFromSearch('?grind=lipslide').skater).toBe('robot');
+    expect(stateFromSearch('?trick=heelflip&skater=human').skater).toBe('human');
+    expect(stateFromSearch('?skater=alien').skater).toBe('robot');
   });
 
   it('opens on the waterfront, and on the plaza when a link asks for it', () => {

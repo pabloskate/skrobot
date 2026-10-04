@@ -41,6 +41,8 @@ export {
 } from './scene/camera';
 /** The sets TrickScene can be staged on. */
 export { SCENE_SETS, type SceneSet } from './scene/setKit';
+/** Who rides in the three.js renderer: the robot or a human skater. */
+export { SKATERS, type Skater } from './skaters';
 /** Flat-bar grinds and slides — TrickScene only (the other renderers are flatground). */
 export { grindTimelineFor, type GrindTimeline } from './scene/grind';
 /**

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
 import { TbPlayerPauseFilled, TbPlayerPlayFilled, TbRefresh, TbRepeat, TbRepeatOff, TbZoomReset } from 'react-icons/tb';
-import type { RiderStance, Robot, SceneCamera, SceneSet, Trick } from '@skrobot/animations';
+import type { RiderStance, Robot, SceneCamera, SceneSet, Skater, Trick } from '@skrobot/animations';
 import { TrickScene3D } from '@skrobot/animations/three';
 import { ZOOM_STEP, phaseAt, turnCamera, zoomBy, type Timeline } from './explorer';
 import { usePlayhead } from './usePlayhead';
@@ -41,6 +41,8 @@ interface Props {
   /** Magnification of the picture, 1 stock. */
   zoom: number;
   set: SceneSet;
+  /** Who skates: the robot or the human skater. */
+  skater: Skater;
   cameraLabel: string;
   customCamera: boolean;
   rate: number;
@@ -66,7 +68,7 @@ const useInBrowser = () => useSyncExternalStore(noSubscription, () => true, () =
  * trick so a new trick starts from the top.
  */
 export default function ExplorerStage({
-  robot, trick, rider, timeline, camera, zoom, set, cameraLabel, customCamera, rate, loop,
+  robot, trick, rider, timeline, camera, zoom, set, skater, cameraLabel, customCamera, rate, loop,
   onCamera, onResetCamera, onZoom, onRate, onLoop,
 }: Props) {
   const { duration, phases } = timeline;
@@ -241,6 +243,7 @@ export default function ExplorerStage({
               camera={camera}
               zoom={zoom}
               set={set}
+              skater={skater}
               onDone={ignoreDone}
             />
           ) : (

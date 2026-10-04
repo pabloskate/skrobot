@@ -21,7 +21,7 @@ export const rgb = (hex: string): RGB => {
   return [((n >> 16) & 0xff) / 255, ((n >> 8) & 0xff) / 255, (n & 0xff) / 255];
 };
 export const vec3 = (hex: string) => new Vector3(...rgb(hex));
-const glslRgb = (hex: string) => `vec3(${rgb(hex).map((c) => c.toFixed(5)).join(', ')})`;
+export const glslRgb = (hex: string) => `vec3(${rgb(hex).map((c) => c.toFixed(5)).join(', ')})`;
 
 /** Ink classes: what color, if any, a part outlines itself in. */
 export const INK_NONE = 0;
@@ -31,13 +31,19 @@ export const INK_PROP = 2;
 /**
  * The ink record a part writes: its id (0 is the sky and the ground, which
  * never outline), paint priority, outline width (world units), and ink
- * class. Faces of one solid (a box, the deck) share a `solid` number: where
- * two of them meet the edge is inked by priority alone, so the line runs
- * unbroken along it.
+ * class. Faces of one solid (a box, the deck) share a `solid` number (below
+ * GARMENT): where two of them meet the edge is inked by priority alone, so
+ * the line runs unbroken along it. Pieces of one garment (a tee and its
+ * sleeves) share a `garment` number instead: where they meet there's no
+ * line at all, only where one passes clearly in front of the other.
  */
-export function inkInfo(id: number, priority: number, width: number, ink: number, into = new Vector4(), solid = 0): Vector4 {
-  return into.set(id / 255, priority / 255, Math.min(width, 4) / 4, (ink + 4 * solid) / 255);
+export function inkInfo(id: number, priority: number, width: number, ink: number, into = new Vector4(), solid = 0, garment = 0): Vector4 {
+  const surface = garment > 0 ? GARMENT + garment : solid;
+  return into.set(id / 255, priority / 255, Math.min(width, 4) / 4, (ink + 4 * surface) / 255);
 }
+
+/** Where garment numbers start in the ink record's surface field; solids number below it. */
+export const GARMENT = 32;
 
 /**
  * The cel light, in view space: up and to the right on screen, like
@@ -68,12 +74,12 @@ vec3 tone(vec3 base, float lam) {
 float lambert(vec3 n) { return clamp(0.5 + 0.5 * dot(n, SUN), 0.0, 1.0); }
 `;
 
-const GLSL_TARGETS = /* glsl */ `
+export const GLSL_TARGETS = /* glsl */ `
 layout(location = 0) out vec4 outColor;
 layout(location = 1) out vec4 outInfo;
 `;
 
-const GLSL_TOON = /* glsl */ `
+export const GLSL_TOON = /* glsl */ `
 const vec3 TOON_LIGHT = vec3(${TOON_LIGHT.x.toFixed(5)}, ${TOON_LIGHT.y.toFixed(5)}, ${TOON_LIGHT.z.toFixed(5)});
 const float TOON_THRESHOLD = ${TOON_THRESHOLD.toFixed(4)};
 /** 0 in the shadow crescent, 1 lit, antialiased across the terminator. */
@@ -86,13 +92,13 @@ float toonLit(vec3 viewNormal) {
 
 type Uniforms = Record<string, IUniform>;
 
-function sceneMaterial(vertexShader: string, fragmentShader: string, uniforms: Uniforms, extra: Partial<ShaderMaterial> = {}) {
+export function sceneMaterial(vertexShader: string, fragmentShader: string, uniforms: Uniforms, extra: Partial<ShaderMaterial> = {}) {
   return Object.assign(new ShaderMaterial({ glslVersion: GLSL3, vertexShader, fragmentShader, uniforms }), extra);
 }
 
 // ---------- Robot parts ----------
 
-const TOON_VERT = /* glsl */ `
+export const TOON_VERT = /* glsl */ `
 out vec3 vNormal;
 out vec3 vLocal;
 /** World units to pull the part toward the camera in depth only (its outline on screen stays put). */

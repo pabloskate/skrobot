@@ -7,6 +7,7 @@ import {
   SCENE_CAMERA_BOUNDS,
   SCENE_SETS,
   SCENE_ZOOM,
+  SKATERS,
   canEnterGrind,
   canExitGrind,
   clampSceneCamera,
@@ -22,6 +23,7 @@ import {
   type SceneCamera,
   type SceneSet,
   type SkateStyle,
+  type Skater,
 } from '@skrobot/animations';
 import {
   TRICKS,
@@ -73,6 +75,8 @@ export interface ExplorerState {
   zoom: number;
   /** The spot the robot skates: the bayside waterfront, or the stock plaza. */
   set: SceneSet;
+  /** Who skates it: the robot, or the human skater. */
+  skater: Skater;
 }
 
 export const STANCES: readonly Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
@@ -190,6 +194,7 @@ export const DEFAULT_STATE: Readonly<ExplorerState> = Object.freeze({
   camera: 'classic',
   zoom: 1,
   set: 'waterfront',
+  skater: 'robot',
 });
 
 /** Keeps a trick out only if the grind rides the end it pops off. */
@@ -447,6 +452,7 @@ export function stateFromSearch(search: string): ExplorerState {
     camera: parseCamera(params.get('cam')),
     zoom: parseZoom(params.get('zoom')),
     set: SCENE_SETS.find((option) => option.id === params.get('set'))?.id ?? DEFAULT_STATE.set,
+    skater: SKATERS.find((option) => option.id === params.get('skater'))?.id ?? DEFAULT_STATE.skater,
   };
   const grind = fromSlug(GRIND_CHOICES, params.get('grind'));
   if (!grind) {
@@ -488,5 +494,6 @@ export function searchFromState(state: ExplorerState): string {
   }
   if (state.zoom !== 1) params.set('zoom', String(round(state.zoom, 2)));
   if (state.set !== DEFAULT_STATE.set) params.set('set', state.set);
+  if (state.skater !== DEFAULT_STATE.skater) params.set('skater', state.skater);
   return `?${params.toString()}`;
 }

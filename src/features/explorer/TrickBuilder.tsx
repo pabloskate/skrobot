@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { TbChevronRight, TbDice5, TbSearch, TbX } from 'react-icons/tb';
-import type { PopEnd } from '@skrobot/animations';
+import { SKATERS, type PopEnd } from '@skrobot/animations';
 import { trickMatchesSearch } from '@/features/tricks';
 import {
   FLATGROUND_TIERS,
@@ -156,6 +156,26 @@ export default function TrickBuilder({ state, onChange }: Props) {
       </div>
 
       {state.mode === 'flatground' && <StanceField state={state} set={set} />}
+
+      <div className="explorer-field explorer-field-inline">
+        <span className="explorer-field-label" id="explorer-skater-label">
+          Skater <small>who rides</small>
+        </span>
+        <div className="explorer-segmented explorer-segmented-compact" role="radiogroup" aria-labelledby="explorer-skater-label">
+          {SKATERS.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              role="radio"
+              aria-checked={state.skater === option.id}
+              className={state.skater === option.id ? 'active' : ''}
+              onClick={() => set({ skater: option.id })}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="explorer-field explorer-field-inline">
         <span className="explorer-field-label" id="explorer-rider-label">

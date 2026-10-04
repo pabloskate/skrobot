@@ -80,6 +80,7 @@ export default function TrickExplorer3D({ initialSearch = '' }: { initialSearch?
             camera={camera}
             zoom={state.zoom}
             set={state.set}
+            skater={state.skater}
             view={view}
             cameraLabel={cameraLabel(state)}
             customCamera={preset == null}

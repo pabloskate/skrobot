@@ -8,6 +8,7 @@ import { randomFallVariant, randomShankProgress, type FallVariant } from '../Tri
 import { DEFAULT_SCENE_CAMERA, type SceneCamera } from '../scene/camera';
 import type { SceneSet } from '../scene/setKit';
 import type { LeadIn } from '../scene/TrickScene';
+import type { Skater } from '../skaters';
 import { SceneRenderer } from './renderer';
 import { planStage, stageFrame } from './stage';
 import { STOCK_VIEW, stageView } from './view';
@@ -50,6 +51,8 @@ interface Props {
   zoom?: number;
   /** The backdrop: the stock plaza, or the bayside waterfront. */
   set?: SceneSet;
+  /** Who rides: the robot (its look from `robot`), or a human skater in its place. */
+  skater?: Skater;
 }
 
 /** Device pixels drawn per CSS pixel: supersampled on ordinary screens, native on retina. */
@@ -71,6 +74,7 @@ export default function TrickScene3D({
   camera = DEFAULT_SCENE_CAMERA,
   zoom = 1,
   set = 'plaza',
+  skater = 'robot',
 }: Props) {
   const idBase = useId().replace(/:/g, '');
   const style = useMemo(() => resolveSkateStyle(robot.skateStyle), [robot.skateStyle]);
@@ -79,10 +83,10 @@ export default function TrickScene3D({
   const [shankProgress] = useState(randomShankProgress);
   const fall = forcedFall ?? fallVariant ?? randomizedFall;
   const stage = useMemo(
-    () => planStage(robot, trick, { landed, riderStance, style, fall, shankProgress }),
+    () => planStage(robot, trick, { landed, riderStance, style, fall, shankProgress, skater }),
     // The trick's name and id don't change what is skated.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [robot, trick.base, trick.stance, landed, riderStance, style, fall, shankProgress],
+    [robot, trick.base, trick.stance, landed, riderStance, style, fall, shankProgress, skater],
   );
   const {
     time, firstRun, isPlaying, staticTime, speedToggleVisible, effectivePlaybackRate,
@@ -124,7 +128,7 @@ export default function TrickScene3D({
     if (!el || !box) return;
     let scene: SceneRenderer;
     try {
-      scene = new SceneRenderer(el, { robot: look, board }, set);
+      scene = new SceneRenderer(el, { robot: look, board, skater }, set);
     } catch {
       // No WebGL 2: say so in place of the picture.
       if (fallback.current) fallback.current.hidden = false;
@@ -145,7 +149,7 @@ export default function TrickScene3D({
       renderer.current = null;
       scene.dispose();
     };
-  }, [look, board, set]);
+  }, [look, board, set, skater]);
 
   useLayoutEffect(() => {
     draw.current = () => renderer.current?.render(frame, camera, zoom);
@@ -158,6 +162,7 @@ export default function TrickScene3D({
       data-renderer="three"
       data-time={time.toFixed(3)}
       data-set={set}
+      data-skater={skater}
       data-rider-stance={riderStance}
       data-nose-foot={stage.mechanics.noseFoot}
       data-toe-side={stage.mechanics.orientationSign}

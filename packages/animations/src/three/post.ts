@@ -11,7 +11,7 @@ import {
 import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
 import { PALETTE } from '../scene/camera';
 import { BAY } from '../scene/waterfrontPanorama';
-import { INK_PROP, INK_ROBOT, rgb } from './materials';
+import { GARMENT, INK_PROP, INK_ROBOT, rgb } from './materials';
 
 /**
  * Screen passes for TrickScene3D.
@@ -28,7 +28,8 @@ import { INK_PROP, INK_ROBOT, rgb } from './materials';
  * when a different part in front of it lies within that part's outline
  * width: the outline falls outside the nearer part, over whatever it covers,
  * exactly where TrickScene's would. Depth decides who is in front; parts
- * touching within a hair of each other fall back to TrickScene's paint order.
+ * touching within a hair of each other fall back to TrickScene's paint order,
+ * except pieces of one garment, which join seamlessly where they touch.
  */
 
 const glsl = (hex: string) => `vec3(${rgb(hex).map((c) => c.toFixed(5)).join(', ')})`;
@@ -45,6 +46,12 @@ void main() {
 export const MAX_INK_PX = 16;
 /** Side of the square tiles the edge map keeps one texel for, in device pixels. */
 export const EDGE_TILE = 8;
+/**
+ * How far in front (world units) one piece of a garment must be to outline
+ * itself over another. More than touching: where a sleeve meets the tee the
+ * two surfaces slant away together, so the seam's ends run apart in depth.
+ */
+const GARMENT_GAP = 4;
 
 const GLSL_DEPTH = /* glsl */ `
 uniform float uNear;
@@ -193,7 +200,7 @@ export function inkMaterial() {
           outColor = lit ? setLight(c) : c;
           return;
         }
-        float ownSolid = floor(floor(own.a * 255.0 + 0.5) / 4.0);
+        float ownSurface = floor(floor(own.a * 255.0 + 0.5) / 4.0);
         float z = viewZ(texture(uDepth, vUv).r);
         float best = 0.0;
         float bestInk = 0.0;
@@ -211,11 +218,16 @@ export function inkMaterial() {
             if (kind < 0.5) continue;
             if (abs(other.r - own.r) < 0.5 / 255.0) continue;
             float oz = viewZ(texture(uDepth, at).r);
-            float solid = floor(code / 4.0);
-            bool sameSolid = solid > 0.5 && abs(solid - ownSolid) < 0.5 && abs(other.g - own.g) > 0.5 / 255.0;
-            bool front = sameSolid
+            float surface = floor(code / 4.0);
+            bool sameSurface = surface > 0.5 && abs(surface - ownSurface) < 0.5;
+            // Pieces of one garment: no seam where they meet, only a line where one is clearly in front.
+            bool garment = sameSurface && surface > ${GARMENT}.0 - 0.5;
+            bool crease = sameSurface && !garment && abs(other.g - own.g) > 0.5 / 255.0;
+            bool front = crease
               ? other.g > own.g
-              : oz < z - uTouch || (abs(oz - z) <= uTouch && other.g > own.g);
+              : garment
+                ? oz < z - ${GARMENT_GAP.toFixed(1)}
+                : oz < z - uTouch || (abs(oz - z) <= uTouch && other.g > own.g);
             if (!front) continue;
             float width = other.b * 4.0 * uFocalPx / oz;
             float cover = clamp(width + 1.0 - d, 0.0, 1.0);

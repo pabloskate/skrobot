@@ -31,6 +31,8 @@ import { Plaza3D } from './plaza3d';
 import { Waterfront3D } from './waterfront3d';
 import { blurMaterial, copyMaterial, dustMaterial, EDGE_TILE, edgeMaterial, fxaaMaterial, inkMaterial, shadowChannel } from './post';
 import { Robot3D } from './robot3d';
+import { Human3D } from './human3d';
+import type { Skater } from '../skaters';
 import { shadowShapeMaterial } from './materials';
 import type { GroundPolygon, StageFrame } from './stage';
 import { rgb } from './materials';
@@ -51,7 +53,7 @@ interface SetPiece {
 }
 
 /**
- * Draws StageFrames with WebGL: the plaza, the bar, the board, and the robot
+ * Draws StageFrames with WebGL: the plaza, the bar, the board, and the rider
  * in one depth-tested scene, so whatever is nearer the camera covers what is
  * behind it pixel by pixel — no paint order to get wrong when limbs cross,
  * the board flips past a foot, or the camera swings round.
@@ -76,13 +78,15 @@ const SHADOW_BLUR = 1.8;
 interface RendererLook {
   robot: RobotLook;
   board: BoardLook;
+  /** Who rides; the robot when omitted. */
+  skater?: Skater;
 }
 
 export class SceneRenderer {
   readonly renderer: WebGLRenderer;
   private readonly scene = new Scene();
   private readonly camera = new Camera();
-  private readonly robot: Robot3D;
+  private readonly rider: Robot3D | Human3D;
   private readonly board: Board3D;
   private readonly bar = new Bar3D();
   private readonly set: SetPiece;
@@ -123,11 +127,11 @@ export class SceneRenderer {
     this.camera.matrixAutoUpdate = false;
     this.camera.matrixWorldAutoUpdate = false;
 
-    this.robot = new Robot3D(look.robot);
+    this.rider = look.skater === 'human' ? new Human3D() : new Robot3D(look.robot);
     this.board = new Board3D(look.board);
     this.set = set === 'waterfront' ? new Waterfront3D() : new Plaza3D();
     this.setLight = set === 'waterfront';
-    this.scene.add(this.set.group, this.bar.group, this.board.group, this.robot.group);
+    this.scene.add(this.set.group, this.bar.group, this.board.group, this.rider.group);
     this.overlayScene.add(this.set.overlay);
 
     this.shadowGeometry.setAttribute('position', new Float32BufferAttribute([], 3));
@@ -198,7 +202,7 @@ export class SceneRenderer {
     const pxPerUnit = height / view.box.height;
     const shadowOpacity: [number, number, number] = [0.3, frame.shadows.boardOpacity, frame.shadows.bodyOpacity];
 
-    this.robot.update(frame.rig, frame.expression, view);
+    this.rider.update(frame.rig, frame.expression, view);
     this.board.update(frame.rig.board, frame.wheels, view);
     this.bar.update(frame.span);
     this.writeShadows(frame);
@@ -329,7 +333,7 @@ export class SceneRenderer {
   }
 
   dispose() {
-    this.robot.dispose();
+    this.rider.dispose();
     this.board.dispose();
     this.bar.dispose();
     this.set.dispose();

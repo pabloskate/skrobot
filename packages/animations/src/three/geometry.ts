@@ -391,3 +391,107 @@ export function frontDecalGeometry(spec: BoxSpec, halfS: number, u0: number, u1:
   geometry.setAttribute('normal', new Float32BufferAttribute(normal, 3));
   return geometry;
 }
+
+// ---------- Lofts ----------
+
+export interface LoftSpec {
+  /** Length of the body along its axis, from 0. */
+  length: number;
+  /** Half thickness across the two cross axes at `t`, 0 → 1 along the length. */
+  radius: (t: number) => readonly [number, number];
+  /** Where the cross-section is centered at `t`. */
+  offset?: (t: number) => readonly [number, number];
+  /** Cross-section squareness at `t`: 1 an ellipse, lower boxier (a superellipse exponent). */
+  square?: (t: number) => number;
+  /** How far each end domes out past it, as a share of its radius: 1 a hemisphere, 0 flat. */
+  caps?: readonly [number, number];
+  /** Leave an end open (a hem, a cuff): no dome, the tube just stops. */
+  open?: readonly [boolean, boolean];
+  /** Maps (along, across a, across b) to the solid's own axes; (x, y, z) when omitted. */
+  warp?: (along: number, a: number, b: number) => Vec3;
+  stations?: number;
+  radial?: number;
+  capRings?: number;
+}
+
+/**
+ * A solid swept along an axis: a cross-section whose size, center, and
+ * squareness change along the length, domed shut at both ends (or left open,
+ * for cloth). Clothes and body parts are lofts: a sleeve that flares, a pant
+ * leg that breaks over the shoe, a head that narrows to the jaw. Wound
+ * outside out whatever the warp does to handedness.
+ */
+export function loftGeometry(spec: LoftSpec): BufferGeometry {
+  const { length, radius, offset = () => [0, 0] as const, square = () => 1, caps = [1, 1], open = [false, false], warp = (x, a, b) => [x, a, b] as Vec3 } = spec;
+  const stations = spec.stations ?? 24;
+  const radial = spec.radial ?? 36;
+  const capRings = spec.capRings ?? 6;
+  const position: number[] = [];
+  const rings: Array<{ along: number; t: number; scale: number }> = [];
+  if (!open[0]) {
+    for (let k = capRings - 1; k >= 1; k--) {
+      const phi = (Math.PI / 2) * (k / capRings);
+      rings.push({ along: -caps[0] * radius(0)[0] * Math.sin(phi), t: 0, scale: Math.cos(phi) });
+    }
+  }
+  for (let i = 0; i <= stations; i++) rings.push({ along: (length * i) / stations, t: i / stations, scale: 1 });
+  if (!open[1]) {
+    for (let k = 1; k < capRings; k++) {
+      const phi = (Math.PI / 2) * (k / capRings);
+      rings.push({ along: length + caps[1] * radius(1)[0] * Math.sin(phi), t: 1, scale: Math.cos(phi) });
+    }
+  }
+  const point = (along: number, t: number, scale: number, theta: number) => {
+    const [ra, rb] = radius(t);
+    const [oa, ob] = offset(t);
+    const n = square(t);
+    return warp(along, oa + ra * scale * spow(Math.cos(theta), n), ob + rb * scale * spow(Math.sin(theta), n));
+  };
+  for (const ring of rings) {
+    for (let j = 0; j < radial; j++) position.push(...point(ring.along, ring.t, ring.scale, (2 * Math.PI * j) / radial));
+  }
+  // Poles: the axis at each closed end, pushed out by its dome.
+  const first = position.length / 3;
+  if (!open[0]) position.push(...warp(-caps[0] * radius(0)[0], offset(0)[0], offset(0)[1]));
+  const last = position.length / 3;
+  if (!open[1]) position.push(...warp(length + caps[1] * radius(1)[0], offset(1)[0], offset(1)[1]));
+  const at = (i: number, j: number) => i * radial + (j % radial);
+  const index: number[] = [];
+  for (let j = 0; j < radial; j++) {
+    if (!open[0]) index.push(first, at(0, j + 1), at(0, j));
+    if (!open[1]) index.push(last, at(rings.length - 1, j), at(rings.length - 1, j + 1));
+    for (let i = 0; i < rings.length - 1; i++) {
+      const a = at(i, j);
+      const b = at(i, j + 1);
+      const c = at(i + 1, j);
+      const d = at(i + 1, j + 1);
+      index.push(a, b, c, b, d, c);
+    }
+  }
+  // A warp that mirrors turns the solid inside out: wind it back if the
+  // warp's Jacobian flips handedness (checked mid-body).
+  const e = 1e-3;
+  const mid = length / 2;
+  const [ra, rb] = radius(0.5);
+  const [oa, ob] = offset(0.5);
+  const p0 = [mid, oa + ra * 0.5, ob + rb * 0.25] as const;
+  const d = (k: number): Vec3 => {
+    const hi = [...p0] as [number, number, number];
+    const lo = [...p0] as [number, number, number];
+    hi[k] += e;
+    lo[k] -= e;
+    const a = warp(...hi);
+    const b = warp(...lo);
+    return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  };
+  const [jx, jy, jz] = [d(0), d(1), d(2)];
+  const det = jx[0] * (jy[1] * jz[2] - jy[2] * jz[1]) - jx[1] * (jy[0] * jz[2] - jy[2] * jz[0]) + jx[2] * (jy[0] * jz[1] - jy[1] * jz[0]);
+  if (det < 0) {
+    for (let k = 0; k < index.length; k += 3) [index[k + 1], index[k + 2]] = [index[k + 2], index[k + 1]];
+  }
+  const geometry = new BufferGeometry();
+  geometry.setIndex(index);
+  geometry.setAttribute('position', new Float32BufferAttribute(position, 3));
+  geometry.computeVertexNormals();
+  return geometry;
+}
