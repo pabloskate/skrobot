@@ -6,7 +6,9 @@ import { resolveSkateStyle } from '../skateStyle';
 import { resolveRiderMechanics } from '../stanceMechanics';
 import type { RiderStance, Robot, SkateStyle, Stance } from '../types';
 import TrickScene from './TrickScene';
-import { HANGER_BOTTOM, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z, deckTopY, drawBoard } from './board';
+import { HANGER_BOTTOM, WHEEL_BOTTOM, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z, deckTopY, drawBoard } from './board';
+import { TIP_X, deckBottomY } from './deck';
+import { EL_TORO_RAIL } from './stairs';
 import { fallSink, makeCamera } from './camera';
 import { facing } from './draw';
 import { drawRobot } from './robot';
@@ -51,6 +53,29 @@ const RIDERS: RiderStance[] = ['regular', 'goofy'];
 const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
 const FALLS: FallVariant[] = ['slam', 'bail', 'shank'];
 const NEUTRAL = resolveSkateStyle({ popHeight: 1, rotationSpeed: 1, flickStrength: 1 });
+
+it.each(['360 Flip', 'Laser Flip'])('snaps %s close to the ground before the grind hop carries it away', (entry) => {
+  for (const rail of [null, EL_TORO_RAIL]) for (const rider of RIDERS) for (const stance of STANCES) {
+    for (const popHeight of [0.45, 1.15]) for (const rotationSpeed of [0.8, 1.25]) {
+      const style = resolveSkateStyle({ popHeight, rotationSpeed, flickStrength: 1 });
+      const spec = grindSpecFor({ base: `${entry} into Frontside 50-50 Grind`, stance })!;
+      const mechanics = resolveRiderMechanics(rider, stance);
+      const plan = planGrind(spec, mechanics, style, true, 'slam', rail);
+      const tipX = spec.popNose ? TIP_X : -TIP_X;
+      const label = `${rail ? 'handrail' : 'flat bar'} ${rider} ${stance} ${popHeight}/${rotationSpeed}`;
+      let closest = Infinity;
+      let lowest = -Infinity;
+      for (let tau = 0; tau <= 0.1; tau += 0.002) {
+        const { rig } = solveGrindRig(plan.pop + tau, plan, mechanics, style);
+        closest = Math.min(closest, GROUND + WHEEL_BOTTOM - rig.board.point({ x: tipX, y: deckBottomY(tipX), z: 0 }).y);
+        lowest = Math.max(lowest, ...boardSamples(rig).map((p) => p.y));
+      }
+      expect(closest, label).toBeLessThan(6);
+      expect(closest, label).toBeGreaterThanOrEqual(-0.1);
+      expect(lowest, label).toBeLessThanOrEqual(GROUND + WHEEL_BOTTOM + 0.1);
+    }
+  }
+});
 
 const nameOf = (base: string, side: GrindSide) => `${side === 'frontside' ? 'Frontside' : 'Backside'} ${base}`;
 

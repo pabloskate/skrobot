@@ -2,7 +2,7 @@ import { DoubleSide, GLSL3, ShaderMaterial, Vector4 } from 'three';
 import { SUN } from './materials';
 
 /** Vertex surface tags let an entire articulated assembly share one draw. */
-export const HUMANOID_SURFACE = { pearl: 0, polymer: 1, titanium: 2, glass: 3, light: 4, graphite: 5 } as const;
+export const HUMANOID_SURFACE = { pearl: 0, polymer: 1, titanium: 2, glass: 3, light: 4, graphite: 5, torso: 6, soft: 7 } as const;
 
 /** Continuous metallic lighting, deliberately independent of the toy's cel ramp. */
 export function humanoidMaterial(): ShaderMaterial {
@@ -61,6 +61,14 @@ export function humanoidMaterial(): ShaderMaterial {
       float grain(vec3 p) {
         return fract(sin(dot(floor(p * 110.0), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
       }
+      float cover(float d) {
+        float aa = max(fwidth(d), 0.001);
+        return 1.0 - smoothstep(-aa, aa, d);
+      }
+      float roundedRect(vec2 p, vec2 halfSize, float radius) {
+        vec2 q = abs(p) - halfSize + radius;
+        return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
+      }
       void main() {
         vec3 n = normalize(vNormal);
         if (!gl_FrontFacing) n = -n;
@@ -74,7 +82,37 @@ export function humanoidMaterial(): ShaderMaterial {
         if (vSurface > 0.5 && vSurface < 1.5) { base = vec3(0.015, 0.02, 0.022); metal = 0.08; rough = 0.68; }
         if (vSurface > 1.5 && vSurface < 2.5) { base = vec3(0.36, 0.405, 0.42); metal = 0.91; rough = 0.25; }
         if (vSurface > 2.5 && vSurface < 3.5) { base = vec3(0.006, 0.014, 0.018); metal = 0.35; rough = 0.115; }
-        if (vSurface > 4.5) { base = vec3(0.065, 0.078, 0.085); metal = 0.83; rough = 0.38; }
+        if (vSurface > 4.5 && vSurface < 5.5) { base = vec3(0.065, 0.078, 0.085); metal = 0.83; rough = 0.38; }
+        if (vSurface > 5.5 && vSurface < 6.5) {
+          // Flush finishes on the torso's actual surface: the vents stay
+          // inside their panels through the shell's taper and rounded caps.
+          vec2 rearPoint = vec2(vLocal.z, vLocal.y - 7.0);
+          vec2 sidePoint = vec2(vLocal.x + 2.8, vLocal.y - 7.0);
+          float rearFacing = 1.0 - step(0.0, vLocal.x);
+          float sideFacing = step(10.0, abs(vLocal.z));
+          float rearDistance = roundedRect(rearPoint, vec2(6.4, 11.0), 1.5);
+          float sideDistance = roundedRect(sidePoint, vec2(3.8, 10.5), 1.2);
+          float panel = max(cover(rearDistance) * rearFacing, cover(sideDistance) * sideFacing);
+          float gasket = max(cover(rearDistance - 0.18) * rearFacing, cover(sideDistance - 0.18) * sideFacing);
+          base = mix(base, vec3(0.018, 0.024, 0.027), gasket);
+          base = mix(base, vec3(0.052, 0.065, 0.071), panel);
+          rough = mix(rough, 0.56, gasket);
+          metal = mix(metal, 0.3, gasket);
+          // A repeated shallow slot, clipped well inside the gasket. A fine
+          // lower lip catches the light without adding floating geometry.
+          float row = mod(vLocal.y + 1.1, 2.2) - 1.1;
+          float inset = max(
+            cover(roundedRect(rearPoint, vec2(4.8, 8.5), 0.6)) * rearFacing,
+            cover(roundedRect(sidePoint, vec2(2.6, 7.8), 0.6)) * sideFacing
+          ) * panel;
+          float slot = cover(abs(row) - 0.34) * inset;
+          float lip = cover(abs(row + 0.42) - 0.07) * inset;
+          base = mix(base, vec3(0.008, 0.012, 0.014), slot);
+          base = mix(base, vec3(0.12, 0.14, 0.145), lip * 0.65);
+          rough = mix(rough, 0.78, slot);
+        }
+        // Matte elastomer joint cover: diffuse, with no armor reflections.
+        if (vSurface > 6.5) { base = vec3(0.045, 0.054, 0.058); metal = 0.0; rough = 0.96; }
         float detailFade = 1.0 - smoothstep(0.006, 0.06, length(fwidth(vLocal)));
         float brushed = sin(vLocal.y * 190.0 + vLocal.x * 3.0) * 0.5;
         rough += (grain(vLocal) - 0.5 + brushed * metal) * 0.035 * detailFade;
@@ -94,6 +132,7 @@ export function humanoidMaterial(): ShaderMaterial {
         vec3 direct = min(vec3(2.5), sunF * d * geometry / max(0.004, 4.0 * nv * max(nl, 0.001))) * nl * 0.75;
         vec3 reflection = environment(r, rough) * fresnel * (1.0 - rough * 0.45);
         vec3 color = diffuse + direct + reflection;
+        if (vSurface > 6.5) color = diffuse + direct * 0.08;
         if (vSurface > 2.5 && vSurface < 3.5) color = base * 0.7 + reflection * 0.85 + direct;
         if (vSurface > 3.5 && vSurface < 4.5) color = vec3(0.08, 0.66, 0.76) * (1.0 + 0.12 * uExpression);
         color = color / (1.0 + color * 0.2);

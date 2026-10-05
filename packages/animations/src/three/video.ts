@@ -1,13 +1,24 @@
 import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
-import { BufferTarget, CanvasSource, Mp4OutputFormat, Output, Quality, getFirstEncodableVideoCodec } from 'mediabunny';
+import {
+  AudioBufferSource,
+  BufferTarget,
+  CanvasSource,
+  Mp4OutputFormat,
+  Output,
+  Quality,
+  getFirstEncodableAudioCodec,
+  getFirstEncodableVideoCodec,
+} from 'mediabunny';
 import type { RiderStance, Robot, Trick } from '../types';
 import { resolveSkateStyle } from '../skateStyle';
 import { DEFAULT_SCENE_CAMERA, type SceneCamera, type TripodId } from '../scene/camera';
 import type { StageSet } from '../scene/setKit';
 import type { Skater } from '../skaters';
 import { SceneRenderer } from './renderer';
+import { renderSoundtrack } from './skateSounds';
+import { soundtrackFor } from './soundtrack';
 import { planStage, stageFrame, type StageFrame } from './stage';
 import { STOCK_VIEW, stageView } from './view';
 import { WaterfrontFarImage } from './waterfrontFar';
@@ -19,8 +30,9 @@ import { WaterfrontFarImage } from './waterfrontFar';
  * frame rate, however fast or slow the device draws, and encoded with
  * WebCodecs. The same stage, renderer, camera, and zoom as the live scene;
  * on the waterfront the far panorama, which the page layers under the
- * canvas, is painted under each frame instead (WaterfrontFarImage). Its own
- * entry point, so the encoder only loads when someone films.
+ * canvas, is painted under each frame instead (WaterfrontFarImage). The
+ * trick's sounds go on its audio track, where the browser can encode one.
+ * Its own entry point, so the encoder only loads when someone films.
  */
 
 export interface TrickVideoOptions {
@@ -39,6 +51,8 @@ export interface TrickVideoOptions {
   rate?: number;
   /** Video width in pixels; the height keeps the stage's shape. */
   width?: number;
+  /** Put the trick's sounds on an audio track (left off where the browser can't encode audio). */
+  sound?: boolean;
   fps?: number;
   /** The share of the video filmed so far, 0 to 1. */
   onProgress?: (share: number) => void;
@@ -61,6 +75,10 @@ export class VideoUnsupportedError extends Error {
 const BITRATE = 8_000_000;
 /** H.264 first: it plays everywhere an MP4 is opened. */
 const CODECS = ['avc', 'hevc', 'vp9', 'av1'] as const;
+/** AAC first, for the same reason. */
+const AUDIO_CODECS = ['aac', 'opus'] as const;
+const AUDIO_BITRATE = 128_000;
+const SAMPLE_RATE = 48_000;
 
 /** Whether this browser has the WebCodecs encoder filming needs. */
 export const canRecordVideo = () => typeof VideoEncoder !== 'undefined' && typeof VideoFrame !== 'undefined';
@@ -77,6 +95,7 @@ export async function recordTrickVideo({
   skater = 'robot',
   rate = 1,
   width: requestedWidth = 1280,
+  sound = true,
   fps = 60,
   onProgress,
   signal,
@@ -87,6 +106,9 @@ export async function recordTrickVideo({
   const height = Math.round(width / (STOCK_VIEW.width / STOCK_VIEW.height) / 2) * 2;
   const codec = await getFirstEncodableVideoCodec([...CODECS], { width, height, frameRate: fps });
   if (!codec) throw new VideoUnsupportedError();
+  const audioCodec = sound && typeof OfflineAudioContext !== 'undefined'
+    ? await getFirstEncodableAudioCodec([...AUDIO_CODECS], { numberOfChannels: 2, sampleRate: SAMPLE_RATE, quality: new Quality({ bitrate: AUDIO_BITRATE }) })
+    : null;
   signal?.throwIfAborted();
 
   const film = document.createElement('canvas');
@@ -105,11 +127,17 @@ export async function recordTrickVideo({
   const bitrate = Math.round(BITRATE * ((width * height) / (1280 * 1034)) * (fps / 60));
   const source = new CanvasSource(film, { codec, quality: new Quality({ bitrate }) });
   output.addVideoTrack(source, { frameRate: fps });
+  const audio = audioCodec ? new AudioBufferSource({ codec: audioCodec, quality: new Quality({ bitrate: AUDIO_BITRATE }) }) : null;
+  if (audio) output.addAudioTrack(audio);
   // Frame i shows the trick at i / fps of video time, so the last lands exactly
   // on the end. No hold after it: the explorer's loop pauses there, the video stops.
   const total = Math.ceil((stage.end / rate) * fps) + 1;
   try {
     await output.start();
+    if (audio) {
+      await audio.add(await renderSoundtrack(soundtrackFor(stage), stage.end, rate, SAMPLE_RATE));
+      audio.close();
+    }
     for (let i = 0; i < total; i++) {
       signal?.throwIfAborted();
       // The wheels' motion smear spans one video frame (stageFrame assumes 60 fps).

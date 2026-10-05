@@ -54,6 +54,10 @@ export function realisticBoardMaterial(): ShaderMaterial {
         float aa = max(fwidth(d), 0.001);
         return 1.0 - smoothstep(-aa, aa, d);
       }
+      float roundedRect(vec2 p, vec2 halfSize, float radius) {
+        vec2 q = abs(p) - halfSize + radius;
+        return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
+      }
       float wood(vec2 p) {
         float bend = noise(vec2(p.x * 0.035, p.y * 0.22));
         return 0.55 * noise(vec2(p.x * 0.11, p.y * 4.0 + bend * 1.2)) + 0.45 * noise(vec2(p.x * 0.04, p.y * 11.0 + bend * 2.0));
@@ -86,20 +90,44 @@ export function realisticBoardMaterial(): ShaderMaterial {
           float edge = 1.0 - cover(abs(vLocal.z) - max(0.0, width - 0.16));
           base = mix(base, vec3(0.29, 0.215, 0.125), edge * 0.8);
         } else if (vSurface < 1.5) {
-          base = mix(vec3(0.43, 0.28, 0.13), vec3(0.7, 0.52, 0.3), grain);
-          // Restrained original graphic: graphite field, fine pale geometry
-          // and a muted cyan registration line, with natural maple at the ends.
-          vec2 q = abs(vLocal.xz) - vec2(23.0, 5.5);
-          float print = cover(length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - 1.4);
-          vec3 graphic = vec3(0.033, 0.047, 0.049);
-          float line = cover(abs(vLocal.z - 0.115 * vLocal.x) - 0.1) * cover(abs(vLocal.x) - 18.0);
-          graphic = mix(graphic, vec3(0.61, 0.65, 0.61), line * 0.8);
-          float cyan = cover(abs(vLocal.z + 2.9) - 0.14) * cover(abs(vLocal.x + 5.0) - 10.5);
-          graphic = mix(graphic, vec3(0.075, 0.3, 0.31), cyan);
-          base = mix(base, graphic, print);
-          // Small lengthwise slides and wear toward the kicked tips.
+          // Full-bleed screen print follows the curved deck, including the
+          // kicks. Work in unscaled deck coordinates so the emblem widens
+          // with the board. Only the physical ply edge remains bare maple.
+          vec2 p = vec2(vLocal.x, vLocal.z / ${BOARD_WIDTH_SCALE.toFixed(5)});
+          vec3 ink = vec3(0.018, 0.043, 0.065);
+          vec3 cream = vec3(0.89, 0.84, 0.68);
+          vec3 cyan = vec3(0.025, 0.62, 0.65);
+          vec3 coral = vec3(0.87, 0.12, 0.055);
+          base = ink;
+          // Wide cyan rails and coral speed chevrons stay legible in motion.
+          float rail = cover(abs(abs(p.y) - 6.4) - 0.75);
+          base = mix(base, cyan, rail);
+          float chevronX = abs(p.x) - 0.75 * abs(p.y);
+          float chevrons = max(cover(abs(chevronX - 35.0) - 2.4), cover(abs(chevronX - 43.0) - 2.4));
+          base = mix(base, coral, chevrons);
+          float trim = cover(abs(chevronX - 29.0) - 0.65);
+          base = mix(base, cream, trim);
+          // Central robot-head badge: cream housing, dark visor, cyan eyes
+          // and a coral antenna. Its broad shapes read at skatepark scale.
+          vec2 face = vec2(p.y, p.x);
+          float halo = cover(abs(length(face / vec2(7.4, 13.0)) - 1.0) - 0.055);
+          base = mix(base, cyan, halo);
+          float antenna = cover(roundedRect(face - vec2(0.0, 10.1), vec2(0.55, 2.0), 0.3));
+          float beacon = cover(length(face - vec2(0.0, 12.0)) - 1.2);
+          base = mix(base, coral, max(antenna, beacon));
+          float head = cover(roundedRect(face, vec2(5.4, 7.6), 1.6));
+          base = mix(base, cream, head);
+          float visor = cover(roundedRect(face - vec2(0.0, 1.8), vec2(4.4, 2.4), 0.8));
+          base = mix(base, ink, visor);
+          float eyes = cover(roundedRect(vec2(abs(face.x) - 2.2, face.y - 1.8), vec2(0.95, 1.05), 0.3));
+          base = mix(base, cyan, eyes);
+          float mouth = cover(roundedRect(face + vec2(0.0, 3.7), vec2(2.5, 0.55), 0.25));
+          base = mix(base, ink, mouth);
+          // Subtle ink grain and lengthwise wear preserve the physical finish
+          // without washing the graphic back into a wood-colored deck.
+          base *= 0.94 + 0.08 * grain;
           float scrape = pow(noise(vLocal.xz * vec2(0.07, 7.0)), 10.0) * smoothstep(13.0, 44.0, abs(vLocal.x));
-          base = mix(base, vec3(0.6, 0.46, 0.29), scrape * 0.5);
+          base = mix(base, vec3(0.6, 0.46, 0.29), scrape * 0.22);
           rough = 0.42;
         } else if (vSurface < 2.5) {
           // Seven physical-height maple laminations and their fine glue lines.

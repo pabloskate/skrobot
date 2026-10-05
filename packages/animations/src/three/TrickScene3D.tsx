@@ -11,6 +11,7 @@ import type { LeadIn } from '../scene/TrickScene';
 import type { Skater } from '../skaters';
 import { SceneRenderer } from './renderer';
 import { planStage, stageFrame } from './stage';
+import { useTrickSound } from './useTrickSound';
 import { STOCK_VIEW, stageView } from './view';
 import WaterfrontFar from './waterfrontFar';
 
@@ -55,6 +56,8 @@ interface Props {
   set?: StageSet;
   /** Who rides: the robot (its look from `robot`), illustrated human, or detailed humanoid. */
   skater?: Skater;
+  /** Play the attempt's sounds while its clock runs: the pop, the wheels, a grind or slide, the landing. Off by default. */
+  sound?: boolean;
 }
 
 /** Device pixels drawn per CSS pixel: supersampled on ordinary screens, native on retina. */
@@ -78,6 +81,7 @@ export default function TrickScene3D({
   zoom = 1,
   set = 'plaza',
   skater = 'robot',
+  sound = false,
 }: Props) {
   const idBase = useId().replace(/:/g, '');
   const style = useMemo(() => resolveSkateStyle(robot.skateStyle), [robot.skateStyle]);
@@ -111,6 +115,7 @@ export default function TrickScene3D({
   });
   const lead = firstRun ? leadIn : undefined;
   const inLeadIn = lead != null && time < 0;
+  useTrickSound(stage, time, effectivePlaybackRate, sound);
 
   // The canvas's shape, for framing the far layers the way the canvas is framed.
   const [aspect, setAspect] = useState(STOCK_VIEW.width / STOCK_VIEW.height);

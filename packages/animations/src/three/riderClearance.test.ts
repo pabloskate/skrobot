@@ -24,7 +24,8 @@ import { onTheGround } from './stage';
 const BASES = [
   'Ollie', 'Ollie North', 'Kickflip', 'Heelflip', 'Double Kickflip', 'Double Heelflip',
   'Varial Kickflip', 'Varial Heelflip', 'Hardflip', 'Inward Heelflip', 'Pressure Flip',
-  'Dolphin Flip', '360 Flip', '360 Double Kickflip', 'Laser Flip', 'Pop Shuvit',
+  'Dolphin Flip', '360 Flip', '360 Double Kickflip', 'Laser Flip', '360 Hardflip',
+  '360 Inward Heelflip', 'Pop Shuvit',
   'Frontside Shuvit', 'Late Backside Shuvit', 'Late Frontside Shuvit', 'Late Kickflip',
   '360 Shuvit', 'Frontside 360 Shuvit', 'Bigspin', 'FS Bigspin', 'Bigspin Flip',
   'FS Bigspin Flip', 'Bigspin Heelflip', 'FS Bigspin Heelflip', 'Frontside 180',

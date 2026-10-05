@@ -65,7 +65,30 @@ interface Spec {
   spinDir: -1 | 0 | 1;
   /** "Late" shuvit: hold the board flat off the pop, then snap the rotation in the back half of the flight. */
   late: boolean;
+  /**
+   * Degrees the board's spin axis leans off vertical, toward its pitch axis.
+   * A spinning, flipping deck is close to a top: its long axis sweeps a cone
+   * about one fixed axis while it rolls about itself. Varials and tre flips
+   * level the pop with the front foot, so that axis stands vertical and the
+   * deck turns flat (0). A hardflip's front foot flicks down instead, the
+   * pop's nose-up pitch stays in it, and the axis leans over: the shuv
+   * carries the nose up on end between the legs (see the rig's tiltFor).
+   */
+  tilt: number;
 }
+
+/** How far a hardflip or inward heelflip's spin axis leans off vertical. */
+const HARDFLIP_TILT = 55;
+/** A 360 hardflip's lean: its whole turn stands the deck on end twice. */
+const HARDFLIP_360_TILT = 40;
+/** A 360 inward heelflip's: the heel's flatter flick keeps more of it level. */
+const INWARD_HEEL_360_TILT = 20;
+/**
+ * Share of the flight a tilted trick's pop pitch fades over. It must be gone
+ * by the earliest catch (0.85 / the fastest rotationSpeed): the rig hands a
+ * finished spin back to the plain turn, which only matches a level deck.
+ */
+const TILT_POP_FADE = 0.5;
 
 function specFor(trick: Trick): Spec {
   const base: Spec = {
@@ -81,6 +104,7 @@ function specFor(trick: Trick): Spec {
     stance: trick.stance,
     spinDir: 0,
     late: false,
+    tilt: 0,
   };
   switch (trick.base) {
     case 'Kickflip':
@@ -96,20 +120,25 @@ function specFor(trick: Trick): Spec {
     case 'Varial Kickflip':
       return { ...base, flips: 1, yaw: 180, flipDir: 1, spinDir: 1 };
     case 'Hardflip':
-      return { ...base, flips: 1, yaw: 180, flipDir: 1, spinDir: -1 };
+      return { ...base, flips: 1, yaw: 180, flipDir: 1, spinDir: -1, tilt: HARDFLIP_TILT };
     case 'Dolphin Flip':
       return { ...base, flips: 1, yaw: 180, flipDir: 1, spinDir: 1, forwardFlip: true };
     case 'Varial Heelflip':
       return { ...base, flips: 1, yaw: 180, flipDir: -1, spinDir: -1 };
     case 'Pressure Flip':
-    case 'Inward Heelflip':
       return { ...base, flips: 1, yaw: 180, flipDir: -1, spinDir: 1 };
+    case 'Inward Heelflip':
+      return { ...base, flips: 1, yaw: 180, flipDir: -1, spinDir: 1, tilt: HARDFLIP_TILT };
     case '360 Flip':
       return { ...base, flips: 1, yaw: 360, flipDir: 1, spinDir: 1 };
     case '360 Double Kickflip':
       return { ...base, flips: 2, yaw: 360, flipDir: 1, spinDir: 1 };
     case 'Laser Flip':
       return { ...base, flips: 1, yaw: 360, flipDir: -1, spinDir: -1 };
+    case '360 Hardflip':
+      return { ...base, flips: 1, yaw: 360, flipDir: 1, spinDir: -1, tilt: HARDFLIP_360_TILT };
+    case '360 Inward Heelflip':
+      return { ...base, flips: 1, yaw: 360, flipDir: -1, spinDir: 1, tilt: INWARD_HEEL_360_TILT };
     case 'Pop Shuvit':
       return { ...base, yaw: 180, spinDir: 1 };
     case 'Frontside Shuvit':
@@ -754,6 +783,13 @@ function computeFrame(
         const dipDir = spec.nollie ? 1 : -1; // tail dips down regardless of stance
         boardRot += dipEase * dipDir * -14;
       }
+    } else if (spec.tilt) {
+      // A tilted spin keeps the pop's pitch (Spec.tilt): its leaning axis
+      // lifts the nose as the pop's own pitch fades, so the fade runs over
+      // that climb instead of levelling the deck off first. It eases off
+      // from the start (the popping foot rides the strike, not a held
+      // pitch) and arrives at zero with zero slope.
+      boardRot = popAngle * (1 - clamp01(p / TILT_POP_FADE)) ** 2;
     } else if (p < 0.3) {
       // smoothstep (zero slope at both ends) instead of a plain quadratic so
       // the pop decay arrives at the wobble with zero velocity, not at speed.
@@ -770,7 +806,8 @@ function computeFrame(
     // deeper as the board comes around, then ease back to level for the catch.
     // Tune to taste: SPIN_DIP_DEG = how far the nose drops, SPIN_DIP_BIAS =
     // how late in the rotation the dip peaks (higher = closer to the end).
-    if (spec.yaw >= 360) {
+    // A tilted spin pitches the deck itself (Spec.tilt): these nods would fight it.
+    if (spec.yaw >= 360 && !spec.tilt) {
       const SPIN_DIP_DEG = 22;
       const SPIN_DIP_BIAS = 2.2;
       const dipDir = (spec.nollie ? -1 : 1) * (spec.spinDir || 1); // nose-down in the stance's frame, mirrored by fs/bs
@@ -785,7 +822,7 @@ function computeFrame(
     // the hold phase, then pitches as the flip fires.
     // Varials stay flatter so the shuv+flip reads instead of a nose-dive;
     // dolphin/forwardFlip keeps the full pitch (handled in 3D via forwardPitchDeg).
-    if (spec.flipDir) {
+    if (spec.flipDir && !spec.tilt) {
       const pitchAmp = spec.yaw && !spec.forwardFlip && spec.yaw < 360 ? 4 : 15;
       boardRot += spec.flipDir * Math.sin(spinP * Math.PI) * pitchAmp;
     }

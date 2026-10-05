@@ -464,6 +464,47 @@ function turnAbout(v: V3, n: V3, deg: number): V3 {
   return add3(add3(scale3(v, c), scale3(cross3(n, v), s)), scale3(n, dot3(n, v) * (1 - c)));
 }
 
+/** A tilted trick's spin axis, and the share of its flick the deck rolls. */
+interface Tilt {
+  axis: V3;
+  rollShare: number;
+}
+
+/**
+ * Where a hardflip's board turns (see Spec.tilt). The shuv is a turn about
+ * an axis leaned `tilt` off vertical toward the pitch axis, the way that
+ * lifts the end the pop leaves in the air, so the nose (the tail, off a
+ * nollie) rises on end as the deck comes round.
+ *
+ * Leaning the axis costs the deck some roll. Half a turn about it ends with
+ * the deck rolled 2·tilt (two half turns about axes `tilt` apart are one
+ * turn of 2·tilt about the axis square to both: the long axis), so the flick
+ * rolls it the rest of the way, the nearest roll to a whole flip that lands
+ * it upright. A whole turn about any axis comes back round, and the deck
+ * rolls its whole flip.
+ *
+ * Once the shuv is round (`yawDeg`, the turn so far) the deck is simply
+ * turned, exactly as a flat spin leaves it: the pop's pitch has faded by
+ * then. From there it pitches about its own width like any other, as it
+ * lands or skids away from a fall, so it takes the plain turn (null).
+ */
+function tiltFor(spec: Spec, mechanics: RiderMechanics, yawDeg: number): Tilt | null {
+  if (!spec.tilt) return null;
+  const done = orientTrickRotation(mechanics, {
+    flipDeg: spec.flipDir * spec.flips * 360,
+    yawDeg: (spec.spinDir || 1) * spec.yaw,
+    bodyYawDeg: 0,
+  });
+  if (Math.abs(yawDeg) >= Math.abs(done.yawDeg)) return null;
+  // A tail pop raises the nose: rotZ's negative sense. A nose pop the tail.
+  const lift = spec.nollie ? 1 : -1;
+  const lean = Math.sign(done.yawDeg) * lift;
+  const axis: V3 = { x: 0, y: Math.cos(rad(spec.tilt)), z: lean * Math.sin(rad(spec.tilt)) };
+  const rolled = Math.round(Math.abs(done.yawDeg) / 180) % 2 ? 2 * spec.tilt * lean : 0;
+  const roll = rolled + 360 * Math.round((done.flipDeg - rolled) / 360);
+  return { axis, rollShare: done.flipDeg ? roll / done.flipDeg : 1 };
+}
+
 function poseRig(
   f: Frame,
   spec: Spec,
@@ -655,7 +696,10 @@ function poseRig(
   const plans = [footPlan('left'), footPlan('right')] as const;
 
   // ----- Board -----
-  let boardDir = (local: V3) => rotY(rotZ(rotX(local, flipDeg), pitchDeg), yawDeg);
+  const tilt = tiltFor(spec, mechanics, yawDeg);
+  let boardDir = tilt
+    ? (local: V3) => turnAbout(rotZ(rotX(local, flipDeg * tilt.rollShare), pitchDeg), tilt.axis, yawDeg)
+    : (local: V3) => rotY(rotZ(rotX(local, flipDeg), pitchDeg), yawDeg);
   let boardPoint = (local: V3): V3 => add3(center, boardDir(local));
   if (spec.roll !== 0) ({ dir: boardDir, point: boardPoint } = wrapBoard(plans[mechanics.popFoot === 'left' ? 0 : 1].shoe));
 

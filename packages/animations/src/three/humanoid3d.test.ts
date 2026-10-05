@@ -4,6 +4,10 @@ import type { FallVariant } from '../TrickAnimation';
 import { resolveSkateStyle } from '../skateStyle';
 import type { RiderStance, Robot, Stance } from '../types';
 import { Humanoid3D } from './humanoid3d';
+import { humanoidHeadGeometry } from './humanoidGeometry';
+import { HUMANOID_SURFACE } from './humanoidMaterials';
+import { FlexibleNeck3D } from './flexibleNeck3d';
+import { shiftFrame } from '../scene/skeleton';
 import { planStage, stageFrame } from './stage';
 import { stageView, toThree } from './view';
 
@@ -15,6 +19,79 @@ const plan = (stance: Stance = 'regular', riderStance: RiderStance = 'regular', 
 });
 
 describe('Humanoid renderer', () => {
+  it('keeps the flexible neck attached and its bend bounded through head and fall poses', () => {
+    const neck = new FlexibleNeck3D();
+    try {
+      const positions = neck.geometry.getAttribute('position');
+      let ringSize = 0;
+      while (ringSize < positions.count && positions.getY(ringSize) === 0) ringSize++;
+      const rings = positions.count / ringSize;
+      for (const riderStance of ['regular', 'goofy'] as const) {
+        for (const fall of [undefined, 'slam'] as const) {
+          const stage = plan('regular', riderStance, fall);
+          for (const fraction of [0, 0.3, 0.6, 1]) {
+            const frame = stageFrame(stage, stage.end * fraction, 1);
+            const head = shiftFrame(frame.rig.head, 0, -8.5, 0);
+            neck.update(frame.rig.torso, head);
+            const start = new Vector3(...toThree(frame.rig.torso.at(-0.8, 23, 0)));
+            const end = new Vector3(...toThree(head.at(-1.8, -16.5, 0)));
+            for (let row = 0; row < rings; row++) {
+              const center = new Vector3();
+              for (let col = 0; col < ringSize; col++) {
+                center.add(new Vector3().fromBufferAttribute(positions, row * ringSize + col));
+              }
+              center.divideScalar(ringSize);
+              const straight = start.clone().lerp(end, row / (rings - 1));
+              expect(center.distanceTo(straight)).toBeLessThan(start.distanceTo(end) * 0.3);
+              if (row === 0) expect(center.distanceTo(start)).toBeLessThan(0.0001);
+              if (row === rings - 1) expect(center.distanceTo(end)).toBeLessThan(0.0001);
+            }
+            for (const attribute of ['position', 'normal']) {
+              expect(Array.from(neck.geometry.getAttribute(attribute).array).every(Number.isFinite)).toBe(true);
+            }
+          }
+        }
+      }
+    } finally {
+      neck.geometry.dispose();
+    }
+  });
+
+  it('keeps the continuous black head closed and its wraparound normals smooth', () => {
+    const head = humanoidHeadGeometry();
+    try {
+      const positions = head.getAttribute('position');
+      const normals = head.getAttribute('normal');
+      const surfaces = head.getAttribute('aSurface');
+      const edges = new Map<string, number[][]>();
+      const vertexKey = (at: number) => [positions.getX(at), positions.getY(at), positions.getZ(at)]
+        .map((coordinate) => Math.round(coordinate * 100_000)).join(',');
+      for (let at = 0; at < positions.count; at += 3) {
+        const surface = surfaces.getX(at);
+        if (surface !== HUMANOID_SURFACE.glass) continue;
+        const vertices = [at, at + 1, at + 2];
+        if (new Set(vertices.map(vertexKey)).size < 3) continue;
+        for (let side = 0; side < 3; side++) {
+          const pair = [vertices[side], vertices[(side + 1) % 3]]
+            .sort((a, b) => vertexKey(a).localeCompare(vertexKey(b)));
+          const key = pair.map(vertexKey).join('/');
+          const neighbors = edges.get(key) ?? [];
+          neighbors.push(pair.flatMap((i) => [normals.getX(i), normals.getY(i), normals.getZ(i)]));
+          edges.set(key, neighbors);
+        }
+      }
+      let normalError = 0;
+      for (const neighbors of edges.values()) {
+        expect(neighbors).toHaveLength(2);
+        normalError = Math.max(normalError, ...neighbors[0].map((normal, i) => Math.abs(normal - neighbors[1][i])));
+      }
+      expect(edges.size).toBeGreaterThan(1000);
+      expect(normalError).toBeLessThan(0.0001);
+    } finally {
+      head.dispose();
+    }
+  });
+
   it('keeps detailed assemblies finite and within mobile draw and triangle budgets', () => {
     const rider = new Humanoid3D();
     try {
@@ -36,7 +113,7 @@ describe('Humanoid renderer', () => {
       for (const geometry of geometries) {
         const position = geometry.getAttribute('position');
         expect(position.count).toBeGreaterThan(0);
-        expect(position.count % 3).toBe(0);
+        expect((geometry.index?.count ?? position.count) % 3).toBe(0);
         for (const name of ['position', 'normal', 'aSurface']) {
           const attribute = geometry.getAttribute(name);
           expect(attribute.count).toBe(position.count);

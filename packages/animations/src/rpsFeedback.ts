@@ -1,5 +1,7 @@
 'use client';
 
+import { getAudioContext } from './audio';
+
 /** RPS beats plus the robot's trick call: a reel tick and the call itself. */
 export type RpsSound = 'beat' | 'reveal' | 'win' | 'lose' | 'tie' | 'tick' | 'call';
 
@@ -17,24 +19,6 @@ export function rpsVibrate(pattern: number | number[]): void {
   } catch {
     // ignore unsupported vibrate calls
   }
-}
-
-/** Lazy-created Web Audio context. Created on first user gesture. */
-let audioCtx: AudioContext | null = null;
-
-function getAudioContext(): AudioContext | null {
-  if (typeof window === 'undefined') return null;
-  if (!audioCtx) {
-    try {
-      audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-    } catch {
-      return null;
-    }
-  }
-  if (audioCtx && audioCtx.state === 'suspended') {
-    audioCtx.resume().catch(() => {});
-  }
-  return audioCtx;
 }
 
 function beep(freq: number, duration: number, type: OscillatorType = 'sine', when?: number, peak = 0.2) {

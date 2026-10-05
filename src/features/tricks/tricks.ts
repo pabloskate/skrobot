@@ -83,6 +83,9 @@ const FLATGROUND: [string, number][] = [
   ['BS Bigspin Heelflip', 12],
   ['FS Bigspin Heelflip', 8],
   ['Laser Flip', 9],
+  // The hardflip and inward heel with a full 360 shuv — harder than the laser.
+  ['360 Hardflip', 9.5],
+  ['360 Inward Heelflip', 9.5],
   // Same elite tier as BS bigspin heelflip — only a couple pros scrape low odds.
   ['360 Double Kickflip', 11.5],
 ];
@@ -332,6 +335,8 @@ export const TRICK_BASE_ALIASES: Readonly<Partial<Record<string, readonly string
   'BS Bigspin Heelflip': ['backside bigspin heelflip', 'bigspin heelflip', 'bigspin heel'],
   'FS Bigspin Heelflip': ['frontside bigspin heelflip', 'front bigspin heelflip', 'fs bigspin heel'],
   'Laser Flip': ['laser'],
+  '360 Hardflip': ['360 hard flip', 'three sixty hardflip'],
+  '360 Inward Heelflip': ['360 inward heel', '360 inward heel flip', 'three sixty inward heelflip'],
   '360 Double Kickflip': ['360 double flip', 'double tre', 'double tre flip', 'tre double'],
   '50-50 Grind': ['50 50', 'fifty fifty'],
   Boardslide: ['board slide'],
@@ -471,6 +476,8 @@ const DESCRIPTIONS: Record<string, string> = {
   'BS Bigspin Heelflip': 'A backside bigspin paired with a heelflip instead of a kickflip — elite tech.',
   'FS Bigspin Heelflip': 'A frontside bigspin combined with a heelflip.',
   'Laser Flip': 'A 360 shuvit and a heelflip together — the gnarliest spinning flip there is.',
+  '360 Hardflip': 'A hardflip with a full frontside 360 shuv — the board flips up between your legs and keeps spinning all the way around.',
+  '360 Inward Heelflip': 'An inward heelflip with a full backside 360 shuv — the heelflip spins in toward you all the way around.',
   '360 Double Kickflip': 'A 360 flip with two full kickflip rotations — pro-level hang-time tech.',
   // Grinds
   '50-50 Grind': 'Grind along an edge on both trucks at once — the first grind everyone learns.',

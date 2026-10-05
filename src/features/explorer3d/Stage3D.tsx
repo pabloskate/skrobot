@@ -236,7 +236,7 @@ export default function Stage3D({
                 </figure>
               )}
               <figure className="explorer3d-pane">
-                <TrickScene3D {...sceneProps} tripod={tripod} set={set} skater={skater} />
+                <TrickScene3D {...sceneProps} tripod={tripod} set={set} skater={skater} sound={playhead.playing} />
                 {view === 'compare' && <figcaption>3D</figcaption>}
               </figure>
             </>

@@ -76,11 +76,11 @@ const bolt = (a: Assembly, at: Vec3, normal: 'x' | 'z' = 'z', radius = 0.62) => 
 
 export function humanoidTorsoGeometry(): BufferGeometry {
   const a = new Assembly();
-  a.add(armor(-9, 34, [[0, 7.6, 10.7], [0.16, 9.3, 13.2], [0.63, 11.1, 16.4], [0.92, 9.5, 17.3], [1, 7.9, 15]], 'y'), S.pearl);
-  // Carbon side inserts sit between the breastplate and rear service panel.
+  // Side inserts, rear service panel and their vents are finished directly
+  // on this shell by the material. Independent panels at fixed x/z offsets
+  // intersected its changing cross-section and left ragged exposed slats.
+  a.add(armor(-9, 34, [[0, 7.6, 10.7], [0.16, 9.3, 13.2], [0.63, 11.1, 16.4], [0.92, 9.5, 17.3], [1, 7.9, 15]], 'y'), S.torso);
   for (const sign of [-1, 1]) {
-    a.add(armor(-4, 22, [[0, 4, 0.7], [0.5, 6, 0.75], [1, 4.5, 0.65]], 'y').translate(-2.8, 0, sign * 14), S.polymer);
-    for (let y = 2; y < 17; y += 2.2) a.box([-3.6, y, sign * 14.85], [3.2, 0.42, 0.14], 0.1, S.graphite);
     a.tube([[8.7, 17.9, sign * 9.5], [9.8, 14, sign * 10.2], [9.6, 4, sign * 8.2], [7.6, -6.2, sign * 5.7]], 0.13, S.graphite);
     for (const y of [-2, 18]) bolt(a, [8, y, sign * 10.7], 'x', 0.54);
   }
@@ -88,66 +88,80 @@ export function humanoidTorsoGeometry(): BufferGeometry {
   a.tube([[8.9, 18.5, -10], [10, 17.3, -5], [10.4, 17, 0], [10, 17.3, 5], [8.9, 18.5, 10]], 0.15, S.polymer);
   a.box([11.12, 10.7, 0], [0.17, 0.45, 2.1], 0.15, S.polymer);
   a.box([11.3, 10.7, 0], [0.04, 0.14, 1.35], 0.035, S.light);
-  a.add(armor(-6, 26, [[0, 1.7, 7.8], [0.5, 2.1, 10.8], [1, 1.7, 9.8]], 'y').translate(-9, 0, 0), S.graphite);
-  for (let y = 0; y < 14; y += 2.2) a.box([-11.1, y, 0], [0.12, 0.45, 6], 0.1, S.polymer);
-  a.ring([0, 25.5, 0], 4.3, 0.55, S.titanium, 'y');
   return a.finish();
 }
 
-/** The separate oval optical face follows the skull curvature, not a flat decal. */
-function visorPatch(): BufferGeometry {
+/** A closed, continuous black optical shell. */
+function headShell(): BufferGeometry {
   const positions: number[] = [];
+  const normals: number[] = [];
   const indices: number[] = [];
-  const rows = 24;
-  const cols = 36;
-  for (let row = 0; row <= rows; row++) {
-    const lat = -1.25 + row / rows * 2.5;
-    for (let col = 0; col <= cols; col++) {
-      const theta = -1.47 + col / cols * 2.94;
+  // Keep the former visor boundary in the grid so the head retains its
+  // proportions. The entire closed shell now has the same black finish.
+  const latitudes = [-Math.PI / 2, -1.45, -1.35,
+    ...Array.from({ length: 25 }, (_, i) => -1.25 + i / 24 * 2.5),
+    1.35, 1.45, Math.PI / 2];
+  const longitudes = [
+    ...Array.from({ length: 10 }, (_, i) => -Math.PI + i / 10 * (Math.PI - 1.47)),
+    ...Array.from({ length: 37 }, (_, i) => -1.47 + i / 36 * 2.94),
+    ...Array.from({ length: 10 }, (_, i) => 1.47 + (i + 1) / 10 * (Math.PI - 1.47)),
+  ];
+  const rows = latitudes.length - 1;
+  const cols = longitudes.length - 1;
+  for (const lat of latitudes) {
+    for (const theta of longitudes) {
       const taper = 0.91 + 0.09 * (Math.sin(lat) * 0.5 + 0.5);
       positions.push(-1.35 + 11.15 * Math.cos(lat) * Math.cos(theta), -9 + 12.6 * Math.sin(lat), 9.2 * taper * Math.cos(lat) * Math.sin(theta));
+      // Analytic normals keep the longitude wrap and poles smooth too.
+      const normal = new Vector3(
+        Math.cos(lat) * Math.cos(theta) / 11.15,
+        (Math.sin(lat) - 0.045 * Math.cos(lat) ** 2 * Math.sin(theta) ** 2 / taper) / 12.6,
+        Math.cos(lat) * Math.sin(theta) / (9.2 * taper),
+      ).normalize();
+      normals.push(normal.x, normal.y, normal.z);
     }
   }
   for (let row = 0; row < rows; row++) for (let col = 0; col < cols; col++) {
     const p = row * (cols + 1) + col;
-    indices.push(p, p + cols + 1, p + 1, p + 1, p + cols + 1, p + cols + 2);
+    // One triangle per pole cell avoids collapsed faces at the closed tips.
+    if (row > 0) {
+      indices.push(p, p + cols + 1, p + 1);
+    }
+    if (row < rows - 1) {
+      indices.push(p + 1, p + cols + 1, p + cols + 2);
+    }
   }
   const g = new BufferGeometry();
   g.setAttribute('position', new Float32BufferAttribute(positions, 3));
+  g.setAttribute('normal', new Float32BufferAttribute(normals, 3));
   g.setIndex(indices);
-  g.computeVertexNormals();
-  return g;
+  const shell = g.toNonIndexed();
+  g.dispose();
+  return shell;
 }
 
 export function humanoidHeadGeometry(): BufferGeometry {
   const a = new Assembly();
-  a.add(armor(-17.3, 16, [[0, 6.9, 5.9], [0.2, 9.5, 8.4], [0.6, 10, 9], [1, 8.1, 7.7]], 'y', 0.98).translate(-2.6, 0, 0), S.pearl);
-  a.add(visorPatch(), S.glass);
+  a.add(headShell(), S.glass);
   const visorPoint = (theta: number, lat: number, out = 0.25): Vec3 => [
     -1.35 + (11.15 + out) * Math.cos(lat) * Math.cos(theta),
     -9 + (12.6 + out) * Math.sin(lat),
     (9.2 + out) * (0.91 + 0.09 * (Math.sin(lat) * 0.5 + 0.5)) * Math.cos(lat) * Math.sin(theta),
   ];
-  // An understated unbroken brow arc and short corner status returns.
+  // A readable illuminated brow arc on the uninterrupted black shell.
   a.tube(Array.from({ length: 19 }, (_, i) => {
     const theta = -1.02 + i / 18 * 2.04;
     return visorPoint(theta, 0.28 - 0.045 * Math.cos(theta * 2));
-  }), 0.22, S.light, 36);
-  for (const sign of [-1, 1]) {
-    a.tube([visorPoint(sign * 1.08, 0.19), visorPoint(sign * 1.12, 0.04), visorPoint(sign * 1.1, -0.1)], 0.085, S.titanium, 12);
-    a.cylinder([-3.2, -7.5, sign * 8.7], [-3.2, -7.5, sign * 9.3], 2.2, 2.05, S.graphite);
-    a.ring([-3.2, -7.5, sign * 9.36], 1.45, 0.16, S.titanium);
-    bolt(a, [-3.2, -7.5, sign * 9.35], 'z', 0.54);
-  }
+  }), 0.5, S.light, 36);
   a.sphere([9.7, -10.8, 0], [0.2, 0.55, 0.55], S.graphite, 12);
   a.sphere([9.87, -10.8, 0], [0.06, 0.28, 0.28], S.glass, 12);
   return a.finish();
 }
 
-/** A servo spine along x, length ten, scaled only along its axis at runtime. */
-export function humanoidSpineGeometry(neck = false): BufferGeometry {
+/** Servo spine along x, length ten, scaled only along its axis at runtime. */
+export function humanoidSpineGeometry(): BufferGeometry {
   const a = new Assembly();
-  const r = neck ? 3.2 : 4.8;
+  const r = 4.8;
   a.cylinder([0, 0, 0], [10, 0, 0], r, r * 0.9, S.polymer);
   for (let x = 0.8; x < 10; x += 1.35) a.ring([x, 0, 0], r, 0.28, S.graphite, 'x');
   for (const z of [-1, 1]) {

@@ -78,6 +78,8 @@ const FLATGROUND_BASES = [
   'FS Bigspin Heelflip',
   'Laser Flip',
   '360 Double Kickflip',
+  '360 Hardflip',
+  '360 Inward Heelflip',
 ];
 
 const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
