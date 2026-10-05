@@ -42,6 +42,7 @@ import {
   settledSpin,
   thenSpin,
   wrapSpin,
+  type HopFrame,
   type HopPlan,
   type TrickSpin,
 } from './grindTricks';
@@ -538,10 +539,11 @@ export function planGrind(
   const lock: BoardPose = rail ? { ...level, fall: (spec.dir * Math.atan(rail.slope) * 180) / Math.PI } : level;
   // How far the board steps across a handrail onto its lock: from beside it to as far past it as the lock sits.
   const across = rail ? RAIL_BESIDE + far * (onBar(level, spec.contact).z - BAR_Z) : 0;
-  const railed = rail ? rideFor(rail, spec, lock, style, spec.entry?.lift ?? 0, across, level.yaw - heading) : null;
+  // A trick in that turns the deck carries the lock's turn round with it (turnShare): no extra time for it over the rail.
+  const railed = rail ? rideFor(rail, spec, lock, style, spec.entry?.lift ?? 0, across, spinsIn(spec) ? 0 : level.yaw - heading) : null;
   const lockCenter = railed ? onRail(lock, spec.contact, railed.ride.rail, railed.ride.tilt, spec.dir, railed.ride.lockS) : onBar(lock, spec.contact);
   // Beside a handrail the lane and where it starts across leave room for the deck's swing.
-  const lane = railed ? railLane(railed.ride, entry, entry ? hopRate(entry, railed.upT) : 1, railed.upT, -far * (lockCenter.z - BAR_Z)) : null;
+  const lane = railed ? railLane(railed.ride, entry, entry ? hopRate(entry, railed.upT) : 1, railed.upT, -far * (lockCenter.z - BAR_Z), level.yaw - heading, heading) : null;
   const ride = railed && lane ? { ...railed.ride, beside: lane.beside } : null;
   // Off the trucks the board pops to a set angle; a slide levers off the
   // bar from whatever angle it was sliding at.
@@ -743,12 +745,13 @@ function offRail(lane: number, beside: number, lock: number, over: number, s: nu
  * rail's line it keeps as far off as the deck reaches at that moment: wide
  * at first, closing in as the spin comes back to lie along the rail.
  */
-function railLane(ride: HandrailRide, entry: HopPlan | null, entryRate: number, upT: number, lock: number): { lane: number; beside: number } {
-  // `lock` is where the board locks on, off the rail the same way as the lane (negative: across it).
+function railLane(ride: HandrailRide, entry: HopPlan | null, entryRate: number, upT: number, lock: number, turn: number, settled: number): { lane: number; beside: number } {
+  // `lock` is where the board locks on, off the rail the same way as the lane (negative: across it);
+  // a spin in brings in `turn`, the lock's own turn past the rider's spin, as it comes round to `settled`.
   const need = (s: number) => {
     if (!entry || (entry.trick.spec.yaw === 0 && entry.trick.spec.bodyYaw === 0)) return RAIL_BESIDE;
     const hop = hopFrame(entry, hopClock(s * upT, entryRate), true);
-    const across = ((hop.heading + hop.spin.yaw) * Math.PI) / 180;
+    const across = ((hop.heading + hop.spin.yaw + turn * (turnShare(entry, settled, hop) ?? 0)) * Math.PI) / 180;
     return TIP_X * Math.abs(Math.sin(across)) + HALF_WIDTH * Math.abs(Math.cos(across)) + RAIL_BESIDE - HALF_WIDTH;
   };
   const beside = need(ride.over + CROSS_FROM * (1 - ride.over));
@@ -757,6 +760,18 @@ function railLane(ride: HandrailRide, entry: HopPlan | null, entryRate: number, 
   let lane = Math.max(RAIL_LANE, beside, lock + CROSS_MIN);
   for (let i = 0; i < 60 && samples.some((s, k) => offRail(lane, beside, lock, ride.over, s) < needs[k] - 1e-6); i++) lane += 1;
   return { lane, beside };
+}
+
+/**
+ * 0 → 1: how far round a trick into the grind that turns the deck has come
+ * (the rider's spin, of the `settled` heading it ends on; or a shuv's own),
+ * for the lock's own turn to ride along with. Null for a trick that doesn't
+ * turn the deck, which turns into the lock on its own.
+ */
+function turnShare(entry: HopPlan | null, settled: number, hop: HopFrame | null): number | null {
+  if (!entry || !hop) return null;
+  if (settled) return clamp01(hop.heading / settled);
+  return entry.trick.spec.yaw ? clamp01(hop.rotation) : null;
 }
 
 /** Damped spring from `from` (moving at `speed`) back to `rest`, `u` seconds on. */
@@ -863,9 +878,14 @@ export function grindFrame(time: number, plan: GrindPlan): GrindFrame {
     const ramp = plan.entry ? ENTRY_LOCK_IN : LOCK_IN;
     const over = ride ? clamp01((s - ride.over) / (1 - ride.over)) : 0;
     const lockIn = ride ? smoothstep((over - 0.5) / 0.48) : smoothstep((s - ramp.from) / ramp.span);
-    // Over a handrail's line the board turns across it as it steps over; only dipping an end below it waits until it's across.
-    const turnIn = ride ? smoothstep((over - CROSS_FROM) / (CROSS_TO + 0.05 - CROSS_FROM)) : lockIn;
     const trick = plan.entry ? hopFrame(plan.entry, hopClock(tau, plan.entryRate), true) : null;
+    // A spin in carries the board round into the lock with it: the lock's own turn comes on as the
+    // spin does, so the board keeps turning one way and arrives in the lock as the spin comes round
+    // (a 360 into a lipslide turns 270 or 450), rather than spinning round and turning back. Without
+    // one, over a handrail's line the board turns across it as it steps over; only dipping an end
+    // below it waits until it's across.
+    const turnIn = turnShare(plan.entry, plan.heading, trick)
+      ?? (ride ? smoothstep((over - CROSS_FROM) / (CROSS_TO + 0.05 - CROSS_FROM)) : lockIn);
     const [noseFoot, tailFoot] = mixFeet(popFeet, spec.feet, smoothstep((s - 0.15) / 0.7));
     const ref = { x: X0, y: GROUND - rise, z: ride ? ontoRail(plan, ride, s) : mix(plan.laneZ, plan.lockCenter.z, smoothstep((s - 0.25) / 0.5)) };
     // The pop turns the board about its middle, as on flatground: the tail
