@@ -21,7 +21,8 @@ Live API) for playing with earbuds at the skatepark.
 |---|---|
 | `npm run dev` | Next dev server (Cloudflare bindings emulated via `initOpenNextCloudflareForDev`) |
 | `npm run build` | `next build` — typecheck + production build (catches type errors, not logic bugs) |
-| `npm test` | Vitest unit tests — the behavioral check for the rules engine, RPS, and trick resolver |
+| `npm test` | Vitest unit tests — the behavioral check for the rules engine, RPS, trick resolver, and animation motion |
+| `npm run test:changed` | Only the tests your uncommitted changes reach — the fast loop; the animation sweeps take over a minute in full |
 | `npm run lint` | ESLint (flat config) — also enforces the architecture import boundaries below |
 | `npm run typecheck:web` | Full root TypeScript check, including tests omitted by `next build` |
 | `npm run typecheck:mobile` | Typecheck the Expo companion app |
@@ -55,7 +56,7 @@ src/
 │   ├── api/billing/      #   Dormant Stripe routes, disabled unless ENABLE_BILLING=true
 │   ├── api/me/           #   Current user + voice quota
 │   ├── tune/             #   /tune → robot behavior editor shell
-│   ├── explore/          #   /explore → Trick Explorer shell; /explore/3d → its three.js preview
+│   ├── explore/          #   /explore → Trick Explorer shell (/explore/3d redirects to it)
 │   └── globals.css       #   all styling (class-based, mobile-first)
 ├── features/             # One folder per web feature; public API is index.ts
 │   ├── auth/             # Passwordless sign-in UI + server session/magic-link code
@@ -69,8 +70,7 @@ src/
 │   ├── skater/           # Player model: skate score (unlocks at 8 games, beta-gated), robot-ladder placement, adaptive rival robot
 │   ├── home/             # Landing screen / flatground robot choice
 │   ├── install/          # App Store handoff + Android PWA install guidance (web-only)
-│   ├── explorer/         # Trick Explorer: customer-facing animation playground (tricks + grind combos, robot or human skater, camera angles, spots incl. El Toro's 20 stair and its handrail, tripod angles there, shareable links, MP4 download)
-│   ├── explorer3d/       # /explore/3d preview: the explorer on the three.js renderer (@skrobot/animations/three), with an SVG comparison
+│   ├── explorer/         # Trick Explorer at /explore (/explore/3d redirects here): tricks + grind combos, robot or human skater, camera angles, spots incl. El Toro's 20 stair and its center and side handrails, tripod angles there, shareable links, MP4 download
 │   └── gallery/          # Flatground trick gallery + player trick book (search, stance filters, video tips, want-to-learn shelf, proven marks, consistency stats)
 ├── platform/             # Runtime infrastructure (Cloudflare env, D1 bindings)
 └── shared/               # Primitive domain-neutral helpers (online status, etc.)
@@ -117,11 +117,13 @@ the exact graph test in `src/architecture.test.ts`.
   doc comment. Add a row to the tree above and to the dependency map in
   `docs/ARCHITECTURE.md` and `docs/FEATURE_OWNERSHIP.md`, then update
   `eslint.config.js` to enforce it.
-- **Animation changes:** edit reusable robot/avatar/trick animation code in
-  `packages/animations`; keep playground-only controls and fixture data in
-  `skrobot-animations`. Verify the package invariants with `npm test`, then use
-  the playground Contact sheet to visually compare the affected trick family
-  and both rider stances. Details live in `skrobot-animations/AGENTS.md`.
+- **Animation changes:** edit `packages/animations` (folder map and "where to
+  make common changes" in the Animation Source Map of `docs/ARCHITECTURE.md`);
+  keep playground-only controls and fixture data in `skrobot-animations`.
+  Iterate with `npm run test:changed` (only tests your changes reach), then
+  run `npm test`. For motion changes, watch the trick in `/explore` from a
+  few angles and both rider stances, or compare the playground Contact sheet
+  before and after (`skrobot-animations/AGENTS.md`).
 - **Rules/catalog/robot/voice resolver changes:** edit the owning feature under
   `src/features/*` and update tests that exercise the behavior through the web
   feature API.

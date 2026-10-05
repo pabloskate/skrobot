@@ -1,15 +1,15 @@
 import { BufferGeometry, Float32BufferAttribute, GLSL3, NormalBlending, ShaderMaterial, Vector2 } from 'three';
-import { lambert, tone } from '../scene/camera';
-import type { V3 } from '../scene/math';
+import { lambert, tone } from '../camera/camera';
+import type { V3 } from '../math';
 import { rgb, type RGB } from './materials';
-import type { Vec3 } from './view';
+import type { Vec3 } from '../camera/view';
 
 /**
  * Baked props: set pieces that never move relative to the street, merged
  * into one mesh per material with their paint in the vertices — a color per
- * face (lit once by the sun, as TrickScene's boxFaces are), an ink record
- * per part, and, for art TrickScene draws in the picture plane (palm crowns,
- * shrubs, buoys, boats), an offset that turns the vertex to face the camera.
+ * face (lit once by the sun), an ink record per part, and, for art drawn in
+ * the picture plane (palm crowns, shrubs, buoys, boats), an offset that turns
+ * the vertex to face the camera.
  */
 
 /** How a part outlines itself: its id, paint priority, outline width (world units), ink class, and solid. */
@@ -25,7 +25,7 @@ export const NO_INK: Ink = { id: 0, priority: 0, width: 0, kind: 0 };
 
 /**
  * Paint modes. Flat is one color. Split shades a round part (a trunk, a
- * bin) the way TrickScene paints it: its base color with a lit color over
+ * bin) like a cel drawing: its base color with a lit color over
  * the stretch of it, left to right on screen, between `from` and `to`
  * (-1 its left edge, 1 its right).
  */
@@ -72,8 +72,7 @@ export class Bake {
   }
 
   /**
-   * A box lying on the ground, its faces lit by the sun (TrickScene's
-   * boxFaces). Each face is its own part, so every visible edge is inked.
+   * A box lying on the ground, its faces lit by the sun. Each face is its own part, so every visible edge is inked.
    * Three's y is up; `n` normals are three's, so the physics normal flips y.
    */
   box(min: Vec3, max: Vec3, side: string, top: string, ink: Ink | null, faces = 'tbfkle', sunlit = true) {
@@ -97,7 +96,7 @@ export class Bake {
     });
   }
 
-  /** A box in one flat color, unlit and not outlined (TrickScene paints the railing flat). */
+  /** A box in one flat color, unlit and not outlined (the waterfront's railing). */
   flatBox(min: Vec3, max: Vec3, color: string) {
     this.box(min, max, color, color, null, 'tbfkle', false);
   }
@@ -169,7 +168,7 @@ export class Bake {
 
   /** A camera-facing polygon about `anchor`, in the picture plane's (right, up) world units. */
   billboard(anchor: Vec3, pts: Array<[number, number]>, paint: Paint, ink: Ink, pull = 0) {
-    // Fan from the first point: TrickScene's picture-plane shapes are convex or star-shaped about it.
+    // Fan from the first point: picture-plane shapes are convex or star-shaped about it.
     for (let i = 1; i + 1 < pts.length; i++) {
       for (const p of [pts[0], pts[i], pts[i + 1]]) this.vertex(anchor, [0, 0, 1], paint, ink, [p[0], p[1], pull]);
     }

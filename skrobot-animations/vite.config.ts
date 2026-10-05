@@ -7,8 +7,8 @@ export default defineConfig({
   resolve: {
     alias: [
       {
-        find: '@skrobot/animations/trick-animation-3d.css',
-        replacement: fileURLToPath(new URL('../packages/animations/src/TrickAnimation3D.css', import.meta.url)),
+        find: '@skrobot/animations/trick-scene-3d.css',
+        replacement: fileURLToPath(new URL('../packages/animations/src/three/TrickScene3D.css', import.meta.url)),
       },
       {
         find: '@skrobot/animations/three',

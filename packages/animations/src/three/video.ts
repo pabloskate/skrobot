@@ -12,16 +12,17 @@ import {
   getFirstEncodableVideoCodec,
 } from 'mediabunny';
 import type { RiderStance, Robot, Trick } from '../types';
-import { resolveSkateStyle } from '../skateStyle';
-import { DEFAULT_SCENE_CAMERA, type SceneCamera, type TripodId } from '../scene/camera';
-import type { StageSet } from '../scene/setKit';
-import type { Skater } from '../skaters';
+import { resolveSkateStyle } from '../motion/style';
+import { DEFAULT_SCENE_CAMERA, type SceneCamera, type TripodId } from '../camera/camera';
+import { setInfo, type RailChoice, type StageSet } from '../sets/sets';
+import type { Skater } from '../riders/skaters';
 import { SceneRenderer } from './renderer';
-import { renderSoundtrack } from './skateSounds';
-import { soundtrackFor } from './soundtrack';
-import { planStage, stageFrame, type StageFrame } from './stage';
-import { STOCK_VIEW, stageView } from './view';
-import { WaterfrontFarImage } from './waterfrontFar';
+import { lookFor } from './rendererPool';
+import { renderSoundtrack } from '../sound/skateSounds';
+import { soundtrackFor } from '../sound/soundtrack';
+import { planStage, stageFrame, type StageFrame } from '../stage/stage';
+import { STOCK_VIEW, stageView } from '../camera/view';
+import { WaterfrontFarImage } from '../sets/waterfront/waterfrontFar';
 
 /**
  * @skrobot/animations/three/video — films a landed attempt to an MP4.
@@ -45,6 +46,8 @@ export interface TrickVideoOptions {
   /** Magnification of the picture, 1 stock. */
   zoom?: number;
   set?: StageSet;
+  /** Which of the set's handrails a grind rides, as on the live stage. */
+  rail?: RailChoice;
   /** The same robot, human, or humanoid selected in the live scene. */
   skater?: Skater;
   /** Playback speed: at 0.25 the trick fills four times as long a video. */
@@ -93,6 +96,7 @@ export async function recordTrickVideo({
   zoom = 1,
   set = 'plaza',
   skater = 'robot',
+  rail = 'center',
   rate = 1,
   width: requestedWidth = 1280,
   sound = true,
@@ -117,11 +121,11 @@ export async function recordTrickVideo({
   const ctx = film.getContext('2d');
   if (!ctx) throw new VideoUnsupportedError();
   const style = resolveSkateStyle(robot.skateStyle);
-  const stage = planStage(robot, trick, { landed: true, riderStance, style, fall: 'slam', shankProgress: 0.5, skater, set });
+  const stage = planStage(trick, { landed: true, riderStance, style, fall: 'slam', shankProgress: 0.5, skater, set, rail });
   const glCanvas = document.createElement('canvas');
-  const scene = new SceneRenderer(glCanvas, { robot: stage.look, board: stage.board, skater }, set);
+  const scene = new SceneRenderer(glCanvas, lookFor(robot, skater), set);
   scene.setSize(width, height, 1);
-  const far = set === 'waterfront' ? new FarPainter(width, height) : null;
+  const far = setInfo(set).farPanorama ? new FarPainter(width, height) : null;
 
   const output = new Output({ format: new Mp4OutputFormat({ fastStart: 'in-memory' }), target: new BufferTarget() });
   const bitrate = Math.round(BITRATE * ((width * height) / (1280 * 1034)) * (fps / 60));
@@ -158,9 +162,6 @@ export async function recordTrickVideo({
   } finally {
     far?.dispose();
     scene.dispose();
-    // Let the context go now rather than at garbage collection: browsers cap
-    // live contexts, and the one they drop first is the stage's own.
-    scene.renderer.forceContextLoss();
   }
   const buffer = output.target.buffer;
   if (!buffer) throw new Error('The video came out empty.');

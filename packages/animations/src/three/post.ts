@@ -9,26 +9,25 @@ import {
   type Texture,
 } from 'three';
 import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
-import { PALETTE } from '../scene/camera';
-import { BAY } from '../scene/waterfrontPanorama';
+import { PALETTE } from '../camera/camera';
+import { BAY } from '../sets/waterfront/waterfrontPanorama';
 import { FEATURES, GARMENT, INK_PROP, INK_ROBOT, rgb } from './materials';
 
 /**
  * Screen passes for TrickScene3D.
  *
- * The ink pass is what makes the 3D robot read like the SVG one. TrickScene
- * paints each body part (an arm, a leg with its shoe, the head with its
- * neck) as one silhouette with its outline behind it, then paints the parts
- * over one another back to front. So there is no line where a shin enters
- * its shoe, but there is one wherever a part covers another, including
- * where an arm meets the chest.
+ * The ink pass gives the stage its drawn look. Each body part (an arm, a
+ * leg with its shoe, the head with its neck) reads as one silhouette with
+ * its outline behind it, the parts layered back to front. So there is no
+ * line where a shin enters its shoe, but there is one wherever a part covers
+ * another, including where an arm meets the chest.
  *
  * Here every pixel knows its part, its paint priority, and the outline its
  * part casts (materials.ts writes that alongside the color). A pixel is inked
  * when a different part in front of it lies within that part's outline
- * width: the outline falls outside the nearer part, over whatever it covers,
- * exactly where TrickScene's would. Depth decides who is in front; parts
- * touching within a hair of each other fall back to TrickScene's paint order,
+ * width: the outline falls outside the nearer part, over whatever it covers.
+ * Depth decides who is in front; parts touching within a hair of each other
+ * fall back to their paint priority (back to front, as a cel drawing layers them),
  * except pieces of one garment, which join seamlessly where they touch.
  */
 
@@ -302,7 +301,7 @@ export function blurMaterial() {
           sum += texture(uSource, vUv + uStep * x) * w;
           total += w;
         }
-        // The rider's shadows soften; a set's props' (the fourth channel) stay crisp, as TrickScene's.
+        // The rider's shadows soften; a set's props' (the fourth channel) stay crisp.
         outColor = vec4(sum.rgb / total, texture(uSource, vUv).a);
       }
     `,
@@ -344,7 +343,7 @@ export function copyMaterial() {
 }
 
 /**
- * Dust puffs: discs facing the camera, see-through like TrickScene's. They
+ * Dust puffs: discs facing the camera, see-through. They
  * are drawn after the outlines so they never cast or catch ink, and test
  * themselves against the scene's depth by hand.
  */

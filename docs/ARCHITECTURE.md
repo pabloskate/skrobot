@@ -22,9 +22,8 @@ If the answer is unclear, tighten the feature boundary before adding more code.
 | Auth/session/quota | `src/features/auth/` | Client auth state in the barrel; server code under `server/`. |
 | Billing | `src/features/billing/` | Beta quota UI plus dormant Stripe server helpers. |
 | Tricks | `src/features/tricks/` | Catalog, difficulty, metadata, picker UI, and the default routed trick pool. Routed games currently use flatground only. |
-| Trick Explorer | `src/features/explorer/` | Customer-facing animation playground at `/explore`: flatground tricks and grind combos on the three.js stage, scrubbable playback, camera angles, a choice of spot (including El Toro's 20 stair: flatground tricks go down it, grinds down its center handrail, filmed by the crane or from tripods at the bottom, side, and top) and of skater (robot, human, or detailed humanoid), and shareable links. |
-| Trick Explorer 3D | `src/features/explorer3d/` | Preview at `/explore/3d`: the explorer's tricks, cameras, and links on the three.js renderer, with a side-by-side comparison against the SVG scene. Reuses the explorer's picker, clock, and URL model; `/explore` also uses the three.js renderer. |
-| Gallery | `src/features/gallery/` | Flatground trick gallery plus the player trick book: browse the catalog with stance filters, curated video tips, personal proven/learning state, and per-trick consistency stats. |
+| Trick Explorer | `src/features/explorer/` | Customer-facing animation playground at `/explore`: flatground tricks and grind combos on the three.js stage, scrubbable playback, camera angles, a choice of spot (including El Toro's 20 stair: flatground tricks go down it, grinds down its center handrail or the side rail the trick comes in toward, filmed by the crane or from tripods at the bottom, side, and top) and of skater (robot, human, or detailed humanoid), and shareable links. |
+| Gallery | `src/features/gallery/` | Flatground trick gallery plus the player trick book: browse the catalog with stance filters, curated video tips, personal proven/learning state, and per-trick consistency stats. A trick without a video tip plays on the three.js stage, loaded on demand. |
 | Robots | `src/features/robots/` | Roster metadata, explicit per-trick land-rate/set-weight tables, profile/select/avatar UI, and the browser-local editor routed at `/tune`. Routed home currently exposes flatground robots only. |
 | Player skill / adaptive rival | `src/features/skater/` | Skate score (player-only curve fit + frontier fallback), robot-ladder placement, and a generated rival that copies the closest roster behavior table. All derived from the game log; nothing persisted. |
 | Records | `src/features/records/` | LocalStorage W/L, game log, trick marks, and per-trick attempt stats until the D1 port. |
@@ -33,38 +32,48 @@ If the answer is unclear, tighten the feature boundary before adding more code.
 | Runtime infrastructure | `src/platform/server/` | Cloudflare env and bindings, D1, future logging/HTTP adapters. |
 | Shared primitives | `src/shared/` | Reserved for domain-neutral primitives only, such as online status. |
 | Expo companion app | `apps/mobile/` | Native WebView shell that loads the same web app; no alternate game implementation. |
-| Shared animations | `packages/animations/` | Reusable robot/avatar/trick animation components, physics model, push-off scene, and browser feedback helpers. The three.js renderer is a separate entry, `@skrobot/animations/three`, so three.js ships only to pages that import it; filming a trick to MP4 is another, `@skrobot/animations/three/video`, so the encoder loads only when someone downloads a video. |
-| Animation playground | `skrobot-animations/` | Standalone Vite playground for animation iteration; consumes `@skrobot/animations` and owns only preview controls/fixtures. |
+| Shared animations | `packages/animations/` | Trick motion, the stage, its sets and riders, and the three.js renderer, plus the small SVG avatar/push-off components and browser feedback helpers. The renderer is a separate entry, `@skrobot/animations/three`, so three.js ships only to pages that show a trick; filming a trick to MP4 is another, `@skrobot/animations/three/video`, so the encoder loads only when someone downloads a video. Map: the Animation Source Map below. |
+| Animation playground | `skrobot-animations/` | Standalone Vite playground: a robot and skate-style tuner on the 3D stage, a Contact sheet of every trick's key frames, and the Blender prototype. Consumes `@skrobot/animations` and owns only preview controls/fixtures. |
 | Frozen design references | `prototype/` | Static artifacts with no build step; see its README for the maintained product sources. |
 
 ## Animation Source Map
 
-Consumers use `@skrobot/animations` and its exported styles. Internal scene files
-are private to the package; the import graph test checks alias and relative
-imports so moving these files does not require app or playground changes.
+Consumers use `@skrobot/animations` (root: motion data, sets and skaters,
+cameras, small SVG components), `@skrobot/animations/three` (`TrickScene3D`),
+and `@skrobot/animations/three/video` (`recordTrickVideo`). Everything else is
+private to the package; the import graph test checks alias and relative
+imports, and that the root entry never loads three.js.
 
-| Change | Owner under `packages/animations/src/` |
+One folder per concept under `packages/animations/src/`:
+
+| Folder | What lives there |
 |---|---|
-| Flatground board motion | `TrickAnimation.tsx` (`computeFrame`) |
-| Shared skeleton dimensions, frames, joints, and neutral poses | `scene/skeleton.ts` |
-| Flatground rider motion | `scene/rig.ts` |
-| Grind names, lock poses, contact geometry, and which ends a trick out can pop off | `scene/grindDefinitions.ts` |
-| Tricks popped into and out of a grind | `scene/grindTricks.ts` |
-| Grind timeline and board path | `scene/grind.ts` |
-| Grind rider motion and handoff from flatground | `scene/grindRig.ts` |
-| Scene rendering and reusable lead-in presentation | `scene/TrickScene.tsx` |
-| Scene camera angles, lens, and the bounds every trick is framed for | `scene/camera.ts` (`SceneCamera`, `SCENE_CAMERA_BOUNDS`) |
-| The scene in WebGL (`TrickScene3D`, `@skrobot/animations/three`): per-frame stage state worked out exactly as TrickScene does, the camera recovered from `scene/camera.ts`, the robot/board/bar/plaza meshes and their cel and ink shaders, and the outline pass; the human skater (`human3d.ts`) rides the same rig, with a person's arms (`humanRig.ts`). It reads the motion solvers and never changes them. El Toro's 20 stair is 3D-only: `scene/stairs.ts` sizes it at the robot's scale and plans the drop (the flatground trick on a clock stretched to the hang time, carried down a real ballistic arc); `stage.ts` solves frames down it and `elToro3d.ts` assembles the set, with shared layout in `elToroLayout.ts`, campus props in `elToroBuilding.ts` and `elToroLandscape.ts`, procedural surfaces in `elToroMaterials.ts`, and rail shadows cast per pixel. Visual references and era choices: [El Toro reference](EL_TORO_REFERENCE.md) | `three/` (`stage.ts`, `elToro3d.ts`, `elToroLayout.ts`, `elToroBuilding.ts`, `elToroLandscape.ts`, `elToroMaterials.ts`, `view.ts`, `robot3d.ts`, `human3d.ts`, `humanGeometry.ts`, `humanMaterials.ts`, `humanRig.ts`, `board3d.ts`, `bar3d.ts`, `plaza3d.ts`, `materials.ts`, `post.ts`, `renderer.ts`) |
-| Filming an attempt to MP4 (`recordTrickVideo`, `@skrobot/animations/three/video`): the same stage and renderer drawn off screen at a steady frame rate, the waterfront panorama painted under each frame (`WaterfrontFarImage`), encoded with WebCodecs and muxed by mediabunny | `three/video.ts`, `three/waterfrontFar.tsx` |
-| Trick sounds (`TrickScene3D`'s `sound` prop, and the MP4's audio track): the pop, grind/slide lock-in and scrape, pop off, landing or crash, and rolling wheels, timed from the stage plan (`soundtrack.ts`) and synthesized with Web Audio (`skateSounds.ts`), except where the app serves recorded loops of the wheels and the rail (`TRICK_SOUND_FILES`: `public/sounds/skate/roll.mp3`, `grind.mp3` for trucks on metal, `slide.mp3` for the deck on metal; a rail recording is a short stretch of the board riding the rail, woven on load into a steady glide with its low end rolled off; all are levelled and loop-crossfaded on load). `grind.mp3` is the settled grind (2.95–3.54 s) from C-V's "Skateboarding Rail Slide" on Freesound (CC0, freesound.org/s/845524), on the page's one audio context (`audio.ts`, shared with the RPS beeps). The game turns them on; voice mode keeps them off under the open mic; the explorers play them only while their playhead runs | `three/soundtrack.ts`, `three/skateSounds.ts`, `three/useTrickSound.ts`, `audio.ts` |
-| Selectable rider models: robot, illustrated human, and detailed humanoid; the two human models use `humanRig.ts` while sharing board motion. The humanoid's matte neck cover bends between its shoulder and head frames. The Explorer URL, MP4 recorder, and playground Contact sheet preserve the selection; SVG comparisons retain an explicitly labeled robot reference | `skaters.ts`, `three/renderer.ts`, `three/humanoid3d.ts`, `three/flexibleNeck3d.ts` |
-| Scene sets (backdrops): the stock plaza, the bayside waterfront and its far panorama, and the ground/prop/shadow helpers they share. A set's sky and panorama are `FarLayer`s: separate SVGs under the scene that are painted once and slid with a transform, so only what moves is repainted each frame | `scene/backdrop.tsx`, `scene/waterfront.tsx` (composition), `scene/waterfrontProps.tsx`, `scene/waterfrontPanorama.tsx`, `scene/setKit.tsx` (`SceneSet`; `StageSet` adds the 3D-only El Toro) |
+| `motion/` | The trick's motion, with no drawing: `trick.ts` (`TRICK_MOTIONS` table and `specFor`: what each flatground trick does; `computeFrame`: the board, feet, and spins at clock time t; phase timing), `rig.ts` (the rider's 3D body solved on that: ballistic hips, fixed-length legs, landing spring) on `skeleton.ts`'s dimensions and frames, `boardClearance.ts`, `stance.ts` (regular/goofy and trick stance), `style.ts` (per-robot skate style), and grinds: `grindDefinitions.ts` (names, lock poses, contact, which ends a trick out can pop off), `grindTricks.ts` (tricks popped into and out of a grind), `grind.ts` (timeline and board path, flat bar or handrail), `grindRig.ts` (rider on the bar) |
+| `stage/` | One attempt put in the world, frame by frame: `stage.ts` (`planStage`, `stageFrame`; flat ground and the flat bar), `downhill.ts` (down a stair set and its handrail), `frameParts.ts` (shadows, dust, faces, keeping the board out of the ground). Reads motion, never changes it |
+| `camera/` | `camera.ts`: the crane (`SceneCamera`, bounds, lift with the pop, zoom), the sun, and the palette. `view.ts`: the crane as a three.js camera, physics ↔ three coordinates, tripod framing |
+| `sets/` | The spots (UI: "Spot"; code: "set"). `sets.ts` is the registry: each set's label and what it changes (stairs, a handrail, a far panorama, tripods). `setKit.ts` shared helpers, `bar.ts`/`bar3d.ts` the flat bar, `plaza3d.ts`, `waterfront/` (layout, 3D set, ground shader, SVG far panorama), `elToro/` (stairs and handrail geometry and drop plan, the 3D set, building, canopy, landscape, materials, its camera and tripods). Visual references: [El Toro reference](EL_TORO_REFERENCE.md) |
+| `riders/` | Who rides. `skaters.ts` is the registry. `look.ts` (robot colors, expressions), `placement.ts` (posing meshes from rig frames), `shoe3d.ts`, `robot/`, `human/` (meshes, materials, and `humanRig.ts`: a person's proportions on the robot's rig), `humanoid/` |
+| `board/` | The skateboard: `deck.ts` (shape), `board.ts` (wheels, trucks, roll), `boardDimensions.ts`, `boardCollision.ts`, `footContact.ts`, and its two meshes (`board3d.ts` cartoon, `realisticBoard3d.ts` for the humanoid) |
+| `three/` | The renderer and the public 3D entries: `TrickScene3D.tsx` (+ `.css`, `useTrickPlayback.ts`), `renderer.ts` (passes, and which set/rider/board meshes each set and skater gets), `rendererPool.ts` (renderers reused across remounts), `post.ts` (outline, blur, FXAA passes), `materials.ts`, `geometry.ts`, `bake.ts`, `video.ts` (MP4: mediabunny + WebCodecs) |
+| `sound/` | `soundtrack.ts` (when each sound plays, from the stage plan), `skateSounds.ts` (Web Audio synthesis and the recorded loops in `public/sounds/skate/`), `useTrickSound.ts`, and `audio.ts` (the page's one AudioContext, shared with `rpsFeedback.ts`). The game turns sounds on; voice mode keeps them off under the open mic; the explorer plays them only while its playhead runs. `grind.mp3` is C-V's "Skateboarding Rail Slide" on Freesound (CC0, freesound.org/s/845524) |
+| `ui/` | Small SVG components for the game's screens: `RobotAvatar.tsx`, `PushOffAnimation.tsx`, `robotColors.ts` |
+
+Where to make common changes:
+
+| Change | Where |
+|---|---|
+| A new flatground trick, or how one moves | a row in `TRICK_MOTIONS` (`motion/trick.ts`); every motion sweep test picks it up, and `explorer.test.ts` fails if a catalog trick has no row |
+| A new grind or slide | `GRINDS` in `motion/grindDefinitions.ts` |
+| A new spot | a folder under `sets/` with its 3D set piece, an entry in `STAGE_SETS` (`sets/sets.ts`), and one in `SET_PIECES` (`three/renderer.ts`); camera presets that only make sense there go in the explorer's `CAMERA_PRESETS` with `set` |
+| A new skater | a folder under `riders/`, an entry in `SKATERS` (`riders/skaters.ts`), and one in `RIDER_PIECES` (`three/renderer.ts`) |
+| Camera angles or framing | `camera/camera.ts` (bounds, lift); explorer presets in `src/features/explorer/explorer.ts` |
+| How the stage looks (ink, shading, shadows) | `three/post.ts`, `three/materials.ts` |
 
 Motion solvers share the skeleton contract, not each other's private constants.
 Grind entry reuses the flatground solver for the hop; tricks into and out of a
 grind borrow its rotation clocks. Match-specific choices,
 reel text, and reducer callbacks belong in `features/game`, passed through the
-scene's `LeadIn` API. Keep tests sampling the complete motion; aggregate hot
+stage's `LeadIn` API. Keep tests sampling the complete motion; aggregate hot
 sweeps by their worst violation instead of making an assertion per sample.
 
 ## Dependency Map
@@ -76,15 +85,14 @@ route is importing server-only feature code. ESLint enforces the common cases;
 | Feature | May depend on | Must not depend on |
 |---|---|---|
 | `apps/mobile` | React Native/Expo, WebView, linking helpers | `src/*`, Cloudflare platform, web feature internals, game/domain packages |
-| `packages/animations` | React, three.js (only under `three/`), package-local files | `src/*`, `skrobot-animations/*`, app/platform code |
+| `packages/animations` | React, three.js (never reachable from the root entry), package-local files | `src/*`, `skrobot-animations/*`, app/platform code |
 | `skrobot-animations` | package-local files, `@skrobot/animations` | `src/*`; reusable animation behavior belongs in `packages/animations` |
 | `auth` | `platform/server` from server files | Gameplay, screens, other features |
 | `analytics` | `platform/server` from server files | Gameplay and screen features; AppShell supplies lifecycle context through the public tracking API |
 | `billing` | `platform/server` from server files | Auth UI, gameplay, screens, other features |
 | `tricks` | none | Other features |
 | `explorer` | `tricks`, `robots`, `@skrobot/animations`, `@skrobot/animations/three`, `@skrobot/animations/three/video` (loaded on demand) | Other features; it plays animations and never reads or writes player records |
-| `explorer3d` | `explorer`, `robots`, `@skrobot/animations`, `@skrobot/animations/three` | Other features; `explorer` must not import it back |
-| `gallery` | `tricks`, `records`, `robots`, `skater` | Other features |
+| `gallery` | `tricks`, `records`, `robots`, `skater`, `@skrobot/animations/three` (loaded on demand) | Other features |
 | `records` | `tricks` | Other features; the catalog dependency is limited to legacy display-name migration into stable trick IDs |
 | `robots` | `tricks`, `records`, `@skrobot/animations` | Screens, game, voice, auth, billing, skater |
 | `skater` | `tricks`, `records`, `robots` | Screens, game, voice, auth, billing |

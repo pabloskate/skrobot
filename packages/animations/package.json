@@ -7,8 +7,8 @@
     ".": "./src/index.ts",
     "./three": "./src/three/index.ts",
     "./three/video": "./src/three/video.ts",
-    "./trick-animation-3d.css": "./src/TrickAnimation3D.css",
-    "./push-off-animation.css": "./src/PushOffAnimation.css"
+    "./trick-scene-3d.css": "./src/three/TrickScene3D.css",
+    "./push-off-animation.css": "./src/ui/PushOffAnimation.css"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit"

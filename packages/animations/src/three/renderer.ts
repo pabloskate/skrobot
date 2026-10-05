@@ -21,29 +21,42 @@ import {
   type Texture,
 } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
-import { DEFAULT_SCENE_CAMERA, type SceneCamera, type TripodId } from '../scene/camera';
-import type { BoardLook } from '../scene/board';
-import type { RobotLook } from '../scene/robot';
-import { Bar3D } from './bar3d';
-import { Board3D } from './board3d';
-import { RealisticBoard3D } from './realisticBoard3d';
-import type { StageSet } from '../scene/setKit';
-import { ElToro3D } from './elToro3d';
-import { elToroTripodView, elToroView } from './elToroCamera';
-import { Plaza3D } from './plaza3d';
-import { Waterfront3D } from './waterfront3d';
+import { DEFAULT_SCENE_CAMERA, type SceneCamera, type TripodId } from '../camera/camera';
+import { stageView, toThree, type StageView } from '../camera/view';
+import type { BoardLook, WheelSpin } from '../board/board';
+import { Board3D } from '../board/board3d';
+import { RealisticBoard3D } from '../board/realisticBoard3d';
+import type { BoardRig, Rig } from '../motion/skeleton';
+import { Human3D } from '../riders/human/human3d';
+import { Humanoid3D } from '../riders/humanoid/humanoid3d';
+import type { Expression, RobotLook } from '../riders/look';
+import { Robot3D } from '../riders/robot/robot3d';
+import type { Skater } from '../riders/skaters';
+import { Bar3D } from '../sets/bar3d';
+import { ElToro3D } from '../sets/elToro/elToro3d';
+import { Plaza3D } from '../sets/plaza3d';
+import { setInfo, type StageSet } from '../sets/sets';
+import { Waterfront3D } from '../sets/waterfront/waterfront3d';
+import type { GroundPolygon, StageFrame } from '../stage/stage';
+import { rgb, shadowShapeMaterial } from './materials';
 import { blurMaterial, copyMaterial, dustMaterial, EDGE_TILE, edgeMaterial, fxaaMaterial, inkMaterial, shadowChannel } from './post';
-import { Robot3D } from './robot3d';
-import { Human3D } from './human3d';
-import { Humanoid3D } from './humanoid3d';
-import type { Skater } from '../skaters';
-import { shadowShapeMaterial } from './materials';
-import type { GroundPolygon, StageFrame } from './stage';
-import { rgb } from './materials';
-import { stageView, toThree, type StageView } from './view';
+
+/** A rider's meshes, posed from the rig every frame. */
+export interface RiderPiece {
+  group: Group;
+  update(rig: Rig, expression: Expression, view: StageView): void;
+  dispose(): void;
+}
+
+/** A board's meshes, posed from the rig's board every frame. */
+export interface BoardPiece {
+  group: Group;
+  update(board: BoardRig, spin: WheelSpin, view: StageView): void;
+  dispose(): void;
+}
 
 /** A set the renderer stages the rider on. */
-interface SetPiece {
+export interface SetPiece {
   /** Drawn in the scene pass. */
   group: Group;
   /** See-through parts drawn after the outlines, hidden by hand behind nearer things. */
@@ -53,17 +66,33 @@ interface SetPiece {
   shadowGeometry: BufferGeometry | null;
   propInk: string;
   update(view: StageView, scroll: number, size: { width: number; height: number }, shadow: Texture, shadowOpacity: [number, number, number], frame: StageFrame): void;
+  /** The set's own camera for this frame (its tripods, or limits on the crane), or null for the stock crane. */
+  view?(frame: StageFrame, camera: Readonly<SceneCamera>, zoom: number, aspect: number, tripod: TripodId | null): StageView | null;
   dispose(): void;
 }
 
+/** Each set's scenery. Its rules (stairs, a handrail, tripods) are in sets/sets.ts. */
+const SET_PIECES: Record<StageSet, () => SetPiece> = {
+  plaza: () => new Plaza3D(),
+  waterfront: () => new Waterfront3D(),
+  'el-toro': () => new ElToro3D(),
+};
+
+/** Each skater's body, and the board they ride. */
+const RIDER_PIECES: Record<Skater, (look: RendererLook) => { rider: RiderPiece; board: BoardPiece }> = {
+  robot: (look) => ({ rider: new Robot3D(look.robot), board: new Board3D(look.board) }),
+  human: (look) => ({ rider: new Human3D(), board: new Board3D(look.board) }),
+  humanoid: () => ({ rider: new Humanoid3D(), board: new RealisticBoard3D() }),
+};
+
 /**
- * Draws StageFrames with WebGL: the plaza, the bar, the board, and the rider
+ * Draws StageFrames with WebGL: the set, the bar, the board, and the rider
  * in one depth-tested scene, so whatever is nearer the camera covers what is
  * behind it pixel by pixel — no paint order to get wrong when limbs cross,
  * the board flips past a foot, or the camera swings round.
  *
  * Each frame runs five passes:
- *  1. cast shadows: the SVG's ground silhouettes into their own target, blurred;
+ *  1. cast shadows: the stage's ground silhouettes into their own target, blurred;
  *  2. the scene, writing color and each pixel's ink record;
  *  3. outlines: ink wherever a nearer part's outline reaches (post.ts);
  *  4. dust puffs, see-through, over the finished picture;
@@ -76,10 +105,10 @@ const FAR = 40000;
 const MAX_PUFFS = 12;
 /** Cast shadows are drawn at this share of the canvas's resolution and blurred anyway. */
 const SHADOW_SCALE = 0.5;
-/** SVG blur of the cast shadows, in viewBox units. */
+/** Blur of the cast shadows, in viewBox units. */
 const SHADOW_BLUR = 1.8;
 
-interface RendererLook {
+export interface RendererLook {
   robot: RobotLook;
   board: BoardLook;
   /** Who rides; the robot when omitted. */
@@ -88,13 +117,14 @@ interface RendererLook {
 
 export class SceneRenderer {
   readonly renderer: WebGLRenderer;
+  /** What it draws on; a stage puts it in the page while it borrows the renderer. */
+  readonly canvas: HTMLCanvasElement;
   private readonly scene = new Scene();
   private readonly camera = new Camera();
-  private readonly rider: Robot3D | Human3D | Humanoid3D;
-  private readonly board: Board3D | RealisticBoard3D;
+  private readonly rider: RiderPiece;
+  private readonly board: BoardPiece;
   private readonly bar = new Bar3D();
   private readonly set: SetPiece;
-  private readonly setName: StageSet;
   /** The waterfront's far panorama is under the canvas, so its sky stays see-through. */
   private readonly setLight: boolean;
   private readonly propShadowMaterial = shadowShapeMaterial();
@@ -126,19 +156,16 @@ export class SceneRenderer {
   private size = { width: 1, height: 1, ratio: 1 };
 
   constructor(canvas: HTMLCanvasElement, look: RendererLook, set: StageSet = 'plaza') {
-    this.setName = set;
+    this.canvas = canvas;
     this.renderer = new WebGLRenderer({ canvas, antialias: false, alpha: true, premultipliedAlpha: true, powerPreference: 'high-performance' });
     this.renderer.autoClear = false;
     this.renderer.setClearColor(0x000000, 0);
     this.camera.matrixAutoUpdate = false;
     this.camera.matrixWorldAutoUpdate = false;
 
-    this.rider = look.skater === 'humanoid'
-      ? new Humanoid3D()
-      : look.skater === 'human' ? new Human3D() : new Robot3D(look.robot);
-    this.board = look.skater === 'humanoid' ? new RealisticBoard3D() : new Board3D(look.board);
-    this.set = set === 'waterfront' ? new Waterfront3D() : set === 'el-toro' ? new ElToro3D() : new Plaza3D();
-    this.setLight = set === 'waterfront';
+    ({ rider: this.rider, board: this.board } = RIDER_PIECES[look.skater ?? 'robot'](look));
+    this.set = SET_PIECES[set]();
+    this.setLight = setInfo(set).farPanorama;
     this.scene.add(this.set.group, this.bar.group, this.board.group, this.rider.group);
     this.overlayScene.add(this.set.overlay);
 
@@ -206,11 +233,8 @@ export class SceneRenderer {
   /** Draw a frame through the crane at `camera`, or from `tripod` where the set has one. */
   render(frame: StageFrame, camera: Readonly<SceneCamera> = DEFAULT_SCENE_CAMERA, zoom = 1, tripod?: TripodId | null) {
     const { width, height } = this.size;
-    const view = this.setName === 'el-toro' && frame.stairs
-      ? tripod
-        ? elToroTripodView(tripod, frame, zoom, width / height)
-        : elToroView(frame.lift, camera, zoom, width / height, frame.stairs.across)
-      : stageView(frame.lift, camera, zoom, width / height);
+    const aspect = width / height;
+    const view = this.set.view?.(frame, camera, zoom, aspect, tripod ?? null) ?? stageView(frame.lift, camera, zoom, aspect);
     this.placeCamera(view);
     const pxPerUnit = height / view.box.height;
     const shadowOpacity: [number, number, number] = [0.3, frame.shadows.boardOpacity, frame.shadows.bodyOpacity];
@@ -358,5 +382,8 @@ export class SceneRenderer {
     for (const q of [this.inkQuad, this.edgeQuad, this.blurQuad, this.fxaaQuad, this.copyQuad]) q.dispose();
     for (const t of [this.main, this.post, this.composite, this.edges, this.shadowA, this.shadowB]) t.dispose();
     this.renderer.dispose();
+    // Let the context go now rather than at garbage collection: browsers cap
+    // live contexts, and the one they drop first may be a stage still on screen.
+    this.renderer.forceContextLoss();
   }
 }

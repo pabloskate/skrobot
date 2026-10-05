@@ -1,6 +1,5 @@
 import { lazy, Suspense, useMemo, useState } from 'react';
 import {
-  BACKGROUND_SCENE_OPTIONS,
   DEFAULT_SKATE_STYLE,
   FALL_VARIANT_OPTIONS,
   ROLL_IN,
@@ -8,22 +7,23 @@ import {
   LAND_T,
   FALL_T,
   RobotAvatar,
-  SCENE_SETS,
+  SKATERS,
   SKATE_STYLE_BOUNDS,
-  SLOW_MOTION_PLAYBACK_RATE,
-  TrickAnimation,
-  TrickAnimation3D,
-  TrickAnimation3DLegacy,
-  TrickScene,
+  STAGE_SETS,
   grindSpecFor,
   grindTimelineFor,
-  type BackgroundSceneId,
+  railLineFor,
+  setInfo,
+  stairTimeline,
   type FallVariant,
+  type RailChoice,
   type RiderStance,
-  type SceneSet,
   type SkateStyle,
+  type Skater,
+  type StageSet,
   type Stance,
 } from '@skrobot/animations';
+import { TrickScene3D } from '@skrobot/animations/three';
 import {
   GRIND_BASES,
   GRIND_ENTRY_BASES,
@@ -47,19 +47,10 @@ const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
 const RIDER_STANCES: RiderStance[] = ['regular', 'goofy'];
 const PLAYBACK_OPTIONS = [
   { id: 'normal', label: 'Normal', rate: 1 },
-  { id: 'slow', label: 'Slow motion', rate: SLOW_MOTION_PLAYBACK_RATE },
+  { id: 'slow', label: 'Slow motion', rate: 0.38 },
 ] as const;
 
 type PlaybackMode = (typeof PLAYBACK_OPTIONS)[number]['id'];
-
-const VIEW_OPTIONS = [
-  { id: 'scene', label: 'Scene (new)' },
-  { id: 'side', label: 'Side (2D)' },
-  { id: '3d', label: 'New 3D' },
-  { id: '3d-legacy', label: '3D legacy' },
-] as const;
-
-type ViewMode = (typeof VIEW_OPTIONS)[number]['id'];
 
 const DISCIPLINES = [
   { id: 'flatground', label: 'Flatground' },
@@ -161,9 +152,9 @@ export default function App() {
   const [paused, setPaused] = useState(false);
   const [inspectionTime, setInspectionTime] = useState<number | null>(0);
   const [playbackMode, setPlaybackMode] = useState<PlaybackMode>('normal');
-  const [viewMode, setViewMode] = useState<ViewMode>('scene');
-  const [backgroundSceneId, setBackgroundSceneId] = useState<BackgroundSceneId>(BACKGROUND_SCENE_OPTIONS[0].id);
-  const [sceneSet, setSceneSet] = useState<SceneSet>('plaza');
+  const [stageSet, setStageSet] = useState<StageSet>('plaza');
+  const [rail, setRail] = useState<RailChoice>('center');
+  const [skater, setSkater] = useState<Skater>('robot');
   const [fallVariant, setFallVariant] = useState<FallVariant>(FALL_VARIANT_OPTIONS[0].id);
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [skateStyle, setSkateStyle] = useState<SkateStyle>(
@@ -189,8 +180,6 @@ export default function App() {
     return availableTricks.find((t) => t.base === selectedBase) ?? availableTricks[0];
   }, [availableTricks, discipline, entryTrick, exitTrick, grindSide, selectedBase, selectedGrind, selectedStance]);
   const grindSpec = discipline === 'grinds' ? grindSpecFor(currentTrick) : null;
-  // Grinds need the bar, and only the Scene renderer has one.
-  const activeView: ViewMode = discipline === 'grinds' ? 'scene' : viewMode;
 
   const animationKey = [
     playKey,
@@ -199,8 +188,9 @@ export default function App() {
     selectedRiderStance,
     landed === null ? 'idle' : landed ? 'landed' : 'bailed',
     playbackMode,
-    activeView,
-    backgroundSceneId,
+    stageSet,
+    rail,
+    skater,
     fallVariant,
     skateStyle.popHeight,
     skateStyle.rotationSpeed,
@@ -224,13 +214,12 @@ export default function App() {
       discipline,
       entryTrick: discipline === 'grinds' && entryTrick ? entryTrick : null,
       exitTrick: discipline === 'grinds' && exit ? `${exit.end === 'nose' ? 'Nollie ' : ''}${exit.base}` : null,
-      view: activeView,
-      backgroundSceneId,
+      set: stageSet,
+      rail: railLineFor(stageSet, currentTrick, selectedRiderStance, rail),
+      skater,
       fallVariant,
     }),
     [
-      activeView,
-      backgroundSceneId,
       currentTrick,
       discipline,
       entryTrick,
@@ -246,6 +235,9 @@ export default function App() {
       selectedBase,
       selectedRiderStance,
       selectedStance,
+      skater,
+      stageSet,
+      rail,
     ]
   );
   const paramsText = useMemo(() => JSON.stringify(animationParams, null, 2), [animationParams]);
@@ -300,12 +292,22 @@ export default function App() {
 
   const grind = useMemo(
     () => discipline === 'grinds'
-      ? grindTimelineFor(currentTrick, selectedRiderStance, skateStyle, landed !== false, fallVariant)
+      ? grindTimelineFor(currentTrick, selectedRiderStance, skateStyle, landed !== false, fallVariant, setInfo(stageSet).rails?.handrail ?? null)
       : null,
-    [currentTrick, discipline, fallVariant, landed, selectedRiderStance, skateStyle],
+    [currentTrick, discipline, fallVariant, landed, selectedRiderStance, skateStyle, stageSet],
   );
-  const duration = grind?.end ?? ROLL_IN + FLIP_T + (landed === false ? FALL_T : LAND_T);
-  const phases = grind
+  // At El Toro a flatground trick goes down the stairs, on a clock stretched to the drop.
+  const stairs = discipline === 'flatground' && stageSet === 'el-toro' ? stairTimeline(skateStyle, landed !== false) : null;
+  const duration = grind?.end ?? stairs?.end ?? ROLL_IN + FLIP_T + (landed === false ? FALL_T : LAND_T);
+  const phases = stairs
+    ? [
+      { label: 'Setup', time: 0 },
+      { label: 'Pop', time: stairs.pop },
+      { label: 'Peak', time: stairs.peak },
+      { label: 'Catch', time: stairs.catch },
+      { label: landed === false ? 'Bail' : 'Roll away', time: duration },
+    ]
+    : grind
     ? [
       { label: 'Setup', time: 0 },
       { label: 'Pop', time: grind.pop },
@@ -395,7 +397,7 @@ export default function App() {
           <div className={styles.styleHeader}>
             <div>
               <h2 className={styles.sectionTitle}>Skate style</h2>
-              <p className={styles.styleNote}>Scene + New 3D · values are multipliers</p>
+              <p className={styles.styleNote}>Values are multipliers</p>
             </div>
             <button className={styles.resetStyleBtn} onClick={resetSkateStyle} type="button">
               Reset preset
@@ -577,16 +579,14 @@ export default function App() {
         </div>}
 
         <div>
-          <h2 className={styles.sectionTitle}>View</h2>
-          {discipline === 'grinds' && <p className={styles.styleNote}>Grinds render in the Scene view only</p>}
+          <h2 className={styles.sectionTitle}>Skater</h2>
           <div className={styles.speedRow}>
-            {VIEW_OPTIONS.map((option) => (
+            {SKATERS.map((option) => (
               <button
                 key={option.id}
-                className={`${styles.speedBtn} ${activeView === option.id ? styles.speedBtnActive : ''}`}
-                onClick={() => setViewMode(option.id)}
-                aria-pressed={activeView === option.id}
-                disabled={discipline === 'grinds' && option.id !== 'scene'}
+                className={`${styles.speedBtn} ${skater === option.id ? styles.speedBtnActive : ''}`}
+                onClick={() => setSkater(option.id)}
+                aria-pressed={skater === option.id}
               >
                 {option.label}
               </button>
@@ -610,33 +610,34 @@ export default function App() {
           </div>
         </div>
 
-        {activeView === 'scene' && <div>
-          <h2 className={styles.sectionTitle}>Set</h2>
+        <div>
+          <h2 className={styles.sectionTitle}>Spot</h2>
           <div className={styles.optionGrid}>
-            {SCENE_SETS.map((option) => (
+            {STAGE_SETS.map((option) => (
               <button
                 key={option.id}
-                className={`${styles.optionBtn} ${sceneSet === option.id ? styles.optionBtnActive : ''}`}
-                onClick={() => setSceneSet(option.id)}
-                aria-pressed={sceneSet === option.id}
+                className={`${styles.optionBtn} ${stageSet === option.id ? styles.optionBtnActive : ''}`}
+                onClick={() => setStageSet(option.id)}
+                aria-pressed={stageSet === option.id}
               >
                 {option.label}
               </button>
             ))}
           </div>
-        </div>}
+        </div>
 
-        {activeView !== '3d' && activeView !== 'scene' && <div>
-          <h2 className={styles.sectionTitle}>Background</h2>
+        {discipline === 'grinds' && setInfo(stageSet).rails && <div>
+          <h2 className={styles.sectionTitle}>Rail</h2>
+          <p className={styles.styleNote}>A side rail is the one the grind comes in toward: {railLineFor(stageSet, currentTrick, selectedRiderStance, 'side')}</p>
           <div className={styles.optionGrid}>
-            {BACKGROUND_SCENE_OPTIONS.map((option) => (
+            {(['center', 'side'] as RailChoice[]).map((option) => (
               <button
-                key={option.id}
-                className={`${styles.optionBtn} ${backgroundSceneId === option.id ? styles.optionBtnActive : ''}`}
-                onClick={() => setBackgroundSceneId(option.id)}
-                aria-pressed={backgroundSceneId === option.id}
+                key={option}
+                className={`${styles.optionBtn} ${rail === option ? styles.optionBtnActive : ''}`}
+                onClick={() => setRail(option)}
+                aria-pressed={rail === option}
               >
-                {option.label}
+                {option}
               </button>
             ))}
           </div>
@@ -663,75 +664,24 @@ export default function App() {
         <div className={styles.stageHeading}>
           <div><span className={styles.eyebrow}>{robot.name} / {selectedRiderStance} rider</span>
           <h2>{currentTrick?.name ?? selectedBase}</h2></div>
-          <span className={styles.stageBadge}>{activeView === 'scene' ? 'New scene' : activeView === '3d' ? '3D preview' : activeView === 'side' ? 'Side view' : 'Legacy 3D'}</span>
+          <span className={styles.stageBadge}>{STAGE_SETS.find((option) => option.id === stageSet)?.label}</span>
         </div>
         <div className={styles.viewport}>
-        {
-          <>
-            {activeView === 'scene' ? (
-              <TrickScene
-                key={animationKey}
-                robot={previewRobot}
-                trick={currentTrick ?? { id: 'kickflip-regular', name: 'Kickflip', base: 'Kickflip', stance: 'regular' }}
-                landed={landed ?? true}
-                fixedTime={inspectionTime ?? undefined}
-                playbackRate={playbackRate}
-                showSpeedToggle={false}
-                fallVariant={fallVariant}
-                riderStance={selectedRiderStance}
-                paused={paused}
-                set={sceneSet}
-                onDone={() => {}}
-              />
-            ) : activeView === '3d' || activeView === '3d-legacy' ? (
-              activeView === '3d' ? (
-              <TrickAnimation3D
-                key={animationKey}
-                robot={previewRobot}
-                trick={currentTrick ?? { id: 'kickflip-regular', name: 'Kickflip', base: 'Kickflip', stance: 'regular' }}
-                landed={landed ?? true}
-                fixedTime={inspectionTime ?? undefined}
-                playbackRate={playbackRate}
-                showSpeedToggle={false}
-                backgroundSceneId={backgroundSceneId}
-                fallVariant={fallVariant}
-                riderStance={selectedRiderStance}
-                paused={paused}
-                onDone={() => {}}
-              />
-              ) : (
-              <TrickAnimation3DLegacy
-                key={animationKey}
-                robot={previewRobot}
-                trick={currentTrick ?? { id: 'kickflip-regular', name: 'Kickflip', base: 'Kickflip', stance: 'regular' }}
-                landed={landed ?? true}
-                fixedTime={inspectionTime ?? undefined}
-                playbackRate={playbackRate}
-                showSpeedToggle={false}
-                backgroundSceneId={backgroundSceneId}
-                fallVariant={fallVariant}
-                riderStance={selectedRiderStance}
-                paused={paused}
-                onDone={() => {}}
-              />
-              )
-            ) : (
-              <TrickAnimation
-                key={animationKey}
-                robot={previewRobot}
-                trick={currentTrick ?? { id: 'kickflip-regular', name: 'Kickflip', base: 'Kickflip', stance: 'regular' }}
-                landed={landed ?? true}
-                fixedTime={inspectionTime ?? undefined}
-                playbackRate={playbackRate}
-                backgroundSceneId={backgroundSceneId}
-                fallVariant={fallVariant}
-                riderStance={selectedRiderStance}
-                paused={paused}
-                onDone={() => {}}
-              />
-            )}
-          </>
-        }
+          <TrickScene3D
+            key={animationKey}
+            robot={previewRobot}
+            trick={currentTrick ?? { id: 'kickflip-regular', name: 'Kickflip', base: 'Kickflip', stance: 'regular' }}
+            landed={landed ?? true}
+            fixedTime={inspectionTime ?? undefined}
+            playbackRate={playbackRate}
+            fallVariant={fallVariant}
+            riderStance={selectedRiderStance}
+            paused={paused}
+            set={stageSet}
+            rail={rail}
+            skater={skater}
+            onDone={() => {}}
+          />
         </div>
 
         <div className={styles.transport}>
