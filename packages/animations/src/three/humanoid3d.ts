@@ -15,6 +15,7 @@ import {
   type HumanoidLimb,
 } from './humanoidGeometry';
 import { humanoidMaterial } from './humanoidMaterials';
+import { FlexibleNeck3D } from './flexibleNeck3d';
 import { dirToThree, toThree, type StageView, type Vec3 } from './view';
 
 /**
@@ -23,23 +24,25 @@ import { dirToThree, toThree, type StageView, type Vec3 } from './view';
  * the existing human-proportioned rig and the original grounded foot frames;
  * no trick trajectories, foot contacts, or board dimensions are changed.
  *
- * Assemblies are made once. Per-frame work is only rigid matrices and thirty
- * instanced finger links. All surfaces share one continuous-lighting MRT
- * material and the screen-space ink pass receives a zero outline width.
+ * Assemblies are made once. Per-frame work updates rigid matrices, thirty
+ * instanced finger links, and the small flexible neck mesh. All surfaces share
+ * one continuous-lighting MRT material; the ink pass gets zero outline width.
  */
 
 const cross = (a: Vec3, b: Vec3): Vec3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 const length = (v: V3) => Math.hypot(v.x, v.y, v.z);
+/** Enlarge the whole articulated hand around its wrist attachment. */
+const HAND_SCALE = 1.3;
 const unit = (v: Vec3, fallback: Vec3): Vec3 => {
   const size = Math.hypot(...v);
   return size < 1e-6 ? fallback : [v[0] / size, v[1] / size, v[2] / size];
 };
 
-function place(mesh: Mesh | Group, origin: Vec3, x: Vec3, y: Vec3, z: Vec3, along = 1) {
+function place(mesh: Mesh | Group, origin: Vec3, x: Vec3, y: Vec3, z: Vec3, along = 1, across = 1) {
   mesh.matrix.set(
-    x[0] * along, y[0], z[0], origin[0],
-    x[1] * along, y[1], z[1], origin[1],
-    x[2] * along, y[2], z[2], origin[2],
+    x[0] * along, y[0] * across, z[0] * across, origin[0],
+    x[1] * along, y[1] * across, z[1] * across, origin[1],
+    x[2] * along, y[2] * across, z[2] * across, origin[2],
     0, 0, 0, 1,
   );
   mesh.matrixWorldNeedsUpdate = true;
@@ -95,6 +98,7 @@ export class Humanoid3D {
   private readonly pelvis: Mesh;
   private readonly abdomen: Mesh;
   private readonly neck: Mesh;
+  private readonly neckSleeve = new FlexibleNeck3D();
   private readonly arms: Record<'left' | 'right', Arm>;
   private readonly legs: Record<'left' | 'right', Leg>;
   private readonly fingerMatrix = new Matrix4();
@@ -114,7 +118,7 @@ export class Humanoid3D {
     this.head = mesh(humanoidHeadGeometry(), 'optical-head');
     this.pelvis = mesh(humanoidPelvisGeometry(), 'pelvis');
     this.abdomen = mesh(humanoidSpineGeometry(), 'abdomen-servos');
-    this.neck = mesh(humanoidSpineGeometry(true), 'neck-servos');
+    this.neck = mesh(this.neckSleeve.geometry, 'neck-sleeve');
     const shapes = Object.fromEntries((['upper', 'fore', 'thigh', 'shin'] as HumanoidLimb[]).map((kind) => [kind, humanoidLimbGeometry(kind)])) as Record<HumanoidLimb, BufferGeometry>;
     const palm = humanoidPalmGeometry();
     const finger = humanoidFingerGeometry();
@@ -177,13 +181,13 @@ export class Humanoid3D {
     void view;
     placeFrame(this.torso, rig.torso);
     // The human rig retains space for hair; this compact optical shell sits
-    // lower on the same gaze frame, with an adult-sized short mechanical neck.
+    // lower on the same gaze frame, above the flexible neck cover.
     const head = shiftFrame(rig.head, 0, -8.5, 0);
     placeFrame(this.head, head);
     const hips = hipsFrame(rig);
     placeFrame(this.pelvis, hips);
     placeBone(this.abdomen, hips.at(-0.5, 5.2, 0), rig.torso.at(-0.5, -8.4, 0), hips.side, 10);
-    placeBone(this.neck, rig.torso.at(-0.8, 25.2, 0), head.at(-3.5, -18.5, 0), head.side, 10);
+    this.neckSleeve.update(rig.torso, head);
     this.material.uniforms.uExpression.value = expression === 'happy' ? 1 : expression === 'focus' ? 0.5 : 0;
     const floor = Math.min(0, ...rig.legs.map((leg) => toThree(leg.shoe.at(0, -SHOE_HALF_HEIGHT, 0))[1]));
 
@@ -201,7 +205,7 @@ export class Humanoid3D {
       const origin = toThree(arm.hand);
       // A fall's wrist is solved close to the floor. Brace the articulated
       // hand at that same anchor instead of extending fingertips underground.
-      const contact = Math.max(0, Math.min(1, (14 - (origin[1] - floor)) / 8));
+      const contact = Math.max(0, Math.min(1, (14 * HAND_SCALE - (origin[1] - floor)) / (8 * HAND_SCALE)));
       if (contact > 0) {
         const flat = unit([x[0], 0, x[2]], [1, 0, 0]);
         x = unit([x[0] + (flat[0] - x[0]) * contact, x[1] * (1 - contact), x[2] + (flat[2] - x[2]) * contact], flat);
@@ -210,7 +214,7 @@ export class Humanoid3D {
         const dot = x[0] * y[0] + x[1] * y[1] + x[2] * y[2];
         y = unit([y[0] - x[0] * dot, y[1] - x[1] * dot, y[2] - x[2] * dot], up);
       }
-      place(parts.hand.group, origin, x, y, cross(x, y));
+      place(parts.hand.group, origin, x, y, cross(x, y), HAND_SCALE, HAND_SCALE);
       const bend = 1 - Math.max(-1, Math.min(1, dot3(norm3(sub3(arm.elbow, arm.shoulder)), axis)));
       const curl = (expression === 'wince' ? 0.58 : expression === 'focus' ? 0.23 : 0.13) + bend * 0.045;
       this.fingers(parts.hand, arm.side, curl * (1 - contact));

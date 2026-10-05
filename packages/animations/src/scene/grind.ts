@@ -13,8 +13,8 @@ import {
   X0,
   type FallVariant,
 } from '../TrickAnimation';
-import { WHEEL_BOTTOM, WHEEL_HALF_W, WHEEL_X, WHEEL_Z } from './board';
-import { TIP_X } from './deck';
+import { WHEEL_BOTTOM, WHEEL_HALF_W, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z } from './board';
+import { BOTTOM_LOCAL, TIP_X } from './deck';
 import { POP_RISE } from './rig';
 import { FOLLOW_POP } from './camera';
 import {
@@ -126,6 +126,8 @@ const SNAP = 0.07;
  */
 const FLAT_POP = 60;
 const POP_IN = 44;
+/** A tre-style scoop must snap before the taller entry hop lifts the tail away. */
+const SCOOP_POP_RISE = 0.03;
 const POP_OUT = 24;
 const SLIDE_POP_OUT = 10;
 
@@ -190,6 +192,19 @@ export const poseDir = (pose: BoardPose) => (local: V3): V3 => {
   const turned = rotY(rotZ(rotX(local, pose.roll), pose.pitch), pose.yaw);
   return pose.fall ? rotZ(turned, pose.fall) : turned;
 };
+
+/** Lowest solid point of a scooping deck, including the tilted wheel rims. */
+function entryBottom(pose: BoardPose, spin: TrickSpin): number {
+  const attitude = poseDir(pose);
+  const dir = (p: V3) => attitude(rotY(rotX(p, spin.flip), spin.yaw));
+  let low = Math.max(...BOTTOM_LOCAL.map((p) => dir(p).y));
+  const rim = WHEEL_R * Math.hypot(dir({ x: 1, y: 0, z: 0 }).y, dir({ x: 0, y: 1, z: 0 }).y)
+    + WHEEL_HALF_W * Math.abs(dir({ x: 0, y: 0, z: 1 }).y);
+  for (const x of [-WHEEL_X, WHEEL_X]) for (const z of [-WHEEL_Z, WHEEL_Z]) {
+    low = Math.max(low, dir({ x, y: WHEEL_Y, z }).y + rim);
+  }
+  return low;
+}
 
 /**
  * Board center that seats a bearing on the bar, at x = X0: its point over
@@ -476,6 +491,8 @@ export interface GrindPlan {
   /** Board pitch at the instant it leaves the bar. */
   popOut: number;
   popIn: number;
+  /** Seconds the entry takes to snap the board up from the ground. */
+  popInRise: number;
   /** Flatground seconds per second of the hops, for the tricks popped into and out of the grind. */
   entryRate: number;
   exitRate: number;
@@ -593,6 +610,8 @@ export function planGrind(
     lock,
     popOut,
     popIn: (spec.popNose ? 1 : -1) * POP_IN,
+    popInRise: entry && entry.trick.spec.flips === 1 && entry.trick.spec.yaw === 360 && entry.trick.spec.bodyYaw === 0
+      ? SCOOP_POP_RISE : POP_RISE,
     entryRate: entry ? hopRate(entry, upT) : 1,
     exitRate: exit ? hopRate(exit, offT, true) : 1,
     laneZ: BAR_Z - far * (lane ? lane.lane : Math.max(far === 1 ? BEHIND_GAP : APPROACH_GAP, far * (BAR_Z - lockCenter.z) + CROSS_MIN)),
@@ -889,10 +908,10 @@ export function grindFrame(time: number, plan: GrindPlan): GrindFrame {
     const [noseFoot, tailFoot] = mixFeet(popFeet, spec.feet, smoothstep((s - 0.15) / 0.7));
     const ref = { x: X0, y: GROUND - rise, z: ride ? ontoRail(plan, ride, s) : mix(plan.laneZ, plan.lockCenter.z, smoothstep((s - 0.25) / 0.5)) };
     // The pop turns the board about its middle, as on flatground: the tail
-    // strike tips it up over POP_RISE and it levels off on flatground's
+    // strike tips it up over the entry's snap and it levels off on flatground's
     // clock; a trick's own pitch comes straight from the flatground physics,
     // scaled to this pop.
-    const strike = smoothstep(tau / POP_RISE);
+    const strike = smoothstep(tau / plan.popInRise);
     const pop = strike * (trick ? (trick.flat.board.rot * POP_IN) / FLAT_POP : plan.popIn * (1 - smoothstep(tau / (0.3 * FLIP_T))));
     // The rider's spin carries the board round; the lock's own turn comes on top.
     const heading = trick?.heading ?? 0;
@@ -906,6 +925,11 @@ export function grindFrame(time: number, plan: GrindPlan): GrindFrame {
         ...(ride ? { fall: ride.tilt * smoothstep((s - ride.over + 0.2) / 0.35) } : null),
       },
     };
+    // A quick scoop can put a wheel below the flight arc for a frame. Seat
+    // the actual board on the ground until the hop lifts every part clear.
+    if (plan.popInRise < POP_RISE && trick && tau < POP_RISE) {
+      board.center = { ...ref, y: Math.min(ref.y, GROUND + WHEEL_BOTTOM - entryBottom(board.pose, trick.spin)) };
+    }
     return {
       ...base,
       phase: 'up',

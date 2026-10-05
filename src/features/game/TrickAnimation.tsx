@@ -17,5 +17,5 @@ type Props = ComponentProps<typeof TrickScene3D>;
 
 export default function PlayerStanceTrickAnimation(props: Props) {
   const stance = usePlayerStance();
-  return <GameTrickScene showSpeedToggle set="waterfront" {...props} riderStance={stance} />;
+  return <GameTrickScene showSpeedToggle set="waterfront" sound {...props} riderStance={stance} />;
 }

@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  catchFraction,
   computeFrame,
   specFor,
   FALL_T,
@@ -39,7 +40,8 @@ import { dot3, sub3, type V3 } from './math';
 const BASES = [
   'Ollie', 'Ollie North', 'Kickflip', 'Heelflip', 'Double Kickflip', 'Double Heelflip',
   'Varial Kickflip', 'Varial Heelflip', 'Hardflip', 'Inward Heelflip', 'Pressure Flip',
-  'Dolphin Flip', '360 Flip', '360 Double Kickflip', 'Laser Flip', 'Pop Shuvit',
+  'Dolphin Flip', '360 Flip', '360 Double Kickflip', 'Laser Flip', '360 Hardflip',
+  '360 Inward Heelflip', 'Pop Shuvit',
   'Frontside Shuvit', 'Late Backside Shuvit', 'Late Frontside Shuvit', 'Late Kickflip',
   '360 Shuvit', 'Frontside 360 Shuvit', 'Bigspin', 'FS Bigspin', 'Bigspin Flip',
   'FS Bigspin Flip', 'Bigspin Heelflip', 'FS Bigspin Heelflip', 'Frontside 180',
@@ -258,6 +260,37 @@ describe('TrickScene body physics', () => {
       }
     }
   }, 20_000);
+
+  it('stands a hardflip deck up on end between the legs, where a varial turns flat', () => {
+    // Mid-flight, once the pop's own pitch has faded.
+    const noseUp = (base: string) => {
+      const nose = rigAt(base, 'regular', 'regular', 'landed', ROLL_IN + 0.45 * FLIP_T).board.dir({ x: 1, y: 0, z: 0 });
+      return (Math.asin(Math.abs(nose.y)) * 180) / Math.PI;
+    };
+    for (const base of ['Varial Kickflip', 'Varial Heelflip']) expect(noseUp(base), base).toBeLessThan(15);
+    for (const base of ['Hardflip', 'Inward Heelflip']) expect(noseUp(base), base).toBeGreaterThan(45);
+  });
+
+  it('catches a tilted spin as the deck a flat one leaves: no jump where the lean hands back', () => {
+    const axes: V3[] = [{ x: 1, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }, { x: 0, y: 0, z: 1 }];
+    for (const rotationSpeed of [SKATE_STYLE_BOUNDS.rotationSpeed.min, 1, SKATE_STYLE_BOUNDS.rotationSpeed.max]) {
+      const spinStyle = resolveSkateStyle({ popHeight: 1, rotationSpeed, flickStrength: 1 });
+      const caught = ROLL_IN + catchFraction(spinStyle) * FLIP_T;
+      for (const base of ['Hardflip', 'Inward Heelflip', '360 Hardflip', '360 Inward Heelflip']) {
+        for (const rider of RIDERS) {
+          for (const stance of STANCES) {
+            const spec = specFor(trickOf(base, stance));
+            const deck = (t: number) => solveRig(
+              computeFrame(t, spec, true, 'slam', 0.65, spinStyle), spec, resolveRiderMechanics(rider, stance), spinStyle, 'landed',
+            ).board.dir;
+            const [before, after] = [deck(caught - 1e-4), deck(Math.min(caught + 1e-4, ROLL_IN + FLIP_T + 0.05))];
+            const jump = Math.max(...axes.map((a) => dist(before(a), after(a))));
+            expect(jump, `${base} ${stance} ${rider} at ${rotationSpeed}`).toBeLessThan(0.01);
+          }
+        }
+      }
+    }
+  });
 
   it('flies the hips on a ballistic arc, with the board pulled up into a knee tuck at the peak', () => {
     for (const base of ['Ollie', 'Frontside 180']) {

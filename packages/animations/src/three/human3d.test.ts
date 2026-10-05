@@ -297,7 +297,8 @@ describe('human skater', () => {
   it('never puts the board through the pants, from the wind-up to touchdown', () => {
     const BASES = [
       'Ollie', 'Kickflip', 'Heelflip', 'Double Kickflip', 'Varial Kickflip', 'Varial Heelflip', 'Hardflip',
-      'Inward Heelflip', 'Pressure Flip', 'Dolphin Flip', '360 Flip', 'Laser Flip', 'Pop Shuvit',
+      'Inward Heelflip', 'Pressure Flip', 'Dolphin Flip', '360 Flip', 'Laser Flip', '360 Hardflip',
+      '360 Inward Heelflip', 'Pop Shuvit',
       'Frontside Shuvit', 'Late Backside Shuvit', 'Late Frontside Shuvit', 'Late Kickflip', '360 Shuvit',
       'Bigspin', 'Bigspin Flip', 'Backside Flip', 'Frontside Flip', 'Backside 360 Kickflip', 'Impossible',
     ];

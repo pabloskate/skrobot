@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Stance, Trick } from '@/features/tricks'
+import { tricksFor, type Stance, type Trick } from '@/features/tricks'
 import { resolveTrick } from './trickResolver'
 
 const t = (name: string, base: string, stance: Stance = 'regular'): Trick => ({
@@ -68,5 +68,19 @@ describe('resolveTrick', () => {
     // "kickflip" now has no exact match; nearest is the nollie variant, but the
     // bare (no-stance) request should not silently grab a stance variant.
     expect(resolveTrick('Kickflip', withoutKickflip).kind).not.toBe('match')
+  })
+
+  it('tells the 360 hardflip and 360 inward heelflip apart from their 180 versions', () => {
+    const flatground = tricksFor('flatground')
+    const name = (spoken: string) => {
+      const r = resolveTrick(spoken, flatground)
+      return r.kind === 'match' ? r.trick.name : r.kind
+    }
+    expect(name('360 hardflip')).toBe('360 Hardflip')
+    expect(name('three sixty hard flip')).toBe('360 Hardflip')
+    expect(name('hardflip')).toBe('Hardflip')
+    expect(name('360 inward heel')).toBe('360 Inward Heelflip')
+    expect(name('nollie three sixty inward heelflip')).toBe('Nollie 360 Inward Heelflip')
+    expect(name('inward heel')).toBe('Inward Heelflip')
   })
 })

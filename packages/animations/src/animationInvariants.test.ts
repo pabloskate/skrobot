@@ -48,6 +48,8 @@ const BASES = [
   '360 Flip',
   '360 Double Kickflip',
   'Laser Flip',
+  '360 Hardflip',
+  '360 Inward Heelflip',
   'Pop Shuvit',
   'Frontside Shuvit',
   'Late Backside Shuvit',
@@ -283,6 +285,11 @@ describe('specFor', () => {
     ['Hardflip', 'Inward Heelflip'],
     ['360 Flip', 'Laser Flip'],
   ];
+  // Mirrors in every way but the lean: a 360 inward heelflip stays flatter
+  // than the 360 hardflip it mirrors.
+  const leanApart: Array<[string, string]> = [
+    ['360 Hardflip', '360 Inward Heelflip'],
+  ];
 
   // Zero out the signed fields so the comparison still covers every other
   // Spec field, including ones added after this test was written.
@@ -309,6 +316,15 @@ describe('specFor', () => {
     expect(unsigned(sb)).toEqual(unsigned(sa));
     expect(sb.flipDir).toBe(-sa.flipDir);
     expect(sb.spinDir).toBe(-sa.spinDir);
+  });
+
+  it.each(leanApart)('%s / %s mirror both flip and spin, the second leaning less', (a, b) => {
+    const [sa, sb] = specs(a, b);
+    expect({ ...unsigned(sb), tilt: 0 }).toEqual({ ...unsigned(sa), tilt: 0 });
+    expect(sb.flipDir).toBe(-sa.flipDir);
+    expect(sb.spinDir).toBe(-sa.spinDir);
+    expect(sb.tilt).toBeGreaterThan(0);
+    expect(sb.tilt).toBeLessThan(sa.tilt);
   });
 });
 

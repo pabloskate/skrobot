@@ -39,7 +39,7 @@ import {
   sub3,
   type V3,
 } from './math';
-import { SETUP_HANG, SETUP_RAMP, solveRig } from './rig';
+import { POP_RISE, SETUP_HANG, SETUP_RAMP, solveRig } from './rig';
 import {
   ANKLE_LIFT,
   DECK_HALF_WIDTH,
@@ -480,14 +480,14 @@ const PLANT_FREE = 16;
  * of it, so only their nearby soles are planted; `k` releases the plant
  * while the entry deck turns under them.
  */
-function planted(rig: Rig, board: BoardRig, k: number, allowLift: boolean): Rig {
+function planted(rig: Rig, board: BoardRig, k: number, allowLift: number): Rig {
   const ax = board.dir({ x: 1, y: 0, z: 0 });
   const ay = board.dir({ x: 0, y: 1, z: 0 });
   const legs = rig.legs.map((leg) => {
     const rel = sub3(leg.shoe.at(0, -SHOE_HALF_HEIGHT, 0), board.center);
     const x = dot3(rel, ax);
     const gap = dot3(rel, ay) - deckTopY(x);
-    const kept = allowLift ? gap * smoothstep((Math.abs(gap) - PLANT_HOLD) / (PLANT_FREE - PLANT_HOLD)) : 0;
+    const kept = allowLift * gap * smoothstep((Math.abs(gap) - PLANT_HOLD) / (PLANT_FREE - PLANT_HOLD));
     // Only as far as the leg reaches: a foot pressing a popped end down
     // leaves it once the leg is straight.
     const ankle = withinReach(leg.hip, add3(leg.ankle, scale3(ay, (kept - gap) * k)));
@@ -518,7 +518,10 @@ function withHop(rig: Rig, frame: GrindFrame, plan: GrindPlan, mechanics: RiderM
   // that still face straight ahead, which vertical planting cannot fix.
   const flat = turnRig(carried, frame.pose.yaw - frame.heading, frame.ref);
   const w = tau < 0 ? 0 : smoothstep((tau / plan.upT - HANDOVER_FROM) / (1 - HANDOVER_FROM));
-  const body = planted(blendRig(flat, rig, w, true), boardRigAt(frame.center, frame.pose), 1 - frame.offDeck, plan.entry != null);
+  // Follow a quicker scoop with the feet, then release them onto their
+  // flatground paths as its snap rejoins the shared animation.
+  const allowLift = plan.entry ? (plan.popInRise < POP_RISE ? smoothstep(tau / POP_RISE) : 1) : 0;
+  const body = planted(blendRig(flat, rig, w, true), boardRigAt(frame.center, frame.pose), 1 - frame.offDeck, allowLift);
   return {
     ...body,
     flickZ: flat.flickZ + (rig.flickZ - flat.flickZ) * w,

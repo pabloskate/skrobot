@@ -281,6 +281,8 @@ export default function VoiceGameScreen({
                 robot={robot}
                 trick={attempts[0].trick}
                 landed={attempts[0].landed}
+                // The mic is open: keep the board quiet under the conversation.
+                sound={false}
                 onDone={() => {
                   // Hold the final frame, then show the next queued attempt
                   // (a retry) or clear the stage.

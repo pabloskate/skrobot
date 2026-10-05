@@ -247,6 +247,7 @@ export default function ExplorerStage({
               zoom={zoom}
               set={set}
               skater={skater}
+              sound={playhead.playing}
               onDone={ignoreDone}
             />
           ) : (
