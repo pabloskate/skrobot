@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
 import { TbPlayerPauseFilled, TbPlayerPlayFilled, TbRefresh, TbRepeat, TbRepeatOff, TbZoomReset } from 'react-icons/tb';
-import type { RiderStance, Robot, SceneCamera, Skater, StageSet, Trick } from '@skrobot/animations';
+import type { RiderStance, Robot, SceneCamera, Skater, StageSet, Trick, TripodId } from '@skrobot/animations';
 import { TrickScene3D } from '@skrobot/animations/three';
 import { ZOOM_STEP, phaseAt, turnCamera, zoomBy, type Timeline } from './explorer';
 import { usePlayhead } from './usePlayhead';
@@ -38,10 +38,12 @@ interface Props {
   rider: RiderStance;
   timeline: Timeline;
   camera: SceneCamera;
+  /** Film from this tripod instead of the crane (El Toro's). */
+  tripod: TripodId | null;
   /** Magnification of the picture, 1 stock. */
   zoom: number;
   set: StageSet;
-  /** Who skates: the robot or the human skater. */
+  /** Who skates: the robot, illustrated human, or detailed humanoid. */
   skater: Skater;
   cameraLabel: string;
   customCamera: boolean;
@@ -68,7 +70,7 @@ const useInBrowser = () => useSyncExternalStore(noSubscription, () => true, () =
  * trick so a new trick starts from the top.
  */
 export default function ExplorerStage({
-  robot, trick, rider, timeline, camera, zoom, set, skater, cameraLabel, customCamera, rate, loop,
+  robot, trick, rider, timeline, camera, tripod, zoom, set, skater, cameraLabel, customCamera, rate, loop,
   onCamera, onResetCamera, onZoom, onRate, onLoop,
 }: Props) {
   const { duration, phases } = timeline;
@@ -241,6 +243,7 @@ export default function ExplorerStage({
               fixedTime={playhead.time}
               playbackRate={playhead.playing ? rate : 0.05}
               camera={camera}
+              tripod={tripod}
               zoom={zoom}
               set={set}
               skater={skater}
@@ -250,7 +253,7 @@ export default function ExplorerStage({
             <div className="explorer-scene-placeholder" />
           )}
         </div>
-        {!orbited && <span className="explorer-orbit-hint" aria-hidden>Drag to look around · pinch to zoom</span>}
+        {!orbited && <span className="explorer-orbit-hint" aria-hidden>Drag to look around 360° · pinch to zoom</span>}
       </div>
 
       <div className="explorer-transport">

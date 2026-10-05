@@ -10,6 +10,7 @@ const CAMERAS: SceneCamera[] = [
   { yaw: yaw.max, pitch: pitch.max, lens: lens.max },
   { yaw: 0, pitch: 3, lens: 1.25 },
   { yaw: 58, pitch: 14, lens: 0.85 },
+  ...[-180, -125, -90, 0, 90, 175].map((yaw) => ({ yaw, pitch: 6, lens: 1, targetZ: -174 })),
 ];
 
 describe('TrickScene3D camera', () => {
@@ -42,6 +43,23 @@ describe('TrickScene3D camera', () => {
     const tall = fitViewBox(STOCK_VIEW, 0.5);
     expect(tall.width).toBe(STOCK_VIEW.width);
     expect(tall.y + tall.height / 2).toBeCloseTo(STOCK_VIEW.y + STOCK_VIEW.height / 2);
+  });
+
+  it('moves the orbit center without changing lens, distance, or camera axes at any yaw', () => {
+    for (const yaw of [-180, -125, -90, 0, 90, 175]) {
+      const stock = stageView(30, { yaw, pitch: 6, lens: 1 });
+      const centered = stageView(30, { yaw, pitch: 6, lens: 1, targetZ: -174 });
+      expect(centered.eye[0]).toBeCloseTo(stock.eye[0], 9);
+      expect(centered.eye[1]).toBeCloseTo(stock.eye[1], 9);
+      expect(centered.eye[2]).toBeCloseTo(stock.eye[2] - 174, 9);
+      expect(centered.distance).toBeCloseTo(stock.distance, 9);
+      expect(centered.focal).toBeCloseTo(stock.focal, 9);
+      expect(centered.anchor.x).toBeCloseTo(stock.anchor.x, 9);
+      expect(centered.anchor.y).toBeCloseTo(stock.anchor.y, 9);
+      expect(centered.back).toEqual(stock.back);
+      expect(centered.up).toEqual(stock.up);
+      expect(centered.right).toEqual(stock.right);
+    }
   });
 
   it('keeps the frustum and the picture in step', () => {

@@ -10,105 +10,32 @@ import {
   Vector4,
   type Texture,
 } from 'three';
-import { X0 } from '../TrickAnimation';
-import { PALETTE, lambert, tone } from '../scene/camera';
-import { mixHex, type V3 } from '../scene/math';
-import { hash2 } from '../scene/setKit';
-import { FOOT, RISER, STAIR_DROP, STAIR_RUN, STAIR_STEPS, TREAD, nosingLine, stairGround } from '../scene/stairs';
-import { Bake, bakedMaterial, type Ink, type Paint } from './bake';
-import { INK_PROP, SUN, glslRgb, skyMaterial } from './materials';
+import { PALETTE } from '../scene/camera';
+import { mixHex } from '../scene/math';
+import { RISER, STAIR_DROP, STAIR_RUN, STAIR_STEPS, TREAD, nosingLine, stairGround } from '../scene/stairs';
+import { Bake, type Ink, type Paint } from './bake';
+import { INK_PROP, SUN, glslRgb } from './materials';
+import { EL_TORO_NOISE, elToroPropMaterial, elToroSkyMaterial } from './elToroMaterials';
+import { buildElToroLandscape } from './elToroLandscape';
+import { buildElToroBuilding } from './elToroBuilding';
+import { buildElToroCanopy, EL_TORO_CANOPY, EL_TORO_CANOPY_COLUMNS, EL_TORO_CANOPY_ROOF_BOUNDS } from './elToroCanopy';
 import type { StageFrame } from './stage';
-import { ASPHALT, type StageView, type Vec3 } from './view';
+import { type StageView, type Vec3 } from './view';
+import { BED, BUILDING_BACK, BUILDING_END, BUILDING_FACE, BUILDING_H, BUILDING_LENGTH, CENTER_Z, DIRT_WIDTH, EAVE, ET, FAR, FAR_RAIL_Z, HILL_DROP, HILL_EDGE, HILL_RAIL_Z, LIP_AWAY, POSTS, RAIL_EXT, RAIL_MID, RAIL_R, RAIL_TOP, RIDER_LANE_Z, WALL_THICK, WALL_U0, WALL_U1, WALL_Z, wallTop } from './elToroLayout';
 
 /**
- * El Toro's 20 stair in 3D (scene/stairs.ts has its size and the flight
- * down it). Looking up from the bottom, as every photo of it does: the hill
- * on the left with its handrail along the stairs, the double rail splitting
- * the steps into two sections, and the wider right section against a
- * concrete side wall with its own rail, the school's block building at the
- * top. The rider takes the left section, the famous one, and the camera
- * films from the hill's side. No yellow gate at the top.
+ * Classic El Toro: twenty steps, a single center handrail, straight sloping
+ * side rails, an exposed dirt bank, the locker school on the left and an
+ * open covered walkway on the right when viewed from the landing.
+ * Photo references and the user-supplied layout correction are documented
+ * in docs/EL_TORO_REFERENCE.md.
  *
- * Every step is real geometry the rider drops past. The ground — landings,
- * treads and risers with their anti-slip nosings, the hill, the planter —
- * is one surface material that takes its shadows from two places: the
- * handrails' and posts' cast analytically per pixel (so their zigzag runs
- * down every step), and the rider's from the renderer's shadow pass, which
- * lays it at one level (StageFrame.stairs.shadowY); each pixel finds its own
- * by casting itself along the sun onto that level.
- *
- * The set is built for each way the stairs can fall (a fakie trick rolls the
- * other way down them) and slid with the street.
+ * Ground, stairs and wall share weathered materials and analytical rail,
+ * building and foliage shadows. Rider shadows are reprojected from the
+ * renderer's shadow level onto each tread and riser. The environment is
+ * built once in its canonical downhill direction. Fakie changes the rider's
+ * heading in stage.ts; it never mirrors or rebuilds this location.
  */
-
-// ----- Layout: distances down the stairs (u, from the lip), across the set (z, toward the camera), heights over the top landing -----
-
-/** The skated section runs from the hill (its near edge) to the double rail; the rider's lane is its middle. */
-const NEAR_EDGE = 6 * FOOT;
-const CENTER_Z = -6 * FOOT;
-/** Half the gap between the two rails of the double rail. */
-const CENTER_GAP = 17;
-/** The far section is twenty feet wide, out to the side wall. */
-const WALL_Z = CENTER_Z - 20 * FOOT;
-const WALL_THICK = 20;
-const WALL_H = 1.5 * FOOT;
-const HILL_RAIL_Z = NEAR_EDGE - 24;
-const FAR_RAIL_Z = WALL_Z + 24;
-/** Galvanized pipe, 36" handrails and a mid rail, as the code wants them. */
-const RAIL_R = 2.4;
-const RAIL_TOP = 3 * FOOT;
-const RAIL_MID = 1.5 * FOOT;
-/** The double rail's lower bar, joined to the top one by a U at each end. */
-const RAIL_LOW = RAIL_TOP - 25;
-/** Level runs the side rails make past the top and bottom steps. */
-const RAIL_EXT = 35;
-/** Posts, at these distances down the stairs. */
-const POSTS = [0.5, 6.5, 12.5, 18.5].map((k) => k * TREAD);
-/** The hill lies just under the steps' inner corners, so their ends stand out of the dirt. */
-const HILL_DROP = 0.55 * RISER;
-/** The side wall runs from a little before the lip to a little past the bottom step. */
-const WALL_U0 = -60;
-const WALL_U1 = STAIR_RUN + 60;
-/** The bed planted along the wall's far side. */
-const BED = 70;
-/** The school building at the top: block walls, a row of doors, a flat roof with a trim. */
-const BUILDING_U0 = -1250;
-const BUILDING_U1 = -650;
-const BUILDING_Z0 = -1150;
-const BUILDING_Z1 = 140;
-const BUILDING_H = 12 * FOOT;
-/** The landings and the slopes beside the stairs run off toward the horizon. */
-const FAR = 30000;
-/** With no trick down the stairs (a grind on the top landing), the lip waits this far ahead, out of reach. */
-const LIP_AWAY = 3200;
-
-/** The embankment either side of the stairs: level with each landing, sloping with the steps between. */
-const hill = (u: number) => Math.max(-STAIR_DROP, Math.min(0, nosingLine(u) - HILL_DROP));
-/** The side wall's top: a foot and a half over the steps, level over each landing. */
-const wallTop = (u: number) => Math.max(-STAIR_DROP, Math.min(0, nosingLine(u))) + WALL_H;
-
-const ET = {
-  concrete: '#e9e0d3',
-  joint: '#cbbba8',
-  tread: '#efe8de',
-  riser: '#e1d9ce',
-  nosing: '#c7b48c',
-  dirt: '#cfa884',
-  wall: '#ddd4c8',
-  planter: '#a8bc8a',
-  grass: '#c5bf92',
-  rail: '#a6a9ba',
-  railLit: '#dcdee8',
-  block: '#dcbd93',
-  blockTop: '#c4b2a2',
-  trim: '#8e7d77',
-  door: '#5d88c6',
-  trunk: PALETTE.trunk,
-  leafDark: tone(PALETTE.tree, 0.2),
-  leafLit: tone(PALETTE.tree, 0.62),
-  shrubDark: '#6f9a6a',
-  shrubLit: '#9cc08a',
-} as const;
 
 /** Surface kinds the ground material paints. */
 const CONCRETE = 0;
@@ -119,7 +46,7 @@ const WALL = 4;
 const PLANTER = 5;
 const GRASS = 6;
 
-const PROP_INK = 0.5;
+const PROP_INK = 0.18;
 const prop = (id: number, priority: number, solid = 0): Ink => ({ id, priority, width: PROP_INK, kind: INK_PROP, solid });
 const GROUND_INK: Ink = { id: 0, priority: 0, width: 0, kind: 0 };
 const STAIR_INK = prop(40, 4, 6);
@@ -127,7 +54,7 @@ const HILL_INK = prop(30, 2);
 const PLANTER_INK = prop(32, 2);
 
 /** Most rail and post segments whose shadows the ground casts. */
-const MAX_RAILS = 72;
+const MAX_RAILS = 32;
 
 /** The ground's own geometry: positions, normals, a surface kind, and an ink record per vertex. */
 class Surfaces {
@@ -202,15 +129,14 @@ uniform int uRails;
 uniform vec4 uRailBox;
 /** Which way the stairs fall in x, so a pixel knows how far down them it is. */
 uniform float uDir;
-uniform float uPxPerUnit;
+uniform vec4 uCanopy[24];
+uniform int uCanopies;
 
 const vec3 SUN = vec3(${SUN.x.toFixed(5)}, ${SUN.y.toFixed(5)}, ${SUN.z.toFixed(5)});
-const vec3 WARM = ${glslRgb(PALETTE.warm)};
-const vec3 COOL = ${glslRgb(PALETTE.cool)};
-const vec3 SHADOW = ${glslRgb(PALETTE.shadow)};
-const vec3 HORIZON = ${glslRgb(PALETTE.horizon)};
+const vec3 WARM = ${glslRgb('#f4edcf')};
+const vec3 SHADOW = ${glslRgb('#535c58')};
+const vec3 HORIZON = ${glslRgb('#c6d0cc')};
 const vec3 CONCRETE = ${glslRgb(ET.concrete)};
-const vec3 JOINT = ${glslRgb(ET.joint)};
 const vec3 TREAD = ${glslRgb(ET.tread)};
 const vec3 RISER = ${glslRgb(ET.riser)};
 const vec3 NOSING = ${glslRgb(ET.nosing)};
@@ -221,8 +147,9 @@ const vec3 GRASS = ${glslRgb(ET.grass)};
 const float TREAD_DEPTH = ${TREAD.toFixed(4)};
 const float RISER_H = ${RISER.toFixed(4)};
 
+${EL_TORO_NOISE}
 vec3 tone(vec3 base, float lam) {
-  return lam >= 0.5 ? mix(base, WARM, (lam - 0.5) * 2.0 * 0.32) : mix(base, COOL, (0.5 - lam) * 2.0 * 0.42);
+  return base * (0.73 + 0.30 * lam) + WARM * 0.025 * lam;
 }
 float lambert(vec3 n) { return clamp(0.5 + 0.5 * dot(n, SUN), 0.0, 1.0); }
 
@@ -230,13 +157,6 @@ float lambert(vec3 n) { return clamp(0.5 + 0.5 * dot(n, SUN), 0.0, 1.0); }
 float band(float x, float lo, float hi) {
   float w = max(fwidth(x), 1e-4);
   return smoothstep(lo - w, lo + w, x) * (1.0 - smoothstep(hi - w, hi + w, x));
-}
-
-/** Coverage of a line of constant coordinate repeating every period, 1.2 viewBox units wide on screen. */
-float jointLine(float coord, float period) {
-  float d = coord - period * floor(coord / period + 0.5);
-  float distPx = abs(d) / max(length(vec2(dFdx(coord), dFdy(coord))), 1e-5);
-  return clamp(0.6 * uPxPerUnit - distPx + 0.5, 0.0, 1.0);
 }
 
 /** How much the rails and posts shade this point: the sun's ray from it passing within a pipe's radius. */
@@ -263,6 +183,61 @@ float railShadow(vec3 p) {
   return best;
 }
 
+float rayBox(vec3 at, vec3 sun, vec3 lo, vec3 hi) {
+  vec3 a = (lo - at) / sun, b = (hi - at) / sun;
+  vec3 near_ = min(a, b), far_ = max(a, b);
+  float enter = max(max(near_.x, near_.y), near_.z);
+  float leave = min(min(far_.x, far_.y), far_.z);
+  return leave > max(enter, 0.0) ? 1.0 : 0.0;
+}
+
+/** An open roof casts its slab and discrete piers, never a fictitious enclosure. */
+float shelterShadow(vec3 at, vec3 sun) {
+  const vec2 lo = vec2(${EL_TORO_CANOPY_ROOF_BOUNDS.min[0].toFixed(1)}, ${EL_TORO_CANOPY_ROOF_BOUNDS.min[2].toFixed(1)});
+  const vec2 hi = vec2(${EL_TORO_CANOPY_ROOF_BOUNDS.max[0].toFixed(1)}, ${EL_TORO_CANOPY_ROOF_BOUNDS.max[2].toFixed(1)});
+  float reach = (${(EL_TORO_CANOPY.roofTop + STAIR_DROP + 10).toFixed(1)}) / sun.y;
+  vec2 shift = sun.xz * reach;
+  // The envelope includes shadows on the lowest stair/landing level.
+  if (any(lessThan(at.xz, min(lo, lo - shift) - 3.0)) || any(greaterThan(at.xz, max(hi, hi - shift) + 3.0))) return 0.0;
+  float t = (${EL_TORO_CANOPY.roofBottom.toFixed(1)} - at.y) / sun.y;
+  vec2 roof = at.xz + sun.xz * max(t, 0.0);
+  float coverage = t > 0.0 ? band(roof.x, lo.x, hi.x) * band(roof.y, lo.y, hi.y) : 0.0;
+  float shade = coverage * 0.38;
+  if (coverage > 0.999) return shade;
+  const vec4 columns[${EL_TORO_CANOPY_COLUMNS.length}] = vec4[](
+    ${EL_TORO_CANOPY_COLUMNS.map(({ u, z, half, height }) => `vec4(${u.toFixed(1)}, ${z.toFixed(1)}, ${half.toFixed(1)}, ${height.toFixed(1)})`).join(',\n    ')}
+  );
+  for (int i = 0; i < ${EL_TORO_CANOPY_COLUMNS.length}; i++) {
+    vec4 c = columns[i];
+    shade = max(shade, 0.32 * rayBox(at, sun, vec3(c.x - c.z, 0.0, c.y - c.z), vec3(c.x + c.z, c.w, c.y + c.z)));
+  }
+  return shade;
+}
+
+/** Architecture and nearby foliage share the same sunlight as the rails. */
+float environmentShadow(vec3 p) {
+  vec3 sun = vec3(uDir * SUN.x, SUN.y, SUN.z);
+  vec3 at = vec3(uDir * p.x, p.y, p.z);
+  vec3 lo = vec3(${(BUILDING_END - BUILDING_LENGTH - EAVE).toFixed(1)}, 0.0, ${(BUILDING_FACE - EAVE).toFixed(1)});
+  vec3 hi = vec3(${(BUILDING_END + EAVE).toFixed(1)}, ${BUILDING_H.toFixed(1)}, ${(BUILDING_BACK + EAVE).toFixed(1)});
+  float shade = max(0.30 * rayBox(at, sun, lo, hi), shelterShadow(at, sun));
+  float dapple = -1.0;
+  for (int i = 0; i < 24; i++) {
+    if (i >= uCanopies) break;
+    vec3 delta = uCanopy[i].xyz - p;
+    float along = dot(delta, SUN);
+    if (along < 0.0) continue;
+    vec3 perpendicular = delta - SUN * along;
+    float distance2 = dot(perpendicular, perpendicular);
+    float radius = 1.15 * uCanopy[i].w;
+    if (distance2 >= radius * radius) continue;
+    float distance_ = sqrt(distance2) / uCanopy[i].w;
+    if (dapple < 0.0) dapple = 0.68 + 0.32 * noise(p.xz * 0.14);
+    shade = max(shade, (1.0 - smoothstep(0.45, 1.15, distance_)) * 0.29 * dapple);
+  }
+  return shade;
+}
+
 /** The rider's, board's, and bar's shadows: this pixel cast along the sun onto their level, looked up where it lands on screen. */
 vec3 riderShadow() {
   vec3 at = vWorld + ((uShadowY - vWorld.y) / SUN.y) * SUN;
@@ -278,39 +253,57 @@ void main() {
   float u = uDir * vLocal.x;
   float h = vLocal.y;
   float z = vLocal.z;
+  vec2 surfaceAt = abs(n.y) > 0.55 ? vec2(u, z) : abs(n.z) > 0.5 ? vec2(u, h) : vec2(z, h);
+  float mottling = weather(surfaceAt * 0.028);
+  float aggregate = grain(surfaceAt * 2.2);
   vec3 base;
   if (vKind < 0.5) {
     base = CONCRETE;
-    // Slab joints near the stairs, and the top step's nosing along the lip.
-    if (abs(z) < 1400.0 && u > -1300.0 && u < ${(STAIR_RUN + 2600).toFixed(1)}) {
-      float joints = max(jointLine(u, ${(5 * FOOT).toFixed(1)}), jointLine(z, ${(5 * FOOT).toFixed(1)}));
-      base = mix(base, JOINT, 0.7 * joints);
-    }
-    if (h > -1.0 && z < ${NEAR_EDGE.toFixed(1)} && z > ${WALL_Z.toFixed(1)}) base = mix(base, NOSING, band(-u, 1.2, 5.5));
+    // Continuous worn concrete, without the artificial square paving grid.
+    // Preserve only the physical lip where the landing meets the first step.
+    if (h > -1.0 && z > ${HILL_EDGE.toFixed(1)} && z < ${WALL_Z.toFixed(1)}) base = mix(base, NOSING, band(-u, 0.0, 1.8));
   } else if (vKind < 1.5) {
-    // Each tread's anti-slip nosing, an inch back from its edge.
-    base = mix(TREAD, NOSING, band(mod(-u, TREAD_DEPTH), 1.2, 5.5));
+    // Classic cast-concrete lips: pale worn edge, darker accumulated grit behind it.
+    float fromEdge = mod(-u, TREAD_DEPTH);
+    base = mix(TREAD, NOSING, band(fromEdge, 0.0, 1.6));
+    float dirt = smoothstep(TREAD_DEPTH - 6.0, TREAD_DEPTH, fromEdge);
+    base *= 1.0 - dirt * (0.12 + 0.10 * noise(vec2(z * 0.08, u)));
+    base *= 0.97 + 0.06 * hash(vec2(floor(u / TREAD_DEPTH), 5.0));
   } else if (vKind < 2.5) {
     // Each riser darkens into the corner at its foot.
     float fromFoot = mod(h, RISER_H);
     base = mix(RISER, SHADOW, 0.2 * (1.0 - smoothstep(0.0, 0.45 * RISER_H, fromFoot)));
+    float streak = weather(vec2(z * 0.055, h * 0.012));
+    base *= 0.84 + 0.19 * streak;
+    base = mix(base, NOSING, 0.45 * band(fromFoot, RISER_H - 1.1, RISER_H));
   } else if (vKind < 3.5) {
-    base = DIRT;
+    base = mix(DIRT * 0.72, DIRT * 1.21, weather(vec2(u, z) * 0.047));
+    base += grain(vec2(u, z) * 0.6) * 0.12;
   } else if (vKind < 4.5) {
-    base = WALL;
+    base = WALL * (0.89 + 0.15 * weather(surfaceAt * vec2(0.045, 0.008)));
   } else if (vKind < 5.5) {
-    base = PLANTER;
+    base = mix(DIRT, PLANTER, mottling);
   } else {
-    base = GRASS;
+    base = mix(GRASS * 0.92, ${glslRgb('#a09f7d')}, weather(surfaceAt * 0.022) * 0.65);
+    base += grain(surfaceAt * vec2(1.6, 0.35)) * 0.07;
+  }
+  if (vKind < 2.5 || (vKind > 3.5 && vKind < 4.5)) {
+    base *= 0.91 + 0.16 * mottling;
+    base += aggregate * 0.035;
+    float spots = smoothstep(0.78, 0.88, noise(surfaceAt * 0.4));
+    base *= 1.0 - spots * 0.045;
+    // Dust and organic grime along the edges where concrete meets planting.
+    float edge = 1.0 - smoothstep(0.0, 14.0, min(abs(z - ${HILL_EDGE.toFixed(1)}), abs(z - ${WALL_Z.toFixed(1)})));
+    base *= 1.0 - edge * 0.13 * mottling;
   }
   vec3 color = tone(base, lambert(n));
 
   // Cast shadows, only on faces turned toward the sun (the rest are in shade already).
   vec3 s = riderShadow();
   float rail = uRailShadow * railShadow(vLocal);
-  float a = 1.0 - (1.0 - rail) * (1.0 - uShadowOpacity.x * s.r) * (1.0 - uShadowOpacity.y * s.g) * (1.0 - uShadowOpacity.z * s.b);
+  float a = 1.0 - (1.0 - rail) * (1.0 - environmentShadow(vLocal)) * (1.0 - uShadowOpacity.x * s.r) * (1.0 - uShadowOpacity.y * s.g) * (1.0 - uShadowOpacity.z * s.b);
   a *= smoothstep(-0.05, 0.25, dot(n, SUN));
-  color = mix(color, SHADOW, a);
+  color = mix(color, color * vec3(0.51, 0.59, 0.65), min(a * 1.65, 0.75));
 
   // Air: far ground fades into the horizon.
   float dist = length(vWorld - cameraPosition);
@@ -335,16 +328,14 @@ function surfaceMaterial() {
       uRails: { value: 0 },
       uRailBox: { value: new Vector4() },
       uDir: { value: 1 },
-      uPxPerUnit: { value: 1 },
+      uCanopy: { value: Array.from({ length: 24 }, () => new Vector4()) },
+      uCanopies: { value: 0 },
     },
     side: DoubleSide,
   });
 }
 
-/** A face lit by the sun, as TrickScene lights its props: three's normal, so the physics one flips y. */
-const lit = (hex: string, n: Vec3): Paint => ({ color: tone(hex, lambert({ x: n[0], y: -n[1], z: n[2] } as V3)) });
-
-/** One way down: everything built in the world for stairs falling toward `dir` in x. */
+/** Static terrain and props, shared by every stance. */
 interface Build {
   group: Group;
   surface: ShaderMaterial;
@@ -372,31 +363,39 @@ function buildSet(dir: 1 | -1, solid: ShaderMaterial): Build {
   // Where the hill leaves the top landing and meets the bottom one.
   const hillTop = -HILL_DROP / slope;
   const hillFoot = (STAIR_DROP - HILL_DROP) / slope;
-  strip(-FAR, 0, WALL_Z - WALL_THICK, NEAR_EDGE, 0, 0, up, CONCRETE, GROUND_INK);
-  strip(-FAR, hillTop, NEAR_EDGE, FAR, 0, 0, up, CONCRETE, GROUND_INK);
-  strip(-FAR, hillTop, -FAR, WALL_Z - WALL_THICK, 0, 0, up, CONCRETE, GROUND_INK);
-  strip(STAIR_RUN, FAR, WALL_Z - WALL_THICK, NEAR_EDGE, -STAIR_DROP, -STAIR_DROP, up, CONCRETE, GROUND_INK);
-  strip(hillFoot, FAR, NEAR_EDGE, FAR, -STAIR_DROP, -STAIR_DROP, up, CONCRETE, GROUND_INK);
-  strip(hillFoot, FAR, -FAR, WALL_Z - WALL_THICK, -STAIR_DROP, -STAIR_DROP, up, CONCRETE, GROUND_INK);
+  const wz1 = WALL_Z + WALL_THICK;
+  strip(-FAR, 0, HILL_EDGE, wz1, 0, 0, up, CONCRETE, GROUND_INK);
+  strip(-FAR, hillTop, HILL_EDGE - 90, HILL_EDGE, 0, 0, up, CONCRETE, GROUND_INK);
+  // The open canopy stands on the school walkway above the planted bank.
+  const apronU = EL_TORO_CANOPY.u0 - 60;
+  const apronZ = EL_TORO_CANOPY.z0 - 60;
+  strip(-FAR, apronU, -FAR, HILL_EDGE - 90, 0, 0, up, GRASS, HILL_INK);
+  strip(apronU, hillTop, -FAR, apronZ, 0, 0, up, GRASS, HILL_INK);
+  strip(apronU, hillTop, apronZ, HILL_EDGE - 90, 0, 0, up, CONCRETE, GROUND_INK);
+  strip(-FAR, hillTop, wz1, BUILDING_BACK + 45, 0, 0, up, CONCRETE, GROUND_INK);
+  strip(-FAR, hillTop, BUILDING_BACK + 45, FAR, 0, 0, up, GRASS, HILL_INK);
+  strip(STAIR_RUN, FAR, HILL_EDGE, wz1, -STAIR_DROP, -STAIR_DROP, up, CONCRETE, GROUND_INK);
+  strip(hillFoot, FAR, -FAR, HILL_EDGE, -STAIR_DROP, -STAIR_DROP, up, CONCRETE, GROUND_INK);
+  strip(hillFoot, FAR, wz1, FAR, -STAIR_DROP, -STAIR_DROP, up, CONCRETE, GROUND_INK);
 
   // ----- The steps: twenty risers, nineteen treads, and their ends standing out of the hill -----
   for (let k = 1; k <= STAIR_STEPS; k++) {
     const u = (k - 1) * TREAD;
-    strip(u, u, WALL_Z, NEAR_EDGE, -(k - 1) * RISER, -k * RISER, downhill, RISER_KIND, STAIR_INK);
-    if (k < STAIR_STEPS) strip(u, u + TREAD, WALL_Z, NEAR_EDGE, -k * RISER, -k * RISER, up, TREAD_KIND, STAIR_INK);
+    strip(u, u, HILL_EDGE, WALL_Z, -(k - 1) * RISER, -k * RISER, downhill, RISER_KIND, STAIR_INK);
+    if (k < STAIR_STEPS) strip(u, u + TREAD, HILL_EDGE, WALL_Z, -k * RISER, -k * RISER, up, TREAD_KIND, STAIR_INK);
   }
   for (let k = 0; k < STAIR_STEPS; k++) {
     // The part of step k's end above the dirt: from where the hill crosses its tread out to its nosing.
     const h = -k * RISER;
     const end = k * TREAD;
-    ground.triangle(P(end - HILL_DROP / slope, h, NEAR_EDGE), P(end, h, NEAR_EDGE), P(end, h - HILL_DROP, NEAR_EDGE), [0, 0, 1], WALL, STAIR_INK);
+    ground.triangle(P(end - HILL_DROP / slope, h, HILL_EDGE), P(end, h, HILL_EDGE), P(end, h - HILL_DROP, HILL_EDGE), [0, 0, -1], WALL, STAIR_INK);
   }
 
-  // ----- The embankment either side: the hill by the skated section, and past the side wall a planted bed -----
-  const wz0 = WALL_Z - WALL_THICK;
-  strip(hillTop, hillFoot, NEAR_EDGE, FAR, 0, -STAIR_DROP, slopeN, DIRT, HILL_INK);
-  strip(hillTop, hillFoot, -FAR, wz0 - BED, 0, -STAIR_DROP, slopeN, GRASS, HILL_INK);
-  strip(hillTop, hillFoot, wz0 - BED, wz0, 0, -STAIR_DROP, slopeN, PLANTER, PLANTER_INK);
+  // ----- The embankment either side: the dirt hill by the skated section, and past the side wall a planted bed -----
+  strip(hillTop, hillFoot, HILL_EDGE - DIRT_WIDTH, HILL_EDGE, 0, -STAIR_DROP, slopeN, DIRT, HILL_INK);
+  strip(hillTop, hillFoot, -FAR, HILL_EDGE - DIRT_WIDTH, 0, -STAIR_DROP, slopeN, GRASS, HILL_INK);
+  strip(hillTop, hillFoot, wz1, wz1 + BED, 0, -STAIR_DROP, slopeN, PLANTER, PLANTER_INK);
+  strip(hillTop, hillFoot, wz1 + BED, FAR, 0, -STAIR_DROP, slopeN, GRASS, HILL_INK);
 
   // ----- The side wall -----
   const wallInk = (face: number) => prop(50 + face, 6 + face, 9);
@@ -404,11 +403,11 @@ function buildSet(dir: 1 | -1, solid: ShaderMaterial): Build {
   for (let i = 0; i + 1 < breaks.length; i++) {
     const [a, b] = [breaks[i], breaks[i + 1]];
     // Its face toward the stairs runs from below the steps (hidden under them) up to its top.
-    ground.quad(P(a, -STAIR_DROP - 10, WALL_Z), P(b, -STAIR_DROP - 10, WALL_Z), P(b, wallTop(b), WALL_Z), P(a, wallTop(a), WALL_Z), [0, 0, 1], WALL, wallInk(0));
-    strip(a, b, wz0, WALL_Z, wallTop(a), wallTop(b), i === 1 ? slopeN : up, WALL, wallInk(1));
+    ground.quad(P(a, -STAIR_DROP - 10, WALL_Z), P(b, -STAIR_DROP - 10, WALL_Z), P(b, wallTop(b), WALL_Z), P(a, wallTop(a), WALL_Z), [0, 0, -1], WALL, wallInk(0));
+    strip(a, b, WALL_Z, wz1, wallTop(a), wallTop(b), i === 1 ? slopeN : up, WALL, wallInk(1));
   }
   for (const [u, floor, n] of [[WALL_U0, 0, [-dir, 0, 0]], [WALL_U1, -STAIR_DROP, [dir, 0, 0]]] as Array<[number, number, Vec3]>) {
-    ground.quad(P(u, floor, wz0), P(u, floor, WALL_Z), P(u, wallTop(u), WALL_Z), P(u, wallTop(u), wz0), n, WALL, wallInk(2));
+    ground.quad(P(u, floor, WALL_Z), P(u, floor, wz1), P(u, wallTop(u), wz1), P(u, wallTop(u), WALL_Z), n, WALL, wallInk(2));
   }
 
   // ----- Handrails: galvanized pipe, posts standing on the steps -----
@@ -422,90 +421,43 @@ function buildSet(dir: 1 | -1, solid: ShaderMaterial): Build {
     const a = P(u, from, z);
     const b = P(u, to, z);
     props.tube([a, b], [RAIL_R, RAIL_R], pipe, ink, 10, true);
+    // Embedded posts have a weathered footing collar, with small anchor heads.
+    props.tube([P(u, from + 0.2, z), P(u, from + 1.1, z)], [5.1, 4.7], { color: '#747b71' }, ink, 12, true);
+    for (const du of [-3.5, 3.5]) {
+      props.tube([P(u + du, from + 1, z), P(u + du, from + 1.6, z)], [0.8, 0.8], { color: '#a4a698' }, ink, 6, true);
+    }
+    // A narrow weld at the upper joint catches a different highlight from the pipe.
+    props.tube([P(u, to - 4, z), P(u, to - 2.8, z)], [RAIL_R + 0.35, RAIL_R + 0.35], { color: '#838b82' }, ink, 10, true);
     rails.push([a, b]);
   };
-  const bottom = nosingLine(STAIR_RUN);
-  /** A side rail: a top rail that levels off past each end and posts down to the ground there, and a mid rail. */
-  const sideRail = (z: number, ink: Ink) => {
-    tube([[-RAIL_EXT, RAIL_TOP], [0, RAIL_TOP], [STAIR_RUN, bottom + RAIL_TOP], [STAIR_RUN + RAIL_EXT, bottom + RAIL_TOP]], z, ink);
-    tube([[POSTS[0], nosingLine(POSTS[0]) + RAIL_MID], [POSTS[3], nosingLine(POSTS[3]) + RAIL_MID]], z, ink);
-    post(-RAIL_EXT, 0, RAIL_TOP, z, ink);
-    post(STAIR_RUN + RAIL_EXT, -STAIR_DROP, bottom + RAIL_TOP, z, ink);
-    for (const u of POSTS) post(u, stairGround(u), nosingLine(u) + RAIL_TOP, z, ink);
-  };
-  /** One rail of the double rail: a top and a lower bar joined by a U at each end. */
-  const centerRail = (z: number, ink: Ink) => {
-    const r = (RAIL_TOP - RAIL_LOW) / 2;
-    const loop = (u: number, out: number) => Array.from({ length: 9 }, (_, i) => {
-      const a = Math.PI / 2 - (i / 8) * Math.PI;
-      return [u + out * r * Math.cos(a), nosingLine(u) + RAIL_LOW + r + r * Math.sin(a)] as [number, number];
-    });
-    const top = loop(0, -1);
-    const foot = loop(STAIR_RUN, 1);
-    tube([...top.slice().reverse().slice(0, 8), [0, RAIL_TOP], [STAIR_RUN, bottom + RAIL_TOP], ...foot.slice(1)], z, ink);
-    tube([[0, RAIL_LOW], [STAIR_RUN, bottom + RAIL_LOW]], z, ink);
-    for (const u of POSTS) post(u, stairGround(u), nosingLine(u) + RAIL_TOP, z, ink);
-  };
-  sideRail(HILL_RAIL_Z, prop(60, 10));
-  centerRail(CENTER_Z + CENTER_GAP, prop(62, 11));
-  centerRail(CENTER_Z - CENTER_GAP, prop(64, 12));
-  sideRail(FAR_RAIL_Z, prop(66, 13));
-
-  // ----- The school building at the top -----
-  const bx = [X(BUILDING_U0), X(BUILDING_U1)].sort((a, b) => a - b);
-  props.box([bx[0], 0, BUILDING_Z0], [bx[1], BUILDING_H, BUILDING_Z1], ET.block, ET.blockTop, prop(70, 6, 10), 'tfkle');
-  const ex = [X(BUILDING_U1 - 2), X(BUILDING_U1 + 40)].sort((a, b) => a - b);
-  props.box([ex[0], BUILDING_H - 16, BUILDING_Z0 - 20], [ex[1], BUILDING_H + 2, BUILDING_Z1 + 20], ET.trim, ET.trim, prop(76, 12, 11), 'tbfkle');
-  const front = X(BUILDING_U1) + dir * 0.3;
-  const facing: Vec3 = [dir, 0, 0];
-  for (let i = 0; i < 6; i++) {
-    const zc = BUILDING_Z0 + 150 + i * 190;
-    const half = 1.5 * FOOT;
-    props.quad([front, 0, zc - half], [front, 0, zc + half], [front, 7 * FOOT, zc + half], [front, 7 * FOOT, zc - half], facing, lit(ET.door, facing), prop(82 + (i % 2), 8));
-  }
-
-  // ----- Trees behind the wall and the building, shrubs along the planter -----
-  const tree = (u: number, z: number, seed: number) => {
-    const foot = hill(u);
-    const r = 38 + 22 * hash2(seed, 0, 51);
-    const trunkH = 70 + 50 * hash2(seed, 0, 52);
-    props.tube([P(u, foot, z), P(u, foot + trunkH + r * 0.5, z)], [4.5, 3.2], { color: ET.trunk }, prop(99, 5), 8, false);
-    const crown = P(u, foot + trunkH + r, z);
-    props.disc(crown, 0, 0, r, { color: ET.leafDark }, prop(100 + (seed % 100), 6), r * 0.9);
-    props.disc(crown, r * 0.16, r * 0.14, r * 0.8, { color: ET.leafLit }, prop(100 + (seed % 100), 6), r * 0.9 + 0.5);
-  };
-  let seed = 0;
-  // Rows of them, thinning out with distance, so the slope reads as planted ground.
-  for (const [row, from, to, gap] of [[330, -1900, STAIR_RUN + 2600, 230], [800, -2600, STAIR_RUN + 3200, 300], [1500, -3400, STAIR_RUN + 4200, 380]]) {
-    for (let u = from; u < to; u += gap + 120 * hash2(seed, 1, 53)) {
-      const at = u + 60 * hash2(seed, 2, 54);
-      const z = WALL_Z - row - 220 * hash2(seed, 3, 55);
-      // None inside the building.
-      if (!(at > BUILDING_U0 - 60 && at < BUILDING_U1 + 60 && z > BUILDING_Z0 - 60)) tree(at, z, seed);
-      seed++;
+  /** Classic rails: one straight sloping top bar and a mid bar, with no end kinks. */
+  const straightRail = (z: number, ink: Ink) => {
+    const start = -RAIL_EXT;
+    const end = STAIR_RUN + RAIL_EXT;
+    for (const height of [RAIL_TOP, RAIL_MID]) {
+      tube([[start, nosingLine(start) + height], [end, nosingLine(end) + height]], z, ink);
     }
-  }
-  /** A shrub: a dark ball with its lit side nudged toward the sun, sat on the slope. */
-  const shrub = (u: number, z: number, r: number, id: number) => {
-    const c = P(u, hill(u) + r * 0.45, z);
-    props.disc(c, 0, 0, r, { color: ET.shrubDark }, prop(id, 7), r);
-    props.disc(c, r * 0.2, r * 0.22, r * 0.72, { color: ET.shrubLit }, prop(id, 7), r + 0.4);
+    post(start, 0, nosingLine(start) + RAIL_TOP, z, ink);
+    post(end, -STAIR_DROP, nosingLine(end) + RAIL_TOP, z, ink);
+    for (const u of POSTS) post(u, stairGround(u), nosingLine(u) + RAIL_TOP, z, ink);
   };
-  // A hedge along the bed behind the wall…
-  for (let u = 0; u < STAIR_RUN; u += 34) {
-    const k = Math.round(u / 34);
-    shrub(u, WALL_Z - WALL_THICK - 22 - (BED - 44) * hash2(k, 1, 57), 11 + 6 * hash2(k, 0, 56), 210 + (k % 8));
-  }
-  // …and bushes in clumps on the hill, clear of its rail.
-  for (let k = 0; k < 14; k++) {
-    const u = 30 + (STAIR_RUN - 60) * hash2(k, 0, 58);
-    shrub(u, NEAR_EDGE + 110 + 260 * hash2(k, 1, 59), 14 + 10 * hash2(k, 2, 60), 218 + (k % 8));
-  }
+  straightRail(HILL_RAIL_Z, prop(60, 10));
+  straightRail(CENTER_Z, prop(62, 11));
+  straightRail(FAR_RAIL_Z, prop(66, 13));
+
+  buildElToroBuilding(props, dir);
+  buildElToroCanopy(props, dir);
+
+  const canopies = buildElToroLandscape(props, dir);
 
   if (rails.length > MAX_RAILS) throw new Error(`El Toro has ${rails.length} rail segments to cast; the ground looks for ${MAX_RAILS}.`);
   const surface = surfaceMaterial();
   const su = surface.uniforms;
   su.uDir.value = dir;
+  su.uCanopies.value = Math.min(24, canopies.length);
+  canopies.slice(0, 24).forEach(({ center, radius }, i) => {
+    (su.uCanopy.value as Vector4[])[i].set(...center, radius);
+  });
   su.uRails.value = rails.length;
   // The rails' shadows reach at most their height along the sun, back and across from them.
   const reach = (RAIL_TOP + RISER) / SUN.y;
@@ -522,6 +474,9 @@ function buildSet(dir: 1 | -1, solid: ShaderMaterial): Build {
     (su.uRailB.value as Vector4[])[i].set(b[0], b[1], b[2], 0);
   });
   const group = new Group();
+  // Keep the rig and camera around their shared origin while centering the
+  // fixed spot on the chosen line in the left-hand flight.
+  group.position.z = -RIDER_LANE_Z;
   const groundMesh = new Mesh(ground.geometry(), surface);
   const propMesh = new Mesh(props.geometry(), solid);
   for (const m of [groundMesh, propMesh]) m.frustumCulled = false;
@@ -537,12 +492,12 @@ export class ElToro3D {
   readonly overlayMaterials: ShaderMaterial[] = [];
   readonly shadowGeometry = null;
   readonly propInk = mixHex(PALETTE.ink, PALETTE.concrete, 0.4);
-  private readonly sky = skyMaterial();
-  private readonly solid = bakedMaterial();
-  private readonly builds = new Map<1 | -1, Build>();
+  private readonly sky = elToroSkyMaterial();
+  private readonly solid = elToroPropMaterial();
+  private built: Build | null = null;
 
   constructor() {
-    // Rails and the building are built mirrored for a fakie trick: draw both faces.
+    // Rail tubes and thin fence wires are visible from either camera side.
     this.solid.side = DoubleSide;
     const skyGeometry = new BufferGeometry();
     skyGeometry.setAttribute('position', new Float32BufferAttribute([-1, -1, 0, 3, -1, 0, -1, 3, 0], 3));
@@ -552,44 +507,38 @@ export class ElToro3D {
     this.group.add(sky);
   }
 
-  private build(dir: 1 | -1): Build {
-    let build = this.builds.get(dir);
-    if (!build) {
-      build = buildSet(dir, this.solid);
-      this.builds.set(dir, build);
-      this.group.add(build.group);
+  private build(): Build {
+    if (!this.built) {
+      this.built = buildSet(1, this.solid);
+      this.group.add(this.built.group);
     }
-    return build;
+    return this.built;
   }
 
   update(view: StageView, scroll: number, size: { width: number; height: number }, shadow: Texture, shadowOpacity: [number, number, number], frame?: StageFrame) {
     const stairs = frame?.stairs ?? null;
-    const dir = stairs?.dir ?? 1;
-    const build = this.build(dir);
-    for (const b of this.builds.values()) b.group.visible = b === build;
-    build.group.position.x = -scroll + (stairs ? 0 : dir * LIP_AWAY);
+    const build = this.build();
+    build.group.position.x = -scroll + (stairs ? 0 : LIP_AWAY);
+    // Under the rider: their line down the left-hand flight, or the center rail they grind.
+    build.group.position.z = -(stairs?.across ?? RIDER_LANE_Z);
     const u = build.surface.uniforms;
     u.uShadow.value = shadow;
     u.uShadowOpacity.value.set(...shadowOpacity);
     u.uShadowY.value = stairs?.shadowY ?? 0;
     u.uRailShadow.value = shadowOpacity[0];
-    u.uPxPerUnit.value = size.height / view.box.height;
 
-    const { cam, box } = view;
     const s = this.sky.uniforms;
-    s.uBox.value.set(box.x, box.y, box.width, box.height);
     s.uRes.value.set(size.width, size.height);
-    s.uHorizon.value = cam.horizonY;
-    s.uPlazaNear.value = cam.project({ x: X0, y: ASPHALT, z: 120 }).y;
-    s.uCloudDrift.value = scroll * cam.drift * 0.015;
-    s.uFarShift.value = scroll * cam.drift * 0.03;
-    s.uNearShift.value = scroll * cam.drift * 0.06;
+    s.uFrustum.value.set(view.frustum.left, view.frustum.right, view.frustum.bottom, view.frustum.top);
+    s.uRight.value.set(...view.right);
+    s.uUp.value.set(...view.up);
+    s.uBack.value.set(...view.back);
   }
 
   dispose() {
     this.sky.dispose();
     this.solid.dispose();
-    for (const b of this.builds.values()) b.surface.dispose();
+    this.built?.surface.dispose();
     this.group.traverse((o) => {
       if (o instanceof Mesh) o.geometry.dispose();
     });

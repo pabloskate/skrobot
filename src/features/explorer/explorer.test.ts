@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SCENE_CAMERA, FLIP_T, LAND_T, ROLL_IN, SCENE_CAMERA_BOUNDS, SCENE_ZOOM, grindSpecFor, stairTimeline } from '@skrobot/animations';
+import { DEFAULT_SCENE_CAMERA, FLIP_T, FOOT, LAND_T, ROLL_IN, SCENE_ORBIT_BOUNDS, SCENE_ZOOM, SKATERS, TRIPODS, grindSpecFor, grindTimelineFor, stageRail, stairTimeline } from '@skrobot/animations';
 import { TRICK_BY_ID } from '@/features/tricks';
 import {
   CAMERA_PRESETS,
@@ -15,9 +15,11 @@ import {
   STANCES,
   ZOOM_RANGE,
   ZOOM_STEP,
+  cameraPresetsFor,
   grindMatchesSearch,
   outEndsFor,
   sceneCamera,
+  sceneTripod,
   searchFromState,
   shuffle,
   stageTrick,
@@ -145,35 +147,56 @@ describe('Trick Explorer timeline', () => {
     for (let i = 1; i < phases.length; i++) expect(phases[i].time, phases[i].label).toBeGreaterThan(phases[i - 1].time);
     expect(phases.at(-1)?.time).toBe(stairs.land);
   });
+
+  it('times a grind at El Toro down its center rail, longer than over the flat bar', () => {
+    const style = { popHeight: 0.92, rotationSpeed: 1.08, flickStrength: 0.95 };
+    const state = grindState({ set: 'el-toro', grind: 'Boardslide', into: 'Kickflip' });
+    const rail = grindTimelineFor(stageTrick(state), state.rider, style, true, 'slam', stageRail('el-toro'))!;
+    const { phases, duration } = timelineFor(state, style);
+    expect(duration).toBe(rail.end);
+    expect(phases.map((p) => p.label)).toEqual(['Set up', 'Pop', 'Trick in', 'Lock', 'Pop off', 'Land']);
+    expect(phases.find((p) => p.label === 'Lock')?.time).toBe(rail.lock);
+    expect(timelineFor({ ...state, set: 'plaza' }, style).duration).not.toBe(duration);
+  });
 });
 
 describe('Trick Explorer spots', () => {
-  it('takes flatground tricks down El Toro, and grinds back to a spot with a bar', () => {
-    expect(withSet(grindState(), 'el-toro')).toMatchObject({ set: 'el-toro', mode: 'flatground' });
+  it('keeps the trick when changing spots: at El Toro flatground goes down the stairs and grinds down the rail', () => {
+    expect(withSet(grindState(), 'el-toro')).toMatchObject({ set: 'el-toro', mode: 'grinds' });
+    expect(withSet(flatState(), 'el-toro')).toMatchObject({ set: 'el-toro', mode: 'flatground' });
     expect(withSet(flatState({ set: 'el-toro' }), 'plaza')).toMatchObject({ set: 'plaza', mode: 'flatground' });
     expect(withSet(grindState(), 'plaza')).toMatchObject({ set: 'plaza', mode: 'grinds' });
-    expect(withMode(flatState({ set: 'el-toro' }), 'grinds')).toMatchObject({ set: DEFAULT_STATE.set, mode: 'grinds' });
+    expect(withMode(flatState({ set: 'el-toro' }), 'grinds')).toMatchObject({ set: 'el-toro', mode: 'grinds' });
     expect(withMode(flatState({ set: 'plaza' }), 'grinds')).toMatchObject({ set: 'plaza', mode: 'grinds' });
-    expect(withMode(grindState(), 'flatground')).toMatchObject({ set: DEFAULT_STATE.set, mode: 'flatground' });
+    expect(withMode(grindState({ set: 'el-toro' }), 'flatground')).toMatchObject({ set: 'el-toro', mode: 'flatground' });
   });
 
-  it('links to El Toro, never with a grind on it', () => {
+  it('links to El Toro with a flatground trick or a grind on it', () => {
     const state = flatState({ set: 'el-toro', trick: '360 Flip', stance: 'nollie' });
     expect(searchFromState(state)).toBe('?trick=360-flip&stance=nollie&set=el-toro');
     expect(stateFromSearch(searchFromState(state))).toEqual(state);
-    expect(stateFromSearch('?set=el-toro')).toEqual(flatState({ set: 'el-toro' }));
-    expect(stateFromSearch('?grind=lipslide&set=el-toro')).toMatchObject({ mode: 'grinds', grind: 'Lipslide', set: DEFAULT_STATE.set });
+    expect(stateFromSearch('?set=el-toro')).toEqual(grindState({ set: 'el-toro' }));
+    expect(stateFromSearch('?grind=lipslide&set=el-toro')).toMatchObject({ mode: 'grinds', grind: 'Lipslide', set: 'el-toro' });
+    const rail = grindState({ set: 'el-toro', grind: 'Smith Grind', side: 'Backside', into: 'Kickflip', stance: 'fakie' });
+    expect(stateFromSearch(searchFromState(rail))).toEqual(rail);
+  });
+
+  it('walks a grind at El Toro through the rail rather than the bar', () => {
+    const steps = trickSteps(grindState({ set: 'el-toro' })).map((step) => step.detail).join(' ');
+    expect(steps).toMatch(/rail/);
+    expect(steps).not.toMatch(/\bbar\b/);
+    expect(trickSteps(grindState({ set: 'plaza' })).map((step) => step.detail).join(' ')).toMatch(/\bbar\b/);
   });
 });
 
 describe('Trick Explorer camera', () => {
   it('keeps every preset inside the camera bounds, with Classic as the game view', () => {
-    const { yaw, pitch, lens } = SCENE_CAMERA_BOUNDS;
+    const { yaw, pitch, lens } = SCENE_ORBIT_BOUNDS;
     for (const preset of CAMERA_PRESETS) {
       for (const stance of STANCES) {
         const camera = sceneCamera({ ...DEFAULT_STATE, stance, camera: preset.id });
         expect(camera.yaw, preset.id).toBeGreaterThanOrEqual(yaw.min);
-        expect(camera.yaw, preset.id).toBeLessThanOrEqual(yaw.max);
+        expect(camera.yaw, preset.id).toBeLessThan(yaw.max);
         expect(camera.pitch, preset.id).toBeGreaterThanOrEqual(pitch.min);
         expect(camera.pitch, preset.id).toBeLessThanOrEqual(pitch.max);
         expect(camera.lens, preset.id).toBeGreaterThanOrEqual(lens.min);
@@ -191,9 +214,82 @@ describe('Trick Explorer camera', () => {
       .toEqual(sceneCamera(flatState({ camera: 'overhead' })));
   });
 
-  it('turns the camera only as far as the bounds allow', () => {
+  it('keeps every El Toro camera preset fixed when changing trick or rider stance', () => {
+    for (const preset of CAMERA_PRESETS) {
+      const regular = sceneCamera(flatState({ set: 'el-toro', camera: preset.id }));
+      for (const stance of STANCES) {
+        for (const rider of ['regular', 'goofy'] as const) {
+          expect(sceneCamera(flatState({ set: 'el-toro', camera: preset.id, stance, rider }))).toEqual(regular);
+        }
+      }
+      // A grind goes down the same stairs on the center rail, so the same way round;
+      // angles aimed across at the rail from the stair line aim at the rider on it.
+      const grind = sceneCamera(grindState({ set: 'el-toro', camera: preset.id, stance: 'fakie' }));
+      expect(grind).toEqual({ ...regular, targetZ: undefined });
+      // Away from El Toro a fakie grind still swings the travel-framed angles round.
+      const elsewhere = sceneCamera(grindState({ set: 'plaza', camera: preset.id, stance: 'fakie' }));
+      expect(elsewhere.yaw).toBe(preset.followsTravel ? -preset.camera.yaw : preset.camera.yaw);
+    }
+  });
+
+  it('films El Toro from tripods standing at the bottom, the side, and the top of the set', () => {
+    const stairs = flatState({ set: 'el-toro' });
+    const tripods = cameraPresetsFor(stairs).filter((preset) => preset.tripod);
+    expect(tripods.map((preset) => preset.tripod)).toEqual([...TRIPODS]);
+    for (const preset of tripods) {
+      expect(sceneTripod({ ...stairs, camera: preset.id })).toBe(preset.tripod);
+      expect(sceneTripod(grindState({ set: 'el-toro', camera: preset.id }))).toBe(preset.tripod);
+      // Shared links reopen on the tripod.
+      expect(stateFromSearch(searchFromState({ ...stairs, camera: preset.id }))).toEqual({ ...stairs, camera: preset.id });
+      // Elsewhere there is no tripod to stand at: the crane films from roughly where it would stand.
+      expect(sceneTripod(flatState({ set: 'plaza', camera: preset.id }))).toBeNull();
+      // Dragging takes over as a crane angle from there.
+      expect(sceneTripod({ ...stairs, camera: turnCamera(sceneCamera({ ...stairs, camera: preset.id }), 5, 0) })).toBeNull();
+    }
+    expect(sceneTripod(stairs)).toBeNull();
+    expect(cameraPresetsFor(DEFAULT_STATE).some((preset) => preset.tripod)).toBe(false);
+  });
+
+  it('offers the bottom angles at El Toro and keeps a selected one when changing spots', () => {
+    expect(cameraPresetsFor(DEFAULT_STATE).map((preset) => preset.id)).not.toContain('bottom-center');
+    const stairs = flatState({ set: 'el-toro' });
+    expect(cameraPresetsFor(stairs).map((preset) => preset.id)).toEqual(expect.arrayContaining(['bottom-center', 'bottom-right']));
+    expect(sceneCamera({ ...stairs, camera: 'bottom-center' }).yaw).toBe(-90);
+    expect(sceneCamera({ ...stairs, camera: 'bottom-center' }).targetZ).toBe(-6 * FOOT);
+    expect(sceneCamera({ ...stairs, camera: 'bottom-right' }).yaw).toBe(-125);
+    const changed = withSet({ ...stairs, camera: 'bottom-right' }, 'plaza');
+    expect(cameraPresetsFor(changed).map((preset) => preset.id)).toContain('bottom-right');
+    expect(sceneCamera(changed)).toEqual(sceneCamera({ ...stairs, camera: 'bottom-right' }));
+  });
+
+  it('continues dragging through full circles while keeping pitch in bounds', () => {
     const turned = turnCamera(DEFAULT_SCENE_CAMERA, 500, -500);
-    expect(turned).toEqual({ ...DEFAULT_SCENE_CAMERA, yaw: SCENE_CAMERA_BOUNDS.yaw.max, pitch: SCENE_CAMERA_BOUNDS.pitch.min });
+    expect(turned).toEqual({ ...DEFAULT_SCENE_CAMERA, yaw: 114, pitch: SCENE_ORBIT_BOUNDS.pitch.min });
+    expect(turnCamera(DEFAULT_SCENE_CAMERA, -720, 500)).toEqual({ ...DEFAULT_SCENE_CAMERA, pitch: SCENE_ORBIT_BOUNDS.pitch.max });
+    const from = { ...DEFAULT_SCENE_CAMERA, yaw: 175 };
+    // The gesture samples total movement from pointer-down, including across the seam.
+    expect([0, 10, 20, 370].map((delta) => turnCamera(from, delta, 0).yaw)).toEqual([175, -175, -165, -175]);
+  });
+
+  it('lets arrow-key steps orbit repeatedly in both directions without getting stuck at the seam', () => {
+    let camera = { ...DEFAULT_SCENE_CAMERA };
+    for (let step = 0; step < 60; step++) camera = turnCamera(camera, 6, 0);
+    expect(camera).toEqual(DEFAULT_SCENE_CAMERA);
+    for (let step = 0; step < 60; step++) camera = turnCamera(camera, -6, 0);
+    expect(camera).toEqual(DEFAULT_SCENE_CAMERA);
+    expect(turnCamera({ ...camera, yaw: -180 }, -6, 0).yaw).toBe(174);
+  });
+
+  it('keeps the staircase center framing when dragging or sharing a bottom-center angle', () => {
+    const camera = sceneCamera(flatState({ set: 'el-toro', camera: 'bottom-center' }));
+    const dragged = turnCamera(camera, -40, 7);
+    expect(dragged).toEqual({ yaw: -130, pitch: 13, lens: 1, targetZ: -6 * FOOT });
+    const state = flatState({ set: 'el-toro', camera: dragged });
+    expect(searchFromState(state)).toBe('?trick=kickflip&cam=-130_13_1_-174&set=el-toro');
+    expect(stateFromSearch(searchFromState(state))).toEqual(state);
+    expect(stateFromSearch('?trick=kickflip&cam=-130_13_1_-999').camera).toEqual(dragged);
+    expect(stateFromSearch('?cam=-130_13_1_NaN').camera).toBe(DEFAULT_STATE.camera);
+    expect(searchFromState(flatState({ camera: { ...DEFAULT_SCENE_CAMERA, targetZ: 0 } }))).toBe('?trick=kickflip&cam=-26_9_1');
   });
 });
 
@@ -230,6 +326,11 @@ describe('Trick Explorer links', () => {
       grindState({ grind: 'Crooked Grind', set: 'waterfront', camera: 'follow' }),
       flatState({ trick: 'Kickflip', skater: 'human' }),
       grindState({ grind: 'Lipslide', side: 'Backside', skater: 'human', set: 'plaza' }),
+      flatState({ trick: 'Kickflip', skater: 'humanoid', set: 'el-toro', rider: 'goofy', stance: 'fakie' }),
+      flatState({ set: 'el-toro', camera: 'bottom-center' }),
+      flatState({ set: 'el-toro', camera: 'bottom-right', stance: 'fakie' }),
+      flatState({ set: 'el-toro', camera: { yaw: 145.5, pitch: 0, lens: 1.1 } }),
+      grindState({ grind: 'Crooked Grind', skater: 'humanoid', into: 'Kickflip', out: { base: 'Heelflip', end: 'nose' } }),
     ];
     for (const state of states) expect(stateFromSearch(searchFromState(state)), searchFromState(state)).toEqual(state);
   });
@@ -243,13 +344,28 @@ describe('Trick Explorer links', () => {
     expect(searchFromState({ ...DEFAULT_STATE, zoom: 1.5 })).toBe('?grind=50-50-grind&zoom=1.5');
     expect(searchFromState({ ...DEFAULT_STATE, set: 'plaza' })).toBe('?grind=50-50-grind&set=plaza');
     expect(searchFromState({ ...DEFAULT_STATE, skater: 'human' })).toBe('?grind=50-50-grind&skater=human');
+    expect(searchFromState({ ...DEFAULT_STATE, skater: 'humanoid' })).toBe('?grind=50-50-grind&skater=humanoid');
   });
 
-  it('opens with the robot, and with the human skater when a link asks for one', () => {
+  it('opens with the robot, and accepts every selectable skater in shared links', () => {
     expect(DEFAULT_STATE.skater).toBe('robot');
     expect(stateFromSearch('?grind=lipslide').skater).toBe('robot');
-    expect(stateFromSearch('?trick=heelflip&skater=human').skater).toBe('human');
+    expect(SKATERS.map((option) => option.id)).toContain('humanoid');
+    for (const { id } of SKATERS) {
+      expect(stateFromSearch(`?trick=heelflip&skater=${id}`).skater).toBe(id);
+    }
     expect(stateFromSearch('?skater=alien').skater).toBe('robot');
+  });
+
+  it('keeps the humanoid selected when changing spots, modes, grinds, and random tricks', () => {
+    const initial = flatState({ skater: 'humanoid', trick: 'Heelflip' });
+    const onStairs = withSet(initial, 'el-toro');
+    const onPlaza = withSet(onStairs, 'plaza');
+    const grind = withGrind(withMode(onPlaza, 'grinds'), 'Nosegrind');
+    for (const state of [onStairs, onPlaza, grind, shuffle(grind, seeded(24)), shuffle(onStairs, seeded(32))]) {
+      expect(state.skater).toBe('humanoid');
+      expect(stateFromSearch(searchFromState(state)).skater).toBe('humanoid');
+    }
   });
 
   it('opens on the waterfront, and on the plaza when a link asks for it', () => {
@@ -285,11 +401,36 @@ describe('Trick Explorer links', () => {
     expect(stateFromSearch('?trick=heelflip&cam=-30_12_1')).toEqual(flatState({ trick: 'Heelflip', camera: { yaw: -30, pitch: 12, lens: 1 } }));
   });
 
-  it('falls back to defaults for anything it does not know, and clamps custom angles', () => {
+  it('serializes equivalent full-circle angles to one stable share URL, including rounding at the seam', () => {
+    for (const yaw of [180, -180, 540, -540, 179.98, -179.98]) {
+      const search = searchFromState(flatState({ set: 'el-toro', camera: { yaw, pitch: 9, lens: 1 } }));
+      expect(search).toBe('?trick=kickflip&cam=-180_9_1&set=el-toro');
+      expect(searchFromState(stateFromSearch(search))).toBe(search);
+    }
+    expect(stateFromSearch('?trick=kickflip&cam=595_0_1').camera).toEqual({ yaw: -125, pitch: 0, lens: 1 });
+    expect(stateFromSearch('?trick=kickflip&cam=-595_0_1').camera).toEqual({ yaw: 125, pitch: 0, lens: 1 });
+  });
+
+  it('opens Bottom center wide enough for both flights, preserving explicitly chosen zoom in links', () => {
+    const search = '?trick=kickflip&cam=bottom-center&set=el-toro';
+    const wide = stateFromSearch(search);
+    expect(wide.zoom).toBe(0.6);
+    expect(searchFromState(wide)).toBe(search);
+    for (const zoom of [0.5, 1, 1.75]) {
+      const state = stateFromSearch(`${search}&zoom=${zoom}`);
+      expect(state.zoom).toBe(zoom);
+      expect(stateFromSearch(searchFromState(state))).toEqual(state);
+    }
+    const preset = cameraPresetsFor(wide).find((option) => option.id === 'bottom-center');
+    expect(preset?.zoom).toBe(0.6);
+  });
+
+  it('falls back to defaults for anything it does not know, wrapping yaw and clamping pitch and lens', () => {
     expect(stateFromSearch('?trick=moonwalk&stance=upside-down&rider=both&cam=drone')).toEqual(DEFAULT_STATE);
     // A nollie trick out of a grind that only rides the tail is no trick out.
     expect(stateFromSearch('?grind=5-0-grind&out=nollie-kickflip').out).toBeNull();
-    expect(stateFromSearch('?cam=999_-40_9').camera).toEqual({ yaw: SCENE_CAMERA_BOUNDS.yaw.max, pitch: SCENE_CAMERA_BOUNDS.pitch.min, lens: SCENE_CAMERA_BOUNDS.lens.max });
+    expect(stateFromSearch('?cam=999_-40_9').camera).toEqual({ yaw: -81, pitch: SCENE_ORBIT_BOUNDS.pitch.min, lens: SCENE_ORBIT_BOUNDS.lens.max });
+    expect(stateFromSearch('?cam=Infinity_9_1').camera).toBe(DEFAULT_STATE.camera);
   });
 });
 

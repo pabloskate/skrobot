@@ -5,10 +5,11 @@ import { TbArrowLeft, TbCheck, TbShare } from 'react-icons/tb';
 import { STAGE_SETS } from '@skrobot/animations';
 import { ROBOT_BY_ID, ROBOTS } from '@/features/robots';
 import {
-  CAMERA_PRESETS,
   cameraLabel,
   cameraPreset,
+  cameraPresetsFor,
   sceneCamera,
+  sceneTripod,
   searchFromState,
   stageTrick,
   stateFromSearch,
@@ -25,7 +26,7 @@ import ExplorerStage from './ExplorerStage';
 import TrickBuilder from './TrickBuilder';
 import VideoButton from './VideoButton';
 
-/** The explorer's robot: Swivel, skating in its own style (the human skater skates the same way). */
+/** Swivel supplies the shared skating style for all three explorer riders. */
 const RIDER = ROBOT_BY_ID.get('shifty') ?? ROBOTS[0];
 /** Wait for the camera to settle before writing it into the address bar. */
 const URL_SYNC_MS = 250;
@@ -43,6 +44,7 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
 
   const trick = stageTrick(state);
   const camera = sceneCamera(state);
+  const tripod = sceneTripod(state);
   const timeline = timelineFor(state, RIDER.skateStyle);
   const steps = trickSteps(state);
   const preset = typeof state.camera === 'string' ? cameraPreset(state.camera) : null;
@@ -91,7 +93,7 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
         </div>
         <div className="explorer-actions">
           <VideoButton
-            video={{ robot: RIDER, trick, riderStance: state.rider, camera, zoom: state.zoom, set: state.set, skater: state.skater, rate }}
+            video={{ robot: RIDER, trick, riderStance: state.rider, camera, tripod, zoom: state.zoom, set: state.set, skater: state.skater, rate }}
             filename={videoFilename(trick.name, rate)}
           />
           <button type="button" className="explorer-share" onClick={share}>
@@ -110,6 +112,7 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
             rider={state.rider}
             timeline={timeline}
             camera={camera}
+            tripod={tripod}
             zoom={state.zoom}
             set={state.set}
             skater={state.skater}
@@ -134,7 +137,7 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
               <span className="explorer-card-hint">{preset ? preset.hint : 'Drag the stage to fine-tune'}</span>
             </div>
             <div className="explorer-cams" role="radiogroup" aria-label="Camera angle">
-              {CAMERA_PRESETS.map((option) => {
+              {cameraPresetsFor(state).map((option) => {
                 const active = preset?.id === option.id;
                 return (
                   <button
@@ -143,7 +146,7 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
                     role="radio"
                     aria-checked={active}
                     className={`explorer-cam ${active ? 'active' : ''}`}
-                    onClick={() => setState({ ...state, camera: option.id })}
+                    onClick={() => setState({ ...state, camera: option.id, zoom: option.zoom ?? state.zoom })}
                   >
                     <CameraDial camera={sceneCamera({ ...state, camera: option.id })} size={30} />
                     <span>{option.label}</span>

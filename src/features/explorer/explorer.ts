@@ -1,16 +1,17 @@
 import {
   DEFAULT_SCENE_CAMERA,
   FLIP_T,
+  FOOT,
   GRIND_BASES,
   LAND_T,
   ROLL_IN,
-  SCENE_CAMERA_BOUNDS,
+  SCENE_ORBIT_BOUNDS,
   SCENE_ZOOM,
   STAGE_SETS,
   SKATERS,
   canEnterGrind,
   canExitGrind,
-  clampSceneCamera,
+  clampOrbitCamera,
   clampZoom,
   exitEndsFor,
   grindSpecFor,
@@ -18,13 +19,16 @@ import {
   joinGrindBase,
   joinGrindExit,
   specFor,
+  stageRail,
   stairTimeline,
+  wrapOrbitYaw,
   type PopEnd,
   type RiderStance,
   type SceneCamera,
   type SkateStyle,
   type Skater,
   type StageSet,
+  type TripodId,
 } from '@skrobot/animations';
 import {
   TRICKS,
@@ -53,7 +57,9 @@ export interface GrindOut {
   end: PopEnd;
 }
 
-export type CameraPresetId = 'classic' | 'side' | 'head-on' | 'follow' | 'overhead' | 'fisheye' | 'long-lens';
+export type CameraPresetId =
+  | 'classic' | 'side' | 'head-on' | 'follow' | 'overhead' | 'fisheye' | 'long-lens' | 'bottom-center' | 'bottom-right'
+  | 'tripod-bottom' | 'tripod-side' | 'tripod-top';
 
 export interface ExplorerState {
   mode: ExplorerMode;
@@ -74,9 +80,9 @@ export interface ExplorerState {
   camera: CameraPresetId | SceneCamera;
   /** How far in the picture is magnified, whatever the angle: 1 is the stock framing. */
   zoom: number;
-  /** The spot the robot skates: the bayside waterfront, the stock plaza, or El Toro's 20 stair (flatground tricks only). */
+  /** The spot the robot skates: the bayside waterfront, the stock plaza, or El Toro's 20 stair (tricks down it, grinds down its center rail). */
   set: StageSet;
-  /** Who skates it: the robot, or the human skater. */
+  /** Who skates it: the robot, illustrated human, or detailed humanoid. */
   skater: Skater;
 }
 
@@ -198,17 +204,17 @@ export const DEFAULT_STATE: Readonly<ExplorerState> = Object.freeze({
   skater: 'robot',
 });
 
-/** The spot El Toro's 20 stair is: flatground tricks go down it, and it has no bar to grind. */
+/** The spot El Toro's 20 stair is: flatground tricks go down it, and grinds go down its center handrail. */
 export const STAIR_SET: StageSet = 'el-toro';
 
-/** The state moved to another spot. A grind can't go to El Toro, so the stairs take the flatground trick. */
+/** The state moved to another spot, keeping its trick: at El Toro a grind takes the handrail. */
 export function withSet(state: ExplorerState, set: StageSet): ExplorerState {
-  return set === STAIR_SET ? { ...state, set, mode: 'flatground' } : { ...state, set };
+  return { ...state, set };
 }
 
-/** The state switched to flatground or grinds. Grinds leave El Toro for the default spot's bar. */
+/** The state switched to flatground or grinds, at the same spot. */
 export function withMode(state: ExplorerState, mode: ExplorerMode): ExplorerState {
-  return mode === 'grinds' && state.set === STAIR_SET ? { ...state, mode, set: DEFAULT_STATE.set } : { ...state, mode };
+  return { ...state, mode };
 }
 
 /** Keeps a trick out only if the grind rides the end it pops off. */
@@ -269,24 +275,30 @@ export function trickSteps(state: ExplorerState): TrickStep[] {
   const spec = grindSpecFor(stageTrick(state));
   if (!spec) return [];
   const riding = state.stance === 'regular' ? 'rolling' : `riding ${state.stance}`;
-  const bar = spec.toesideApproach ? 'toeside' : 'heelside';
+  const side = spec.toesideApproach ? 'toeside' : 'heelside';
+  // At El Toro the grind goes down the center handrail.
+  const rail = state.set === STAIR_SET;
+  const bar = rail ? 'rail' : 'bar';
   const steps: TrickStep[] = [
-    { label: 'Approach', detail: `Come in ${riding} with the bar on your ${bar}.` },
+    { label: 'Approach', detail: `Come in ${riding} with the ${bar} on your ${side}${rail ? ', a little slower than you would to jump the set' : ''}.` },
     state.into
       ? {
         label: state.into,
         detail: spec.reversed
-          ? `Pop ${withArticle(state.into)} onto the bar. It turns you round, so you lock in riding the other way.`
-          : `Pop ${withArticle(state.into)} and catch it on the way onto the bar.`,
+          ? `Pop ${withArticle(state.into)} onto the ${bar}. It turns you round, so you lock in riding the other way.`
+          : `Pop ${withArticle(state.into)} and catch it on the way onto the ${bar}.`,
       }
-      : { label: state.stance === 'nollie' ? 'Nollie on' : 'Ollie on', detail: 'Pop up and lock onto the bar.' },
-    { label: `${state.side} ${state.grind}`, detail: grindDescription(state.grind) },
+      : {
+        label: state.stance === 'nollie' ? 'Nollie on' : 'Ollie on',
+        detail: rail ? 'Pop as the rail starts beside you. Your speed carries you on while it drops away under the board, so lock on a few stairs down.' : 'Pop up and lock onto the bar.',
+      },
+    { label: `${state.side} ${state.grind}`, detail: `${grindDescription(state.grind)}${rail ? ' Stay over it as it picks up speed down the rail.' : ''}` },
     state.out
       ? {
         label: outName(state.out),
-        detail: `Pop ${withArticle(`${state.out.end === 'nose' ? 'nollie ' : ''}${state.out.base}`)} off the ${state.out.end} as you leave the bar.`,
+        detail: `Pop ${withArticle(`${state.out.end === 'nose' ? 'nollie ' : ''}${state.out.base}`)} off the ${state.out.end} as you leave the ${bar}.`,
       }
-      : { label: 'Pop off', detail: 'Pop off the end of the bar and ride away.' },
+      : { label: 'Pop off', detail: rail ? 'Pop off the bottom of the rail and ride away from the landing.' : 'Pop off the end of the bar and ride away.' },
   ];
   return steps;
 }
@@ -332,7 +344,7 @@ export function timelineFor(state: ExplorerState, style: SkateStyle | undefined)
       ],
     };
   }
-  const grind = grindTimelineFor(stageTrick(state), state.rider, style, true, 'slam');
+  const grind = grindTimelineFor(stageTrick(state), state.rider, style, true, 'slam', stageRail(state.set));
   if (!grind) return { phases: [{ label: 'Set up', time: 0 }], duration: ROLL_IN + FLIP_T + LAND_T };
   return {
     duration: grind.end,
@@ -363,44 +375,77 @@ export interface CameraPreset {
   /** What this angle shows best. */
   hint: string;
   camera: SceneCamera;
+  /** Optional framing magnification when choosing this composition. */
+  zoom?: number;
   /**
    * Framed against the direction of travel (in front of or behind the
-   * rider), so a fakie trick, rolling the other way, swings it round too.
+   * rider). Flatground fakie reverses travel; on El Toro the travel and
+   * camera stay fixed while the rider faces backwards down the stairs.
    */
   followsTravel: boolean;
+  /** Spot-specific choices are shown there, or while they remain selected. */
+  set?: StageSet;
+  /**
+   * A filmer standing still in the spot, panning with the rider, instead of
+   * the crane flying alongside; `camera` is then only roughly where they
+   * stand, for the dial and as where dragging takes over from.
+   */
+  tripod?: TripodId;
 }
 
 export const CAMERA_PRESETS: readonly CameraPreset[] = [
   { id: 'classic', label: 'Classic', hint: 'The game view', camera: { ...DEFAULT_SCENE_CAMERA }, followsTravel: false },
+  { id: 'bottom-center', label: 'Bottom center', hint: 'Straight up the center rail from the landing', camera: { yaw: -90, pitch: 6, lens: 1, targetZ: -6 * FOOT }, zoom: 0.6, followsTravel: false, set: 'el-toro' },
+  { id: 'bottom-right', label: 'Bottom right', hint: 'Up the stairs from the planted bank side', camera: { yaw: -125, pitch: 9, lens: 1 }, followsTravel: false, set: 'el-toro' },
+  { id: 'tripod-bottom', label: 'Bottom tripod', hint: 'Standing at the bottom, panning as it comes down at you', camera: { yaw: -100, pitch: 2, lens: 1.4 }, tripod: 'bottom', followsTravel: false, set: 'el-toro' },
+  { id: 'tripod-side', label: 'Side tripod', hint: 'Up the bank beside the stairs, panning across', camera: { yaw: 0, pitch: 6, lens: 1.4 }, tripod: 'side', followsTravel: false, set: 'el-toro' },
+  { id: 'tripod-top', label: 'Top tripod', hint: 'At the top, watching it drop away', camera: { yaw: 70, pitch: 14, lens: 1 }, tripod: 'top', followsTravel: false, set: 'el-toro' },
   { id: 'side', label: 'Side on', hint: 'Pop height and flip axis', camera: { yaw: 0, pitch: 3, lens: 1.25 }, followsTravel: false },
   { id: 'head-on', label: 'Head on', hint: 'Which way the board flicks', camera: { yaw: -70, pitch: 7, lens: 1 }, followsTravel: true },
   { id: 'follow', label: 'Follow cam', hint: 'Chasing from behind', camera: { yaw: 58, pitch: 14, lens: 0.85 }, followsTravel: true },
   { id: 'overhead', label: 'Overhead', hint: 'How the board spins', camera: { yaw: -18, pitch: 58, lens: 1.15 }, followsTravel: false },
-  { id: 'fisheye', label: 'Fisheye', hint: 'Up close, skate-video style', camera: { yaw: -38, pitch: 4, lens: SCENE_CAMERA_BOUNDS.lens.min }, followsTravel: true },
-  { id: 'long-lens', label: 'Long lens', hint: 'Flat and steady', camera: { yaw: -16, pitch: 5, lens: SCENE_CAMERA_BOUNDS.lens.max }, followsTravel: true },
+  { id: 'fisheye', label: 'Fisheye', hint: 'Up close, skate-video style', camera: { yaw: -38, pitch: 4, lens: SCENE_ORBIT_BOUNDS.lens.min }, followsTravel: true },
+  { id: 'long-lens', label: 'Long lens', hint: 'Flat and steady', camera: { yaw: -16, pitch: 5, lens: SCENE_ORBIT_BOUNDS.lens.max }, followsTravel: true },
 ];
+
+/** Keep a chosen spot angle available when moving to another spot. */
+export const cameraPresetsFor = (state: Pick<ExplorerState, 'set' | 'camera'>): readonly CameraPreset[] =>
+  CAMERA_PRESETS.filter((preset) => !preset.set || preset.set === state.set || preset.id === state.camera);
 
 const PRESET_BY_ID = new Map(CAMERA_PRESETS.map((p) => [p.id, p]));
 
 export const cameraPreset = (id: CameraPresetId): CameraPreset => PRESET_BY_ID.get(id) ?? CAMERA_PRESETS[0];
 
-/** Which way the rider rolls along the street: fakie rolls backwards. */
+const defaultZoomForCamera = (camera: ExplorerState['camera']) => typeof camera === 'string' ? cameraPreset(camera).zoom ?? 1 : 1;
+
+/** World-space travel: El Toro is fixed downhill (its tricks and its rail), while fakie elsewhere reverses. */
 function travelDir(state: ExplorerState): 1 | -1 {
+  if (state.set === STAIR_SET) return 1;
   const trick = stageTrick(state);
   return (grindSpecFor(trick) ?? specFor(trick)).dir;
 }
 
-/** The camera TrickScene films from. */
+/** The camera the 3D explorer films from. */
 export function sceneCamera(state: ExplorerState): SceneCamera {
-  if (typeof state.camera !== 'string') return clampSceneCamera(state.camera);
+  if (typeof state.camera !== 'string') return clampOrbitCamera(state.camera);
   const preset = cameraPreset(state.camera);
+  // El Toro's angles aim across at the center rail from the stair line; a grind is already on it.
+  if (state.set === STAIR_SET && state.mode === 'grinds' && preset.camera.targetZ) {
+    return { yaw: preset.camera.yaw, pitch: preset.camera.pitch, lens: preset.camera.lens };
+  }
   if (!preset.followsTravel || travelDir(state) === 1) return preset.camera;
   return { ...preset.camera, yaw: -preset.camera.yaw };
 }
 
-/** The camera swung round the rider (yaw) and up over them (pitch) by some degrees, kept in bounds. */
+/** The tripod the 3D explorer films from, where the spot has the chosen one; null for the crane. */
+export function sceneTripod(state: Pick<ExplorerState, 'set' | 'camera'>): TripodId | null {
+  if (typeof state.camera !== 'string' || state.set !== STAIR_SET) return null;
+  return cameraPreset(state.camera).tripod ?? null;
+}
+
+/** Swing freely around the rider, wrapping yaw while keeping pitch in bounds. */
 export function turnCamera(camera: SceneCamera, yaw: number, pitch: number): SceneCamera {
-  return clampSceneCamera({ ...camera, yaw: camera.yaw + yaw, pitch: camera.pitch + pitch });
+  return clampOrbitCamera({ ...camera, yaw: camera.yaw + yaw, pitch: camera.pitch + pitch });
 }
 
 /** How much a key press, button, or notch of scrolling zooms by. */
@@ -451,13 +496,14 @@ const fromSlug = (choices: readonly string[], value: string | null) =>
 
 const isStance = (value: string | null): value is Stance => STANCES.includes(value as Stance);
 
-/** A preset id, or a custom angle as `yaw_pitch_lens` ("-30_12_1"): underscores stay readable in a link. */
+/** A preset id, or `yaw_pitch_lens` with an optional fourth lateral-target field. */
 function parseCamera(value: string | null): ExplorerState['camera'] {
   if (!value) return DEFAULT_STATE.camera;
   if (PRESET_BY_ID.has(value as CameraPresetId)) return value as CameraPresetId;
-  const [yaw, pitch, lens] = value.split('_').map(Number);
-  if ([yaw, pitch, lens].some((n) => !Number.isFinite(n))) return DEFAULT_STATE.camera;
-  return clampSceneCamera({ yaw, pitch, lens });
+  const fields = value.split('_').map(Number);
+  if ((fields.length !== 3 && fields.length !== 4) || fields.some((n) => !Number.isFinite(n))) return DEFAULT_STATE.camera;
+  const [yaw, pitch, lens, targetZ] = fields;
+  return clampOrbitCamera({ yaw, pitch, lens, targetZ });
 }
 
 /** A zoom from a link, kept in range; anything that isn't a number is the stock framing. */
@@ -473,21 +519,22 @@ const round = (n: number, places: number) => Number(n.toFixed(places));
 export function stateFromSearch(search: string): ExplorerState {
   const params = new URLSearchParams(search);
   const stanceParam = params.get('stance');
+  const camera = parseCamera(params.get('cam'));
   const base: ExplorerState = {
     ...DEFAULT_STATE,
     stance: isStance(stanceParam) ? stanceParam : DEFAULT_STATE.stance,
     rider: params.get('rider') === 'goofy' ? 'goofy' : 'regular',
-    camera: parseCamera(params.get('cam')),
-    zoom: parseZoom(params.get('zoom')),
+    camera,
+    zoom: params.has('zoom') ? parseZoom(params.get('zoom')) : defaultZoomForCamera(camera),
     set: STAGE_SETS.find((option) => option.id === params.get('set'))?.id ?? DEFAULT_STATE.set,
     skater: SKATERS.find((option) => option.id === params.get('skater'))?.id ?? DEFAULT_STATE.skater,
   };
   const grind = fromSlug(GRIND_CHOICES, params.get('grind'));
   if (!grind) {
     // Flatground is asked for by naming its trick; a link naming nothing the
-    // stage knows opens on the default grind (or, at El Toro, the default trick).
+    // stage knows opens on the default grind (at El Toro, down its rail).
     const trick = fromSlug(FLATGROUND_BASES, params.get('trick'));
-    return trick ? { ...base, mode: 'flatground', trick } : withSet(base, base.set);
+    return trick ? { ...base, mode: 'flatground', trick } : base;
   }
   const outParam = params.get('out') ?? '';
   const nose = outParam.startsWith('nollie-');
@@ -520,11 +567,16 @@ export function searchFromState(state: ExplorerState): string {
   if (state.stance !== 'regular') params.set('stance', state.stance);
   if (state.rider !== 'regular') params.set('rider', state.rider);
   if (state.camera !== DEFAULT_STATE.camera) {
-    params.set('cam', typeof state.camera === 'string'
-      ? state.camera
-      : [round(state.camera.yaw, 1), round(state.camera.pitch, 1), round(state.camera.lens, 2)].join('_'));
+    if (typeof state.camera === 'string') params.set('cam', state.camera);
+    else {
+      const camera = clampOrbitCamera(state.camera);
+      const fields = [wrapOrbitYaw(round(camera.yaw, 1)), round(camera.pitch, 1), round(camera.lens, 2)];
+      const targetZ = round(camera.targetZ ?? 0, 1);
+      if (targetZ !== 0) fields.push(targetZ);
+      params.set('cam', fields.join('_'));
+    }
   }
-  if (state.zoom !== 1) params.set('zoom', String(round(state.zoom, 2)));
+  if (state.zoom !== defaultZoomForCamera(state.camera)) params.set('zoom', String(round(state.zoom, 2)));
   if (state.set !== DEFAULT_STATE.set) params.set('set', state.set);
   if (state.skater !== DEFAULT_STATE.skater) params.set('skater', state.skater);
   return `?${params.toString()}`;

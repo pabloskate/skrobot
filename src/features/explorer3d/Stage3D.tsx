@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
 import { TbPlayerPauseFilled, TbPlayerPlayFilled, TbRefresh, TbRepeat, TbRepeatOff, TbZoomReset } from 'react-icons/tb';
-import { TrickScene, sceneSetFor, type RiderStance, type Robot, type SceneCamera, type Skater, type StageSet, type Trick } from '@skrobot/animations';
+import { TrickScene, clampSceneCamera, sceneSetFor, type RiderStance, type Robot, type SceneCamera, type Skater, type StageSet, type Trick, type TripodId } from '@skrobot/animations';
 import { TrickScene3D } from '@skrobot/animations/three';
 import { CameraDial, ZOOM_STEP, phaseAt, turnCamera, usePlayhead, zoomBy, type Timeline } from '@/features/explorer';
 
@@ -35,6 +35,8 @@ interface Props {
   rider: RiderStance;
   timeline: Timeline;
   camera: SceneCamera;
+  /** Film the 3D pane from this tripod instead of the crane (El Toro's). */
+  tripod: TripodId | null;
   zoom: number;
   set: StageSet;
   /** Who rides on the 3D stage; the SVG comparison only has the robot. */
@@ -60,11 +62,11 @@ const useInBrowser = () => useSyncExternalStore(noSubscription, () => true, () =
  * The 3D explorer's stage: the trick on the explorer's own clock, drawn by
  * TrickScene3D, with the same drag-to-orbit, pinch-to-zoom, keyboard, and
  * transport as the Trick Explorer's stage. In compare mode the SVG scene
- * plays beside it from the same camera at the same moment. Key it by trick
- * so a new trick starts from the top.
+ * plays beside it at the same moment, within the SVG renderer's supported
+ * camera range. Key it by trick so a new trick starts from the top.
  */
 export default function Stage3D({
-  robot, trick, rider, timeline, camera, zoom, set, skater, view, cameraLabel, customCamera, rate, loop,
+  robot, trick, rider, timeline, camera, tripod, zoom, set, skater, view, cameraLabel, customCamera, rate, loop,
   onCamera, onResetCamera, onZoom, onRate, onLoop,
 }: Props) {
   const { duration, phases } = timeline;
@@ -173,6 +175,9 @@ export default function Stage3D({
   const speedIndex = SPEEDS.findIndex((s) => s.rate === rate);
   const nextSpeed = SPEEDS[(speedIndex + 1) % SPEEDS.length];
   const progress = duration > 0 ? playhead.time / duration : 0;
+  const svgCamera = clampSceneCamera(camera);
+  const svgAngleLimited = svgCamera.yaw !== camera.yaw || svgCamera.pitch !== camera.pitch || (camera.targetZ ?? 0) !== 0;
+  const svgLabel = ['SVG', skater !== 'robot' ? 'Robot reference' : null, svgAngleLimited ? 'Limited angle' : null].filter(Boolean).join(' · ');
   const sceneProps = {
     robot,
     trick,
@@ -226,12 +231,12 @@ export default function Stage3D({
             <>
               {view === 'compare' && (
                 <figure className="explorer3d-pane">
-                  <TrickScene {...sceneProps} set={sceneSetFor(set)} showSpeedToggle={false} />
-                  <figcaption>SVG</figcaption>
+                  <TrickScene {...sceneProps} camera={svgCamera} set={sceneSetFor(set)} showSpeedToggle={false} />
+                  <figcaption>{svgLabel}</figcaption>
                 </figure>
               )}
               <figure className="explorer3d-pane">
-                <TrickScene3D {...sceneProps} set={set} skater={skater} />
+                <TrickScene3D {...sceneProps} tripod={tripod} set={set} skater={skater} />
                 {view === 'compare' && <figcaption>3D</figcaption>}
               </figure>
             </>
@@ -239,7 +244,7 @@ export default function Stage3D({
             <div className="explorer-scene-placeholder" />
           )}
         </div>
-        {!orbited && <span className="explorer-orbit-hint" aria-hidden>Drag to look around · pinch to zoom</span>}
+        {!orbited && <span className="explorer-orbit-hint" aria-hidden>Drag to look around 360° · pinch to zoom</span>}
       </div>
 
       <div className="explorer-transport">

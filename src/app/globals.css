@@ -6047,6 +6047,19 @@ main:has(.rps-arena) > .screen {
   gap: 12px;
 }
 
+.explorer-skater-field {
+  flex-wrap: wrap;
+}
+
+.explorer-skater-field .explorer-segmented {
+  max-width: 100%;
+}
+
+.explorer-skater-field .explorer-segmented button {
+  flex: 1 1 auto;
+  padding-inline: 12px;
+}
+
 .explorer-field-label {
   color: var(--ink);
   font-size: 13px;

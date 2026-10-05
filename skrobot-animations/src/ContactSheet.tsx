@@ -5,6 +5,7 @@ import {
   FLIP_T,
   LAND_T,
   ROLL_IN,
+  SKATERS,
   TrickAnimation,
   TrickAnimation3D,
   TrickScene,
@@ -13,6 +14,7 @@ import {
   type GrindTimeline,
   type RiderStance,
   type Robot,
+  type Skater,
   type Stance,
   type Trick,
 } from '@skrobot/animations';
@@ -99,6 +101,7 @@ const noop = () => {};
 interface CellProps {
   view: View;
   robot: Robot;
+  skater: Skater;
   trick: Trick;
   landed: boolean;
   fallVariant: FallVariant;
@@ -120,7 +123,7 @@ interface CaptureProps {
  * drawing buffer is cleared once the browser presents that frame.
  */
 const FrozenWebGLCell = memo(function FrozenWebGLCell({
-  robot, trick, landed, fallVariant, riderStance, fixedTime,
+  robot, skater, trick, landed, fallVariant, riderStance, fixedTime,
   captureActive, captureBatch, captureIndex, onCaptured,
 }: CellProps & CaptureProps) {
   const host = useRef<HTMLDivElement>(null);
@@ -132,35 +135,45 @@ const FrozenWebGLCell = memo(function FrozenWebGLCell({
     const canvas = host.current?.querySelector('canvas');
     const unavailable = host.current?.querySelector('p:not([hidden])');
     const context = canvas?.getContext('webgl2');
-    if (!canvas || !context || unavailable) {
-      setFailed(true);
-    } else {
+    let captured: string | null = null;
+    if (canvas && context && !unavailable) {
       try {
-        setPicture(canvas.toDataURL('image/png'));
+        captured = canvas.toDataURL('image/png');
       } catch {
-        setFailed(true);
+        // A blocked canvas read leaves this cell marked unavailable.
       }
     }
-    // Advance after React has replaced this canvas with the captured image.
-    // Yielding also keeps a long contact-sheet capture responsive to controls.
+    // Publish the image outside the passive-effect flush, then let React commit
+    // its replacement before mounting another canvas. Long sheets otherwise
+    // chain renderer resize effects and hit the nested-update warning at fifty
+    // frames. Use timers so background-tab capture also continues without rAF.
+    let advance = 0;
     const next = window.setTimeout(() => {
-      context?.getExtension('WEBGL_lose_context')?.loseContext();
-      onCaptured(captureBatch, captureIndex);
+      setPicture(captured);
+      setFailed(captured === null);
+      advance = window.setTimeout(() => {
+        context?.getExtension('WEBGL_lose_context')?.loseContext();
+        onCaptured(captureBatch, captureIndex);
+      }, 40);
     }, 0);
-    return () => window.clearTimeout(next);
+    return () => {
+      window.clearTimeout(next);
+      window.clearTimeout(advance);
+    };
   }, [captureActive, captureBatch, captureIndex, onCaptured]);
 
   return (
     <div
       ref={host}
       data-renderer="three"
+      data-skater={skater}
       data-time={fixedTime.toFixed(3)}
       style={{ width: '100%', aspectRatio: '500 / 404' }}
     >
       {picture ? (
         <img
           src={picture}
-          alt={`${trick.name}, ${riderStance} rider, at ${fixedTime.toFixed(2)} seconds`}
+          alt={`${trick.name}, ${skater} with ${riderStance} stance, at ${fixedTime.toFixed(2)} seconds`}
           style={{ display: 'block', width: '100%', height: '100%' }}
         />
       ) : failed ? (
@@ -168,6 +181,7 @@ const FrozenWebGLCell = memo(function FrozenWebGLCell({
       ) : captureActive ? (
         <TrickScene3D
           robot={robot}
+          skater={skater}
           trick={trick}
           landed={landed}
           fallVariant={fallVariant}
@@ -190,6 +204,7 @@ const Cell = memo(function Cell(props: CellProps & CaptureProps) {
     <div
       className={styles.cell}
       data-view={view}
+      data-skater={view === 'webgl' ? props.skater : 'robot'}
       data-rider-stance={riderStance}
       data-trick={trick.id}
       style={view === 'webgl' && props.captureActive ? { contentVisibility: 'visible' } : undefined}
@@ -215,6 +230,7 @@ export default function ContactSheet() {
   const [viewMode, setViewMode] = useState<ViewMode>('3d');
   const [outcome, setOutcome] = useState<Outcome>('landed');
   const [robotId, setRobotId] = useState(ROBOTS[0].id);
+  const [skater, setSkater] = useState<Skater>('robot');
   const [filter, setFilter] = useState('');
   const [entry, setEntry] = useState('');
   const [exit, setExit] = useState('');
@@ -249,7 +265,7 @@ export default function ContactSheet() {
   // Both scene renderers include the bar; the earlier SVG views do not.
   const views: View[] = activeViewMode === 'compare' ? ['webgl', 'scene']
     : activeViewMode === 'both' ? ['3d', 'side'] : [activeViewMode];
-  const captureBatch = JSON.stringify([robotId, discipline, stance, riderMode, viewMode, outcome, entry, exit, filter]);
+  const captureBatch = JSON.stringify([robotId, skater, discipline, stance, riderMode, viewMode, outcome, entry, exit, filter]);
   const captureIndex = captureProgress.batch === captureBatch ? captureProgress.index : 0;
   const captureCount = views.includes('webgl') ? tricks.length * riders.length * phases.length : 0;
   if (captureProgress.batch !== captureBatch) {
@@ -386,7 +402,26 @@ export default function ContactSheet() {
           </div>
 
           <div className={styles.controlGroup}>
-            <span className={styles.controlLabel}>Robot</span>
+            <span className={styles.controlLabel}>Skater</span>
+            <div className={playgroundStyles.stanceRow}>
+              {SKATERS.map((option) => (
+                <button
+                  key={option.id}
+                  className={`${playgroundStyles.stanceBtn} ${skater === option.id ? playgroundStyles.stanceBtnActive : ''}`}
+                  onClick={() => {
+                    setSkater(option.id);
+                    if (option.id !== 'robot' && !views.includes('webgl')) setViewMode('webgl');
+                  }}
+                  aria-pressed={skater === option.id}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className={styles.controlGroup}>
+            <span className={styles.controlLabel}>Robot reference</span>
             <select
               className={playgroundStyles.trickSelect}
               value={robotId}
@@ -413,6 +448,7 @@ export default function ContactSheet() {
           {tricks.length} tricks × {rowsPerTrick} row{rowsPerTrick > 1 ? 's' : ''} × {phases.length} frames
           = {tricks.length * rowsPerTrick * phases.length} cells
           {captureCount > 0 && ` · WebGL frames: ${Math.min(captureIndex, captureCount)}/${captureCount}`}
+          {skater !== 'robot' && views.some((view) => view !== 'webgl') && ' · SVG views retain the robot reference'}
         </p>
       </section>
 
@@ -447,6 +483,7 @@ export default function ContactSheet() {
                         key={`${trick.id}:${rider}:${view}:${phase.label}`}
                         view={view}
                         robot={robot}
+                        skater={skater}
                         trick={trick}
                         landed={landed}
                         fallVariant={fallVariant}

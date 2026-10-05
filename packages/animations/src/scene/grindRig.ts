@@ -1,6 +1,6 @@
 import type { SkateStyle } from '../types';
 import type { RiderMechanics } from '../stanceMechanics';
-import { FLIP_T, ROLL_IN, X0, computeFrame, specFor } from '../TrickAnimation';
+import { FLIP_T, GROUND, ROLL_IN, X0, computeFrame, specFor } from '../TrickAnimation';
 import { deckTopY } from './board';
 import {
   FALL_CLEAR,
@@ -10,6 +10,10 @@ import {
   grindFrame,
   grindStreetDist,
   poseDir,
+  railSink,
+  railTrack,
+  restFall,
+  restY,
   slipBoard,
   slipSide,
   sprawlsAway,
@@ -113,6 +117,8 @@ const FLICK_AIM_TOE = 14;
 const FLICK_KNEE_LIFT = 0.7;
 /** Longest hip-to-ankle reach the hips may ask of a leg (just short of straight). */
 const REACH = THIGH + SHIN - 1.5;
+/** Degrees the head looks further down a handrail, per degree it falls. */
+const RAIL_LOOK = 0.5;
 
 /**
  * The board at a pose, with its deck optionally turned about its own axes
@@ -192,6 +198,8 @@ function bodyOn(g: GrindFrame, plan: GrindPlan, mechanics: RiderMechanics): Rig 
   // ----- Hips: between the feet, sliding back over the heels as they sink -----
   const squat = clamp01((RIDE_HEIGHT - g.overDeck) / (RIDE_HEIGHT - SQUAT_FLOOR));
   const shift = heading({ x: (HIP_CENTER * (g.noseFoot + g.tailFoot)) / 2, y: 0, z: -toeDir * HIP_BACK * squat });
+  // Leaning down a handrail carries the hips ahead of the board, square to what the rider feels.
+  if (g.lean) shift.x += Math.sin(rad(g.lean)) * g.overDeck;
   // The hips ride the un-snapped board, so a pop's snap is taken by the legs,
   // but never higher than both legs can still reach their feet from.
   let hipY = g.ref.y - g.overDeck;
@@ -209,7 +217,9 @@ function bodyOn(g: GrindFrame, plan: GrindPlan, mechanics: RiderMechanics): Rig 
   const spinWay = Math.sign(plan.lock.yaw - plan.heading);
   const windUp = plan.spec.slide ? (g.t < plan.lockAt ? -spinWay : spinWay) * PRE_WIND * g.load : 0;
   const torsoRelYaw = -turn * TWIST_HOLD + windUp;
-  const upperDir = (d: V3, relYaw: number) => rotY(rotX(rotY(d, restingBodyYaw + relYaw), leanX), g.pose.yaw);
+  // Down a handrail, the whole upper body leans with the hips.
+  const tip = (d: V3) => (g.lean ? rotZ(d, g.lean) : d);
+  const upperDir = (d: V3, relYaw: number) => tip(rotY(rotX(rotY(d, restingBodyYaw + relYaw), leanX), g.pose.yaw));
   const torsoPoint = (p: V3) => add3(anchor, upperDir(p, torsoRelYaw));
   const bodyPoint = (p: V3) => add3(anchor, rotY(p, bodyYawDeg));
 
@@ -223,7 +233,10 @@ function bodyOn(g: GrindFrame, plan: GrindPlan, mechanics: RiderMechanics): Rig 
     const rest = plan.isNose ? KNEE_AIM_FRONT : KNEE_AIM_BACK;
     const aim = rad(rest + (flickDir * toeDir > 0 ? (FLICK_AIM_TOE - rest) * flick : 0));
     const pole = heading({ x: Math.cos(aim), y: -0.12 - FLICK_KNEE_LIFT * flick, z: toeDir * Math.sin(aim) });
-    const solved = solveLeg(hip, plan.ankle, pole, plan.shoe.up, true);
+    // The shin keeps above the shoe as it would on a level bar: down a handrail the
+    // slope tips every foot alike, and leaning the knees round it whips them across.
+    const shinUp = g.pose.fall ? rotZ(plan.shoe.up, -g.pose.fall) : plan.shoe.up;
+    const solved = solveLeg(hip, plan.ankle, pole, shinUp, true);
     return {
       side: plan.side,
       hip,
@@ -261,9 +274,11 @@ function bodyOn(g: GrindFrame, plan: GrindPlan, mechanics: RiderMechanics): Rig 
   const restingHeadYaw = -(STANCE_BODY_YAW - HEAD_LOOK_FORWARD) * toeDir;
   const headYawDeg = g.heading + turn * (1 - HEAD_HOLD) + restingHeadYaw;
   const headRelYaw = headYawDeg - g.pose.yaw - restingBodyYaw;
-  const lookDown = LOOK_DOWN_OLLIE * g.air + LOOK_DOWN_GRIND * g.grind;
+  // Down a handrail the eyes go further down it, to the landing.
+  const railLook = plan.handrail ? RAIL_LOOK * Math.abs(plan.handrail.tilt) : 0;
+  const lookDown = LOOK_DOWN_OLLIE * g.air + (LOOK_DOWN_GRIND + railLook) * g.grind;
   const headDir = (d: V3) =>
-    rotY(rotX(rotY(rotZ(d, lookDown), restingBodyYaw + headRelYaw), leanX * (1 - HEAD_STEADY)), g.pose.yaw);
+    tip(rotY(rotX(rotY(rotZ(d, lookDown), restingBodyYaw + headRelYaw), leanX * (1 - HEAD_STEADY)), g.pose.yaw));
   const neckTop = torsoPoint({ x: 0, y: -60, z: 0 });
 
   return {
@@ -399,6 +414,32 @@ function turnRig(rig: Rig, deg: number, at: V3): Rig {
   };
 }
 
+/** A rig tipped `deg` about the world's z through `at` (nose down for positive, as rotZ). The board is left to the caller. */
+function tipRig(rig: Rig, deg: number, at: V3): Rig {
+  if (!deg) return rig;
+  const pt = (p: V3) => add3(at, rotZ(sub3(p, at), deg));
+  const fr = (f: Frame3) => frameOf(pt(f.origin), (d) => rotZ(add3(add3(scale3(f.fwd, d.x), scale3(f.up, -d.y)), scale3(f.side, d.z)), deg));
+  return {
+    ...rig,
+    legs: rig.legs.map((l) => ({ ...l, hip: pt(l.hip), knee: pt(l.knee), ankle: pt(l.ankle), shoe: fr(l.shoe) })) as [LegRig, LegRig],
+    arms: rig.arms.map((a) => ({ ...a, shoulder: pt(a.shoulder), elbow: pt(a.elbow), hand: pt(a.hand) })) as [ArmRig, ArmRig],
+    torso: fr(rig.torso),
+    head: fr(rig.head),
+  };
+}
+
+/**
+ * A rider fallen off a handrail, lying on the steps below it: the flatground
+ * fall (laid out on level ground) tipped along the steps' edges about the
+ * hips and set down on them, wherever the slide has carried it to.
+ */
+function onSteps(rig: Rig, plan: GrindPlan, time: number): Rig {
+  const hips = lerp3(rig.legs[0].hip, rig.legs[1].hip, 0.5);
+  const s = railTrack(plan, time) + plan.spec.dir * (hips.x - X0);
+  const tipped = tipRig(rig, restFall(plan, s, 40), { x: hips.x, y: GROUND, z: hips.z });
+  return moveRig(tipped, { x: 0, y: restY(plan, s) - GROUND, z: 0 });
+}
+
 /**
  * The shared flatground fall, `u` seconds after its touchdown. A rider spun
  * round by the entry trick falls as a fakie rider does, turned with them.
@@ -500,15 +541,18 @@ export function solveGrindRig(time: number, plan: GrindPlan, mechanics: RiderMec
   const clear = Math.max(FALL_CLEAR, Math.abs(hipZ - BAR_Z));
   const laneZ = BAR_Z + side * clear;
   const settle = sprawlsAway(plan) ? clear - FALL_SETTLE_CLEAR : 0;
-  const fallen = (v: number) =>
-    moveRig(flatFall(v, plan, mechanics, style), { x: 0, y: 0, z: laneZ - side * settle * smoothstep(v / FALL_SETTLE) });
+  const fallen = (v: number) => {
+    const rig = moveRig(flatFall(v, plan, mechanics, style), { x: 0, y: 0, z: laneZ - side * settle * smoothstep(v / FALL_SETTLE) });
+    return plan.handrail ? onSteps(rig, plan, time) : rig;
+  };
   let body: Rig;
   if (u < plan.drop) {
     // Falling off the bar: the pose at the slip drops and drifts toward the
     // landing spot while it blends into the fall's first frame, and the feet
     // come off the grip.
     const w = smoothstep(u / plan.drop);
-    const dropping = moveRig(onBar, { x: 0, y: 0.5 * GRAVITY * u * u, z: (laneZ - hipZ) * w });
+    // Off a handrail it was already sinking with the rail as it slipped.
+    const dropping = moveRig(onBar, { x: 0, y: 0.5 * GRAVITY * u * u + railSink(plan, plan.fail) * u, z: (laneZ - hipZ) * w });
     body = { ...blendRig(dropping, fallen(0), w), onGrip: 1 - w };
   } else {
     body = fallen(u - plan.drop);

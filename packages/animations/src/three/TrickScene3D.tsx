@@ -5,7 +5,7 @@ import type { RiderStance, Robot, Trick } from '../types';
 import { resolveSkateStyle } from '../skateStyle';
 import { useTrickPlayback } from '../useTrickPlayback';
 import { randomFallVariant, randomShankProgress, type FallVariant } from '../TrickAnimation';
-import { DEFAULT_SCENE_CAMERA, type SceneCamera } from '../scene/camera';
+import { DEFAULT_SCENE_CAMERA, type SceneCamera, type TripodId } from '../scene/camera';
 import type { StageSet } from '../scene/setKit';
 import type { LeadIn } from '../scene/TrickScene';
 import type { Skater } from '../skaters';
@@ -47,11 +47,13 @@ interface Props {
   leadIn?: LeadIn;
   /** Where the crane films from; the stock 3/4 view when omitted. */
   camera?: SceneCamera;
+  /** Film from a filmer standing still in the spot instead, where the set has that tripod (El Toro); else `camera`. */
+  tripod?: TripodId | null;
   /** Magnify the picture about the rider, 1 stock. */
   zoom?: number;
-  /** The backdrop: the stock plaza, the bayside waterfront, or El Toro's 20 stair (flatground tricks go down it). */
+  /** The backdrop: the stock plaza, the bayside waterfront, or El Toro's 20 stair (flatground tricks go down it, grinds down its center rail). */
   set?: StageSet;
-  /** Who rides: the robot (its look from `robot`), or a human skater in its place. */
+  /** Who rides: the robot (its look from `robot`), illustrated human, or detailed humanoid. */
   skater?: Skater;
 }
 
@@ -72,6 +74,7 @@ export default function TrickScene3D({
   fixedTime,
   leadIn,
   camera = DEFAULT_SCENE_CAMERA,
+  tripod = null,
   zoom = 1,
   set = 'plaza',
   skater = 'robot',
@@ -152,7 +155,7 @@ export default function TrickScene3D({
   }, [look, board, set, skater]);
 
   useLayoutEffect(() => {
-    draw.current = () => renderer.current?.render(frame, camera, zoom);
+    draw.current = () => renderer.current?.render(frame, camera, zoom, tripod);
     draw.current();
   });
 

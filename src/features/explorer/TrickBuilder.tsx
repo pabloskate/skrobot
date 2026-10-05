@@ -105,7 +105,7 @@ function SearchField({ value, onChange, placeholder, label }: SearchProps) {
   );
 }
 
-/** Pick what the robot skates: a flatground trick, or a grind combo built from three slots. */
+/** Pick the skater and a flatground trick, or a grind combo built from three slots. */
 export default function TrickBuilder({ state, onChange }: Props) {
   const [query, setQuery] = useState('');
   const [slot, setSlot] = useState<Slot>('grind');
@@ -158,7 +158,7 @@ export default function TrickBuilder({ state, onChange }: Props) {
 
       {state.mode === 'flatground' && <StanceField state={state} set={set} />}
 
-      <div className="explorer-field explorer-field-inline">
+      <div className="explorer-field explorer-field-inline explorer-skater-field">
         <span className="explorer-field-label" id="explorer-skater-label">
           Skater <small>who rides</small>
         </span>

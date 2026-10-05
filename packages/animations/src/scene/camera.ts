@@ -1,5 +1,6 @@
 import { GROUND, JUMP, X0 } from '../TrickAnimation';
 import { clamp01, mixHex, norm3, rad, smoothstep, sub3, type P2, type V3 } from './math';
+import { FOOT } from './stairs';
 
 /**
  * Crane camera for TrickScene.
@@ -46,6 +47,36 @@ export interface SceneCamera {
    * rider size, stronger perspective); longer backs off on a telephoto.
    */
   lens: number;
+  /** Optional lateral framing in world units; 0 keeps the orbit on the rider. */
+  targetZ?: number;
+}
+
+/**
+ * Tripods stand still in the spot and pan to keep the rider in shot, rather
+ * than flying alongside them as the crane does: from the bottom of the set,
+ * off its side, and from the top. Where a spot has them (El Toro's 20 stair),
+ * TrickScene3D films from them; anywhere else it keeps to the crane.
+ */
+export type TripodId = 'bottom' | 'side' | 'top';
+export const TRIPODS: readonly TripodId[] = ['bottom', 'side', 'top'];
+
+/** The rider's scale in the crane's picture (viewBox units per world unit at its target), whatever the lens. */
+export const CRANE_SCALE = FOCAL / DISTANCE;
+
+/**
+ * The crane angle and lens that put its eye exactly at `eye` with the
+ * target raised by `lift`: a tripod at `eye` pointed at the rider. The lens
+ * is just the eye's distance; a tripod sets its own magnification.
+ */
+export function craneThrough(eye: V3, lift: number): SceneCamera {
+  const dx = eye.x - X0;
+  const up = GROUND - (TARGET_HEIGHT + lift) - eye.y;
+  const distance = Math.max(1e-6, Math.hypot(dx, up, eye.z));
+  return {
+    yaw: (Math.atan2(-dx, eye.z) * 180) / Math.PI,
+    pitch: (Math.asin(up / distance) * 180) / Math.PI,
+    lens: distance / DISTANCE,
+  };
 }
 
 /** The stock 3/4 view every TrickScene uses unless told otherwise. */
@@ -62,6 +93,14 @@ export const SCENE_CAMERA_BOUNDS = Object.freeze({
   yaw: Object.freeze({ min: -75, max: 75 }),
   pitch: Object.freeze({ min: 0, max: 60 }),
   lens: Object.freeze({ min: 0.65, max: 1.6 }),
+});
+
+/** Full-circle controls for the depth-tested 3D renderer. Yaw wraps at +180°. */
+export const SCENE_ORBIT_BOUNDS = Object.freeze({
+  yaw: Object.freeze({ min: -180, max: 180 }),
+  pitch: SCENE_CAMERA_BOUNDS.pitch,
+  lens: SCENE_CAMERA_BOUNDS.lens,
+  targetZ: Object.freeze({ min: -6 * FOOT, max: 6 * FOOT }),
 });
 
 /**
@@ -116,6 +155,25 @@ export function clampSceneCamera(camera: Partial<SceneCamera>): SceneCamera {
   };
 }
 
+/** The same orbit angle in [-180, 180), so repeated turns have stable URLs. */
+export function wrapOrbitYaw(yaw: number | undefined): number {
+  if (yaw === undefined || !Number.isFinite(yaw)) return DEFAULT_SCENE_CAMERA.yaw;
+  const wrapped = yaw % 360;
+  const result = wrapped >= 180 ? wrapped - 360 : wrapped < -180 ? wrapped + 360 : wrapped;
+  return result === 0 ? 0 : result;
+}
+
+/** A full-circle 3D camera; SVG scenes must continue using clampSceneCamera. */
+export function clampOrbitCamera(camera: Partial<SceneCamera>): SceneCamera {
+  const targetZ = within(camera.targetZ, 0, SCENE_ORBIT_BOUNDS.targetZ);
+  return {
+    yaw: wrapOrbitYaw(camera.yaw),
+    pitch: within(camera.pitch, DEFAULT_SCENE_CAMERA.pitch, SCENE_ORBIT_BOUNDS.pitch),
+    lens: within(camera.lens, DEFAULT_SCENE_CAMERA.lens, SCENE_ORBIT_BOUNDS.lens),
+    ...(targetZ === 0 ? {} : { targetZ }),
+  };
+}
+
 export interface Proj extends P2 {
   /** Perspective scale: viewBox units per world unit at this depth. */
   s: number;
@@ -164,17 +222,18 @@ export function makeCamera(lift: number, view: Readonly<SceneCamera> = DEFAULT_S
   const distance = DISTANCE * view.lens;
   const focal = FOCAL * view.lens;
   const targetHeight = TARGET_HEIGHT + lift;
+  const targetZ = view.targetZ ?? 0;
   const depthOf = (p: V3) => {
     const dx = p.x - X0;
     const wy = GROUND - p.y - targetHeight;
-    const z1 = -dx * sinA + p.z * cosA;
+    const z1 = -dx * sinA + (p.z - targetZ) * cosA;
     return wy * sinB + z1 * cosB;
   };
   const project = (p: V3): Proj => {
     const dx = p.x - X0;
     const wy = GROUND - p.y - targetHeight;
-    const x1 = dx * cosA + p.z * sinA;
-    const z1 = -dx * sinA + p.z * cosA;
+    const x1 = dx * cosA + (p.z - targetZ) * sinA;
+    const z1 = -dx * sinA + (p.z - targetZ) * cosA;
     const y2 = wy * cosB - z1 * sinB;
     const z2 = wy * sinB + z1 * cosB;
     const s = focal / Math.max(NEAR * 0.5, distance - z2);
@@ -183,7 +242,7 @@ export function makeCamera(lift: number, view: Readonly<SceneCamera> = DEFAULT_S
   const eye: V3 = {
     x: X0 - distance * cosB * sinA,
     y: GROUND - (targetHeight + distance * sinB),
-    z: distance * cosB * cosA,
+    z: targetZ + distance * cosB * cosA,
   };
   const limit = distance - NEAR;
   const clip = (a: V3, b: V3): [V3, V3] | null => {

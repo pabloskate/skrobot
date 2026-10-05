@@ -5,13 +5,14 @@ import { TbArrowLeft } from 'react-icons/tb';
 import { STAGE_SETS } from '@skrobot/animations';
 import { ROBOT_BY_ID, ROBOTS } from '@/features/robots';
 import {
-  CAMERA_PRESETS,
   CameraDial,
   TrickBuilder,
   ZOOM_RANGE,
   cameraLabel,
   cameraPreset,
+  cameraPresetsFor,
   sceneCamera,
+  sceneTripod,
   searchFromState,
   stageTrick,
   stateFromSearch,
@@ -47,6 +48,7 @@ export default function TrickExplorer3D({ initialSearch = '' }: { initialSearch?
 
   const trick = stageTrick(state);
   const camera = sceneCamera(state);
+  const tripod = sceneTripod(state);
   const timeline = timelineFor(state, RIDER.skateStyle);
   const preset = typeof state.camera === 'string' ? cameraPreset(state.camera) : null;
   const search = `${searchFromState(state)}${view === 'compare' ? '&view=compare' : ''}`;
@@ -79,6 +81,7 @@ export default function TrickExplorer3D({ initialSearch = '' }: { initialSearch?
             rider={state.rider}
             timeline={timeline}
             camera={camera}
+            tripod={tripod}
             zoom={state.zoom}
             set={state.set}
             skater={state.skater}
@@ -125,7 +128,7 @@ export default function TrickExplorer3D({ initialSearch = '' }: { initialSearch?
               <span className="explorer-card-hint">{preset ? preset.hint : 'Drag the stage to fine-tune'}</span>
             </div>
             <div className="explorer-cams" role="radiogroup" aria-label="Camera angle">
-              {CAMERA_PRESETS.map((option) => {
+              {cameraPresetsFor(state).map((option) => {
                 const active = preset?.id === option.id;
                 return (
                   <button
@@ -134,7 +137,7 @@ export default function TrickExplorer3D({ initialSearch = '' }: { initialSearch?
                     role="radio"
                     aria-checked={active}
                     className={`explorer-cam ${active ? 'active' : ''}`}
-                    onClick={() => setState({ ...state, camera: option.id })}
+                    onClick={() => setState({ ...state, camera: option.id, zoom: option.zoom ?? state.zoom })}
                   >
                     <CameraDial camera={sceneCamera({ ...state, camera: option.id })} size={30} />
                     <span>{option.label}</span>

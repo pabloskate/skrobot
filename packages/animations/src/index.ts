@@ -30,23 +30,28 @@ export {
 export { default as TrickAnimation3D } from './TrickAnimation3D';
 /** From-scratch look (new robot, skate plaza, crane camera) on the same physics. */
 export { default as TrickScene, type HeadPose, type LeadIn } from './scene/TrickScene';
-/** Where TrickScene films from: the stock 3/4 view, or any angle inside the tested bounds. */
+/** Camera controls: bounded angles for SVG scenes, full-circle orbit and spot tripods for 3D. */
 export {
   DEFAULT_SCENE_CAMERA,
   SCENE_CAMERA_BOUNDS,
+  SCENE_ORBIT_BOUNDS,
   SCENE_ZOOM,
+  clampOrbitCamera,
   clampSceneCamera,
   clampZoom,
+  wrapOrbitYaw,
+  TRIPODS,
   type SceneCamera,
+  type TripodId,
 } from './scene/camera';
 /** The sets TrickScene can be staged on, and the ones TrickScene3D can (those plus El Toro's 20 stair). */
 export { SCENE_SETS, STAGE_SETS, sceneSetFor, type SceneSet, type StageSet } from './scene/setKit';
-/** El Toro's 20 stair: its size, and the moments of a trick down it. */
-export { FOOT, STAIR_DROP, STAIR_RUN, STAIR_STEPS, stairTimeline, type StairTimeline } from './scene/stairs';
-/** Who rides in the three.js renderer: the robot or a human skater. */
+/** El Toro's 20 stair: its size, the moments of a trick down it, and the center handrail its grinds ride. */
+export { FOOT, STAIR_DROP, STAIR_RUN, STAIR_STEPS, stageRail, stairTimeline, type StairTimeline } from './scene/stairs';
+/** Who rides in the three.js renderer: robot, illustrated human, or detailed humanoid. */
 export { SKATERS, type Skater } from './skaters';
-/** Flat-bar grinds and slides — TrickScene only (the other renderers are flatground). */
-export { grindTimelineFor, type GrindTimeline } from './scene/grind';
+/** Grinds and slides: on the flat bar (both TrickScenes), or down El Toro's handrail (TrickScene3D). */
+export { grindTimelineFor, type GrindTimeline, type Handrail } from './scene/grind';
 /**
  * Grind names. Flatground tricks can be popped into a grind ("Kickflip into
  * Frontside Lipslide", "Backside 180 into Frontside Nosegrind") and out of it

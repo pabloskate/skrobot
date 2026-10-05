@@ -36,12 +36,12 @@ const HEAD_PIVOT = { f: -2.5, u: -15 } as const;
  * while the rider is up, sinking to the ground as the torso lies down, so a
  * slammed rider grows along the ground instead of into it.
  */
-function growFrom(rig: Rig): V3 {
+function growFrom(rig: Rig, ground: number): V3 {
   const [a, b] = rig.legs;
   const feet = scale3(add3(a.ankle, b.ankle), 0.5);
   // Physics is y-down: an upright torso's up is -y.
   const upright = smoothstep((-rig.torso.up.y - 0.25) / 0.45);
-  return { x: feet.x, y: ASPHALT + (feet.y - ASPHALT) * upright, z: feet.z };
+  return { x: feet.x, y: ground + (feet.y - ground) * upright, z: feet.z };
 }
 
 /** A knee for a leg of the person's bones from `hip` to `ankle`, bent the way `bent` (a direction off the hip-ankle line) points. */
@@ -109,8 +109,8 @@ const HAND_OFF_GROUND = 3;
  * down through the asphalt in a slam lies along it instead, still pointing
  * the same way round.
  */
-function overGround(from: V3, dir: V3, length: number, floor: number): V3 {
-  const lowest = ASPHALT - floor;
+function overGround(from: V3, dir: V3, length: number, floor: number, ground: number): V3 {
+  const lowest = ground - floor;
   if (from.y + dir.y * length <= lowest) return dir;
   const y = Math.max(-1, Math.min(1, (lowest - from.y) / length));
   const flat = Math.hypot(dir.x, dir.z);
@@ -126,8 +126,13 @@ const frameAt = (frame: Frame3, origin: V3): Frame3 => ({
   at: (f, u, s) => add3(origin, add3(scale3(frame.fwd, f), add3(scale3(frame.up, u), scale3(frame.side, s)))),
 });
 
-export function humanRig(rig: Rig): Rig {
-  const from = growFrom(rig);
+/**
+ * The rider grown to a person's size. `ground` is the physics y of the ground
+ * under them (the asphalt, or the steps under a handrail) that a slammed body
+ * grows along and the arms keep off.
+ */
+export function humanRig(rig: Rig, ground = ASPHALT): Rig {
+  const from = growFrom(rig, ground);
   const grow = (p: V3): V3 => add3(from, scale3(sub3(p, from), HUMAN_SCALE));
 
   // Hips up, scaled; then pulled in toward the feet if either leg can't reach its ankle.
@@ -165,8 +170,8 @@ export function humanRig(rig: Rig): Rig {
     const shoulder = place(add3(add3(arm.shoulder, inward), scale3(rig.torso.up, -HUMAN_SHOULDER_DROP)));
     const upperLength = HUMAN_UPPER_ARM * HUMAN_SCALE;
     const foreLength = HUMAN_FOREARM * HUMAN_SCALE;
-    const elbow = add3(shoulder, scale3(overGround(shoulder, upper, upperLength, ELBOW_OFF_GROUND), upperLength));
-    const hand = add3(elbow, scale3(overGround(elbow, fore, foreLength, HAND_OFF_GROUND), foreLength));
+    const elbow = add3(shoulder, scale3(overGround(shoulder, upper, upperLength, ELBOW_OFF_GROUND, ground), upperLength));
+    const hand = add3(elbow, scale3(overGround(elbow, fore, foreLength, HAND_OFF_GROUND, ground), foreLength));
     return { ...arm, shoulder, elbow, hand };
   }) as Rig['arms'];
 

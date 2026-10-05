@@ -21,18 +21,21 @@ import {
   type Texture,
 } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
-import { DEFAULT_SCENE_CAMERA, type SceneCamera } from '../scene/camera';
+import { DEFAULT_SCENE_CAMERA, type SceneCamera, type TripodId } from '../scene/camera';
 import type { BoardLook } from '../scene/board';
 import type { RobotLook } from '../scene/robot';
 import { Bar3D } from './bar3d';
 import { Board3D } from './board3d';
+import { RealisticBoard3D } from './realisticBoard3d';
 import type { StageSet } from '../scene/setKit';
 import { ElToro3D } from './elToro3d';
+import { elToroTripodView, elToroView } from './elToroCamera';
 import { Plaza3D } from './plaza3d';
 import { Waterfront3D } from './waterfront3d';
 import { blurMaterial, copyMaterial, dustMaterial, EDGE_TILE, edgeMaterial, fxaaMaterial, inkMaterial, shadowChannel } from './post';
 import { Robot3D } from './robot3d';
 import { Human3D } from './human3d';
+import { Humanoid3D } from './humanoid3d';
 import type { Skater } from '../skaters';
 import { shadowShapeMaterial } from './materials';
 import type { GroundPolygon, StageFrame } from './stage';
@@ -87,10 +90,11 @@ export class SceneRenderer {
   readonly renderer: WebGLRenderer;
   private readonly scene = new Scene();
   private readonly camera = new Camera();
-  private readonly rider: Robot3D | Human3D;
-  private readonly board: Board3D;
+  private readonly rider: Robot3D | Human3D | Humanoid3D;
+  private readonly board: Board3D | RealisticBoard3D;
   private readonly bar = new Bar3D();
   private readonly set: SetPiece;
+  private readonly setName: StageSet;
   /** The waterfront's far panorama is under the canvas, so its sky stays see-through. */
   private readonly setLight: boolean;
   private readonly propShadowMaterial = shadowShapeMaterial();
@@ -122,14 +126,17 @@ export class SceneRenderer {
   private size = { width: 1, height: 1, ratio: 1 };
 
   constructor(canvas: HTMLCanvasElement, look: RendererLook, set: StageSet = 'plaza') {
+    this.setName = set;
     this.renderer = new WebGLRenderer({ canvas, antialias: false, alpha: true, premultipliedAlpha: true, powerPreference: 'high-performance' });
     this.renderer.autoClear = false;
     this.renderer.setClearColor(0x000000, 0);
     this.camera.matrixAutoUpdate = false;
     this.camera.matrixWorldAutoUpdate = false;
 
-    this.rider = look.skater === 'human' ? new Human3D() : new Robot3D(look.robot);
-    this.board = new Board3D(look.board);
+    this.rider = look.skater === 'humanoid'
+      ? new Humanoid3D()
+      : look.skater === 'human' ? new Human3D() : new Robot3D(look.robot);
+    this.board = look.skater === 'humanoid' ? new RealisticBoard3D() : new Board3D(look.board);
     this.set = set === 'waterfront' ? new Waterfront3D() : set === 'el-toro' ? new ElToro3D() : new Plaza3D();
     this.setLight = set === 'waterfront';
     this.scene.add(this.set.group, this.bar.group, this.board.group, this.rider.group);
@@ -196,9 +203,14 @@ export class SceneRenderer {
     this.shadowB.setSize(sw, sh);
   }
 
-  render(frame: StageFrame, camera: Readonly<SceneCamera> = DEFAULT_SCENE_CAMERA, zoom = 1) {
+  /** Draw a frame through the crane at `camera`, or from `tripod` where the set has one. */
+  render(frame: StageFrame, camera: Readonly<SceneCamera> = DEFAULT_SCENE_CAMERA, zoom = 1, tripod?: TripodId | null) {
     const { width, height } = this.size;
-    const view = stageView(frame.lift, camera, zoom, width / height);
+    const view = this.setName === 'el-toro' && frame.stairs
+      ? tripod
+        ? elToroTripodView(tripod, frame, zoom, width / height)
+        : elToroView(frame.lift, camera, zoom, width / height, frame.stairs.across)
+      : stageView(frame.lift, camera, zoom, width / height);
     this.placeCamera(view);
     const pxPerUnit = height / view.box.height;
     const shadowOpacity: [number, number, number] = [0.3, frame.shadows.boardOpacity, frame.shadows.bodyOpacity];

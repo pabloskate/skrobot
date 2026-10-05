@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { BufferTarget, CanvasSource, Mp4OutputFormat, Output, Quality, getFirstEncodableVideoCodec } from 'mediabunny';
 import type { RiderStance, Robot, Trick } from '../types';
 import { resolveSkateStyle } from '../skateStyle';
-import { DEFAULT_SCENE_CAMERA, type SceneCamera } from '../scene/camera';
+import { DEFAULT_SCENE_CAMERA, type SceneCamera, type TripodId } from '../scene/camera';
 import type { StageSet } from '../scene/setKit';
 import type { Skater } from '../skaters';
 import { SceneRenderer } from './renderer';
@@ -28,9 +28,12 @@ export interface TrickVideoOptions {
   trick: Pick<Trick, 'id' | 'name' | 'base' | 'stance'>;
   riderStance?: RiderStance;
   camera?: SceneCamera;
+  /** Film from this tripod instead of the crane, where the set has it (El Toro). */
+  tripod?: TripodId | null;
   /** Magnification of the picture, 1 stock. */
   zoom?: number;
   set?: StageSet;
+  /** The same robot, human, or humanoid selected in the live scene. */
   skater?: Skater;
   /** Playback speed: at 0.25 the trick fills four times as long a video. */
   rate?: number;
@@ -50,8 +53,6 @@ export class VideoUnsupportedError extends Error {
   }
 }
 
-/** Seconds the landing holds at the end, as the explorer's loop holds it. */
-const END_HOLD = 0.7;
 /**
  * Bits per second at 1280 wide, 60 fps, scaled by pixels and frames for other
  * sizes. The flat cel shading holds up well here, and a set rate (rather
@@ -70,6 +71,7 @@ export async function recordTrickVideo({
   trick,
   riderStance = 'regular',
   camera = DEFAULT_SCENE_CAMERA,
+  tripod = null,
   zoom = 1,
   set = 'plaza',
   skater = 'robot',
@@ -103,24 +105,21 @@ export async function recordTrickVideo({
   const bitrate = Math.round(BITRATE * ((width * height) / (1280 * 1034)) * (fps / 60));
   const source = new CanvasSource(film, { codec, quality: new Quality({ bitrate }) });
   output.addVideoTrack(source, { frameRate: fps });
-  // Frame i shows the trick at i / fps of video time, so the last lands exactly on the end.
-  const moving = Math.ceil((stage.end / rate) * fps);
-  const total = moving + 1 + Math.round(END_HOLD * fps);
+  // Frame i shows the trick at i / fps of video time, so the last lands exactly
+  // on the end. No hold after it: the explorer's loop pauses there, the video stops.
+  const total = Math.ceil((stage.end / rate) * fps) + 1;
   try {
     await output.start();
     for (let i = 0; i < total; i++) {
       signal?.throwIfAborted();
-      // The hold's frames repeat the landing already on the film.
-      if (i <= moving) {
-        // The wheels' motion smear spans one video frame (stageFrame assumes 60 fps).
-        const frame = stageFrame(stage, Math.min(stage.end, (i / fps) * rate), (rate * 60) / fps);
-        const backdrop = await far?.paint(frame, camera, zoom);
-        ctx.clearRect(0, 0, width, height);
-        if (backdrop) ctx.drawImage(backdrop, 0, 0, width, height);
-        // Copied in the same task it's drawn, while the WebGL canvas still holds the frame.
-        scene.render(frame, camera, zoom);
-        ctx.drawImage(glCanvas, 0, 0, width, height);
-      }
+      // The wheels' motion smear spans one video frame (stageFrame assumes 60 fps).
+      const frame = stageFrame(stage, Math.min(stage.end, (i / fps) * rate), (rate * 60) / fps);
+      const backdrop = await far?.paint(frame, camera, zoom);
+      ctx.clearRect(0, 0, width, height);
+      if (backdrop) ctx.drawImage(backdrop, 0, 0, width, height);
+      // Copied in the same task it's drawn, while the WebGL canvas still holds the frame.
+      scene.render(frame, camera, zoom, tripod);
+      ctx.drawImage(glCanvas, 0, 0, width, height);
       await source.add(i / fps, 1 / fps);
       onProgress?.((i + 1) / total);
     }

@@ -1,6 +1,8 @@
-import { FALL_T, FLIP_T, JUMP, LAND_T, ROLL_IN, type Spec } from '../TrickAnimation';
+import { FALL_T, FLIP_T, JUMP, LAND_T, ROLL_IN } from '../TrickAnimation';
 import { resolveSkateStyle } from '../skateStyle';
 import type { SkateStyle } from '../types';
+import type { Handrail } from './grind';
+import type { StageSet } from './setKit';
 
 /**
  * El Toro: the 20 stair at El Toro High School (Lake Forest, California),
@@ -33,6 +35,11 @@ export const TREAD = STAIR_RUN / (STAIR_STEPS - 1);
 const GRAVITY = 32.2 * FOOT;
 /** How far the deck rises over the top landing off a neutral pop. */
 const POP_RISE = 2 * FOOT;
+/**
+ * Seconds of the run-up shown before the flatground roll-in (its crouch and
+ * pop): El Toro's run-up is long, and the rider is seen rolling up it.
+ */
+const RUN_UP = 0.6;
 /** Board center behind the lip when the tail strikes. */
 const POP_BEHIND = 26;
 /** Board center past the bottom step at touchdown. */
@@ -50,14 +57,14 @@ export interface StairPlan {
   speed: number;
   /** The deck's upward speed off the pop. */
   rise: number;
-  /** Which way the stairs fall in world x: the way the trick travels. */
-  dir: 1 | -1;
+  /** The fixed spot always falls toward +x; fakie changes the rider's heading. */
+  dir: 1;
 }
 
-export function planStairs(spec: Pick<Spec, 'dir'>, style: Pick<SkateStyle, 'popHeight'>, landed: boolean): StairPlan {
+export function planStairs(style: Pick<SkateStyle, 'popHeight'>, landed: boolean): StairPlan {
   const rise = Math.sqrt(2 * GRAVITY * POP_RISE * style.popHeight);
   const flight = (rise + Math.sqrt(rise * rise + 2 * GRAVITY * STAIR_DROP)) / GRAVITY;
-  const pop = ROLL_IN;
+  const pop = RUN_UP + ROLL_IN;
   const land = pop + flight;
   return {
     pop,
@@ -66,19 +73,19 @@ export function planStairs(spec: Pick<Spec, 'dir'>, style: Pick<SkateStyle, 'pop
     end: land + (landed ? LAND_T : FALL_T),
     speed: (POP_BEHIND + STAIR_RUN + LAND_PAST) / flight,
     rise,
-    dir: spec.dir,
+    dir: 1,
   };
 }
 
 /**
- * The flatground clock for a moment on the stairs: the roll-in as it is, the
- * flight stretched to the drop's hang time, and the landing (or fall) after
- * it, shifted by the extra time in the air.
+ * The flatground clock for a moment on the stairs: cruising up the run-up
+ * (before the flatground clock starts), the roll-in as it is, the flight
+ * stretched to the drop's hang time, and the landing (or fall) after it.
  */
 export function stairClock(plan: StairPlan, t: number): number {
-  if (t <= plan.pop) return t;
-  if (t < plan.land) return plan.pop + ((t - plan.pop) * FLIP_T) / plan.flight;
-  return t - plan.flight + FLIP_T;
+  if (t <= plan.pop) return t - RUN_UP;
+  if (t < plan.land) return ROLL_IN + ((t - plan.pop) * FLIP_T) / plan.flight;
+  return t - plan.land + ROLL_IN + FLIP_T;
 }
 
 /** The deck's height over the top landing at a stair clock time. */
@@ -131,6 +138,34 @@ export function stairGround(u: number): number {
 /** Where a step's nosing line runs: through every step's top edge, from the lip down. */
 export const nosingLine = (u: number) => (-u * RISER) / TREAD;
 
+// ----- The center handrail -----
+
+/** Galvanized pipe, its axis 36" over the nosings, as the code wants a handrail. */
+export const RAIL_R = 2.4;
+export const RAIL_TOP = 3 * FOOT;
+/** The straight rail runs on this far past the top and bottom steps. */
+export const RAIL_EXT = 35;
+
+/**
+ * El Toro's center handrail as a grind sees it: a straight pipe from just
+ * before the lip to just past the bottom step, its top (a radius over the
+ * axis, square to the slope) falling with the nosings. A slip comes down
+ * on the steps, and a body lying on them rests along the nosings.
+ */
+export const EL_TORO_RAIL: Handrail = {
+  start: -RAIL_EXT,
+  end: STAIR_RUN + RAIL_EXT,
+  top: RAIL_TOP + RAIL_R * Math.hypot(1, RISER / TREAD),
+  slope: RISER / TREAD,
+  ground: stairGround,
+  rest: (u) => Math.max(-STAIR_DROP, Math.min(0, nosingLine(u))),
+  // A good roll for a rail: well under the speed it takes to jump the set.
+  speed: 13 * FOOT,
+};
+
+/** The handrail a spot's grinds ride, or null where they ride the flat bar. */
+export const stageRail = (set: StageSet): Handrail | null => (set === 'el-toro' ? EL_TORO_RAIL : null);
+
 export interface StairTimeline {
   pop: number;
   /** The top of the arc. */
@@ -143,7 +178,7 @@ export interface StairTimeline {
 
 /** The moments of a trick down the stairs, for a robot's style (its pop sets the hang time). */
 export function stairTimeline(style: SkateStyle | undefined, landed = true): StairTimeline {
-  const plan = planStairs({ dir: 1 }, resolveSkateStyle(style), landed);
+  const plan = planStairs(resolveSkateStyle(style), landed);
   return {
     pop: plan.pop,
     peak: plan.pop + plan.rise / GRAVITY,
