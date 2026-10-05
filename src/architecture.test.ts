@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
@@ -19,7 +19,6 @@ const ALLOWED_FEATURE_IMPORTS: Record<string, readonly string[]> = {
   auth: [],
   billing: [],
   explorer: ['robots', 'tricks'],
-  explorer3d: ['explorer', 'robots'],
   gallery: ['records', 'robots', 'skater', 'tricks'],
   game: ['records', 'robots', 'tricks'],
   home: ['records', 'robots', 'skater'],
@@ -49,6 +48,33 @@ function sourceFiles(root: string): string[] {
 function importsIn(file: string): string[] {
   const source = readFileSync(file, 'utf8');
   return ts.preProcessFile(source, true, true).importedFiles.map((item) => item.fileName);
+}
+
+/** Imports that load code at runtime: `import type` and `export type` are erased, and so are imports of types alone. */
+function runtimeImportsIn(file: string): string[] {
+  const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, false);
+  const out: string[] = [];
+  for (const node of source.statements) {
+    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
+      const clause = node.importClause;
+      const typeOnly = clause != null && (clause.isTypeOnly || (!clause.name && clause.namedBindings != null
+        && ts.isNamedImports(clause.namedBindings) && clause.namedBindings.elements.length > 0
+        && clause.namedBindings.elements.every((element) => element.isTypeOnly)));
+      if (!typeOnly) out.push(node.moduleSpecifier.text);
+    } else if (ts.isExportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
+      const typeOnly = node.isTypeOnly || (node.exportClause != null && ts.isNamedExports(node.exportClause)
+        && node.exportClause.elements.every((element) => element.isTypeOnly));
+      if (!typeOnly) out.push(node.moduleSpecifier.text);
+    }
+  }
+  return out;
+}
+
+/** The module a relative specifier names, as a file on disk. */
+function resolveModule(from: string, specifier: string): string | null {
+  const base = resolve(dirname(from), specifier);
+  return [`${base}.ts`, `${base}.tsx`, resolve(base, 'index.ts'), base]
+    .find((candidate) => /\.(?:ts|tsx)$/.test(candidate) && existsSync(candidate)) ?? null;
 }
 
 function featureFromResolvedPath(path: string): string | null {
@@ -126,6 +152,28 @@ describe('architecture import graph', () => {
         }
       }
     }
+    expect(violations).toEqual([]);
+  });
+
+  it('keeps three.js and the video encoder out of the animation package root entry', () => {
+    // Pages that only need trick data or the small SVG avatars import the root;
+    // the WebGL stage and the MP4 recorder ship only with their own entries.
+    const heavy = /^(?:three|mediabunny)(?:\/|$)/;
+    const seen = new Set<string>();
+    const pending = [resolve(ANIMATIONS_ROOT, 'src/index.ts')];
+    const violations: string[] = [];
+    while (pending.length) {
+      const file = pending.pop()!;
+      if (seen.has(file)) continue;
+      seen.add(file);
+      for (const specifier of runtimeImportsIn(file)) {
+        if (heavy.test(specifier)) violations.push(`${relative(ROOT, file)} loads ${specifier}`);
+        if (!specifier.startsWith('.')) continue;
+        const target = resolveModule(file, specifier);
+        if (target) pending.push(target);
+      }
+    }
+    expect(seen.size).toBeGreaterThan(10);
     expect(violations).toEqual([]);
   });
 

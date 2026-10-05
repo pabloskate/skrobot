@@ -1,13 +1,12 @@
 import { CustomBlending, DoubleSide, GLSL3, MaxEquation, OneFactor, ShaderMaterial, Vector2, Vector3, Vector4, type IUniform } from 'three';
-import { LIGHT, LIGHT_SCREEN, PALETTE, tone } from '../scene/camera';
-import { dirToThree } from './view';
+import { LIGHT, LIGHT_SCREEN, PALETTE, tone } from '../camera/camera';
+import { dirToThree } from '../camera/view';
 
 /**
- * Materials for TrickScene3D. They reproduce the SVG renderer's paint
- * exactly where it can be reproduced: the same two cel tones per robot part
- * (tone(color, 0.18) in shadow, tone(color, 0.6) lit), the same lambert
- * ramp on the board, the bar, and the props, and the same palette hexes,
- * written straight to the canvas with no color management in between.
+ * Materials for TrickScene3D: two cel tones per robot part (tone(color, 0.18)
+ * in shadow, tone(color, 0.6) lit), a lambert ramp on the board, the bar,
+ * and the props, all from the palette's hexes (camera.ts), written straight
+ * to the canvas with no color management in between.
  *
  * Every scene material writes two targets: the color, and an "ink" record —
  * which part this pixel belongs to, its paint priority, and how wide an
@@ -53,7 +52,7 @@ export const FEATURES = 16;
  * The cel light, in view space: up and to the right on screen, like
  * LIGHT_SCREEN's crescents, tipped toward the viewer. A surface is lit where
  * it faces the light more than TOON_THRESHOLD; the rim it turns away from it
- * is the shadow crescent the SVG draws offset from each part.
+ * is the shadow crescent.
  */
 const TOON_TILT = (26 * Math.PI) / 180;
 export const TOON_LIGHT = new Vector3(
@@ -145,7 +144,7 @@ void main() {
 }
 `;
 
-/** The two cel tones of a color, as TrickScene paints a rounded part. */
+/** The two cel tones of a color on a rounded part. */
 export const celTones = (hex: string) => ({ lit: vec3(tone(hex, 0.6)), shade: vec3(tone(hex, 0.18)) });
 
 /**
@@ -169,9 +168,8 @@ export function toonMaterial(hex: string, below?: { hex: string; split: number; 
 
 /**
  * The visor and eyes, painted on a grid lying on the head's front face.
- * Shapes are drawn as distance fields in the face's (up, side) plane,
- * matching drawFace in robot.tsx less its glare: the 3D robot is matte, so
- * the screen is too. Around them the grid shows the head's own paint, so it
+ * Shapes are drawn as distance fields in the face's (up, side) plane, with
+ * no glare: the robot is matte, so the screen is too. Around them the grid shows the head's own paint, so it
  * needs no transparency.
  */
 const FACE_FRAG = /* glsl */ `
@@ -344,7 +342,7 @@ void main() {
   vec3 n = normalize(vWorldNormal);
   float lam = lambert(n);
   vec3 cap = tone(WHEEL, lam);
-  // Hub and mark fade toward edge-on, as TrickScene's do.
+  // Hub and mark fade toward edge-on.
   float detail = clamp(dot(normalize(cameraPosition - vWorld), n) / 0.35, 0.0, 1.0);
   float r = length(vLocal.xy) / uRadius;
   float aa = length(fwidth(vLocal.xy)) / uRadius;
@@ -441,7 +439,7 @@ export function flatMaterial(hex: string) {
 
 /**
  * Round billboards: a tree's canopy (a dark disc with its lit disc nudged
- * toward the sun, like TrickScene's trees), sitting a radius in front of its
+ * toward the sun), sitting a radius in front of its
  * center so the trunk tucks behind it. Instanced: center + radius per tree.
  */
 const CANOPY_VERT = /* glsl */ `
@@ -491,7 +489,7 @@ export function canopyMaterial(darkHex: string, litHex: string) {
 
 // ---------- The plaza's ground and sky ----------
 
-/** Turns a fragment into TrickScene viewBox coordinates. */
+/** Turns a fragment into the crane's viewBox coordinates. */
 const GLSL_VIEWBOX = /* glsl */ `
 uniform vec4 uBox;
 uniform vec2 uRes;
@@ -722,8 +720,8 @@ void main() {
 
 /**
  * Ground shadow shapes: each writes its layer's channel — the bar, the board,
- * the rider, and a set's props in the fourth — overlaps merging by max like
- * an SVG group.
+ * the rider, and a set's props in the fourth — overlaps merging by max, so
+ * a shadow is one even shade however its parts overlap.
  */
 export function shadowShapeMaterial() {
   return new ShaderMaterial({

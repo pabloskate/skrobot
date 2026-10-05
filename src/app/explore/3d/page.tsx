@@ -1,16 +1,14 @@
-import type { Metadata } from 'next';
-import { TrickExplorer3D } from '@/features/explorer3d';
+import { redirect } from 'next/navigation';
 import { searchFromRecord } from '../../rootTab';
 
-export const metadata: Metadata = {
-  title: 'Trick Explorer 3D · Skate Robot',
-  description: 'Preview: the Trick Explorer drawn in 3D with three.js.',
-};
-
+/** The 3D preview became the Trick Explorer itself; old links land there with their trick and camera. */
 export default async function Explore3DPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  return <TrickExplorer3D initialSearch={searchFromRecord(await searchParams)} />;
+  const params = new URLSearchParams(searchFromRecord(await searchParams));
+  params.delete('view');
+  const search = params.toString();
+  redirect(`/explore${search ? `?${search}` : ''}`);
 }

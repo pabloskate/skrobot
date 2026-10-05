@@ -6,9 +6,6 @@ import {
   LAND_T,
   ROLL_IN,
   SKATERS,
-  TrickAnimation,
-  TrickAnimation3D,
-  TrickScene,
   grindTimelineFor,
   type FallVariant,
   type GrindTimeline,
@@ -43,18 +40,7 @@ const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
 
 type Discipline = 'flatground' | 'grinds';
 type RiderMode = RiderStance | 'both';
-type View = 'scene' | 'webgl' | '3d' | 'side';
-type ViewMode = View | 'both' | 'compare';
 type Outcome = 'landed' | FallVariant;
-
-const VIEW_LABELS: Record<ViewMode, string> = {
-  scene: 'SVG scene',
-  webgl: 'WebGL 3D',
-  '3d': '3D SVG',
-  side: '2D SVG',
-  both: '3D SVG + 2D',
-  compare: 'WebGL + SVG scene',
-};
 
 interface Phase {
   label: string;
@@ -99,7 +85,6 @@ function grindPhases(tl: GrindTimeline, labels: string[]): Phase[] {
 const noop = () => {};
 
 interface CellProps {
-  view: View;
   robot: Robot;
   skater: Skater;
   trick: Trick;
@@ -118,9 +103,10 @@ interface CaptureProps {
 
 /**
  * Hundreds of live WebGL canvases would exhaust the browser's context limit.
- * Draw one cell at a time, save its frozen frame, then release its context.
- * Read the canvas in the same effect flush as the renderer's draw: its default
- * drawing buffer is cleared once the browser presents that frame.
+ * Draw one cell at a time and save its frozen frame; the next cell borrows
+ * the same renderer back from the stage's pool. Read the canvas in the same
+ * effect flush as the renderer's draw: its default drawing buffer is cleared
+ * once the browser presents that frame.
  */
 const FrozenWebGLCell = memo(function FrozenWebGLCell({
   robot, skater, trick, landed, fallVariant, riderStance, fixedTime,
@@ -134,9 +120,8 @@ const FrozenWebGLCell = memo(function FrozenWebGLCell({
     if (!captureActive) return;
     const canvas = host.current?.querySelector('canvas');
     const unavailable = host.current?.querySelector('p:not([hidden])');
-    const context = canvas?.getContext('webgl2');
     let captured: string | null = null;
-    if (canvas && context && !unavailable) {
+    if (canvas && !unavailable) {
       try {
         captured = canvas.toDataURL('image/png');
       } catch {
@@ -151,10 +136,7 @@ const FrozenWebGLCell = memo(function FrozenWebGLCell({
     const next = window.setTimeout(() => {
       setPicture(captured);
       setFailed(captured === null);
-      advance = window.setTimeout(() => {
-        context?.getExtension('WEBGL_lose_context')?.loseContext();
-        onCaptured(captureBatch, captureIndex);
-      }, 40);
+      advance = window.setTimeout(() => onCaptured(captureBatch, captureIndex), 40);
     }, 0);
     return () => {
       window.clearTimeout(next);
@@ -198,27 +180,16 @@ const FrozenWebGLCell = memo(function FrozenWebGLCell({
 
 /** Memoized so filter keystrokes only re-render rows that actually change. */
 const Cell = memo(function Cell(props: CellProps & CaptureProps) {
-  const { view, robot, trick, landed, fallVariant, riderStance, fixedTime } = props;
-  const Renderer = view === 'scene' ? TrickScene : view === '3d' ? TrickAnimation3D : TrickAnimation;
+  const { trick, riderStance } = props;
   return (
     <div
       className={styles.cell}
-      data-view={view}
-      data-skater={view === 'webgl' ? props.skater : 'robot'}
+      data-skater={props.skater}
       data-rider-stance={riderStance}
       data-trick={trick.id}
-      style={view === 'webgl' && props.captureActive ? { contentVisibility: 'visible' } : undefined}
+      style={props.captureActive ? { contentVisibility: 'visible' } : undefined}
     >
-      {view === 'webgl' ? <FrozenWebGLCell {...props} /> : <Renderer
-        robot={robot}
-        trick={trick}
-        landed={landed}
-        fallVariant={fallVariant}
-        riderStance={riderStance}
-        backgroundSceneId="park"
-        fixedTime={fixedTime}
-        onDone={noop}
-      />}
+      <FrozenWebGLCell {...props} />
     </div>
   );
 });
@@ -227,7 +198,6 @@ export default function ContactSheet() {
   const [discipline, setDiscipline] = useState<Discipline>('flatground');
   const [stance, setStance] = useState<Stance>('regular');
   const [riderMode, setRiderMode] = useState<RiderMode>('regular');
-  const [viewMode, setViewMode] = useState<ViewMode>('3d');
   const [outcome, setOutcome] = useState<Outcome>('landed');
   const [robotId, setRobotId] = useState(ROBOTS[0].id);
   const [skater, setSkater] = useState<Skater>('robot');
@@ -261,13 +231,9 @@ export default function ContactSheet() {
   }, [grinds, stance, entry, exit, filter]);
 
   const riders: RiderStance[] = riderMode === 'both' ? ['regular', 'goofy'] : [riderMode];
-  const activeViewMode = grinds && (viewMode === '3d' || viewMode === 'side' || viewMode === 'both') ? 'scene' : viewMode;
-  // Both scene renderers include the bar; the earlier SVG views do not.
-  const views: View[] = activeViewMode === 'compare' ? ['webgl', 'scene']
-    : activeViewMode === 'both' ? ['3d', 'side'] : [activeViewMode];
-  const captureBatch = JSON.stringify([robotId, skater, discipline, stance, riderMode, viewMode, outcome, entry, exit, filter]);
+  const captureBatch = JSON.stringify([robotId, skater, discipline, stance, riderMode, outcome, entry, exit, filter]);
   const captureIndex = captureProgress.batch === captureBatch ? captureProgress.index : 0;
-  const captureCount = views.includes('webgl') ? tricks.length * riders.length * phases.length : 0;
+  const captureCount = tricks.length * riders.length * phases.length;
   if (captureProgress.batch !== captureBatch) {
     setCaptureProgress({ batch: captureBatch, index: 0 });
   }
@@ -275,7 +241,7 @@ export default function ContactSheet() {
     const tl = grinds ? grindTimelineFor(trick, rider, robot.skateStyle, landed, fallVariant) : null;
     return tl ? grindPhases(tl, grindLabels(landed, entry !== '', exit !== '')) : phases;
   };
-  const rowsPerTrick = riders.length * views.length;
+  const rowsPerTrick = riders.length;
 
   return (
     <div className={styles.wrap}>
@@ -361,24 +327,6 @@ export default function ContactSheet() {
           </div>
 
           <div className={styles.controlGroup}>
-            <span className={styles.controlLabel}>View</span>
-            <div className={playgroundStyles.stanceRow}>
-              {(grinds
-                ? ['scene', 'webgl', 'compare'] as ViewMode[]
-                : ['scene', 'webgl', 'compare', '3d', 'side', 'both'] as ViewMode[]).map((v) => (
-                <button
-                  key={v}
-                  className={`${playgroundStyles.stanceBtn} ${activeViewMode === v ? playgroundStyles.stanceBtnActive : ''}`}
-                  onClick={() => setViewMode(v)}
-                  aria-pressed={activeViewMode === v}
-                >
-                  {VIEW_LABELS[v]}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className={styles.controlGroup}>
             <span className={styles.controlLabel}>Outcome</span>
             <div className={playgroundStyles.stanceRow}>
               <button
@@ -408,10 +356,7 @@ export default function ContactSheet() {
                 <button
                   key={option.id}
                   className={`${playgroundStyles.stanceBtn} ${skater === option.id ? playgroundStyles.stanceBtnActive : ''}`}
-                  onClick={() => {
-                    setSkater(option.id);
-                    if (option.id !== 'robot' && !views.includes('webgl')) setViewMode('webgl');
-                  }}
+                  onClick={() => setSkater(option.id)}
                   aria-pressed={skater === option.id}
                 >
                   {option.label}
@@ -421,7 +366,7 @@ export default function ContactSheet() {
           </div>
 
           <div className={styles.controlGroup}>
-            <span className={styles.controlLabel}>Robot reference</span>
+            <span className={styles.controlLabel}>Robot</span>
             <select
               className={playgroundStyles.trickSelect}
               value={robotId}
@@ -447,8 +392,7 @@ export default function ContactSheet() {
         <p className={styles.meta}>
           {tricks.length} tricks × {rowsPerTrick} row{rowsPerTrick > 1 ? 's' : ''} × {phases.length} frames
           = {tricks.length * rowsPerTrick * phases.length} cells
-          {captureCount > 0 && ` · WebGL frames: ${Math.min(captureIndex, captureCount)}/${captureCount}`}
-          {skater !== 'robot' && views.some((view) => view !== 'webgl') && ' · SVG views retain the robot reference'}
+          {` · frames drawn: ${Math.min(captureIndex, captureCount)}/${captureCount}`}
         </p>
       </section>
 
@@ -465,23 +409,15 @@ export default function ContactSheet() {
               </div>
             ))}
             {tricks.map((trick, trickIndex) =>
-              riders.map((rider, riderIndex) =>
-                views.map((view) => (
-                  <div style={{ display: 'contents' }} key={`${captureBatch}:${trick.id}:${rider}:${view}`}>
+              riders.map((rider, riderIndex) => (
+                  <div style={{ display: 'contents' }} key={`${captureBatch}:${trick.id}:${rider}`}>
                     <div className={styles.labelCell}>
                       <span>{trick.base}</span>
-                      {(riders.length > 1 || views.length > 1) && (
-                        <span className={styles.labelBadge}>
-                          {riders.length > 1 ? rider : ''}
-                          {riders.length > 1 && views.length > 1 ? ' · ' : ''}
-                          {views.length > 1 ? VIEW_LABELS[view] : ''}
-                        </span>
-                      )}
+                      {riders.length > 1 && <span className={styles.labelBadge}>{rider}</span>}
                     </div>
                     {rowPhases(trick, rider).map((phase, phaseIndex) => (
                       <Cell
-                        key={`${trick.id}:${rider}:${view}:${phase.label}`}
-                        view={view}
+                        key={`${trick.id}:${rider}:${phase.label}`}
                         robot={robot}
                         skater={skater}
                         trick={trick}
@@ -489,15 +425,14 @@ export default function ContactSheet() {
                         fallVariant={fallVariant}
                         riderStance={rider}
                         fixedTime={phase.t}
-                        captureActive={view === 'webgl' && captureIndex === (trickIndex * riders.length + riderIndex) * phases.length + phaseIndex}
+                        captureActive={captureIndex === (trickIndex * riders.length + riderIndex) * phases.length + phaseIndex}
                         captureBatch={captureBatch}
                         captureIndex={(trickIndex * riders.length + riderIndex) * phases.length + phaseIndex}
                         onCaptured={onCaptured}
                       />
                     ))}
                   </div>
-                ))
-              )
+              ))
             )}
           </div>
         )}

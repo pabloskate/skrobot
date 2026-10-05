@@ -8,23 +8,32 @@ import {
 } from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { ConvexHull } from 'three/examples/jsm/math/ConvexHull.js';
-import type { BoxSpec } from '../scene/draw';
-import { THICKNESS, TIP_X, kickY } from '../scene/deck';
-import { DECK_HALF_WIDTH } from '../scene/skeleton';
-import type { Vec3 } from './view';
+import { THICKNESS, TIP_X, kickY } from '../board/deck';
+import { DECK_HALF_WIDTH } from '../motion/skeleton';
+import type { Vec3 } from '../camera/view';
 
 /**
- * Geometry for TrickScene3D, built to the same dimensions the SVG renderer
- * draws: its rounded boxes are the hull of eight corner balls (draw.tsx
- * samples exactly that solid's outline), its limbs are the hull of two balls,
- * and the deck follows deck.tsx's popsicle profile. Every solid is built in
- * the local axes the rig gives its frame: x forward, y up, z to the side.
+ * Geometry for TrickScene3D: its rounded boxes are the hull of eight corner
+ * balls, its limbs are the hull of two balls, and the deck follows deck.ts's
+ * popsicle profile. Every solid is built in the local axes the rig gives its
+ * frame: x forward, y up, z to the side.
  */
+
+/** A rounded box in a rig frame. */
+export interface BoxSpec {
+  /** Half extents along the frame's fwd / up / side axes. */
+  f: number;
+  u: number;
+  s: number;
+  /** Corner radius. */
+  r: number;
+  /** Scale of the bottom (−up) cross-section; < 1 tapers toward the base. */
+  taper?: number;
+}
 
 /**
  * A rounded box: the box shrunk by its corner radius, swollen back out by a
- * ball. A taper narrows the forward and side extents toward the base, the way
- * draw.tsx tapers the corners it hulls.
+ * ball. A taper narrows the forward and side extents toward the base.
  */
 export function roundedBoxGeometry(spec: BoxSpec, segments = 5): BufferGeometry {
   const r = Math.min(spec.r, spec.f, spec.u, spec.s);
@@ -50,7 +59,7 @@ export function roundedBoxGeometry(spec: BoxSpec, segments = 5): BufferGeometry 
   return geometry;
 }
 
-/** A convex solid: the hull of `corners`, each swollen into a ball of radius `r` (draw.tsx's solidHull). */
+/** A convex solid: the hull of `corners`, each swollen into a ball of radius `r`. */
 export function solidHullGeometry(corners: ReadonlyArray<readonly [number, number, number]>, r: number): BufferGeometry {
   const dirs: Vector3[] = [];
   const RINGS = 6;
@@ -259,7 +268,7 @@ export const DECK_PLY = 2;
 /**
  * The deck in board-local axes (x toward the nose, y up off the grip, z
  * across): grip, underside, and the ply band around the edge, each tagged
- * with its `kind`. Same popsicle as deck.tsx, sampled finer.
+ * with its `kind`. The popsicle of board/deck.ts, sampled finer.
  */
 export function deckGeometry(): BufferGeometry {
   const h = THICKNESS / 2;

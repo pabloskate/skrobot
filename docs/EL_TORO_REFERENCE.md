@@ -43,12 +43,20 @@ side. Camera limits keep the eye clear of both roofs and above the uphill grade
 without changing the lens as an attempt plays. The SVG comparison keeps its
 original restricted viewing range.
 
-## Grinds down the center rail
+## Grinds down the rails
 
 Every flat-bar grind and slide, with any trick in or out, is offered at El Toro
-and rides the center handrail (`EL_TORO_RAIL` in `scene/stairs.ts`; the motion is
-the flat-bar grind in `scene/grind.ts` with a `Handrail`). The physics follows a
-real down rail rather than the flat bar's:
+and rides the center handrail by default, or a side rail (`rail=side` in the
+explorer's link). The three rails are the same pipe (`EL_TORO_RAIL` in
+`sets/elToro/stairs.ts`; where each stands is `rails` in `sets/sets.ts`; the
+motion is the flat-bar grind in `motion/grind.ts` with a `Handrail`). A side
+rail isn't picked by hand: it's the one the grind's approach puts on the
+rider's far side, coming in from the steps. Going down, a regular rider's
+backside boardslide (toeside approach) takes the right rail, by the side wall,
+and a frontside one the left, by the bank; goofy, fakie, and spins into the
+grind swap it as they swap the rider's toeside. A slip off a side rail falls
+back onto the steps. The physics follows a real down rail rather than the
+flat bar's:
 
 - The skater rolls in beside the rail at about 13 ft/s, well under the speed it
   takes to jump the set, and pops a foot before the rail starts. They don't ollie
@@ -69,7 +77,7 @@ real down rail rather than the flat bar's:
 ## Tripod angles
 
 Besides the crane presets, three tripods stand still in the spot and pan with the
-rider (`EL_TORO_TRIPODS` in `three/elToroCamera.ts`): crouched on the bottom
+rider (`EL_TORO_TRIPODS` in `sets/elToro/elToroCamera.ts`): crouched on the bottom
 landing off the line, up the grass bank past the side wall, and at the top beside
 the wall. Each has a fixed lens, so the rider grows as they come closer and
 shrinks as they go. Beyond the bottom landing the set is an open concrete
@@ -102,7 +110,7 @@ expanse, which the side and top tripods look out over once the rider is down.
 The shipped assets use procedural runtime materials and baked 3D props. Source
 photographs are visual references only; they are not redistributed as textures
 or bundled into the application. Reusable scene code belongs in
-`packages/animations/src/three/`: `elToroLayout.ts` owns layout,
+`packages/animations/src/sets/elToro/`: `elToroLayout.ts` owns layout,
 `elToroBuilding.ts`, `elToroCanopy.ts` and `elToroLandscape.ts` own environment props,
 `elToroMaterials.ts` owns surface treatment, and `elToro3d.ts` assembles the set.
 

@@ -10,6 +10,8 @@ import {
   STAGE_SETS,
   SKATERS,
   canEnterGrind,
+  railLineFor,
+  setInfo,
   canExitGrind,
   clampOrbitCamera,
   clampZoom,
@@ -19,10 +21,11 @@ import {
   joinGrindBase,
   joinGrindExit,
   specFor,
-  stageRail,
   stairTimeline,
   wrapOrbitYaw,
   type PopEnd,
+  type RailChoice,
+  type RailLine,
   type RiderStance,
   type SceneCamera,
   type SkateStyle,
@@ -80,8 +83,10 @@ export interface ExplorerState {
   camera: CameraPresetId | SceneCamera;
   /** How far in the picture is magnified, whatever the angle: 1 is the stock framing. */
   zoom: number;
-  /** The spot the robot skates: the bayside waterfront, the stock plaza, or El Toro's 20 stair (tricks down it, grinds down its center rail). */
+  /** The spot the robot skates: the bayside waterfront, the stock plaza, or El Toro's 20 stair (tricks down it, grinds down a handrail). */
   set: StageSet;
+  /** At a spot with several handrails, which one a grind rides: the center one, or the side one the trick's approach takes. */
+  rail: RailChoice;
   /** Who skates it: the robot, illustrated human, or detailed humanoid. */
   skater: Skater;
 }
@@ -201,11 +206,9 @@ export const DEFAULT_STATE: Readonly<ExplorerState> = Object.freeze({
   camera: 'classic',
   zoom: 1,
   set: 'waterfront',
+  rail: 'center',
   skater: 'robot',
 });
-
-/** The spot El Toro's 20 stair is: flatground tricks go down it, and grinds go down its center handrail. */
-export const STAIR_SET: StageSet = 'el-toro';
 
 /** The state moved to another spot, keeping its trick: at El Toro a grind takes the handrail. */
 export function withSet(state: ExplorerState, set: StageSet): ExplorerState {
@@ -242,7 +245,7 @@ export function trickInName(state: ExplorerState): string {
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
-/** The trick on the stage, shaped for TrickScene. */
+/** The trick on the stage, shaped for TrickScene3D. */
 export function stageTrick(state: ExplorerState): Pick<Trick, 'id' | 'name' | 'base' | 'stance'> {
   if (state.mode === 'flatground') return flatgroundTrick(state.trick, state.stance);
   const base = grindBase(state);
@@ -254,6 +257,15 @@ export const outName = (out: GrindOut) => `${out.end === 'nose' ? 'Nollie ' : ''
 
 /** "a Kickflip", "an Inward Heelflip", "an FS Bigspin". */
 const withArticle = (name: string) => `${/^([aeiou]|fs\b)/i.test(name) ? 'an' : 'a'} ${name}`;
+
+/**
+ * The handrail a grind rides at a spot that has them: the center one, or
+ * the side one (left or right going down) the trick's approach takes. Null
+ * for flatground, or a spot that grinds a flat bar.
+ */
+export function railLine(state: ExplorerState): RailLine | null {
+  return state.mode === 'grinds' ? railLineFor(state.set, stageTrick(state), state.rider, state.rail) : null;
+}
 
 /** One step of a trick or combo, as a skater would call it. */
 export interface TrickStep {
@@ -276,9 +288,10 @@ export function trickSteps(state: ExplorerState): TrickStep[] {
   if (!spec) return [];
   const riding = state.stance === 'regular' ? 'rolling' : `riding ${state.stance}`;
   const side = spec.toesideApproach ? 'toeside' : 'heelside';
-  // At El Toro the grind goes down the center handrail.
-  const rail = state.set === STAIR_SET;
-  const bar = rail ? 'rail' : 'bar';
+  // At El Toro the grind goes down a handrail: the center one, or the side one it comes in toward.
+  const line = railLine(state);
+  const rail = line != null;
+  const bar = line === 'left' || line === 'right' ? `${line} rail` : rail ? 'rail' : 'bar';
   const steps: TrickStep[] = [
     { label: 'Approach', detail: `Come in ${riding} with the ${bar} on your ${side}${rail ? ', a little slower than you would to jump the set' : ''}.` },
     state.into
@@ -317,7 +330,7 @@ export interface Timeline {
 
 /** The moments worth jumping to, and how long the trick runs (seconds). */
 export function timelineFor(state: ExplorerState, style: SkateStyle | undefined): Timeline {
-  if (state.mode === 'flatground' && state.set === STAIR_SET) {
+  if (state.mode === 'flatground' && setInfo(state.set).stairs) {
     // Down the stairs the flight is the drop's: longer the lower the robot pops.
     const stairs = stairTimeline(style);
     return {
@@ -344,7 +357,7 @@ export function timelineFor(state: ExplorerState, style: SkateStyle | undefined)
       ],
     };
   }
-  const grind = grindTimelineFor(stageTrick(state), state.rider, style, true, 'slam', stageRail(state.set));
+  const grind = grindTimelineFor(stageTrick(state), state.rider, style, true, 'slam', setInfo(state.set).rails?.handrail ?? null);
   if (!grind) return { phases: [{ label: 'Set up', time: 0 }], duration: ROLL_IN + FLIP_T + LAND_T };
   return {
     duration: grind.end,
@@ -420,7 +433,7 @@ const defaultZoomForCamera = (camera: ExplorerState['camera']) => typeof camera 
 
 /** World-space travel: El Toro is fixed downhill (its tricks and its rail), while fakie elsewhere reverses. */
 function travelDir(state: ExplorerState): 1 | -1 {
-  if (state.set === STAIR_SET) return 1;
+  if (setInfo(state.set).stairs) return 1;
   const trick = stageTrick(state);
   return (grindSpecFor(trick) ?? specFor(trick)).dir;
 }
@@ -430,7 +443,7 @@ export function sceneCamera(state: ExplorerState): SceneCamera {
   if (typeof state.camera !== 'string') return clampOrbitCamera(state.camera);
   const preset = cameraPreset(state.camera);
   // El Toro's angles aim across at the center rail from the stair line; a grind is already on it.
-  if (state.set === STAIR_SET && state.mode === 'grinds' && preset.camera.targetZ) {
+  if (setInfo(state.set).rails && state.mode === 'grinds' && preset.camera.targetZ) {
     return { yaw: preset.camera.yaw, pitch: preset.camera.pitch, lens: preset.camera.lens };
   }
   if (!preset.followsTravel || travelDir(state) === 1) return preset.camera;
@@ -439,8 +452,9 @@ export function sceneCamera(state: ExplorerState): SceneCamera {
 
 /** The tripod the 3D explorer films from, where the spot has the chosen one; null for the crane. */
 export function sceneTripod(state: Pick<ExplorerState, 'set' | 'camera'>): TripodId | null {
-  if (typeof state.camera !== 'string' || state.set !== STAIR_SET) return null;
-  return cameraPreset(state.camera).tripod ?? null;
+  if (typeof state.camera !== 'string') return null;
+  const { tripod } = cameraPreset(state.camera);
+  return tripod && setInfo(state.set).tripods.includes(tripod) ? tripod : null;
 }
 
 /** Swing freely around the rider, wrapping yaw while keeping pitch in bounds. */
@@ -527,6 +541,7 @@ export function stateFromSearch(search: string): ExplorerState {
     camera,
     zoom: params.has('zoom') ? parseZoom(params.get('zoom')) : defaultZoomForCamera(camera),
     set: STAGE_SETS.find((option) => option.id === params.get('set'))?.id ?? DEFAULT_STATE.set,
+    rail: params.get('rail') === 'side' ? 'side' : DEFAULT_STATE.rail,
     skater: SKATERS.find((option) => option.id === params.get('skater'))?.id ?? DEFAULT_STATE.skater,
   };
   const grind = fromSlug(GRIND_CHOICES, params.get('grind'));
@@ -578,6 +593,7 @@ export function searchFromState(state: ExplorerState): string {
   }
   if (state.zoom !== defaultZoomForCamera(state.camera)) params.set('zoom', String(round(state.zoom, 2)));
   if (state.set !== DEFAULT_STATE.set) params.set('set', state.set);
+  if (state.rail !== DEFAULT_STATE.rail) params.set('rail', state.rail);
   if (state.skater !== DEFAULT_STATE.skater) params.set('skater', state.skater);
   return `?${params.toString()}`;
 }

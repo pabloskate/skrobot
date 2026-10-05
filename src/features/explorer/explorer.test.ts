@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SCENE_CAMERA, FLIP_T, FOOT, LAND_T, ROLL_IN, SCENE_ORBIT_BOUNDS, SCENE_ZOOM, SKATERS, TRIPODS, grindSpecFor, grindTimelineFor, stageRail, stairTimeline } from '@skrobot/animations';
+import { DEFAULT_SCENE_CAMERA, FLIP_T, FOOT, LAND_T, ROLL_IN, SCENE_ORBIT_BOUNDS, SCENE_ZOOM, SKATERS, TRICK_BASES, grindSpecFor, grindTimelineFor, setInfo, stairTimeline } from '@skrobot/animations';
 import { TRICK_BY_ID } from '@/features/tricks';
 import {
   CAMERA_PRESETS,
@@ -26,6 +26,7 @@ import {
   stateFromSearch,
   timelineFor,
   trickInName,
+  railLine,
   trickSteps,
   turnCamera,
   videoFilename,
@@ -59,6 +60,11 @@ describe('Trick Explorer catalog', () => {
         expect(TRICK_BY_ID.get(trick.id), `${base} ${stance}`).toMatchObject({ base, stance });
       }
     }
+  });
+
+  it('animates every flatground trick in the catalog as itself, never as a plain ollie', () => {
+    // A catalog base the motion doesn't know pops like an ollie without a word.
+    expect(FLATGROUND_BASES.filter((base) => !TRICK_BASES.includes(base))).toEqual([]);
   });
 
   it('shelves every grind and every trick into a grind in exactly one group, grinds apart from slides', () => {
@@ -151,7 +157,7 @@ describe('Trick Explorer timeline', () => {
   it('times a grind at El Toro down its center rail, longer than over the flat bar', () => {
     const style = { popHeight: 0.92, rotationSpeed: 1.08, flickStrength: 0.95 };
     const state = grindState({ set: 'el-toro', grind: 'Boardslide', into: 'Kickflip' });
-    const rail = grindTimelineFor(stageTrick(state), state.rider, style, true, 'slam', stageRail('el-toro'))!;
+    const rail = grindTimelineFor(stageTrick(state), state.rider, style, true, 'slam', setInfo('el-toro').rails!.handrail)!;
     const { phases, duration } = timelineFor(state, style);
     expect(duration).toBe(rail.end);
     expect(phases.map((p) => p.label)).toEqual(['Set up', 'Pop', 'Trick in', 'Lock', 'Pop off', 'Land']);
@@ -186,6 +192,28 @@ describe('Trick Explorer spots', () => {
     expect(steps).toMatch(/rail/);
     expect(steps).not.toMatch(/\bbar\b/);
     expect(trickSteps(grindState({ set: 'plaza' })).map((step) => step.detail).join(' ')).toMatch(/\bbar\b/);
+  });
+
+  it('grinds the center rail at El Toro unless asked for the side one, whose side the trick picks', () => {
+    const boardslide = (side: 'Frontside' | 'Backside', patch: Partial<ExplorerState> = {}) =>
+      grindState({ set: 'el-toro', grind: 'Boardslide', side, ...patch });
+    expect(railLine(boardslide('Backside'))).toBe('center');
+    // Going down the stairs, a regular rider's backside boardslide takes the right rail, a frontside one the left.
+    expect(railLine(boardslide('Backside', { rail: 'side' }))).toBe('right');
+    expect(railLine(boardslide('Frontside', { rail: 'side' }))).toBe('left');
+    expect(railLine(boardslide('Backside', { rail: 'side', rider: 'goofy' }))).toBe('left');
+    // No rail where there's no handrail, or no grind.
+    expect(railLine(boardslide('Backside', { rail: 'side', set: 'plaza' }))).toBeNull();
+    expect(railLine(flatState({ set: 'el-toro', rail: 'side' }))).toBeNull();
+    expect(trickSteps(boardslide('Backside', { rail: 'side' })).map((step) => step.detail).join(' ')).toMatch(/right rail on your toeside/);
+  });
+
+  it('links to the side rail, and leaves the center one out of the link', () => {
+    const side = grindState({ set: 'el-toro', grind: 'Boardslide', side: 'Backside', rail: 'side' });
+    expect(searchFromState(side)).toBe('?grind=boardslide&side=bs&set=el-toro&rail=side');
+    expect(stateFromSearch(searchFromState(side))).toEqual(side);
+    expect(searchFromState({ ...side, rail: 'center' })).not.toMatch(/rail=/);
+    expect(stateFromSearch('?grind=boardslide&set=el-toro&rail=sideways').rail).toBe('center');
   });
 });
 
@@ -235,7 +263,7 @@ describe('Trick Explorer camera', () => {
   it('films El Toro from tripods standing at the bottom, the side, and the top of the set', () => {
     const stairs = flatState({ set: 'el-toro' });
     const tripods = cameraPresetsFor(stairs).filter((preset) => preset.tripod);
-    expect(tripods.map((preset) => preset.tripod)).toEqual([...TRIPODS]);
+    expect(tripods.map((preset) => preset.tripod)).toEqual([...setInfo('el-toro').tripods]);
     for (const preset of tripods) {
       expect(sceneTripod({ ...stairs, camera: preset.id })).toBe(preset.tripod);
       expect(sceneTripod(grindState({ set: 'el-toro', camera: preset.id }))).toBe(preset.tripod);

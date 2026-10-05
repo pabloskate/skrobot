@@ -2,32 +2,33 @@
 
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { RiderStance, Robot, Trick } from '../types';
-import { resolveSkateStyle } from '../skateStyle';
-import { useTrickPlayback } from '../useTrickPlayback';
-import { randomFallVariant, randomShankProgress, type FallVariant } from '../TrickAnimation';
-import { DEFAULT_SCENE_CAMERA, type SceneCamera, type TripodId } from '../scene/camera';
-import type { StageSet } from '../scene/setKit';
-import type { LeadIn } from '../scene/TrickScene';
-import type { Skater } from '../skaters';
-import { SceneRenderer } from './renderer';
-import { planStage, stageFrame } from './stage';
-import { useTrickSound } from './useTrickSound';
-import { STOCK_VIEW, stageView } from './view';
-import WaterfrontFar from './waterfrontFar';
+import { resolveSkateStyle } from '../motion/style';
+import { useTrickPlayback } from './useTrickPlayback';
+import { randomFallVariant, randomShankProgress, type FallVariant } from '../motion/trick';
+import { DEFAULT_SCENE_CAMERA, type SceneCamera, type TripodId } from '../camera/camera';
+import { setInfo, type RailChoice, type StageSet } from '../sets/sets';
+import type { LeadIn } from '../types';
+import type { Skater } from '../riders/skaters';
+import type { SceneRenderer } from './renderer';
+import { borrowRenderer, lookFor, returnRenderer } from './rendererPool';
+import { planStage, stageFrame } from '../stage/stage';
+import { useTrickSound } from '../sound/useTrickSound';
+import { STOCK_VIEW, stageView } from '../camera/view';
+import WaterfrontFar from '../sets/waterfront/waterfrontFar';
 
 /**
- * TrickScene3D — TrickScene drawn in WebGL with three.js.
+ * TrickScene3D — a skate attempt on stage, drawn in WebGL with three.js.
  *
- * Same robot, board, bar, plaza, and camera, from the same physics and rig
- * solvers, frame for frame (stage.ts); only the drawing is new. Parts are
- * depth-tested instead of painted in order, so crossing limbs, a board
- * flipping past a foot, and any camera angle sort themselves out. The look —
- * two-tone cel shading, ink outlines, soft cast shadows — is rebuilt to
- * match the SVG renderer's.
+ * The attempt is planned and worked out frame by frame by the stage
+ * (stage/stage.ts); this component runs its clock, borrows a renderer for
+ * the set and rider (rendererPool.ts), and draws each frame. Parts are
+ * depth-tested, so crossing limbs, a board flipping past a foot, and any
+ * camera angle sort themselves out; the look is two-tone cel shading, ink
+ * outlines, and soft cast shadows.
  *
- * Takes TrickScene's props. With `fixedTime` it draws that moment; without
- * it plays the attempt on its own clock. On the waterfront the far panorama
- * is TrickScene's own SVG art in layers under the canvas (waterfrontFar.tsx).
+ * With `fixedTime` it draws that moment; without it plays the attempt on
+ * its own clock. Where the set has a far panorama (the waterfront's) it is
+ * SVG in layers under the canvas (waterfrontFar.tsx).
  */
 
 interface Props {
@@ -54,6 +55,8 @@ interface Props {
   zoom?: number;
   /** The backdrop: the stock plaza, the bayside waterfront, or El Toro's 20 stair (flatground tricks go down it, grinds down its center rail). */
   set?: StageSet;
+  /** Where the set has several handrails (El Toro): the center one, or the side one the grind's approach takes. */
+  rail?: RailChoice;
   /** Who rides: the robot (its look from `robot`), illustrated human, or detailed humanoid. */
   skater?: Skater;
   /** Play the attempt's sounds while its clock runs: the pop, the wheels, a grind or slide, the landing. Off by default. */
@@ -81,6 +84,7 @@ export default function TrickScene3D({
   zoom = 1,
   set = 'plaza',
   skater = 'robot',
+  rail = 'center',
   sound = false,
 }: Props) {
   const idBase = useId().replace(/:/g, '');
@@ -90,20 +94,17 @@ export default function TrickScene3D({
   const [shankProgress] = useState(randomShankProgress);
   const fall = forcedFall ?? fallVariant ?? randomizedFall;
   const stage = useMemo(
-    () => planStage(robot, trick, { landed, riderStance, style, fall, shankProgress, skater, set }),
+    () => planStage(trick, { landed, riderStance, style, fall, shankProgress, skater, set, rail }),
     // The trick's name and id don't change what is skated.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [robot, trick.base, trick.stance, landed, riderStance, style, fall, shankProgress, skater, set],
+    [robot, trick.base, trick.stance, landed, riderStance, style, fall, shankProgress, skater, set, rail],
   );
   const {
     time, firstRun, isPlaying, staticTime, speedToggleVisible, effectivePlaybackRate,
     selectedPlaybackRate, replay, seek, togglePlaybackRate,
   } = useTrickPlayback({
-    spec: stage.spec,
-    landed,
-    resolvedFallVariant: fall,
-    shankProgress,
-    skateStyle: style,
+    attempt: stage,
+    end: stage.end,
     onDone,
     paused,
     playbackRate,
@@ -111,7 +112,6 @@ export default function TrickScene3D({
     fixedTime,
     leadIn: leadIn?.seconds,
     onLeadInEnd: leadIn?.onEnd,
-    end: stage.end,
   });
   const lead = firstRun ? leadIn : undefined;
   const inLeadIn = lead != null && time < 0;
@@ -123,25 +123,29 @@ export default function TrickScene3D({
   const view = stageView(frame.lift, camera, zoom, aspect);
 
   const host = useRef<HTMLDivElement>(null);
-  const canvas = useRef<HTMLCanvasElement>(null);
+  const slot = useRef<HTMLDivElement>(null);
   const renderer = useRef<SceneRenderer | null>(null);
   const fallback = useRef<HTMLParagraphElement>(null);
   const draw = useRef<() => void>(() => {});
 
-  const look = stage.look;
-  const board = stage.board;
+  // Only the robot's colors, the rider, and the set need a different renderer; a new trick reuses it.
+  const { body, accent, variant } = robot.avatar;
   useEffect(() => {
-    const el = canvas.current;
     const box = host.current;
-    if (!el || !box) return;
+    const into = slot.current;
+    if (!box || !into) return;
     let scene: SceneRenderer;
     try {
-      scene = new SceneRenderer(el, { robot: look, board, skater }, set);
+      scene = borrowRenderer(lookFor({ avatar: { body, accent, variant } }, skater), set);
     } catch {
       // No WebGL 2: say so in place of the picture.
       if (fallback.current) fallback.current.hidden = false;
       return;
     }
+    const canvas = scene.canvas;
+    canvas.setAttribute('aria-hidden', 'true');
+    Object.assign(canvas.style, { display: 'block', width: '100%', height: '100%' });
+    into.append(canvas);
     renderer.current = scene;
     const resize = () => {
       const rect = box.getBoundingClientRect();
@@ -155,9 +159,10 @@ export default function TrickScene3D({
     return () => {
       observer.disconnect();
       renderer.current = null;
-      scene.dispose();
+      canvas.remove();
+      returnRenderer(scene);
     };
-  }, [look, board, set, skater]);
+  }, [body, accent, variant, set, skater]);
 
   useLayoutEffect(() => {
     draw.current = () => renderer.current?.render(frame, camera, zoom, tripod);
@@ -171,6 +176,7 @@ export default function TrickScene3D({
       data-time={time.toFixed(3)}
       data-set={set}
       data-skater={skater}
+      data-rail={stage.rail?.line}
       data-rider-stance={riderStance}
       data-nose-foot={stage.mechanics.noseFoot}
       data-toe-side={stage.mechanics.orientationSign}
@@ -190,9 +196,9 @@ export default function TrickScene3D({
         }}
       >
         <div ref={host} style={{ position: 'relative', width: '100%', aspectRatio: '500 / 404', overflow: 'hidden' }}>
-          {set === 'waterfront' && <WaterfrontFar cam={view.cam} scroll={frame.scroll} view={view.box} idBase={idBase} />}
-          {/* Above the SVG panorama, including in panels that give their SVGs a z-index. */}
-          <canvas ref={canvas} style={{ position: 'relative', zIndex: 2, display: 'block', width: '100%', height: '100%' }} aria-hidden="true" />
+          {setInfo(set).farPanorama && <WaterfrontFar cam={view.cam} scroll={frame.scroll} view={view.box} idBase={idBase} />}
+          {/* The borrowed renderer's canvas goes here, above the SVG panorama, including in panels that give their SVGs a z-index. */}
+          <div ref={slot} style={{ position: 'relative', zIndex: 2, width: '100%', height: '100%' }} />
           <p ref={fallback} hidden style={{ position: 'absolute', zIndex: 3, inset: 0, placeContent: 'center', margin: 0, padding: 16, textAlign: 'center' }}>
             This browser can&apos;t draw the 3D stage (WebGL 2 is off or unavailable).
           </p>

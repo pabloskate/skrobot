@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { TbArrowLeft, TbCheck, TbShare } from 'react-icons/tb';
-import { STAGE_SETS } from '@skrobot/animations';
+import { STAGE_SETS, setInfo, type RailChoice } from '@skrobot/animations';
 import { ROBOT_BY_ID, ROBOTS } from '@/features/robots';
 import {
   cameraLabel,
   cameraPreset,
   cameraPresetsFor,
+  railLine,
   sceneCamera,
   sceneTripod,
   searchFromState,
@@ -28,6 +29,11 @@ import VideoButton from './VideoButton';
 
 /** Swivel supplies the shared skating style for all three explorer riders. */
 const RIDER = ROBOT_BY_ID.get('shifty') ?? ROBOTS[0];
+const RAILS: ReadonlyArray<{ id: RailChoice; label: string }> = [
+  { id: 'center', label: 'Center' },
+  { id: 'side', label: 'Side' },
+];
+
 /** Wait for the camera to settle before writing it into the address bar. */
 const URL_SYNC_MS = 250;
 
@@ -49,6 +55,9 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
   const steps = trickSteps(state);
   const preset = typeof state.camera === 'string' ? cameraPreset(state.camera) : null;
   const search = searchFromState(state);
+  // A grind at a spot with handrails picks one; a side rail's side comes from the trick.
+  const pickRail = state.mode === 'grinds' && setInfo(state.set).rails != null;
+  const line = railLine(state);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -93,7 +102,7 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
         </div>
         <div className="explorer-actions">
           <VideoButton
-            video={{ robot: RIDER, trick, riderStance: state.rider, camera, tripod, zoom: state.zoom, set: state.set, skater: state.skater, rate }}
+            video={{ robot: RIDER, trick, riderStance: state.rider, camera, tripod, zoom: state.zoom, set: state.set, rail: state.rail, skater: state.skater, rate }}
             filename={videoFilename(trick.name, rate)}
           />
           <button type="button" className="explorer-share" onClick={share}>
@@ -115,6 +124,7 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
             tripod={tripod}
             zoom={state.zoom}
             set={state.set}
+            rail={state.rail}
             skater={state.skater}
             cameraLabel={cameraLabel(state)}
             customCamera={preset == null}
@@ -186,6 +196,27 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
                 ))}
               </div>
             </div>
+            {pickRail && (
+              <div className="explorer-field explorer-field-inline">
+                <span className="explorer-field-label" id="explorer-rail-label">
+                  Rail <small>{state.rail === 'side' && line ? `the ${line} one, for this trick` : 'or the side the trick comes in toward'}</small>
+                </span>
+                <div className="explorer-segmented explorer-segmented-compact" role="radiogroup" aria-labelledby="explorer-rail-label">
+                  {RAILS.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={state.rail === option.id}
+                      className={state.rail === option.id ? 'active' : ''}
+                      onClick={() => setState({ ...state, rail: option.id })}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </section>
 
           {steps.length > 0 && (

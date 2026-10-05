@@ -4,15 +4,18 @@ A standalone, interactive dev environment for the Skrobot animation assets.
 
 ## What's inside
 
-- `TrickAnimation` — side-view SVG animation of a robot attempting a skate trick, imported from `@skrobot/animations`.
-- `TrickAnimation3D` — perspective SVG renderer sharing the same animation model.
-- `TrickScene` — from-scratch look on the same physics: a new toy-robot character, a golden-hour skate plaza, and a crane camera that rises with the pop. Code lives in `packages/animations/src/scene/`; its tests assert it moves exactly like `TrickAnimation3D` and keeps every trick in frame.
-- Grinds — flat-bar grinds and slides, rendered by `TrickScene` only. Under `packages/animations/src/scene/`, `grindDefinitions.ts` owns the catalog, names, and contact geometry, `grindTricks.ts` the tricks popped into and out of a grind, `grind.ts` the timing and board path, `grindRig.ts` the rider's body, and `rail.tsx` the bar. Both rider solvers share `skeleton.ts`.
-- `SlowMotionTrickAnimation` — a ready-made slow-motion version of `TrickAnimation`.
-- `BACKGROUND_SCENE_OPTIONS` / `FALL_VARIANT_OPTIONS` — named scene and bail presets for reproducible demos.
-- `RobotAvatar` — parameterized robot avatar SVG from the shared animation package.
-- `rpsFeedback` — sound + vibration helpers for RPS from the shared animation package.
-- A Vite-powered playground UI for iterating on animations.
+- **Playground** — one attempt on the shared three.js stage (`TrickScene3D`
+  from `@skrobot/animations/three`): pick a robot and tune its skate style
+  (pop height, rotation speed, flick strength), the rider and trick stance,
+  a flatground trick or a grind combo, the spot, the skater, and the fall,
+  then land, fall, replay, or scrub frame by frame. Copy the parameters as
+  JSON for a robot's `skateStyle`.
+- **Contact sheet** — every trick as a row of frozen key frames, drawn one
+  cell at a time on the same stage.
+- **Blender prototype** — a GLB rig posed from the shared `computeFrame`.
+
+For a quick look at any trick from any camera, the web app's `/explore` is
+the same stage with orbit, zoom, and shareable links.
 
 ## Get started
 
@@ -26,60 +29,39 @@ Then open the printed local URL (usually `http://localhost:5173`).
 
 ## How to use the playground
 
-1. Pick a robot.
+1. Pick a robot, and tune its **Skate style** (values are multipliers).
 2. Pick the rider's natural **Rider stance** (`regular` or `goofy`).
 3. Pick a trick and its independent **Trick stance** (`regular`, `fakie`, `switch`, or `nollie`).
 4. Click **Land** to see the success animation, **Fall** to see the bail, or **Replay** to restart the current one.
 5. Switch **Playback** between normal and slow motion to inspect trick timing.
-6. Pin a **Background** and **Fall** variant, then copy the parameter JSON below the demo.
+6. Pick a **Spot**, a **Skater**, and a **Fall** variant, then copy the parameter JSON below the stage.
 
-Switch **Discipline** to **Grinds** for flat-bar tricks: pick a **Grind side**
-(Frontside or Backside) and a grind or slide. Grinds only render in the Scene
-view, so the other views are disabled while Grinds is selected. The frame
-buttons become Setup / Pop / Lock / Hold / Pop off / Roll away, or
-Slip / Bail for a fall. Frontside means the bar is on the rider's toeside on
-the way in. Pick a
-**Trick into grind** (for example Kickflip) to pop a flatground trick on the
-way to the bar, giving "Kickflip into Frontside Lipslide". Flips, shuvits,
-and spins (180s, 360s, bigspins, and flips with them) qualify; dolphin flips
-and impossibles don't. The trick turns the board during the hop, settles onto
-the bar, and a "Trick in" phase is added to the frame buttons and transport
-timeline. A 180 or bigspin turns the rider round, so the grind is named the
-way they then ride it, fakie: its side is where the bar is at the lock, and
-nose and tail are theirs. "Backside 180 into Frontside Nosegrind" rolls in
-with the bar on the heelside and grinds the front-foot truck, now trailing
-(it sits like a switch 5-0). In the animation params JSON it shows up as
-`entryTrick`.
+Switch **Discipline** to **Grinds** for grinds and slides: pick a **Grind
+side** (Frontside or Backside) and a grind or slide. The frame buttons become
+Setup / Pop / Lock / Hold / Pop off / Roll away, or Slip / Bail for a fall.
+Frontside means the bar is on the rider's toeside on the way in. At El Toro
+a grind goes down the center handrail, or with **Rail** set to side, the side
+rail its approach comes in toward (shown under the picker); a flatground trick
+goes down the stairs.
+
+Pick a **Trick into grind** (for example Kickflip) to pop a flatground trick
+on the way to the bar, giving "Kickflip into Frontside Lipslide". Flips,
+shuvits, and spins (180s, 360s, bigspins, and flips with them) qualify;
+dolphin flips and impossibles don't. A 180 or bigspin turns the rider round,
+so the grind is named the way they then ride it, fakie. It shows up as
+`entryTrick` in the params JSON.
 
 Pick a **Trick out of grind** to pop a flatground trick off the end of the
 bar instead of a plain pop off, giving "Frontside 5-0 Grind Kickflip Out" or
-"Crooked Grind Nollie Kickflip Out". The default is None, the plain pop off.
-What rides the bar decides which end can pop: centered on it (50-50,
-boardslide, lipslide) either end, so a kickflip or a nollie flip out; on one
-end (a single truck, a nose- or tailslide, a blunt) only that end, so a 5-0
-or smith can kickflip out but not nollie flip out, and a nosegrind or crook
-the other way round. The off-limits end is disabled in the picker, with a note
-saying why, and changing to a grind that doesn't ride the chosen end clears
-it. The pop off rises higher to give the trick room, and a "Trick out" phase
-is added to the frame buttons. It shows up as `exitTrick` in the params JSON.
+"Crooked Grind Nollie Kickflip Out". What rides the bar decides which end can
+pop: centered on it (50-50, boardslide, lipslide) either end; on one end (a
+single truck, a nose- or tailslide, a blunt) only that end. The off-limits
+end is disabled in the picker. It shows up as `exitTrick` in the params JSON.
 
 The contact sheet has the same Flatground / Grinds switch, with each grind's
-key frames placed at its own timing, and the same Trick into grind and Trick
-out of grind controls (a trick out pops off the tail where the grind rides
-it, else off the nose).
-
-The New 3D preview opens on a frozen setup pose. Use the frame slider or
-Setup / Pop / Peak / Catch / Roll away buttons to inspect the motion, and
-Land / Fall / Replay to return to playback. Background presets apply to the
-side and legacy views; New 3D uses its original outdoor scene.
-
-## Slow motion
-
-Use `SlowMotionTrickAnimation` for the preset slow-motion version, or pass
-`playbackRate` to `TrickAnimation` for a custom speed.
-
-Use `backgroundSceneId` and `fallVariant` to pin a reproducible animation setup.
-Leave them unset to keep the original randomized behavior.
+key frames placed at its own timing, and the same trick in / trick out
+controls (a trick out pops off the tail where the grind rides it, else off
+the nose).
 
 ## Type check
 

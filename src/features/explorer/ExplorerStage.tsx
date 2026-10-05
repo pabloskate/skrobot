@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
 import { TbPlayerPauseFilled, TbPlayerPlayFilled, TbRefresh, TbRepeat, TbRepeatOff, TbZoomReset } from 'react-icons/tb';
-import type { RiderStance, Robot, SceneCamera, Skater, StageSet, Trick, TripodId } from '@skrobot/animations';
+import type { RailChoice, RiderStance, Robot, SceneCamera, Skater, StageSet, Trick, TripodId } from '@skrobot/animations';
 import { TrickScene3D } from '@skrobot/animations/three';
 import { ZOOM_STEP, phaseAt, turnCamera, zoomBy, type Timeline } from './explorer';
 import { usePlayhead } from './usePlayhead';
@@ -43,6 +43,8 @@ interface Props {
   /** Magnification of the picture, 1 stock. */
   zoom: number;
   set: StageSet;
+  /** At a spot with several handrails, which one a grind rides. */
+  rail: RailChoice;
   /** Who skates: the robot, illustrated human, or detailed humanoid. */
   skater: Skater;
   cameraLabel: string;
@@ -70,7 +72,7 @@ const useInBrowser = () => useSyncExternalStore(noSubscription, () => true, () =
  * trick so a new trick starts from the top.
  */
 export default function ExplorerStage({
-  robot, trick, rider, timeline, camera, tripod, zoom, set, skater, cameraLabel, customCamera, rate, loop,
+  robot, trick, rider, timeline, camera, tripod, zoom, set, rail, skater, cameraLabel, customCamera, rate, loop,
   onCamera, onResetCamera, onZoom, onRate, onLoop,
 }: Props) {
   const { duration, phases } = timeline;
@@ -246,6 +248,7 @@ export default function ExplorerStage({
               tripod={tripod}
               zoom={zoom}
               set={set}
+              rail={rail}
               skater={skater}
               sound={playhead.playing}
               onDone={ignoreDone}

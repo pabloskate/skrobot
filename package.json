@@ -14,6 +14,7 @@
     "lint": "eslint .",
     "typecheck:web": "tsc --noEmit --incremental false",
     "test": "vitest run",
+    "test:changed": "vitest run --changed",
     "typecheck:mobile": "npm --workspace mobile run typecheck",
     "typecheck:animations": "npm --workspace @skrobot/animations run typecheck && npm --prefix skrobot-animations run typecheck",
     "check": "npm run lint && npm run typecheck:web && npm test && npm run typecheck:mobile && npm run typecheck:animations && npm run build",
