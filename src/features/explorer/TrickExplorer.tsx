@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { TbArrowLeft, TbCheck, TbShare } from 'react-icons/tb';
-import { STAGE_SETS, setInfo, type RailChoice } from '@skrobot/animations';
+import { STAGE_SETS, setInfo, useSoundEffects, type RailChoice } from '@skrobot/animations';
 import { ROBOT_BY_ID, ROBOTS } from '@/features/robots';
 import {
   cameraLabel,
@@ -45,8 +45,9 @@ const URL_SYNC_MS = 250;
 export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: string }) {
   const [state, setState] = useState<ExplorerState>(() => stateFromSearch(initialSearch));
   const [rate, setRate] = useState(1);
-  const [loop, setLoop] = useState(true);
+  const [loop, setLoop] = useState(false);
   const [shared, setShared] = useState(false);
+  const sound = useSoundEffects();
 
   const trick = stageTrick(state);
   const camera = sceneCamera(state);
@@ -56,7 +57,7 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
   const preset = typeof state.camera === 'string' ? cameraPreset(state.camera) : null;
   const search = searchFromState(state);
   // A grind at a spot with handrails picks one; a side rail's side comes from the trick.
-  const pickRail = state.mode === 'grinds' && setInfo(state.set).rails != null;
+  const pickRail = state.mode === 'grinds' && setInfo(state.set).rails != null && setInfo(state.set).rails?.sideGrinds !== false;
   const line = railLine(state);
 
   useEffect(() => {
@@ -102,7 +103,7 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
         </div>
         <div className="explorer-actions">
           <VideoButton
-            video={{ robot: RIDER, trick, riderStance: state.rider, camera, tripod, zoom: state.zoom, set: state.set, rail: state.rail, skater: state.skater, rate }}
+            video={{ robot: RIDER, trick, riderStance: state.rider, camera, tripod, zoom: state.zoom, set: state.set, rail: state.rail, skater: state.skater, rate, sound }}
             filename={videoFilename(trick.name, rate)}
           />
           <button type="button" className="explorer-share" onClick={share}>
@@ -179,9 +180,9 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
               />
               <span className="explorer-zoom-end">In</span>
             </label>
-            <div className="explorer-field explorer-field-inline">
+            <div className="explorer-field explorer-spots">
               <span className="explorer-field-label" id="explorer-set-label">Spot</span>
-              <div className="explorer-segmented explorer-segmented-compact" role="radiogroup" aria-labelledby="explorer-set-label">
+              <div className="explorer-segmented explorer-spot-options" role="radiogroup" aria-labelledby="explorer-set-label">
                 {STAGE_SETS.map((option) => (
                   <button
                     key={option.id}
@@ -195,6 +196,7 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
                   </button>
                 ))}
               </div>
+              {setInfo(state.set).description && <p className="explorer-spot-description">{setInfo(state.set).description}</p>}
             </div>
             {pickRail && (
               <div className="explorer-field explorer-field-inline">

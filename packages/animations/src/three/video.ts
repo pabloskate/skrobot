@@ -21,7 +21,7 @@ import { lookFor } from './rendererPool';
 import { renderSoundtrack } from '../sound/skateSounds';
 import { soundtrackFor } from '../sound/soundtrack';
 import { planStage, stageFrame, type StageFrame } from '../stage/stage';
-import { STOCK_VIEW, stageView } from '../camera/view';
+import { STOCK_VIEW, stageView, tracked } from '../camera/view';
 import { WaterfrontFarImage } from '../sets/waterfront/waterfrontFar';
 
 /**
@@ -41,20 +41,20 @@ export interface TrickVideoOptions {
   trick: Pick<Trick, 'id' | 'name' | 'base' | 'stance'>;
   riderStance?: RiderStance;
   camera?: SceneCamera;
-  /** Film from this tripod instead of the crane, where the set has it (El Toro). */
+  /** Film from this tripod instead of the crane, where the set has it (the landmarks). */
   tripod?: TripodId | null;
   /** Magnification of the picture, 1 stock. */
   zoom?: number;
   set?: StageSet;
   /** Which of the set's handrails a grind rides, as on the live stage. */
   rail?: RailChoice;
-  /** The same robot, human, or humanoid selected in the live scene. */
+  /** The same robot, illustrated/realistic human, or humanoid selected in the live scene. */
   skater?: Skater;
   /** Playback speed: at 0.25 the trick fills four times as long a video. */
   rate?: number;
   /** Video width in pixels; the height keeps the stage's shape. */
   width?: number;
-  /** Put the trick's sounds on an audio track (left off where the browser can't encode audio). */
+  /** Opt into an audio track; off by default and omitted where the browser can't encode audio. */
   sound?: boolean;
   fps?: number;
   /** The share of the video filmed so far, 0 to 1. */
@@ -99,7 +99,7 @@ export async function recordTrickVideo({
   rail = 'center',
   rate = 1,
   width: requestedWidth = 1280,
-  sound = true,
+  sound = false,
   fps = 60,
   onProgress,
   signal,
@@ -134,9 +134,11 @@ export async function recordTrickVideo({
   const audio = audioCodec ? new AudioBufferSource({ codec: audioCodec, quality: new Quality({ bitrate: AUDIO_BITRATE }) }) : null;
   if (audio) output.addAudioTrack(audio);
   // Frame i shows the trick at i / fps of video time, so the last lands exactly
-  // on the end. No hold after it: the explorer's loop pauses there, the video stops.
+  // on the end. No hold after it: the explorer stops there too, the video ends.
   const total = Math.ceil((stage.end / rate) * fps) + 1;
   try {
+    await scene.ready;
+    signal?.throwIfAborted();
     await output.start();
     if (audio) {
       await audio.add(await renderSoundtrack(soundtrackFor(stage), stage.end, rate, SAMPLE_RATE));
@@ -177,7 +179,7 @@ class FarPainter {
 
   async paint(frame: StageFrame, camera: Readonly<SceneCamera>, zoom: number): Promise<HTMLImageElement> {
     const { width, height } = this;
-    const view = stageView(frame.lift, camera, zoom, width / height);
+    const view = stageView(frame.lift, tracked(camera, frame), zoom, width / height);
     flushSync(() => this.root.render(createElement(WaterfrontFarImage, { cam: view.cam, scroll: frame.scroll, view: view.box, width, height })));
     const svg = this.host.firstElementChild;
     if (!svg) throw new Error('The waterfront backdrop did not render.');

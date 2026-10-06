@@ -1,5 +1,6 @@
 'use client';
 
+import { setSoundEffects, useSoundEffects } from '@skrobot/animations';
 import type { GameFormat, GameVariant } from './engine';
 import type { PlayerStance } from './gamePreferences';
 import {
@@ -46,6 +47,7 @@ export default function GamePreferencesSection() {
   const variant = useGameVariant();
   const stance = usePlayerStance();
   const tracking = useTrickTracking();
+  const sound = useSoundEffects();
 
   return (
     <section className="settings-section" aria-labelledby="game-preferences-title">
@@ -53,6 +55,20 @@ export default function GamePreferencesSection() {
         <h2 id="game-preferences-title">Game preferences</h2>
         <p>Choose match rules, your stance, and whether games feed your trick stats. Saved games keep their match settings.</p>
       </div>
+      <fieldset className="game-format-options">
+        <legend className="settings-choice-label">Sound effects</legend>
+        <label className={`game-format-option ${sound ? 'selected' : ''}`}>
+          <input
+            type="checkbox"
+            checked={sound}
+            onChange={(event) => setSoundEffects(event.target.checked)}
+          />
+          <span className="game-format-copy">
+            <strong>Play sound effects</strong>
+            <small>Skating and game sounds. Off by default.</small>
+          </span>
+        </label>
+      </fieldset>
       <fieldset className="game-format-options">
         <legend className="sr-only">Game format</legend>
         {OPTIONS.map((option) => (

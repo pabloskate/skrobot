@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { TbChevronRight, TbDice5, TbSearch, TbX } from 'react-icons/tb';
-import { SKATERS, type PopEnd } from '@skrobot/animations';
+import { SKATERS, setInfo, type PopEnd } from '@skrobot/animations';
 import { trickMatchesSearch } from '@/features/tricks';
 import {
   FLATGROUND_TIERS,
@@ -144,6 +144,7 @@ export default function TrickBuilder({ state, onChange }: Props) {
             key={mode.id}
             type="button"
             role="tab"
+            disabled={mode.id === 'grinds' && !setInfo(state.set).grinds}
             aria-selected={state.mode === mode.id}
             className={state.mode === mode.id ? 'active' : ''}
             onClick={() => {
@@ -151,7 +152,7 @@ export default function TrickBuilder({ state, onChange }: Props) {
               onChange(withMode(state, mode.id));
             }}
           >
-            {mode.label}
+            {mode.id === 'flatground' && setInfo(state.set).terrain ? 'Gap tricks' : mode.label}
           </button>
         ))}
       </div>

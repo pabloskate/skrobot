@@ -5401,16 +5401,6 @@ main:has(.rps-arena) > .screen {
   padding: 0 12px;
 }
 
-/* Pin the single-column stage only when the viewport leaves room below it
-   for the controls. Wider, shorter windows scroll the stage with the page. */
-@media (max-width: 959px) and (min-height: 640px) and (max-aspect-ratio: 3/4) {
-  .explorer-stage-col {
-    position: sticky;
-    top: 0;
-    z-index: 5;
-  }
-}
-
 @media (min-width: 960px) {
   .explorer-header {
     padding: calc(22px + var(--app-safe-area-top)) max(24px, calc((100% - 1180px) / 2 + 24px)) 72px;
@@ -5433,11 +5423,6 @@ main:has(.rps-arena) > .screen {
 
   .explorer-panel-col {
     padding: 0;
-  }
-
-  .explorer-stage-col {
-    position: sticky;
-    top: 20px;
   }
 }
 
@@ -5598,7 +5583,7 @@ main:has(.rps-arena) > .screen {
 
 .explorer-transport {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) auto auto;
+  grid-template-columns: 44px minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 10px;
   padding: 10px 12px 4px;
@@ -6047,12 +6032,35 @@ main:has(.rps-arena) > .screen {
   gap: 12px;
 }
 
+.explorer-spot-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  border-radius: 18px;
+}
+
+.explorer-spot-options button {
+  min-width: 0;
+  white-space: normal;
+  padding: 10px 8px;
+  border-radius: 13px;
+}
+
+.explorer-spot-description {
+  margin: 2px 0 0;
+  color: var(--text-muted, #716b88);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .explorer-skater-field {
   flex-wrap: wrap;
 }
 
 .explorer-skater-field .explorer-segmented {
   max-width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .explorer-skater-field .explorer-segmented button {

@@ -8,10 +8,12 @@ import type { RiderStance, SkateStyle, Stance } from '../types';
 import { HANGER_BOTTOM, WHEEL_BOTTOM, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z, deckTopY } from '../board/board';
 import { TIP_X, deckBottomY } from '../board/deck';
 import { EL_TORO_RAIL } from '../sets/elToro/stairs';
-import { fallSink, makeCamera } from '../camera/camera';
+import { DEFAULT_SCENE_CAMERA, fallSink, makeCamera } from '../camera/camera';
 import {
   barSpan,
+  carve,
   grindCameraLift,
+  grindCameraTrack,
   grindFrame,
   grindStreetDist,
   grindTimelineFor,
@@ -270,15 +272,39 @@ describe('Grind physics', () => {
     expect(stageFrame(stage, 1.5, 1).span?.x0).toBeCloseTo(barSpan(plan, grindStreetDist(1.5, plan)).x0, 6);
   });
 
-  it('starts and ends the board flat on the ground', () => {
+  it('starts and ends the board flat on the ground, rolling in along its angled line and away along the bar', () => {
     for (const { base, side, rider, stance, label } of everyGrind()) {
       const { plan, mechanics } = planFor(base, side, stance, rider, null);
       const at = (t: number) => solveGrindRig(t, plan, mechanics, NEUTRAL).rig.board;
       for (const t of [0, plan.pop - 0.01, plan.land + 0.01, plan.end]) {
         const board = at(t);
         expect(board.center.y, `${label} t=${t}`).toBeCloseTo(GROUND, 6);
-        expect(Math.abs(board.yawDeg) + Math.abs(board.pitchDeg) + Math.abs(board.flipDeg), `${label} t=${t}`).toBeLessThan(1e-6);
+        expect(Math.abs(board.pitchDeg) + Math.abs(board.flipDeg), `${label} t=${t}`).toBeLessThan(1e-6);
+        // Carving onto the approach's angle (rider and all), on it by the pop; away straight along the bar.
+        expect(board.yawDeg, `${label} t=${t}`).toBeCloseTo(t < plan.pop ? plan.approachYaw * carve(t, plan.pop, plan.carveTight).share : 0, 6);
       }
+    }
+  });
+
+  it('crosses to the bar on the sideways speed the approach gave it: nothing pushes the board sideways in the air', () => {
+    for (const { base, side, rider, stance, label } of everyGrind()) {
+      const { plan, mechanics } = planFor(base, side, stance, rider, null);
+      const z = (t: number) => solveGrindRig(t, plan, mechanics, NEUTRAL).frame.ref.z;
+      const dt = 1 / 120;
+      // Carved onto the line rolling in; then the same sideways speed into the pop and all through the hop to the lock.
+      for (const t of [plan.pop - 0.03, plan.pop + 0.05, (plan.pop + plan.lockAt) / 2, plan.lockAt - 0.05]) {
+        expect((z(t + dt) - z(t - dt)) / (2 * dt), `${label} t=${t.toFixed(2)}`).toBeCloseTo(plan.approachSpeed, 3);
+      }
+      // The carve builds that speed up smoothly from rolling straight.
+      let last = 0;
+      for (let t = dt; t < plan.pop - 0.03; t += 0.02) {
+        const v = (z(t + dt) - z(t - dt)) / (2 * dt);
+        expect(Math.abs(v - last), `${label} t=${t.toFixed(2)}`).toBeLessThan(Math.abs(plan.approachSpeed) * 0.3 + 1e-9);
+        last = v;
+      }
+      // Toward the bar, and landing on the lock.
+      expect(Math.sign(plan.approachSpeed || plan.far), label).toBe(plan.far);
+      expect(z(plan.lockAt), label).toBeCloseTo(plan.lockCenter.z, 6);
     }
   });
 });
@@ -380,7 +406,7 @@ describe('Grind body', () => {
           for (let t = 0; t <= plan.end; t += 0.06) {
             const { rig, frame, falling } = solveGrindRig(t, plan, mechanics, style);
             const sink = falling ? fallSink(GROUND - rig.head.origin.y) : 0;
-            const cam = makeCamera(grindCameraLift(plan, t, frame.rail, sink));
+            const cam = makeCamera(grindCameraLift(plan, t, frame.rail, sink), { ...DEFAULT_SCENE_CAMERA, targetZ: grindCameraTrack(plan, t) });
             const where = `${label} ${fall ?? 'landed'} pop ${popHeight} t=${t.toFixed(2)}`;
             push('top', -SKY_PAD - cam.project(rig.head.at(0, 28, 0)).y, where);
             const extremes = [
@@ -485,7 +511,7 @@ describe('Trick into grind', () => {
       const { plan, spec, mechanics } = entryPlan(entry, base, side, stance, rider, null);
       expect(plan.lock, label).toEqual(plain.lock);
       expect(plan.lockCenter, label).toEqual(plain.lockCenter);
-      expect(plan.laneZ, label).toBe(plain.laneZ);
+      // The line in is the trick's own: a spin in needs more room, so comes in at more of an angle.
       expect(plan.off - plan.lockAt, label).toBeCloseTo(plain.off - plain.lockAt, 9);
       for (let t = plan.lockAt; t < plan.off - 0.08; t += 0.1) {
         const { rig, frame } = solveGrindRig(t, plan, mechanics, NEUTRAL);
@@ -552,8 +578,9 @@ describe('Trick into grind', () => {
             sweep.below('shin length error', Math.abs(dist(leg.knee, leg.ankle) - SHIN), 0.5e-6, `${label} t=${t.toFixed(2)}`);
             if (frame.flickOut > 0.9 && leg.flicking && (entry === 'Kickflip' || entry === 'Heelflip')) {
               // Out past the rail: heelside for a kickflip, toeside for a heelflip.
-              // (Measured across the world, since the flipping deck's own sides swap.)
-              const across = leg.shoe.origin.z - rig.board.center.z;
+              // (Measured across the rider's line, since the flipping deck's own sides swap.)
+              const side = rotY({ x: 0, y: 0, z: 1 }, frame.approach);
+              const across = dot3(sub3(leg.shoe.origin, rig.board.center), side);
               expect(Math.sign(across) * rig.toeDir, `${label} t=${t.toFixed(2)}`).toBe(entry === 'Heelflip' ? 1 : -1);
               expect(Math.abs(across), label).toBeGreaterThan(DECK_HALF_WIDTH - 3);
             }
@@ -621,7 +648,7 @@ describe('Trick into grind', () => {
             prev = now;
             if (Math.round(t / dt) % 6 !== 0) continue;
             const sink = falling ? fallSink(GROUND - rig.head.origin.y) : 0;
-            const cam = makeCamera(grindCameraLift(plan, t, frame.rail, sink));
+            const cam = makeCamera(grindCameraLift(plan, t, frame.rail, sink), { ...DEFAULT_SCENE_CAMERA, targetZ: grindCameraTrack(plan, t) });
             const where = `${label} ${fall ?? 'landed'} pop ${popHeight} t=${t.toFixed(2)}`;
             sweep.below('stage top', -SKY_PAD - cam.project(rig.head.at(0, 28, 0)).y, 0, `top ${where}`);
             for (const p of [...rig.legs.map((leg) => leg.shoe.origin), ...rig.arms.map((arm) => arm.hand)]) {
@@ -758,9 +785,10 @@ describe('Spin into grind', () => {
         const bearing = rotX(rotY(spec.contact.at, -frame.spin.yaw), -frame.spin.flip);
         expect(rig.board.point(bearing).z, `${label} t=${t.toFixed(2)}`).toBeCloseTo(BAR_Z, 6);
       }
-      const start = solveGrindRig(0, plan, mechanics, NEUTRAL).rig;
+      // Turned from the line along the bar, before the carve in angles the rider.
+      const start = solveGrindRig(0, plan, mechanics, NEUTRAL);
       const end = solveGrindRig(plan.end, plan, mechanics, NEUTRAL);
-      expect(end.rig.bodyYawDeg - start.bodyYawDeg, label).toBeCloseTo(plan.heading, 6);
+      expect(end.rig.bodyYawDeg - (start.rig.bodyYawDeg - start.frame.approach), label).toBeCloseTo(plan.heading, 6);
       // A half turn swaps which end leads: the nose trails riding away from a regular roll-in, and leads out of a fakie one.
       const leads = (yaw: number) => rotY({ x: 1, y: 0, z: 0 }, yaw).x * spec.dir;
       expect(leads(end.frame.pose.yaw), label).toBeCloseTo((HALF.has(entry) ? -1 : 1) * leads(0), 6);
@@ -822,7 +850,7 @@ describe('Spin into grind', () => {
             sweep.below('sole height', Math.abs(sole.y - deckTopY(sole.x)), 0.5, `${where} sole`);
           }
           const sink = falling ? fallSink(GROUND - rig.head.origin.y) : 0;
-          const cam = makeCamera(grindCameraLift(plan, t, frame.rail, sink));
+          const cam = makeCamera(grindCameraLift(plan, t, frame.rail, sink), { ...DEFAULT_SCENE_CAMERA, targetZ: grindCameraTrack(plan, t) });
           sweep.below('stage top', -SKY_PAD - cam.project(rig.head.at(0, 28, 0)).y, 0, `top ${where}`);
           for (const p of [...rig.legs.map((leg) => leg.shoe.origin), ...rig.arms.map((arm) => arm.hand)]) {
             const pp = cam.project(p);
@@ -1029,9 +1057,9 @@ describe('Trick out of grind', () => {
         expect(Number.isNaN(halfTurns(rig.board.yawDeg)), `${label} t=${t} yaw=${rig.board.yawDeg}`).toBe(false);
         expect(frame.heading, label).toBe(plan.endHeading);
       }
-      const start = solveGrindRig(0, plan, mechanics, NEUTRAL).rig;
+      const start = solveGrindRig(0, plan, mechanics, NEUTRAL);
       const done = solveGrindRig(plan.end, plan, mechanics, NEUTRAL).rig;
-      expect(done.bodyYawDeg - start.bodyYawDeg, label).toBeCloseTo(plan.endHeading, 6);
+      expect(done.bodyYawDeg - (start.rig.bodyYawDeg - start.frame.approach), label).toBeCloseTo(plan.endHeading, 6);
     }
   });
 
@@ -1114,7 +1142,7 @@ describe('Trick out of grind', () => {
             sweep.below('thigh length error', Math.abs(dist(leg.hip, leg.knee) - THIGH), 0.5e-6, where);
             sweep.below('shin length error', Math.abs(dist(leg.knee, leg.ankle) - SHIN), 0.5e-6, where);
           }
-          const cam = makeCamera(grindCameraLift(plan, t, frame.rail, 0));
+          const cam = makeCamera(grindCameraLift(plan, t, frame.rail, 0), { ...DEFAULT_SCENE_CAMERA, targetZ: grindCameraTrack(plan, t) });
           sweep.below('stage top', -SKY_PAD - cam.project(rig.head.at(0, 28, 0)).y, 0, `top ${where}`);
           for (const p of [...rig.legs.map((leg) => leg.shoe.origin), ...rig.arms.map((arm) => arm.hand)]) {
             const pp = cam.project(p);

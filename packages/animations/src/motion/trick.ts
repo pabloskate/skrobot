@@ -36,8 +36,22 @@ interface Spec {
   stance: Trick['stance'];
   /** Spin direction: -1 = frontside, 1 = backside, 0 = no fs/bs distinction. */
   spinDir: -1 | 0 | 1;
+  /**
+   * The body spin's direction: the board's (spinDir), unless a counter shuv
+   * goes the other way (a ghetto bird's hardflip shuvs frontside, its 180 is backside).
+   */
+  bodySpinDir: -1 | 0 | 1;
   /** "Late" shuvit: hold the board flat off the pop, then snap the rotation in the back half of the flight. */
   late: boolean;
+  /**
+   * The board's own shuv (`yaw`, `spinDir`) turns against the body's spin,
+   * inside it: a ghetto bird is a frontside hardflip in a backside 180. The
+   * rider carries the board through the whole turn, so to them it is a plain
+   * hardflip, caught early and square under the feet with the turn still to
+   * finish; to the world the deck is caught short of its shuv and brought
+   * back round straight.
+   */
+  counterShuv: boolean;
   /**
    * Degrees the board's spin axis leans off vertical, toward its pitch axis.
    * A spinning, flipping deck is close to a top: its long axis sweeps a cone
@@ -50,6 +64,17 @@ interface Spec {
   tilt: number;
 }
 
+/**
+ * Share of the catch clock a counter shuv's trick is caught by
+ * (Spec.counterShuv): the back of the flight is left to finish the turn.
+ */
+const COUNTER_SHUV_CATCH = 0.6;
+/**
+ * Share of its turn the rider has made when a counter shuv is caught. A
+ * ghetto bird's rider is some 70° into the backside 180, so the deck, a half
+ * turn round them, is caught a bit past a quarter turn round in the world.
+ */
+const COUNTER_SHUV_TURNED = 0.4;
 /** How far a hardflip or inward heelflip's spin axis leans off vertical. */
 const HARDFLIP_TILT = 55;
 /** A 360 hardflip's lean: its whole turn stands the deck on end twice. */
@@ -112,6 +137,10 @@ const TRICK_MOTIONS: Readonly<Record<string, TrickMotion>> = {
   'Frontside Flip': { flips: 1, yaw: 180, bodyYaw: 180, flipDir: 1, spinDir: -1 },
   'Backside Heelflip': { flips: 1, yaw: 180, bodyYaw: 180, flipDir: -1, spinDir: 1 },
   'Frontside Heelflip': { flips: 1, yaw: 180, bodyYaw: 180, flipDir: -1, spinDir: -1 },
+  // A hardflip inside a backside 180: caught early, then turned on round with the board.
+  'Ghetto Bird': {
+    flips: 1, yaw: 180, flipDir: 1, spinDir: -1, tilt: HARDFLIP_TILT, bodyYaw: 180, bodySpinDir: 1, counterShuv: true,
+  },
   'Backside 360': { yaw: 360, bodyYaw: 360, spinDir: 1 },
   'Frontside 360': { yaw: 360, bodyYaw: 360, spinDir: -1 },
   'Backside 360 Kickflip': { flips: 1, yaw: 360, bodyYaw: 360, flipDir: 1, spinDir: 1 },
@@ -137,11 +166,34 @@ function specFor(trick: Trick): Spec {
     dir: trick.stance === 'fakie' ? -1 : 1,
     stance: trick.stance,
     spinDir: 0,
+    bodySpinDir: 0,
     late: false,
+    counterShuv: false,
     tilt: 0,
   };
   const motion = TRICK_MOTIONS[trick.base];
-  return { ...base, ...(typeof motion === 'function' ? motion(trick.stance) : motion) };
+  const spec = { ...base, ...(typeof motion === 'function' ? motion(trick.stance) : motion) };
+  return { ...spec, bodySpinDir: spec.bodySpinDir || spec.spinDir };
+}
+
+/**
+ * The board's world yaw (signed degrees) with its own shuv `shuvP` and the
+ * body's spin `bodyP` of the way round. The body carries the board with it
+ * (a 180's whole turn, a bigspin's first half; all of a counter shuv's) and
+ * the board's own shuv turns on top.
+ */
+function boardYawDeg(spec: Spec, shuvP: number, bodyP: number): number {
+  const carried = spec.counterShuv ? spec.bodyYaw : Math.min(spec.yaw, spec.bodyYaw);
+  const own = spec.counterShuv ? spec.yaw : spec.yaw - carried;
+  return (spec.bodySpinDir || 1) * carried * bodyP + (spec.spinDir || 1) * own * shuvP;
+}
+
+/**
+ * 0 → 1 through a counter shuv's turn: easing off the pop, COUNTER_SHUV_TURNED
+ * of the way by the catch at `caughtAt`, and still coming round at touchdown.
+ */
+function counterTurnProgress(p: number, caughtAt: number): number {
+  return clamp01(p) ** (Math.log(COUNTER_SHUV_TURNED) / Math.log(caughtAt));
 }
 
 // ---------- Scene + timing constants ----------
@@ -225,8 +277,9 @@ interface Frame {
    *  sx/sy squash factors; a renderer that can rotate for real (3D) uses
    *  these instead. flipDeg = around the board's long axis, yawDeg = board
    *  around the vertical axis, forwardPitchDeg = Dolphin/Forward-flip nose
-   *  dive, bodyYawDeg = skater around the vertical axis. */
-  spin3d: { flipDeg: number; yawDeg: number; forwardPitchDeg: number; bodyYawDeg: number };
+   *  dive, bodyYawDeg = skater around the vertical axis; a counter shuv
+   *  also names its shuvDeg (RawTrickRotation). */
+  spin3d: { flipDeg: number; yawDeg: number; forwardPitchDeg: number; bodyYawDeg: number; shuvDeg?: number };
   /** Shared phase clocks for renderer-only motion such as lateral flick. */
   motion: { flight: number; rotation: number };
   footL: Pt;
@@ -470,6 +523,7 @@ function computeFrame(
   let falling = false;
   let flipDeg = 0;
   let yawDeg = 0;
+  let shuvDeg = 0;
   let forwardPitchDeg = 0;
   let bodyYawDeg = 0;
   const flightProgress = (t - ROLL_IN) / FLIP_T;
@@ -512,9 +566,10 @@ function computeFrame(
 
     // Pre-rotation body lean: frontside opens the chest (lean toward the toes,
     // +x), backside winds up turning the back in first (lean toward the heels,
-    // -x). Only for tricks with body rotation (180s, 360s, bigspins).
-    if (spec.spinDir && spec.bodyYaw) {
-      bodyX += spec.spinDir * spec.dir * 8 * crouchRatio;
+    // -x). Only for tricks with body rotation (180s, 360s, bigspins) off
+    // the pop: a counter shuv's turn eases in, so it sets up as its trick does.
+    if (spec.bodySpinDir && spec.bodyYaw && !spec.counterShuv) {
+      bodyX += spec.bodySpinDir * spec.dir * 8 * crouchRatio;
     }
   } else if (t < ROLL_IN + FLIP_T) {
     const p = (t - ROLL_IN) / FLIP_T;
@@ -526,7 +581,8 @@ function computeFrame(
     // touchdown. Without the cap, values below 0.85 would remain visibly
     // under-rotated at p=1 and snap into the landed pose on the next frame.
     const catchAt = catchFraction(skateStyle);
-    const catchP = clamp01(p / catchAt);
+    const caughtAt = spec.counterShuv ? catchAt * COUNTER_SHUV_CATCH : catchAt;
+    const catchP = clamp01(p / caughtAt);
     // A "late" shuvit holds the board flat off the pop, then whips the rotation
     // through in the back half of the flight (the late scoop). Its yaw runs on a
     // delayed clock; everything else (pop arc, catch) stays on catchP.
@@ -564,22 +620,24 @@ function computeFrame(
     // The feet catch a flip or the board's own shuv early, but a body spin
     // has the whole rider's momentum behind it: it turns steadily until
     // touchdown, carrying the board round with it, and never stops in the air.
-    const carriedYaw = Math.min(spec.yaw, spec.bodyYaw);
-    const boardYaw = carriedYaw * p + (spec.yaw - carriedYaw) * spinP;
+    // A counter shuv's turn eases in round the trick and on past its catch.
+    const bodyP = spec.counterShuv ? counterTurnProgress(p, caughtAt) : p;
+    const boardYaw = boardYawDeg(spec, spinP, bodyP);
     if (spec.yaw) {
       const c = Math.cos(rad(boardYaw * shankYawScale));
       // A clean spin (no flip) reads better passing through the signed thin
       // edge; combined with a flip the scaleY rotation already carries it.
       sx = spec.flips ? 0.2 + 0.8 * Math.abs(c) : signedSquash(c);
     }
-    if (spec.bodyYaw) bodySX = signedSquash(Math.cos(rad(p * spec.bodyYaw * shankBodyScale)));
+    if (spec.bodyYaw) bodySX = signedSquash(Math.cos(rad(bodyP * spec.bodyYaw * shankBodyScale)));
     // Raw angles for the 3D renderer — same clocks (spinP/catchP, and the
     // flight for a body spin) as the squash factors above, so late tricks
     // and shanks carry over for free.
     flipDeg = spec.flipDir * spinP * spec.flips * 360 * shankFlipScale;
-    yawDeg = (spec.spinDir || 1) * boardYaw * shankYawScale;
+    yawDeg = boardYaw * shankYawScale;
+    shuvDeg = (spec.spinDir || 1) * spec.yaw * spinP * shankYawScale;
     forwardPitchDeg = spec.forwardFlip ? spec.dir * spinP * 180 * shankYawScale : 0;
-    bodyYawDeg = (spec.spinDir || 1) * p * spec.bodyYaw * shankBodyScale;
+    bodyYawDeg = (spec.bodySpinDir || 1) * bodyP * spec.bodyYaw * shankBodyScale;
     // Impossible: one continuous wrap from the popped angle through a full
     // end-over-end revolution. A separate pop-taper + linear roll used to
     // nearly cancel mid-flight (board almost stops rotating, then restarts),
@@ -610,8 +668,10 @@ function computeFrame(
       // lifts the nose as the pop's own pitch fades, so the fade runs over
       // that climb instead of levelling the deck off first. It eases off
       // from the start (the popping foot rides the strike, not a held
-      // pitch) and arrives at zero with zero slope.
-      boardRot = popAngle * (1 - clamp01(p / TILT_POP_FADE)) ** 2;
+      // pitch) and arrives at zero with zero slope, by the catch at the
+      // latest (a counter shuv's comes early).
+      const fade = Math.min(TILT_POP_FADE, caughtAt);
+      boardRot = popAngle * (1 - clamp01(p / fade)) ** 2;
     } else if (p < 0.3) {
       // smoothstep (zero slope at both ends) instead of a plain quadratic so
       // the pop decay arrives at the wobble with zero velocity, not at speed.
@@ -669,8 +729,8 @@ function computeFrame(
     // into a completely different pose. One half-sine gives a single smooth
     // sweep that returns to the catch pose without reversing mid-air.
     if (spec.bodyYaw) {
-      const spinSign = spec.spinDir || 1;
-      const armSweep = Math.sin(p * Math.PI) * 0.28 * flail * spinSign;
+      const spinSign = spec.bodySpinDir || 1;
+      const armSweep = Math.sin(bodyP * Math.PI) * 0.28 * flail * spinSign;
       armFront -= armSweep;
       armBack += armSweep;
     }
@@ -760,9 +820,10 @@ function computeFrame(
     bodySX = Math.sign(Math.cos(rad(spec.bodyYaw))) || 1;
     // Trick complete: hold the final rotations (rides away turned after 180s).
     flipDeg = spec.flipDir * spec.flips * 360;
-    yawDeg = (spec.spinDir || 1) * spec.yaw;
+    yawDeg = boardYawDeg(spec, 1, 1);
+    shuvDeg = (spec.spinDir || 1) * spec.yaw;
     forwardPitchDeg = spec.forwardFlip ? spec.dir * 180 : 0;
-    bodyYawDeg = (spec.spinDir || 1) * spec.bodyYaw;
+    bodyYawDeg = (spec.bodySpinDir || 1) * spec.bodyYaw;
     
     // Arms come down to balance on landing
     const landP = p < 0.55 ? Math.sin((p / 0.55) * Math.PI) : 0;
@@ -870,16 +931,17 @@ function computeFrame(
       const shankAngle = spec.flips * 360 * shankProgress;
       sy = spec.flips ? Math.cos(rad(shankAngle)) : 1;
       if (spec.yaw) {
-        const c = Math.cos(rad(spec.yaw * shankProgress));
+        const c = Math.cos(rad(boardYawDeg(spec, 1, 1) * shankProgress));
         sx = spec.flips ? 0.2 + 0.8 * Math.abs(c) : signedSquash(c);
       }
       if (spec.bodyYaw) {
         bodySX = signedSquash(Math.cos(rad(spec.bodyYaw * shankProgress)));
       }
       flipDeg = spec.flipDir * shankAngle;
-      yawDeg = (spec.spinDir || 1) * spec.yaw * shankProgress;
+      yawDeg = boardYawDeg(spec, 1, 1) * shankProgress;
+      shuvDeg = (spec.spinDir || 1) * spec.yaw * shankProgress;
       forwardPitchDeg = spec.forwardFlip ? spec.dir * 180 * shankProgress : 0;
-      bodyYawDeg = (spec.spinDir || 1) * spec.bodyYaw * shankProgress;
+      bodyYawDeg = (spec.bodySpinDir || 1) * spec.bodyYaw * shankProgress;
 
       const slow = easeOutCubic(clamp01(u / 0.75));
       fx = 48 * slow;
@@ -955,7 +1017,7 @@ function computeFrame(
     t,
     board: { x: boardX, y: boardY, rot: boardRot, sx, sy, griptape: sy >= 0 },
     body: { x: bodyX, y: bodyY, sx: bodySX, rot: bodyRot },
-    spin3d: { flipDeg, yawDeg, forwardPitchDeg, bodyYawDeg },
+    spin3d: { flipDeg, yawDeg, forwardPitchDeg, bodyYawDeg, ...(spec.counterShuv && { shuvDeg }) },
     motion: { flight: flightProgress, rotation: rotationProgress },
     footL,
     footR,
@@ -967,6 +1029,7 @@ function computeFrame(
 
 export {
   specFor,
+  boardYawDeg,
   computeFrame,
   catchFraction,
   knee,

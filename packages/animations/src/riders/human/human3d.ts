@@ -512,6 +512,14 @@ interface LegParts {
   shoeMaterials: ShaderMaterial[];
 }
 
+/** Alternative finishes share the human's clothing deformation and foot contact. */
+export interface HumanAppearance {
+  finish?: (material: ShaderMaterial) => ShaderMaterial;
+  /** Replaces the illustrated face and hair; the knitted beanie is retained. */
+  head?: Group;
+  outlines?: boolean;
+}
+
 export class Human3D {
   readonly group = new Group();
   private readonly head = new Group();
@@ -529,14 +537,15 @@ export class Human3D {
   private readonly geometries: BufferGeometry[] = [];
   private readonly materials: ShaderMaterial[] = [];
 
-  constructor(look: HumanLook = SKATER_LOOK) {
+  constructor(look: HumanLook = SKATER_LOOK, appearance: HumanAppearance = {}) {
     const geometry = <T extends BufferGeometry>(g: T) => {
       this.geometries.push(g);
       return g;
     };
-    const material = <T extends ShaderMaterial>(m: T) => {
-      this.materials.push(m);
-      return m;
+    const material = (m: ShaderMaterial) => {
+      const finished = appearance.finish?.(m) ?? m;
+      this.materials.push(finished);
+      return finished;
     };
     const skin = () => material(toonMaterial(look.skin));
     const darker = (hex: string, k: number) => mixHex(hex, '#1d1438', k);
@@ -572,6 +581,10 @@ export class Human3D {
     this.beanieMaterial = material(beanieMaterial({ knit: look.beanie, rib: darker(look.beanie, 0.22), label: look.print }));
     const beanie = staticMesh(geometry(beanieGeometry()), this.beanieMaterial);
     this.head.add(skull, ...ears, nose, hair, ...curls, beanie);
+    if (appearance.head) {
+      this.head.remove(skull, ...ears, nose, hair, ...curls);
+      this.head.add(appearance.head);
+    }
 
     // Torso: the tee.
     const rib = darker(look.tee, 0.2);
@@ -634,7 +647,7 @@ export class Human3D {
     }
 
     const ink = (materials: ShaderMaterial[], id: number, width = INK, garment = 0) => {
-      for (const m of materials) inkInfo(id, 0, width, INK_ROBOT, m.uniforms.uInfo.value, 0, garment);
+      for (const m of materials) inkInfo(id, 0, appearance.outlines === false ? 0 : width, appearance.outlines === false ? 0 : INK_ROBOT, m.uniforms.uInfo.value, 0, garment);
     };
     ink([this.face], ID.head, HEAD_INK, FACE);
     ink([earMaterial], ID.ears, FINE_INK, FACE);

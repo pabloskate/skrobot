@@ -2,6 +2,7 @@ import { FALL_T, FLIP_T, JUMP, LAND_T, ROLL_IN } from '../../motion/trick';
 import { resolveSkateStyle } from '../../motion/style';
 import type { SkateStyle } from '../../types';
 import type { Handrail } from '../../motion/grind';
+import { rad, smoothstep } from '../../math';
 
 /**
  * El Toro: the 20 stair at El Toro High School (Lake Forest, California),
@@ -45,6 +46,9 @@ const POP_BEHIND = 26;
 const LAND_PAST = 4 * FOOT;
 
 export interface StairPlan {
+  terrain: DropTerrain;
+  /** Post-landing horizontal positions; only bank landings accelerate. */
+  rollout: readonly number[] | null;
   /** Clock time of the pop (the tail striking at the lip) and of touchdown. */
   pop: number;
   land: number;
@@ -54,23 +58,72 @@ export interface StairPlan {
   end: number;
   /** World units a second along the stairs: the approach, the flight, and the ride away. */
   speed: number;
+  /** Horizontal airborne velocity; a side entry also crosses the spot in z. */
+  velocity: { x: number; z: number };
   /** The deck's upward speed off the pop. */
   rise: number;
   /** The fixed spot always falls toward +x; fakie changes the rider's heading. */
   dir: 1;
 }
 
-export function planStairs(style: Pick<SkateStyle, 'popHeight'>, landed: boolean): StairPlan {
+/** A fixed takeoff and its actual landing surface; distances use the same scale as scenery. */
+export interface DropTerrain {
+  drop: number;
+  run: number;
+  landPast: number;
+  laneZ: number;
+  ground: (u: number) => number;
+  /** Finite roof/bank boundaries where height depends on both world axes. */
+  surface?: (x: number, z: number) => number;
+  /** A takeoff from beside the downhill line; yaw is degrees from +x toward +z. */
+  entry?: { x: number; z: number; yaw: number };
+  /** Extra approach before the trick's crouch; short schoolyard landings have less room. */
+  runUp?: number;
+  /** Signed height gradient. Omitted for discrete stairs with a flat landing. */
+  slope?: (u: number) => number;
+}
+
+export const EL_TORO_TERRAIN: DropTerrain = {
+  drop: STAIR_DROP, run: STAIR_RUN, landPast: LAND_PAST, laneZ: 12 * FOOT, ground: stairGround,
+};
+const ROLLOUT_HZ = 240;
+
+export function planStairs(style: Pick<SkateStyle, 'popHeight'>, landed: boolean, terrain = EL_TORO_TERRAIN): StairPlan {
   const rise = Math.sqrt(2 * GRAVITY * POP_RISE * style.popHeight);
-  const flight = (rise + Math.sqrt(rise * rise + 2 * GRAVITY * STAIR_DROP)) / GRAVITY;
-  const pop = RUN_UP + ROLL_IN;
+  const landingX = terrain.run + terrain.landPast;
+  const drop = -terrain.ground(landingX);
+  const flight = (rise + Math.sqrt(rise * rise + 2 * GRAVITY * drop)) / GRAVITY;
+  const pop = (terrain.runUp ?? RUN_UP) + ROLL_IN;
   const land = pop + flight;
+  const velocity = {
+    x: (landingX - (terrain.entry?.x ?? -POP_BEHIND)) / flight,
+    z: (terrain.laneZ - (terrain.entry?.z ?? terrain.laneZ)) / flight,
+  };
+  const speed = Math.hypot(velocity.x, velocity.z);
+  let rollout: number[] | null = null;
+  if (terrain.slope && landed) {
+    rollout = [landingX];
+    const gradient = -terrain.slope(landingX);
+    // Impact removes velocity normal to the bank; downhill momentum survives.
+    // Wheels face downhill at touchdown. Impact scrubs the cross-bank component.
+    let downhillSpeed = (velocity.x + (GRAVITY * flight - rise) * gradient) / Math.hypot(1, gradient);
+    let x = landingX;
+    for (let i = 0; i < Math.ceil(LAND_T * ROLLOUT_HZ) + 1; i++) {
+      const slope = -terrain.slope(x);
+      downhillSpeed += GRAVITY * slope / Math.hypot(1, slope) / ROLLOUT_HZ;
+      x += downhillSpeed / Math.hypot(1, slope) / ROLLOUT_HZ;
+      rollout.push(x);
+    }
+  }
   return {
+    terrain,
+    rollout,
     pop,
     land,
     flight,
     end: land + (landed ? LAND_T : FALL_T),
-    speed: (POP_BEHIND + STAIR_RUN + LAND_PAST) / flight,
+    speed,
+    velocity,
     rise,
     dir: 1,
   };
@@ -82,7 +135,7 @@ export function planStairs(style: Pick<SkateStyle, 'popHeight'>, landed: boolean
  * stretched to the drop's hang time, and the landing (or fall) after it.
  */
 export function stairClock(plan: StairPlan, t: number): number {
-  if (t <= plan.pop) return t - RUN_UP;
+  if (t <= plan.pop) return t - (plan.pop - ROLL_IN);
   if (t < plan.land) return ROLL_IN + ((t - plan.pop) * FLIP_T) / plan.flight;
   return t - plan.land + ROLL_IN + FLIP_T;
 }
@@ -90,7 +143,7 @@ export function stairClock(plan: StairPlan, t: number): number {
 /** The deck's height over the top landing at a stair clock time. */
 export function stairDeckHeight(plan: StairPlan, t: number): number {
   if (t <= plan.pop) return 0;
-  if (t >= plan.land) return -STAIR_DROP;
+  if (t >= plan.land) return plan.terrain.ground(stairDistance(plan, t, ROLL_IN + FLIP_T + t - plan.land));
   const u = t - plan.pop;
   return plan.rise * u - (GRAVITY * u * u) / 2;
 }
@@ -100,9 +153,9 @@ export function stairDeckHeight(plan: StairPlan, t: number): number {
  * board and rider are carried by this, so the trick's flatground pop arc
  * (over the flatground clock) becomes the drop down the stairs.
  */
-export function stairLift(plan: StairPlan, t: number, popHeight: number): number {
+export function stairLift(plan: StairPlan, t: number, popHeight: number, distance?: number): number {
   if (t <= plan.pop) return 0;
-  if (t >= plan.land) return -STAIR_DROP;
+  if (t >= plan.land) return distance === undefined ? stairDeckHeight(plan, t) : plan.terrain.ground(distance);
   const p = (t - plan.pop) / plan.flight;
   return stairDeckHeight(plan, t) - 4 * JUMP * popHeight * p * (1 - p);
 }
@@ -113,7 +166,9 @@ export function stairLift(plan: StairPlan, t: number, popHeight: number): number
  * drop puts through the legs.
  */
 export function landingImpact(plan: StairPlan, popHeight: number): number {
-  return Math.max(0, GRAVITY * plan.flight - plan.rise - (4 * JUMP * popHeight) / plan.flight);
+  const slope = -(plan.terrain.slope?.(plan.terrain.run + plan.terrain.landPast) ?? 0);
+  const normalSpeed = (GRAVITY * plan.flight - plan.rise - plan.velocity.x * slope) / Math.hypot(1, slope);
+  return Math.max(0, normalSpeed - (4 * JUMP * popHeight) / plan.flight);
 }
 
 /**
@@ -123,8 +178,33 @@ export function landingImpact(plan: StairPlan, popHeight: number): number {
  * flatground clock: seconds of travel at full speed.
  */
 export function stairDistance(plan: StairPlan, t: number, streetDist: number): number {
-  if (t < plan.land) return -POP_BEHIND + plan.speed * (t - plan.pop);
-  return STAIR_RUN + LAND_PAST + plan.speed * (streetDist - (ROLL_IN + FLIP_T));
+  const entry = plan.terrain.entry;
+  if (t <= plan.pop) return (entry?.x ?? -POP_BEHIND) + plan.speed * Math.cos(rad(entry?.yaw ?? 0)) * (t - plan.pop);
+  if (t < plan.land) return (entry?.x ?? -POP_BEHIND) + plan.velocity.x * (t - plan.pop);
+  if (plan.rollout) {
+    const at = Math.max(0, (t - plan.land) * ROLLOUT_HZ);
+    const i = Math.min(plan.rollout.length - 2, Math.floor(at));
+    return plan.rollout[i] + (plan.rollout[i + 1] - plan.rollout[i]) * (at - i);
+  }
+  return plan.terrain.run + plan.terrain.landPast + plan.speed * (streetDist - (ROLL_IN + FLIP_T));
+}
+
+/** Position and heading of a drop's route, independent of the trick's own spins. */
+export function stairTrack(plan: StairPlan, t: number, streetDist: number) {
+  const x = stairDistance(plan, t, streetDist);
+  const { entry, laneZ } = plan.terrain;
+  const z = !entry || t >= plan.land ? laneZ
+    : t <= plan.pop ? entry.z + plan.speed * Math.sin(rad(entry.yaw)) * (t - plan.pop)
+    : entry.z + plan.velocity.z * (t - plan.pop);
+  const yaw = (entry?.yaw ?? 0) * (1 - smoothstep((t - plan.pop) / plan.flight));
+  // Wheel travel stays board-local when the entire route turns in the world.
+  const travel = -POP_BEHIND + (t < plan.land ? plan.speed * (t - plan.pop)
+    : plan.speed * plan.flight + x - plan.terrain.run - plan.terrain.landPast);
+  return { x, z, yaw, travel };
+}
+
+export function terrainSurface(terrain: DropTerrain, x: number, z: number): number {
+  return terrain.surface?.(x, z) ?? terrain.ground(x);
 }
 
 /** Height of the ground over the top landing, `u` down the stairs. */
@@ -173,8 +253,8 @@ export interface StairTimeline {
 }
 
 /** The moments of a trick down the stairs, for a robot's style (its pop sets the hang time). */
-export function stairTimeline(style: SkateStyle | undefined, landed = true): StairTimeline {
-  const plan = planStairs(resolveSkateStyle(style), landed);
+export function stairTimeline(style: SkateStyle | undefined, landed = true, terrain = EL_TORO_TERRAIN): StairTimeline {
+  const plan = planStairs(resolveSkateStyle(style), landed, terrain);
   return {
     pop: plan.pop,
     peak: plan.pop + plan.rise / GRAVITY,

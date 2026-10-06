@@ -52,6 +52,7 @@ import {
   JUMP,
   LIFT,
   ROLL_IN,
+  boardYawDeg,
   clampFootReach,
   computeFrame,
   type FallVariant,
@@ -519,12 +520,13 @@ function poseRig(
   // back to its starting facing on touchdown. Hold the completed rotation.
   // (Shanks already freeze theirs part-way.)
   const heldSpin = !landed && outcome !== 'shank' && f.motion.flight >= 1;
-  const spin = heldSpin
+  const spin: Frame['spin3d'] = heldSpin
     ? {
         flipDeg: spec.flipDir * spec.flips * 360,
-        yawDeg: (spec.spinDir || 1) * spec.yaw,
+        yawDeg: boardYawDeg(spec, 1, 1),
         forwardPitchDeg: spec.forwardFlip ? spec.dir * 180 : 0,
-        bodyYawDeg: (spec.spinDir || 1) * spec.bodyYaw,
+        bodyYawDeg: (spec.bodySpinDir || 1) * spec.bodyYaw,
+        ...(spec.counterShuv && { shuvDeg: (spec.spinDir || 1) * spec.yaw }),
       }
     : f.spin3d;
   const oriented = orientTrickRotation(mechanics, spin);
@@ -533,7 +535,7 @@ function poseRig(
   const restingHeadYaw = -(STANCE_BODY_YAW - HEAD_LOOK_FORWARD) * toeDir;
   const bodyYawDeg = oriented.bodyYawDeg + restingBodyYaw;
   const halfSpin = spec.bodyYaw % 360 !== 0;
-  const backside = spec.spinDir === 1;
+  const backside = spec.bodySpinDir === 1;
   const torsoFollow = !halfSpin || backside ? 1 : TORSO_SPIN_FOLLOW;
   const headFollow = !halfSpin || backside ? 1 : HEAD_SPIN_FOLLOW;
   // Blend the head's look-forward out as the body folds in a fall, so the
@@ -550,6 +552,10 @@ function poseRig(
   const boardPitch = popPitch(f, spec);
   const pitchDeg = boardPitch + (spec.forwardFlip ? Math.sin(spinP * Math.PI) * 42 : 0);
   const yawDeg = oriented.yawDeg;
+  // The board's own shuv: all of its turn, but for a counter shuv's.
+  const shuvDeg = spin.shuvDeg === undefined
+    ? yawDeg
+    : orientTrickRotation(mechanics, { flipDeg: 0, yawDeg: spin.shuvDeg, bodyYawDeg: 0, shuvDeg: spin.shuvDeg }).yawDeg;
   // 0 → 1: how far an impossible's board has come round from flat — the
   // share of the wrap pose (tilt, toe shift, radius) it is ridden in.
   const wrap = spec.roll !== 0 ? smoothstep(Math.abs(Math.sin(rad(pitchDeg) / 2)) / WRAP_IN) : 0;
@@ -695,9 +701,9 @@ function poseRig(
   const plans = [footPlan('left'), footPlan('right')] as const;
 
   // ----- Board -----
-  const tilt = tiltFor(spec, mechanics, yawDeg);
+  const tilt = tiltFor(spec, mechanics, shuvDeg);
   let boardDir = tilt
-    ? (local: V3) => turnAbout(rotZ(rotX(local, flipDeg * tilt.rollShare), pitchDeg), tilt.axis, yawDeg)
+    ? (local: V3) => rotY(turnAbout(rotZ(rotX(local, flipDeg * tilt.rollShare), pitchDeg), tilt.axis, shuvDeg), yawDeg - shuvDeg)
     : (local: V3) => rotY(rotZ(rotX(local, flipDeg), pitchDeg), yawDeg);
   let boardPoint = (local: V3): V3 => add3(center, boardDir(local));
   if (spec.roll !== 0) ({ dir: boardDir, point: boardPoint } = wrapBoard(plans[mechanics.popFoot === 'left' ? 0 : 1].shoe));
@@ -760,9 +766,10 @@ function poseRig(
   const upperDir = (d: V3, relYaw: number) =>
     rotY(rotX(rotY(d, restingBodyYaw + relYaw), leanX), oriented.bodyYawDeg);
   // Before a body spin the shoulders wind up against it through the crouch
-  // and release into it off the pop; the head keeps looking ahead.
-  const spinWay = Math.sign(orientTrickRotation(mechanics, {
-    flipDeg: 0, yawDeg: 0, bodyYawDeg: (spec.spinDir || 1) * spec.bodyYaw,
+  // and release into it off the pop; the head keeps looking ahead. A counter
+  // shuv's turn eases in, so it winds up as its trick does.
+  const spinWay = spec.counterShuv ? 0 : Math.sign(orientTrickRotation(mechanics, {
+    flipDeg: 0, yawDeg: 0, bodyYawDeg: (spec.bodySpinDir || 1) * spec.bodyYaw,
   }).bodyYawDeg);
   const torsoRelYaw = oriented.bodyYawDeg * (torsoFollow - 1) - spinWay * PRE_WIND * hip.load;
   const torsoPoint = (p: V3) => add3(anchor, upperDir(fallTurn(p), torsoRelYaw));

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BufferGeometry, Group, Material, Mesh, ShaderMaterial, Texture, Vector3, type Vector4 } from 'three';
+import { BufferGeometry, DoubleSide, Group, Material, Mesh, MeshBasicMaterial, Raycaster, ShaderMaterial, Texture, Vector3, type Vector4 } from 'three';
 import { resolveSkateStyle } from '../../motion/style';
 import { SKATERS, type Skater } from '../../riders/skaters';
 import type { RiderStance, Robot, Stance } from '../../types';
@@ -10,7 +10,7 @@ import { CENTER_Z, FAR_RAIL_Z, HILL_EDGE, HILL_RAIL_Z, RIDER_LANE_Z, WALL_Z } fr
 import { FOOT, RISER, STAIR_DROP, STAIR_RUN, STAIR_STEPS, TREAD } from './stairs';
 import { buildElToroBuilding } from './elToroBuilding';
 import { Bake } from '../../three/bake';
-import { buildElToroCanopy } from './elToroCanopy';
+import { buildElToroCanopy, EL_TORO_CANOPY } from './elToroCanopy';
 
 const robot: Robot = {
   id: 'el-toro-geometry',
@@ -252,6 +252,58 @@ describe('El Toro environment geometry', () => {
       expect(max.y).toBeGreaterThan(300);
       expect(Array.from(geometry.getAttribute('position').array).every(Number.isFinite)).toBe(true);
     } finally {
+      geometry.dispose();
+    }
+  });
+
+  it.each([1, -1] as const)('has one canopy underside and closed perimeter corners without duplicate faces (direction %s)', (dir) => {
+    const props = new Bake();
+    buildElToroCanopy(props, dir);
+    const geometry = props.geometry();
+    const material = new MeshBasicMaterial({ side: DoubleSide });
+    const C = EL_TORO_CANOPY;
+    try {
+      const mesh = new Mesh(geometry, material);
+      // Look upward between the rafters. The dark finish belongs to the slab,
+      // so it cannot compete with another underside a fraction of a unit away.
+      const underside = new Raycaster(
+        new Vector3(dir * (C.u0 + 214.37), C.roofBottom - 2, C.z0 + 286.71),
+        new Vector3(0, 1, 0), 0, 3,
+      ).intersectObject(mesh);
+      expect(underside).toHaveLength(1);
+      expect(underside[0].point.y).toBe(C.roofBottom);
+
+      // A ray through each outer corner crosses the two real frame sections:
+      // metal top/bottom, then wood top/bottom, each exactly once.
+      for (const [u, ux] of [[C.u0, -1], [C.u1, 1]]) {
+        for (const [z, zz] of [[C.z0, -1], [C.z1, 1]]) {
+          const hits = new Raycaster(new Vector3(dir * (u + ux * 1.37), 380, z + zz * 2.11), new Vector3(0, -1, 0), 0, 40)
+            .intersectObject(mesh);
+          expect(hits).toHaveLength(4);
+          [375.6, 371, 370, 344].forEach((y, index) => expect(hits[index].point.y).toBeCloseTo(y, 4));
+        }
+      }
+
+      // Looking along either perimeter side must encounter only its exterior
+      // ends, with no buried caps left at the joins between adjacent sides.
+      for (const [uRayY, zRayY, half] of [[363.3, 352.3, 4], [373.3, 373.3, 4.3]]) {
+        for (const z of [C.z0 - 1.71, C.z1 + 1.71]) {
+          const hits = new Raycaster(new Vector3(dir * (C.u0 - 10), uRayY, z), new Vector3(dir, 0, 0), 0, C.u1 - C.u0 + 20)
+            .intersectObject(mesh);
+          expect(hits).toHaveLength(2);
+          expect(dir * hits[0].point.x).toBeCloseTo(C.u0 - half, 4);
+          expect(dir * hits[1].point.x).toBeCloseTo(C.u1 + half, 4);
+        }
+        for (const u of [C.u0 - 1.37, C.u1 + 1.37]) {
+          const hits = new Raycaster(new Vector3(dir * u, zRayY, C.z0 - 10), new Vector3(0, 0, 1), 0, C.z1 - C.z0 + 20)
+            .intersectObject(mesh);
+          expect(hits).toHaveLength(2);
+          expect(hits[0].point.z).toBeCloseTo(C.z0 - half, 4);
+          expect(hits[1].point.z).toBeCloseTo(C.z1 + half, 4);
+        }
+      }
+    } finally {
+      material.dispose();
       geometry.dispose();
     }
   });

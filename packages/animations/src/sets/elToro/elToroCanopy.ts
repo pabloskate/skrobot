@@ -52,15 +52,16 @@ export function buildElToroCanopy(props: Bake, dir: 1 | -1): void {
   const P = (u: number, y: number, z: number): Vec3 => [dir * u, y, z];
   const face = (a: Vec3, b: Vec3, c: Vec3, d: Vec3, n: Vec3, color: string, ink: Ink) =>
     props.quad(a, b, c, d, n, { color: daylight(color, n) }, ink);
-  const box = (a: Vec3, b: Vec3, color: string, ink: Ink = WOOD) => {
+  const box = (a: Vec3, b: Vec3, color: string, ink: Ink = WOOD, options: { faces?: string; bottom?: string } = {}) => {
     const [x0, y0, z0]: Vec3 = [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.min(a[2], b[2])];
     const [x1, y1, z1]: Vec3 = [Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.max(a[2], b[2])];
-    face([x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0], [0, 1, 0], color, ink);
-    face([x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1], [0, -1, 0], color, ink);
-    face([x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], [0, 0, 1], color, ink);
-    face([x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0], [0, 0, -1], color, ink);
-    face([x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0], [-1, 0, 0], color, ink);
-    face([x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [1, 0, 0], color, ink);
+    const faces = options.faces ?? 'tbfkle';
+    if (faces.includes('t')) face([x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0], [0, 1, 0], color, ink);
+    if (faces.includes('b')) face([x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1], [0, -1, 0], options.bottom ?? color, ink);
+    if (faces.includes('f')) face([x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], [0, 0, 1], color, ink);
+    if (faces.includes('k')) face([x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0], [0, 0, -1], color, ink);
+    if (faces.includes('l')) face([x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0], [-1, 0, 0], color, ink);
+    if (faces.includes('e')) face([x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [1, 0, 0], color, ink);
   };
 
   // Individual running-bond block faces wrap the square piers. Their shallow
@@ -115,8 +116,7 @@ export function buildElToroCanopy(props: Bake, dir: 1 | -1): void {
 
   // A dark uninterrupted underside keeps the roof open and sheltered, rather
   // than turning the canopy into another solid-walled classroom building.
-  box(P(C.u0, C.roofBottom, C.z0), P(C.u1, C.roofTop, C.z1), '#858174');
-  face(P(C.u0, C.roofBottom - 0.2, C.z1), P(C.u1, C.roofBottom - 0.2, C.z1), P(C.u1, C.roofBottom - 0.2, C.z0), P(C.u0, C.roofBottom - 0.2, C.z0), [0, -1, 0], '#4c493f', WOOD);
+  box(P(C.u0, C.roofBottom, C.z0), P(C.u1, C.roofTop, C.z1), '#858174', WOOD, { bottom: '#4c493f' });
   for (let z = C.z0 + 15; z < C.z1; z += 76) {
     // Exposed rectangular ends project beyond both roof edges, as in the photo.
     box(P(C.u0 - 23, 354, z - 4), P(C.u1 + 30, 371, z + 4), '#827a66');
@@ -125,17 +125,27 @@ export function buildElToroCanopy(props: Bake, dir: 1 | -1): void {
     box(P(C.u0, C.roofTop + 0.15, z + 9), P(C.u1, C.roofTop + 0.6, z + 9.8), '#716e62');
   }
 
+  // Each perimeter is a closed ring. The u sides own the corner footprints;
+  // the z sides meet them without hidden end caps or duplicate top faces.
+  const perimeter = (half: number, low: number, high: number, uColor: string, zColor: string, ink: Ink) => {
+    for (const [u, outward] of [[C.u0, -1], [C.u1, 1]]) {
+      const a = P(u - half, low, C.z0 - half), b = P(u + half, high, C.z1 + half);
+      box(a, b, uColor, ink, { faces: 'tbfk' });
+      box(a, b, uColor, ink, { faces: dir * outward > 0 ? 'e' : 'l' });
+      // Only the section facing the open roof interior is exposed inward.
+      box(P(u - half, low, C.z0 + half), P(u + half, high, C.z1 - half), uColor, ink, { faces: dir * outward > 0 ? 'l' : 'e' });
+    }
+    for (const z of [C.z0, C.z1]) {
+      box(P(C.u0 + half, low, z - half), P(C.u1 - half, high, z + half), zColor, ink, { faces: 'tbfk' });
+    }
+  };
   // Weathered perimeter fascia with a narrow metal flashing and drip edge.
+  perimeter(4, 344, 370, '#786e5a', '#726956', WOOD);
+  perimeter(4.3, 371, 375.6, '#9c9785', '#999481', METAL);
   for (const u of [C.u0, C.u1]) {
-    box(P(u - 4, 344, C.z0 - 4), P(u + 4, 370, C.z1 + 4), '#786e5a');
-    box(P(u - 4.3, 371, C.z0 - 4.3), P(u + 4.3, 375.6, C.z1 + 4.3), '#9c9785', METAL);
     for (let y = 349; y < 370; y += 5.2) {
       box(P(u + 4.1, y, C.z0), P(u + 4.4, y + 0.6, C.z1), '#625c4f');
     }
-  }
-  for (const z of [C.z0, C.z1]) {
-    box(P(C.u0 - 4, 344, z - 4), P(C.u1 + 4, 370, z + 4), '#726956');
-    box(P(C.u0 - 4.3, 371, z - 4.3), P(C.u1 + 4.3, 375.6, z + 4.3), '#999481', METAL);
   }
 
   // A low blue-gray guardrail across the rear bay remains visibly open.

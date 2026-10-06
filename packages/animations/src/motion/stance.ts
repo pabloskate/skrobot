@@ -27,6 +27,11 @@ export interface RawTrickRotation {
   flipDeg: number;
   yawDeg: number;
   bodyYawDeg: number;
+  /**
+   * Of yawDeg, the board's own shuv, when the rest is the rider bringing the
+   * board round (a counter shuv: Spec.counterShuv). Absent, the whole yaw is one.
+   */
+  shuvDeg?: number;
 }
 
 export interface OrientedTrickRotation {
@@ -88,11 +93,16 @@ export function orientTrickRotation(
 ): OrientedTrickRotation {
   // A nose scoop sends a board-only shuv around the opposite world-space yaw
   // from the equivalent tail scoop. When the rider turns too (180s, 360s, and
-  // bigspins), the body carries the board in the same direction instead.
-  const noseShuvSign = mechanics.popFoot === mechanics.noseFoot && rotation.bodyYawDeg === 0 ? -1 : 1;
+  // bigspins), the body carries the board in the same direction instead. A
+  // counter shuv names its own shuv, so only that is the scoop's.
+  const noseScoop = mechanics.popFoot === mechanics.noseFoot;
+  const { shuvDeg } = rotation;
+  const yawDeg = shuvDeg === undefined
+    ? (noseScoop && rotation.bodyYawDeg === 0 ? -1 : 1) * rotation.yawDeg
+    : (noseScoop ? -1 : 1) * shuvDeg + (rotation.yawDeg - shuvDeg);
   return {
     flipDeg: mechanics.orientationSign * rotation.flipDeg,
-    yawDeg: -mechanics.orientationSign * noseShuvSign * rotation.yawDeg,
+    yawDeg: -mechanics.orientationSign * yawDeg,
     bodyYawDeg: mechanics.bodyYawDegrees - mechanics.orientationSign * rotation.bodyYawDeg,
   };
 }

@@ -3,24 +3,23 @@ import { FOLLOW_POP, LIGHT, fallSink } from '../camera/camera';
 import { ASPHALT } from '../camera/view';
 import { wheelRoll } from '../board/board';
 import { clearFeet } from '../board/footContact';
-import type { V3 } from '../math';
+import { rad, type V3 } from '../math';
 import { handrailHeight, railTrack, type GrindPlan } from '../motion/grind';
 import { kneeBetween, solveGrindRig } from '../motion/grindRig';
 import { solveRig } from '../motion/rig';
 import { LAND_OMEGA, LAND_ZETA, SQUAT_FLOOR, moveFrame, type Frame3, type LegRig, type Rig } from '../motion/skeleton';
 import { GROUND, X0, computeFrame } from '../motion/trick';
-import { RIDER_LANE_Z } from '../sets/elToro/elToroLayout';
+import { bankRig } from './bank';
 import {
-  STAIR_DROP,
   landingImpact,
   stairClock,
   stairDeckHeight,
-  stairDistance,
-  stairGround,
+  stairTrack,
+  terrainSurface,
   stairLift,
   type StairPlan,
 } from '../sets/elToro/stairs';
-import { dustPuffs, expressionAt, grindExpression, hipsOf, onTheGround, posed, riderShadows, DUST_T, type Puff, type StageFrame } from './frameParts';
+import { dustPuffs, expressionAt, grindExpression, groundLift, hipsOf, onTheGround, posed, riderShadows, DUST_T, type Puff, type StageFrame } from './frameParts';
 import type { StagePlan } from './stage';
 
 /**
@@ -83,7 +82,7 @@ function shiftRig(rig: Rig, by: V3): Rig {
 }
 
 /**
- * The landing off nine feet. The flatground rig's touchdown spring takes the
+ * The landing after a drop. The flatground rig's touchdown spring takes the
  * speed its own pop arrives with; the drop arrives faster, so the knees take
  * the difference too: the body sinks further into the landing, on the same
  * spring, never past the deepest squat the legs allow.
@@ -144,10 +143,10 @@ function craneDownhill(deckHeight: (t: number) => number, t: number): number {
  * shadow on: down the sun's line from `p` until it meets a step, `u` being
  * the rider's distance down the stairs.
  */
-function shadowGround(p: V3, u: number, dir: 1 | -1): number {
+function shadowGround(p: V3, u: number, dir: 1 | -1, ground: (u: number, z: number) => number, across: number): number {
   const at = (s: number) => {
-    const q = { x: p.x - LIGHT.x * s, y: p.y - LIGHT.y * s };
-    return { up: ASPHALT - q.y, ground: stairGround(u + dir * (q.x - X0)) };
+    const q = { x: p.x - LIGHT.x * s, y: p.y - LIGHT.y * s, z: p.z - LIGHT.z * s };
+    return { up: ASPHALT - q.y, ground: ground(u + dir * (q.x - X0), across + q.z) };
   };
   let lo = 0;
   let hi = 0;
@@ -170,13 +169,13 @@ function shadowGround(p: V3, u: number, dir: 1 | -1): number {
 }
 
 /** The level (over the top landing) the rider's shadows fall at: the step the sun casts the middle of them onto. */
-function shadowLevel(rig: Rig, u: number, dir: 1 | -1): number {
+function shadowLevel(rig: Rig, u: number, dir: 1 | -1, ground: (u: number, z: number) => number, across = 0): number {
   const hips = hipsOf(rig);
-  return shadowGround({ x: (hips.x + rig.board.center.x) / 2, y: (hips.y + rig.board.center.y) / 2, z: 0 }, u, dir);
+  return shadowGround({ x: (hips.x + rig.board.center.x) / 2, y: (hips.y + rig.board.center.y) / 2, z: (hips.z + rig.board.center.z) / 2 }, u, dir, ground, across);
 }
 
 /**
- * One frame of a flatground trick down El Toro's 20 stair. The trick and
+ * One frame of a gap trick down a spot's stairs or onto its bank. The trick and
  * the rider are solved exactly as on flat ground, on the stairs' stretched
  * clock (stairClock), turned together for a backwards approach, then carried
  * down the drop together; the street rolls at the stairs' speed.
@@ -187,49 +186,60 @@ export function stairFrame(stage: StagePlan, stairs: StairPlan, t: number, rate:
   const at = (time: number) => computeFrame(stairClock(stairs, time), spec, landed, fall, shankProgress, style);
   const f = at(clock);
   // Distance down the stairs (the lip at 0), and the street rolled by it.
-  const distance = (time: number) => stairDistance(stairs, time, time < 0 ? time : at(Math.min(time, stage.end)).streetDist);
-  const u = distance(t);
+  const track = (time: number) => stairTrack(stairs, time, time < 0 ? time : at(Math.min(time, stage.end)).streetDist);
+  const route = track(t);
+  const u = route.x;
   const dir = stairs.dir;
   // The rider is solved on flat ground and then carried down by `drop`; the
   // ground pass keeps the board out of the steps as they lie before that
   // carry (a low pop off the lip rises slower than its flatground arc, and
   // would otherwise sink the tail into the top landing).
-  const drop = stairLift(stairs, clock, style.popHeight);
-  const stepUnder = (p: V3) => ASPHALT - (stairGround(u + dir * (p.x - X0)) - drop);
+  const ground = (x: number, z: number) => terrainSurface(stairs.terrain, x, z);
+  const drop = stairLift(stairs, clock, style.popHeight, u);
+  const stepUnder = (p: V3) => ASPHALT - (ground(u + dir * (p.x - X0), route.z + p.z) - drop);
   const flat = solveRig(f, spec, mechanics, style, landed ? 'landed' : fall);
   const heading = spec.dir === -1 ? 180 : 0;
   const downhill = heading ? reverseHeading(flat) : flat;
-  const solved = clearFeet(onTheGround(downhill, stepUnder));
+  const solved = clearFeet(onTheGround(downhill, stairs.terrain.slope ? undefined : stepUnder));
   const absorbed = absorbDrop(solved, stairs, clock, style.popHeight);
-  const rig = shiftRig(posed(absorbed, stage.skater, headPose), { x: 0, y: -drop, z: 0 });
+  const banked = bankRig(posed(absorbed, stage.skater, headPose), stairs, clock, u, route.yaw);
+  const carried = shiftRig(banked, { x: 0, y: -drop, z: 0 });
+  // Feet already cleared the grip before the rigid bank transform. Resolve
+  // terrain contact by carrying this complete posed skeleton, not by solving
+  // its knees again with robot bone lengths after humanRig has sized them.
+  const clearance = stairs.terrain.slope ? groundLift(carried, p => ASPHALT - ground(u + p.x - X0, route.z + p.z)) : 0;
+  const rig = clearance > 0 ? shiftRig(carried, { x: 0, y: -clearance, z: 0 }) : carried;
   const falling = !landed && f.motion.flight >= 1;
   const headHeight = GROUND - solved.head.origin.y;
   const lift = craneDownhill((time) => stairDeckHeight(stairs, time), clock) - (falling ? fallSink(headHeight) : 0);
 
-  const touchdownU = distance(stairs.land);
+  const touchdownTravel = track(stairs.land).travel;
   // Wheel angles are board-local: turning the entire rider must not reverse
   // the backwards roll inside that frame, including after a 180-degree trick.
-  const roll = (d: number) => wheelRoll(d, touchdownU, spec.dir, rig.board.yawDeg - heading);
-  const angle = roll(u);
+  const roll = (d: number) => wheelRoll(d, touchdownTravel, spec.dir, rig.board.yawDeg + route.yaw - heading);
+  const angle = roll(route.travel);
 
   // Dust off the lip at the pop and off the bottom at touchdown, left behind where it was kicked up.
   const dust: Puff[] = [];
-  const kick = (from: number, x: number, ground: number, strength: number) => {
+  const kick = (from: number, along: number, ground: number, strength: number) => {
     const p = (clock - from) / DUST_T;
-    if (p >= 0 && p < 1) dust.push(...dustPuffs(p, x - dir * (u - distance(from)), strength, 0, ground));
+    const origin = track(from);
+    if (p >= 0 && p < 1) dust.push(...dustPuffs(p,
+      X0 + along * Math.cos(rad(origin.yaw)) + origin.x - u,
+      strength, along * Math.sin(rad(origin.yaw)) + origin.z - route.z, ground));
   };
-  kick(stairs.pop, X0 + spec.dir * (spec.nollie ? 32 : -32), ASPHALT, 0.8);
-  kick(stairs.land, X0, ASPHALT + STAIR_DROP, landed ? 1 : 0.8);
+  kick(stairs.pop, spec.dir * (spec.nollie ? 32 : -32), ASPHALT, 0.8);
+  kick(stairs.land, 0, ASPHALT - ground(stairs.terrain.run + stairs.terrain.landPast, stairs.terrain.laneZ), landed ? 1 : 0.8);
 
-  const shadowY = shadowLevel(rig, u, dir);
+  const shadowY = shadowLevel(rig, u, dir, ground, route.z);
   return {
     t,
     rig,
     lift,
     scroll: u * dir,
     span: null,
-    stairs: { dir, shadowY, across: RIDER_LANE_Z },
-    wheels: { angle, sweep: angle - roll(distance(t - rate / 60)) },
+    stairs: { dir, shadowY, across: route.z },
+    wheels: { angle, sweep: angle - roll(track(t - rate / 60).travel) },
     expression: headPose?.expression ?? expressionAt(f.t, landed),
     dust,
     shadows: riderShadows(rig, {
@@ -280,7 +290,7 @@ export function railFrame(stage: StagePlan, plan: GrindPlan, t: number, rate: nu
   if (plan.fail == null) kick(plan.land, X0, across(plan.lockCenter.z), 1);
   else kick(plan.fail + plan.drop, hips.x, hips.z, 0.8);
 
-  const shadowY = shadowLevel(rig, u, 1);
+  const shadowY = shadowLevel(rig, u, 1, rail.ground);
   return {
     t,
     rig,

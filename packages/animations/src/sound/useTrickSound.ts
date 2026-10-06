@@ -5,12 +5,15 @@ import { unlockAudio } from './audio';
 import { LiveSoundtrack, loadRecordings } from './skateSounds';
 import { soundtrackFor } from './soundtrack';
 import type { StagePlan } from '../stage/stage';
+import { useSoundEffects } from './preferences';
 
 /**
  * Plays the attempt's sounds along with the clock its picture is drawn at,
- * while `enabled`: the pop, the wheels, a grind or slide, the landing.
+ * when requested and the viewer has enabled sound effects.
  */
-export function useTrickSound(stage: StagePlan, time: number, rate: number, enabled: boolean) {
+export function useTrickSound(stage: StagePlan, time: number, rate: number, requested: boolean) {
+  const soundEffects = useSoundEffects();
+  const enabled = requested && soundEffects;
   const player = useRef<LiveSoundtrack | null>(null);
 
   useEffect(() => {

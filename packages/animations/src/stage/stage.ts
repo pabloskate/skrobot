@@ -3,7 +3,7 @@ import { cameraLift, fallSink } from '../camera/camera';
 import { ASPHALT } from '../camera/view';
 import { clearFeet } from '../board/footContact';
 import { wheelRoll } from '../board/board';
-import { barSpan, grindCameraLift, grindStreetDist, planGrind, travel, type GrindPlan } from '../motion/grind';
+import { barSpan, grindCameraLift, grindCameraTrack, grindStreetDist, planGrind, travel, type GrindPlan } from '../motion/grind';
 import { grindSpecFor } from '../motion/grindDefinitions';
 import { solveGrindRig } from '../motion/grindRig';
 import { solveRig } from '../motion/rig';
@@ -14,6 +14,7 @@ import { barShadowParts } from '../sets/bar';
 import { planStairs, type StairPlan } from '../sets/elToro/stairs';
 import { setInfo, sideRailFor, type RailChoice, type RailLine, type StageSet } from '../sets/sets';
 import { railFrame, stairFrame } from './downhill';
+import { gazeAt } from './gaze';
 import {
   expressionAt,
   grindExpression,
@@ -45,7 +46,7 @@ export interface StagePlan {
   grind: GrindPlan | null;
   /** Down a set's handrails: which one the grind rides, and where it stands across the set (z). Null otherwise. */
   rail: { line: RailLine; z: number } | null;
-  /** Down a stair set (a flatground trick at El Toro); null on flat ground. */
+  /** A gap trick down a fixed obstacle, including a bank landing; null on flat ground. */
   stairs: StairPlan | null;
   mechanics: RiderMechanics;
   style: SkateStyle;
@@ -76,13 +77,13 @@ export function planStage(
   const spec = specFor(trick);
   const grindSpec = grindSpecFor(trick);
   const mechanics = resolveRiderMechanics(riderStance, spec.stance);
-  // Where the set has handrails a grind rides one down the stairs; where it's a stair set a flatground trick goes down them.
-  const { rails, stairs: stairSet } = setInfo(set);
-  const line: RailLine | null = grindSpec && rails ? (choice === 'side' ? sideRailFor(grindSpec, mechanics) : 'center') : null;
+  // Where the set has handrails a grind rides one down the stairs; where it has a drop a flatground trick goes down it.
+  const { rails, terrain, grinds } = setInfo(set);
+  const line: RailLine | null = grindSpec && rails ? (choice === 'side' && rails.sideGrinds !== false ? sideRailFor(grindSpec, mechanics) : 'center') : null;
   // A side rail stands at the edge of the stairs, with nothing past it to fall onto.
   const handrail = rails && line ? (line === 'center' ? rails.handrail : { ...rails.handrail, edge: true }) : null;
-  const grind = grindSpec ? planGrind(grindSpec, mechanics, style, landed, fall, handrail) : null;
-  const stairs = stairSet && !grind ? planStairs(style, landed) : null;
+  const grind = grindSpec && grinds ? planGrind(grindSpec, mechanics, style, landed, fall, handrail) : null;
+  const stairs = terrain && !grind ? planStairs(style, landed, terrain) : null;
   return {
     spec,
     grind,
@@ -103,6 +104,14 @@ export function planStage(
  * which sets how far the wheel's printed mark smears over a displayed frame.
  */
 export function stageFrame(stage: StagePlan, t: number, rate: number, headPose?: HeadPose | null): StageFrame {
+  const frame = frameAt(stage, t, rate, headPose);
+  // Where the rider is looking (stage/gaze.ts): the obstacle, then the board, then the way ahead.
+  // A presentation head move (a lead-in) is choreographed instead, and wins.
+  if (headPose) return frame;
+  return { ...frame, gaze: gazeAt(stage, frame, (at) => frameAt(stage, at, 1)) };
+}
+
+function frameAt(stage: StagePlan, t: number, rate: number, headPose?: HeadPose | null): StageFrame {
   if (stage.stairs) return stairFrame(stage, stage.stairs, t, rate, headPose);
   if (stage.grind?.handrail) return railFrame(stage, stage.grind, t, rate, headPose);
   const { spec, grind: plan, mechanics, style, landed, fall, shankProgress } = stage;
@@ -152,6 +161,7 @@ export function stageFrame(stage: StagePlan, t: number, rate: number, headPose?:
     t,
     rig,
     lift,
+    ...(plan ? { track: grindCameraTrack(plan, clock) } : null),
     scroll,
     span,
     stairs: null,

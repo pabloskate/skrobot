@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
-import { TbPlayerPauseFilled, TbPlayerPlayFilled, TbRefresh, TbRepeat, TbRepeatOff, TbZoomReset } from 'react-icons/tb';
+import { TbPlayerPauseFilled, TbPlayerPlayFilled, TbRefresh, TbRepeat, TbRepeatOff, TbVolume, TbVolumeOff, TbZoomReset } from 'react-icons/tb';
+import { setSoundEffects, useSoundEffects } from '@skrobot/animations';
 import type { RailChoice, RiderStance, Robot, SceneCamera, Skater, StageSet, Trick, TripodId } from '@skrobot/animations';
 import { TrickScene3D } from '@skrobot/animations/three';
 import { ZOOM_STEP, phaseAt, turnCamera, zoomBy, type Timeline } from './explorer';
@@ -38,7 +39,7 @@ interface Props {
   rider: RiderStance;
   timeline: Timeline;
   camera: SceneCamera;
-  /** Film from this tripod instead of the crane (El Toro's). */
+  /** Film from this tripod instead of the crane (a landmark's). */
   tripod: TripodId | null;
   /** Magnification of the picture, 1 stock. */
   zoom: number;
@@ -77,6 +78,7 @@ export default function ExplorerStage({
 }: Props) {
   const { duration, phases } = timeline;
   const playhead = usePlayhead(duration, rate, loop);
+  const sound = useSoundEffects();
   const phase = phaseAt(phases, playhead.time);
   const drag = useRef<{ id: number; x: number; y: number; from: SceneCamera; moved: boolean } | null>(null);
   // Every finger or pointer on the stage; two of them are a pinch, not a drag.
@@ -250,7 +252,7 @@ export default function ExplorerStage({
               set={set}
               rail={rail}
               skater={skater}
-              sound={playhead.playing}
+              sound={sound && playhead.playing}
               onDone={ignoreDone}
             />
           ) : (
@@ -297,6 +299,16 @@ export default function ExplorerStage({
           aria-label={`Speed ${SPEEDS[Math.max(0, speedIndex)].label}; switch to ${nextSpeed.label}`}
         >
           {SPEEDS[Math.max(0, speedIndex)].label}
+        </button>
+        <button
+          type="button"
+          className={`explorer-loop ${sound ? 'active' : ''}`}
+          onClick={() => setSoundEffects(!sound)}
+          aria-pressed={sound}
+          aria-label="Sound effects"
+          title={sound ? 'Turn sound effects off' : 'Turn sound effects on'}
+        >
+          {sound ? <TbVolume aria-hidden /> : <TbVolumeOff aria-hidden />}
         </button>
         <button
           type="button"

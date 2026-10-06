@@ -55,7 +55,7 @@ export interface SceneCamera {
 /**
  * Tripods stand still in the spot and pan to keep the rider in shot, rather
  * than flying alongside them as the crane does: from the bottom of the set,
- * off its side, and from the top. Where a spot has them (El Toro's 20 stair),
+ * off its side, and from the top. Where a spot has them (the landmarks),
  * TrickScene3D films from them; anywhere else it keeps to the crane.
  */
 export type TripodId = 'bottom' | 'side' | 'top';

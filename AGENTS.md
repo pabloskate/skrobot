@@ -70,7 +70,7 @@ src/
 │   ├── skater/           # Player model: skate score (unlocks at 8 games, beta-gated), robot-ladder placement, adaptive rival robot
 │   ├── home/             # Landing screen / flatground robot choice
 │   ├── install/          # App Store handoff + Android PWA install guidance (web-only)
-│   ├── explorer/         # Trick Explorer at /explore (/explore/3d redirects here): tricks + grind combos, robot or human skater, camera angles, spots incl. El Toro's 20 stair and its center and side handrails, tripod angles there, shareable links, MP4 download
+│   ├── explorer/         # Trick Explorer at /explore (/explore/3d redirects here): tricks + grind combos, robot or one of three human skaters, camera angles, spots (plaza, waterfront, El Toro's 20 stair and its handrails, Hollywood 16, Wallenberg, Sunset Car Wash), tripod angles at the landmarks, shareable links, MP4 download
 │   └── gallery/          # Flatground trick gallery + player trick book (search, stance filters, video tips, want-to-learn shelf, proven marks, consistency stats)
 ├── platform/             # Runtime infrastructure (Cloudflare env, D1 bindings)
 └── shared/               # Primitive domain-neutral helpers (online status, etc.)

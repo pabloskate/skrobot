@@ -21,7 +21,7 @@ import {
   joinGrindBase,
   joinGrindExit,
   specFor,
-  stairTimeline,
+  setTimeline,
   wrapOrbitYaw,
   type PopEnd,
   type RailChoice,
@@ -83,11 +83,11 @@ export interface ExplorerState {
   camera: CameraPresetId | SceneCamera;
   /** How far in the picture is magnified, whatever the angle: 1 is the stock framing. */
   zoom: number;
-  /** The spot the robot skates: the bayside waterfront, the stock plaza, or El Toro's 20 stair (tricks down it, grinds down a handrail). */
+  /** The spot the rider skates, with terrain and supported obstacles from the shared set registry. */
   set: StageSet;
   /** At a spot with several handrails, which one a grind rides: the center one, or the side one the trick's approach takes. */
   rail: RailChoice;
-  /** Who skates it: the robot, illustrated human, or detailed humanoid. */
+  /** Who skates it: the robot, illustrated human, realistic human, or humanoid. */
   skater: Skater;
 }
 
@@ -210,14 +210,14 @@ export const DEFAULT_STATE: Readonly<ExplorerState> = Object.freeze({
   skater: 'robot',
 });
 
-/** The state moved to another spot, keeping its trick: at El Toro a grind takes the handrail. */
+/** Move to another spot; gap-only spots open the saved gap trick. */
 export function withSet(state: ExplorerState, set: StageSet): ExplorerState {
-  return { ...state, set };
+  return { ...state, set, mode: setInfo(set).grinds ? state.mode : 'flatground', rail: setInfo(set).rails?.sideGrinds === false ? 'center' : state.rail };
 }
 
-/** The state switched to flatground or grinds, at the same spot. */
+/** Switch between gap/flatground tricks and grinds where the spot supports them. */
 export function withMode(state: ExplorerState, mode: ExplorerMode): ExplorerState {
-  return { ...state, mode };
+  return { ...state, mode: mode === 'grinds' && !setInfo(state.set).grinds ? 'flatground' : mode };
 }
 
 /** Keeps a trick out only if the grind rides the end it pops off. */
@@ -288,7 +288,7 @@ export function trickSteps(state: ExplorerState): TrickStep[] {
   if (!spec) return [];
   const riding = state.stance === 'regular' ? 'rolling' : `riding ${state.stance}`;
   const side = spec.toesideApproach ? 'toeside' : 'heelside';
-  // At El Toro the grind goes down a handrail: the center one, or the side one it comes in toward.
+  // At a spot with handrails the grind goes down one: the center one, or (El Toro) the side one it comes in toward.
   const line = railLine(state);
   const rail = line != null;
   const bar = line === 'left' || line === 'right' ? `${line} rail` : rail ? 'rail' : 'bar';
@@ -330,9 +330,9 @@ export interface Timeline {
 
 /** The moments worth jumping to, and how long the trick runs (seconds). */
 export function timelineFor(state: ExplorerState, style: SkateStyle | undefined): Timeline {
-  if (state.mode === 'flatground' && setInfo(state.set).stairs) {
+  if (state.mode === 'flatground' && setInfo(state.set).terrain) {
     // Down the stairs the flight is the drop's: longer the lower the robot pops.
-    const stairs = stairTimeline(style);
+    const stairs = setTimeline(state.set, style)!;
     return {
       duration: stairs.end,
       phases: [
@@ -392,8 +392,8 @@ export interface CameraPreset {
   zoom?: number;
   /**
    * Framed against the direction of travel (in front of or behind the
-   * rider). Flatground fakie reverses travel; on El Toro the travel and
-   * camera stay fixed while the rider faces backwards down the stairs.
+   * rider). Flatground fakie reverses travel; at a spot with a drop the
+   * travel and camera stay fixed while the rider faces backwards down it.
    */
   followsTravel: boolean;
   /** Spot-specific choices are shown there, or while they remain selected. */
@@ -411,7 +411,7 @@ export const CAMERA_PRESETS: readonly CameraPreset[] = [
   { id: 'bottom-center', label: 'Bottom center', hint: 'Straight up the center rail from the landing', camera: { yaw: -90, pitch: 6, lens: 1, targetZ: -6 * FOOT }, zoom: 0.6, followsTravel: false, set: 'el-toro' },
   { id: 'bottom-right', label: 'Bottom right', hint: 'Up the stairs from the planted bank side', camera: { yaw: -125, pitch: 9, lens: 1 }, followsTravel: false, set: 'el-toro' },
   { id: 'tripod-bottom', label: 'Bottom tripod', hint: 'Standing at the bottom, panning as it comes down at you', camera: { yaw: -100, pitch: 2, lens: 1.4 }, tripod: 'bottom', followsTravel: false, set: 'el-toro' },
-  { id: 'tripod-side', label: 'Side tripod', hint: 'Up the bank beside the stairs, panning across', camera: { yaw: 0, pitch: 6, lens: 1.4 }, tripod: 'side', followsTravel: false, set: 'el-toro' },
+  { id: 'tripod-side', label: 'Side tripod', hint: 'Beside the spot, panning across the whole drop', camera: { yaw: 0, pitch: 6, lens: 1.4 }, tripod: 'side', followsTravel: false, set: 'el-toro' },
   { id: 'tripod-top', label: 'Top tripod', hint: 'At the top, watching it drop away', camera: { yaw: 70, pitch: 14, lens: 1 }, tripod: 'top', followsTravel: false, set: 'el-toro' },
   { id: 'side', label: 'Side on', hint: 'Pop height and flip axis', camera: { yaw: 0, pitch: 3, lens: 1.25 }, followsTravel: false },
   { id: 'head-on', label: 'Head on', hint: 'Which way the board flicks', camera: { yaw: -70, pitch: 7, lens: 1 }, followsTravel: true },
@@ -423,7 +423,9 @@ export const CAMERA_PRESETS: readonly CameraPreset[] = [
 
 /** Keep a chosen spot angle available when moving to another spot. */
 export const cameraPresetsFor = (state: Pick<ExplorerState, 'set' | 'camera'>): readonly CameraPreset[] =>
-  CAMERA_PRESETS.filter((preset) => !preset.set || preset.set === state.set || preset.id === state.camera);
+  CAMERA_PRESETS.filter((preset) => preset.id === state.camera || (preset.tripod
+    ? setInfo(state.set).tripods.includes(preset.tripod)
+    : !preset.set || preset.set === state.set));
 
 const PRESET_BY_ID = new Map(CAMERA_PRESETS.map((p) => [p.id, p]));
 
@@ -431,9 +433,9 @@ export const cameraPreset = (id: CameraPresetId): CameraPreset => PRESET_BY_ID.g
 
 const defaultZoomForCamera = (camera: ExplorerState['camera']) => typeof camera === 'string' ? cameraPreset(camera).zoom ?? 1 : 1;
 
-/** World-space travel: El Toro is fixed downhill (its tricks and its rail), while fakie elsewhere reverses. */
+/** World-space travel: a spot with terrain (stairs, a gap, a bank) is fixed downhill, tricks and rails alike, while fakie elsewhere reverses. */
 function travelDir(state: ExplorerState): 1 | -1 {
-  if (setInfo(state.set).stairs) return 1;
+  if (setInfo(state.set).terrain) return 1;
   const trick = stageTrick(state);
   return (grindSpecFor(trick) ?? specFor(trick)).dir;
 }
@@ -534,22 +536,24 @@ export function stateFromSearch(search: string): ExplorerState {
   const params = new URLSearchParams(search);
   const stanceParam = params.get('stance');
   const camera = parseCamera(params.get('cam'));
+  const set = STAGE_SETS.find((option) => option.id === params.get('set'))?.id ?? DEFAULT_STATE.set;
   const base: ExplorerState = {
     ...DEFAULT_STATE,
     stance: isStance(stanceParam) ? stanceParam : DEFAULT_STATE.stance,
     rider: params.get('rider') === 'goofy' ? 'goofy' : 'regular',
     camera,
     zoom: params.has('zoom') ? parseZoom(params.get('zoom')) : defaultZoomForCamera(camera),
-    set: STAGE_SETS.find((option) => option.id === params.get('set'))?.id ?? DEFAULT_STATE.set,
-    rail: params.get('rail') === 'side' ? 'side' : DEFAULT_STATE.rail,
+    set,
+    rail: params.get('rail') === 'side' && setInfo(set).rails?.sideGrinds !== false ? 'side' : DEFAULT_STATE.rail,
     skater: SKATERS.find((option) => option.id === params.get('skater'))?.id ?? DEFAULT_STATE.skater,
   };
   const grind = fromSlug(GRIND_CHOICES, params.get('grind'));
   if (!grind) {
     // Flatground is asked for by naming its trick; a link naming nothing the
-    // stage knows opens on the default grind (at El Toro, down its rail).
+    // stage knows opens on the default grind (at El Toro, down its rail), or
+    // on the trick at a spot with no grinds.
     const trick = fromSlug(FLATGROUND_BASES, params.get('trick'));
-    return trick ? { ...base, mode: 'flatground', trick } : base;
+    return trick ? { ...base, mode: 'flatground', trick } : withSet(base, base.set);
   }
   const outParam = params.get('out') ?? '';
   const nose = outParam.startsWith('nollie-');

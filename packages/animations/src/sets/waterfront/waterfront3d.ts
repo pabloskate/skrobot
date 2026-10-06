@@ -11,6 +11,7 @@ import {
   type Texture,
 } from 'three';
 import { X0 } from '../../motion/trick';
+import { GLSL_DEPTH } from '../../three/depth';
 import { LIGHT_SCREEN, PALETTE, lambert, tone } from '../../camera/camera';
 import { clamp01, mixHex, type V3 } from '../../math';
 import { SPAN_HI, SPAN_LO, hash2 } from '../setKit';
@@ -202,12 +203,13 @@ function glintMaterial() {
       layout(location = 0) out vec4 outColor;
       uniform sampler2D uDepth;
       uniform vec2 uRes;
+      ${GLSL_DEPTH}
       void main() {
-        if (gl_FragCoord.z > texture(uDepth, gl_FragCoord.xy / uRes).r + 1e-6) discard;
+        if (behindScene(gl_FragCoord.z, texture(uDepth, gl_FragCoord.xy / uRes).r)) discard;
         outColor = vec4(${rgb(WF.glint).map((v) => v.toFixed(4)).join(', ')}, 1.0);
       }
     `,
-    uniforms: { uScroll: { value: 0 }, uFocal: { value: 720 }, uDepth: { value: null }, uRes: { value: new Vector2() } },
+    uniforms: { uScroll: { value: 0 }, uFocal: { value: 720 }, uDepth: { value: null }, uRes: { value: new Vector2() }, uNear: { value: 1 }, uFar: { value: 1000 } },
     transparent: true,
     blending: NormalBlending,
     depthTest: false,

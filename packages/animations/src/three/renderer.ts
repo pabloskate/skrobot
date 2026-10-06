@@ -1,7 +1,7 @@
 import {
   BufferGeometry,
-  Camera,
   DepthTexture,
+  FloatType,
   Float32BufferAttribute,
   Group,
   HalfFloatType,
@@ -14,37 +14,46 @@ import {
   RGBAFormat,
   Scene,
   UnsignedByteType,
-  UnsignedIntType,
   WebGLRenderer,
   WebGLRenderTarget,
   type ShaderMaterial,
   type Texture,
 } from 'three';
-import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { DEFAULT_SCENE_CAMERA, type SceneCamera, type TripodId } from '../camera/camera';
-import { stageView, toThree, type StageView } from '../camera/view';
+import { stageView, toThree, tracked, type StageView } from '../camera/view';
 import type { BoardLook, WheelSpin } from '../board/board';
 import { Board3D } from '../board/board3d';
 import { RealisticBoard3D } from '../board/realisticBoard3d';
 import type { BoardRig, Rig } from '../motion/skeleton';
 import { Human3D } from '../riders/human/human3d';
 import { Humanoid3D } from '../riders/humanoid/humanoid3d';
+import { RealisticHuman3D } from '../riders/realistic/realisticHuman3d';
 import type { Expression, RobotLook } from '../riders/look';
 import { Robot3D } from '../riders/robot/robot3d';
 import type { Skater } from '../riders/skaters';
 import { Bar3D } from '../sets/bar3d';
 import { ElToro3D } from '../sets/elToro/elToro3d';
+import { Hollywood3D } from '../sets/hollywood/hollywood3d';
+import { Wallenberg3D } from '../sets/wallenberg/wallenberg3d';
+import { Sunset3D } from '../sets/sunset/sunset3d';
 import { Plaza3D } from '../sets/plaza3d';
 import { setInfo, type StageSet } from '../sets/sets';
 import { Waterfront3D } from '../sets/waterfront/waterfront3d';
 import type { GroundPolygon, StageFrame } from '../stage/stage';
 import { rgb, shadowShapeMaterial } from './materials';
+import { SCENE_FAR as FAR, SceneCamera3D, prepareReversedDepth, sceneNear } from './depth';
+import { ScreenPass } from './screenPass';
 import { blurMaterial, copyMaterial, dustMaterial, EDGE_TILE, edgeMaterial, fxaaMaterial, inkMaterial, shadowChannel } from './post';
 
 /** A rider's meshes, posed from the rig every frame. */
 export interface RiderPiece {
   group: Group;
-  update(rig: Rig, expression: Expression, view: StageView): void;
+  /** Optional local model/texture decoding; redraw frozen scenes when it finishes. */
+  ready?: Promise<void>;
+  /** `frame` is the whole stage frame, for riders that need more than the rig (the ground under a slam). */
+  update(rig: Rig, expression: Expression, view: StageView, frame?: StageFrame): void;
+  /** Optional work on the GPU before the scene pass, after `update` (the realistic skater's own shadow). */
+  prepare?(renderer: WebGLRenderer): void;
   dispose(): void;
 }
 
@@ -66,6 +75,8 @@ export interface SetPiece {
   shadowGeometry: BufferGeometry | null;
   propInk: string;
   update(view: StageView, scroll: number, size: { width: number; height: number }, shadow: Texture, shadowOpacity: [number, number, number], frame: StageFrame): void;
+  /** Optional assets loading after the set is built; redraw frozen scenes when it finishes. */
+  ready?: Promise<void>;
   /** The set's own camera for this frame (its tripods, or limits on the crane), or null for the stock crane. */
   view?(frame: StageFrame, camera: Readonly<SceneCamera>, zoom: number, aspect: number, tripod: TripodId | null): StageView | null;
   dispose(): void;
@@ -76,12 +87,16 @@ const SET_PIECES: Record<StageSet, () => SetPiece> = {
   plaza: () => new Plaza3D(),
   waterfront: () => new Waterfront3D(),
   'el-toro': () => new ElToro3D(),
+  'hollywood-high': () => new Hollywood3D(),
+  wallenberg: () => new Wallenberg3D(),
+  'sunset-car-wash': () => new Sunset3D(),
 };
 
 /** Each skater's body, and the board they ride. */
 const RIDER_PIECES: Record<Skater, (look: RendererLook) => { rider: RiderPiece; board: BoardPiece }> = {
   robot: (look) => ({ rider: new Robot3D(look.robot), board: new Board3D(look.board) }),
   human: (look) => ({ rider: new Human3D(), board: new Board3D(look.board) }),
+  realistic: () => ({ rider: new RealisticHuman3D(), board: new RealisticBoard3D() }),
   humanoid: () => ({ rider: new Humanoid3D(), board: new RealisticBoard3D() }),
 };
 
@@ -99,8 +114,6 @@ const RIDER_PIECES: Record<Skater, (look: RendererLook) => { rider: RiderPiece; 
  *  5. FXAA to the canvas.
  */
 
-const NEAR = 2;
-const FAR = 40000;
 /** Most dust puffs on stage at once (a pop and a landing). */
 const MAX_PUFFS = 12;
 /** Cast shadows are drawn at this share of the canvas's resolution and blurred anyway. */
@@ -117,10 +130,11 @@ export interface RendererLook {
 
 export class SceneRenderer {
   readonly renderer: WebGLRenderer;
+  readonly ready: Promise<void>;
   /** What it draws on; a stage puts it in the page while it borrows the renderer. */
   readonly canvas: HTMLCanvasElement;
   private readonly scene = new Scene();
-  private readonly camera = new Camera();
+  private readonly camera: SceneCamera3D;
   private readonly rider: RiderPiece;
   private readonly board: BoardPiece;
   private readonly bar = new Bar3D();
@@ -141,23 +155,24 @@ export class SceneRenderer {
   private readonly post: WebGLRenderTarget;
   private readonly composite: WebGLRenderTarget;
   private readonly copy = copyMaterial();
-  private readonly copyQuad: FullScreenQuad;
+  private readonly copyQuad: ScreenPass;
   private readonly edges: WebGLRenderTarget;
   private readonly edge = edgeMaterial();
-  private readonly edgeQuad: FullScreenQuad;
+  private readonly edgeQuad: ScreenPass;
   private readonly shadowA: WebGLRenderTarget;
   private readonly shadowB: WebGLRenderTarget;
   private readonly ink = inkMaterial();
   private readonly blur = blurMaterial();
   private readonly fxaa = fxaaMaterial();
-  private readonly inkQuad: FullScreenQuad;
-  private readonly blurQuad: FullScreenQuad;
-  private readonly fxaaQuad: FullScreenQuad;
+  private readonly inkQuad: ScreenPass;
+  private readonly blurQuad: ScreenPass;
+  private readonly fxaaQuad: ScreenPass;
   private size = { width: 1, height: 1, ratio: 1 };
 
   constructor(canvas: HTMLCanvasElement, look: RendererLook, set: StageSet = 'plaza') {
     this.canvas = canvas;
-    this.renderer = new WebGLRenderer({ canvas, antialias: false, alpha: true, premultipliedAlpha: true, powerPreference: 'high-performance' });
+    this.renderer = new WebGLRenderer({ canvas, antialias: false, alpha: true, premultipliedAlpha: true, powerPreference: 'high-performance', reversedDepthBuffer: true });
+    this.camera = new SceneCamera3D(this.renderer.capabilities.reversedDepthBuffer);
     this.renderer.autoClear = false;
     this.renderer.setClearColor(0x000000, 0);
     this.camera.matrixAutoUpdate = false;
@@ -165,9 +180,16 @@ export class SceneRenderer {
 
     ({ rider: this.rider, board: this.board } = RIDER_PIECES[look.skater ?? 'robot'](look));
     this.set = SET_PIECES[set]();
+    this.ready = Promise.all([this.rider.ready, this.set.ready]).then(() => {});
     this.setLight = setInfo(set).farPanorama;
     this.scene.add(this.set.group, this.bar.group, this.board.group, this.rider.group);
     this.overlayScene.add(this.set.overlay);
+    // Three r185 reverses the entire render list, including explicit ordering,
+    // and complements Always/Equal depth tests. Preserve the scene's intended
+    // sky-first order and the ink pass's unconditional depth copy.
+    if (this.renderer.capabilities.reversedDepthBuffer) {
+      prepareReversedDepth([this.scene, this.overlayScene], [this.ink]);
+    }
 
     this.shadowGeometry.setAttribute('position', new Float32BufferAttribute([], 3));
     this.shadowGeometry.setAttribute('channel', new Float32BufferAttribute([], 4));
@@ -191,9 +213,9 @@ export class SceneRenderer {
     this.dustScene.add(dust);
 
     this.main = new WebGLRenderTarget(1, 1, { count: 2, depthBuffer: true, minFilter: NearestFilter, magFilter: NearestFilter });
-    this.main.depthTexture = new DepthTexture(1, 1, UnsignedIntType);
+    this.main.depthTexture = new DepthTexture(1, 1, FloatType);
     this.post = new WebGLRenderTarget(1, 1, { depthBuffer: true, minFilter: LinearFilter, magFilter: LinearFilter });
-    this.post.depthTexture = new DepthTexture(1, 1, UnsignedIntType);
+    this.post.depthTexture = new DepthTexture(1, 1, FloatType);
     this.composite = new WebGLRenderTarget(1, 1, { depthBuffer: false, minFilter: LinearFilter, magFilter: LinearFilter });
     this.edges = new WebGLRenderTarget(1, 1, { depthBuffer: false, minFilter: NearestFilter, magFilter: NearestFilter });
     const shadowOptions = { depthBuffer: false, type: HalfFloatType, format: RGBAFormat, minFilter: LinearFilter, magFilter: LinearFilter };
@@ -205,11 +227,11 @@ export class SceneRenderer {
       texture.magFilter = NearestFilter;
     }
 
-    this.inkQuad = new FullScreenQuad(this.ink);
-    this.copyQuad = new FullScreenQuad(this.copy);
-    this.edgeQuad = new FullScreenQuad(this.edge);
-    this.blurQuad = new FullScreenQuad(this.blur);
-    this.fxaaQuad = new FullScreenQuad(this.fxaa);
+    this.inkQuad = new ScreenPass(this.ink);
+    this.copyQuad = new ScreenPass(this.copy);
+    this.edgeQuad = new ScreenPass(this.edge);
+    this.blurQuad = new ScreenPass(this.blur);
+    this.fxaaQuad = new ScreenPass(this.fxaa);
   }
 
   /** Match the canvas to its CSS size at `ratio` device pixels per CSS pixel. */
@@ -234,12 +256,13 @@ export class SceneRenderer {
   render(frame: StageFrame, camera: Readonly<SceneCamera> = DEFAULT_SCENE_CAMERA, zoom = 1, tripod?: TripodId | null) {
     const { width, height } = this.size;
     const aspect = width / height;
-    const view = this.set.view?.(frame, camera, zoom, aspect, tripod ?? null) ?? stageView(frame.lift, camera, zoom, aspect);
+    const crane = tracked(camera, frame);
+    const view = this.set.view?.(frame, crane, zoom, aspect, tripod ?? null) ?? stageView(frame.lift, crane, zoom, aspect);
     this.placeCamera(view);
     const pxPerUnit = height / view.box.height;
     const shadowOpacity: [number, number, number] = [0.3, frame.shadows.boardOpacity, frame.shadows.bodyOpacity];
 
-    this.rider.update(frame.rig, frame.expression, view);
+    this.rider.update(frame.rig, frame.expression, view, frame);
     this.board.update(frame.rig.board, frame.wheels, view);
     this.bar.update(frame.span);
     this.writeShadows(frame);
@@ -248,6 +271,7 @@ export class SceneRenderer {
     this.writeDust(frame);
 
     const r = this.renderer;
+    this.rider.prepare?.(r);
     // 1. Cast shadows, then a two-way blur.
     r.setRenderTarget(this.shadowA);
     r.clear(true, false, false);
@@ -268,7 +292,7 @@ export class SceneRenderer {
     edge.uDepth.value = this.main.depthTexture;
     edge.uSize.value = [width, height];
     edge.uFocalPx.value = focalPx;
-    edge.uNear.value = NEAR;
+    edge.uNear.value = this.camera.near;
     edge.uFar.value = FAR;
     r.setRenderTarget(this.edges);
     this.edgeQuad.render(r);
@@ -279,7 +303,7 @@ export class SceneRenderer {
     ink.uDepth.value = this.main.depthTexture;
     ink.uTexel.value.set(1 / width, 1 / height);
     ink.uFocalPx.value = focalPx;
-    ink.uNear.value = NEAR;
+    ink.uNear.value = this.camera.near;
     ink.uFar.value = FAR;
     ink.uPropInk.value.set(...rgb(this.set.propInk));
     ink.uOverlays.value = this.setLight ? 1 : 0;
@@ -297,6 +321,8 @@ export class SceneRenderer {
     for (const m of [...this.set.overlayMaterials, this.dust]) {
       m.uniforms.uDepth.value = this.post.depthTexture;
       m.uniforms.uRes.value.set(width, height);
+      m.uniforms.uNear.value = this.camera.near;
+      m.uniforms.uFar.value = FAR;
     }
     r.render(this.overlayScene, this.camera);
     if (this.dustGeometry.instanceCount > 0) r.render(this.dustScene, this.camera);
@@ -317,10 +343,7 @@ export class SceneRenderer {
       0, 0, 0, 1,
     );
     this.camera.matrixWorldInverse.copy(this.camera.matrixWorld).invert();
-    this.camera.projectionMatrix.makePerspective(
-      frustum.left * NEAR, frustum.right * NEAR, frustum.top * NEAR, frustum.bottom * NEAR, NEAR, FAR,
-    );
-    this.camera.projectionMatrixInverse.copy(this.camera.projectionMatrix).invert();
+    this.camera.setFrustum(frustum, sceneNear(view.distance, this.camera.reversedDepth));
   }
 
   private blurInto(from: WebGLRenderTarget, to: WebGLRenderTarget, dx: number, dy: number, sigma: number) {
@@ -352,6 +375,8 @@ export class SceneRenderer {
     for (const polygon of frame.shadows.bar) add(polygon, shadowChannel.bar);
     add(frame.shadows.board, shadowChannel.board);
     for (const polygon of frame.shadows.body) add(polygon, shadowChannel.body);
+    // Contact shadows go in the board's channel, darker than its cast shadow (max blending keeps the darkest).
+    for (const { polygon, dark } of frame.shadows.contact ?? []) add(polygon, shadowChannel.board.map((c) => c * dark));
     this.shadowGeometry.setAttribute('position', new Float32BufferAttribute(position, 3));
     this.shadowGeometry.setAttribute('channel', new Float32BufferAttribute(channel, 4));
   }

@@ -83,4 +83,16 @@ describe('resolveTrick', () => {
     expect(name('nollie three sixty inward heelflip')).toBe('Nollie 360 Inward Heelflip')
     expect(name('inward heel')).toBe('Inward Heelflip')
   })
+
+  it('knows the ghetto bird by name and as a hardflip backside 180', () => {
+    const flatground = tricksFor('flatground')
+    const name = (spoken: string) => {
+      const r = resolveTrick(spoken, flatground)
+      return r.kind === 'match' ? r.trick.name : r.kind
+    }
+    expect(name('ghetto bird')).toBe('Ghetto Bird')
+    expect(name('nollie ghetto bird')).toBe('Nollie Ghetto Bird')
+    expect(name('hardflip backside 180')).toBe('Ghetto Bird')
+    expect(name('hardflip')).toBe('Hardflip')
+  })
 })

@@ -529,7 +529,8 @@ function withHop(rig: Rig, frame: GrindFrame, plan: GrindPlan, mechanics: RiderM
   // Flatground already supplies the entry trick's spin; add only the turn
   // into the lock. Otherwise a slide rotates the grip out from under feet
   // that still face straight ahead, which vertical planting cannot fix.
-  const flat = turnRig(carried, frame.pose.yaw - frame.heading, frame.ref);
+  // The approach's angle in is the grind's own, not the flatground trick's: the body turns with it too.
+  const flat = turnRig(carried, frame.pose.yaw - frame.heading + frame.approach, frame.ref);
   const w = tau < 0 ? 0 : smoothstep((tau / plan.upT - HANDOVER_FROM) / (1 - HANDOVER_FROM));
   // Follow a quicker scoop with the feet, then release them onto their
   // flatground paths as its snap rejoins the shared animation.

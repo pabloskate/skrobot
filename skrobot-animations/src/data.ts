@@ -80,6 +80,7 @@ const FLATGROUND_BASES = [
   '360 Double Kickflip',
   '360 Hardflip',
   '360 Inward Heelflip',
+  'Ghetto Bird',
 ];
 
 const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];

@@ -1,6 +1,7 @@
 'use client';
 
 import { getAudioContext } from './audio';
+import { getSoundEffects } from './preferences';
 
 /** RPS beats plus the robot's trick call: a reel tick and the call itself. */
 export type RpsSound = 'beat' | 'reveal' | 'win' | 'lose' | 'tie' | 'tick' | 'call';
@@ -41,7 +42,7 @@ function beep(freq: number, duration: number, type: OscillatorType = 'sine', whe
 }
 
 export function rpsSound(kind: RpsSound): void {
-  if (prefersReducedMotion()) return;
+  if (!getSoundEffects() || prefersReducedMotion()) return;
   const ctx = getAudioContext();
   if (!ctx) return;
 

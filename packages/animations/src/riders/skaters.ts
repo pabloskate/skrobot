@@ -1,10 +1,10 @@
 /**
- * Who rides: the robot, the illustrated human, or the detailed humanoid.
- * All three ride the same trick and board motion. The two people wear a
+ * Who rides: the robot, illustrated human, realistic human, or humanoid.
+ * All ride the same trick and board motion. The people wear a
  * person's proportions on the robot's rig (human/humanRig.ts); each one's
  * meshes, and the board they ride, are picked in three/renderer.ts.
  */
-export type Skater = 'robot' | 'human' | 'humanoid';
+export type Skater = 'robot' | 'human' | 'realistic' | 'humanoid';
 
 export interface SkaterInfo {
   id: Skater;
@@ -17,6 +17,7 @@ export interface SkaterInfo {
 export const SKATERS: readonly SkaterInfo[] = [
   { id: 'robot', label: 'Robot', person: false },
   { id: 'human', label: 'Human', person: true },
+  { id: 'realistic', label: 'Realistic', person: true },
   { id: 'humanoid', label: 'Humanoid', person: true },
 ];
 

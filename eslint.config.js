@@ -116,7 +116,9 @@ export default defineConfig([
     files: ['packages/animations/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': restrictedImports({
-        group: ['@/*', 'src', 'src/**', '../src/**', '../../src/**', 'skrobot-animations', 'skrobot-animations/**', '../skrobot-animations/**'],
+        // Three's installed backend is exercised by depth integration tests;
+        // its package-local src directory is not the web app's source tree.
+        group: ['@/*', 'src', 'src/**', '../src/**', '../../src/**', 'skrobot-animations', 'skrobot-animations/**', '../skrobot-animations/**', '!three/src', '!three/src/**'],
         message: 'Shared animations must not import app, feature, platform, or playground code. Pass structural data in instead.',
       }),
     },

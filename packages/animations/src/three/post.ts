@@ -12,6 +12,7 @@ import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
 import { PALETTE } from '../camera/camera';
 import { BAY } from '../sets/waterfront/waterfrontPanorama';
 import { FEATURES, GARMENT, INK_PROP, INK_ROBOT, rgb } from './materials';
+import { GLSL_DEPTH } from './depth';
 
 /**
  * Screen passes for TrickScene3D.
@@ -57,15 +58,6 @@ const GARMENT_GAP = 4;
  * and never round its base, where it rises out of the face.
  */
 const FEATURE_GAP = 1;
-
-const GLSL_DEPTH = /* glsl */ `
-uniform float uNear;
-uniform float uFar;
-float viewZ(float d) {
-  float z = d * 2.0 - 1.0;
-  return (2.0 * uNear * uFar) / (uFar + uNear - z * (uFar - uNear));
-}
-`;
 
 /**
  * The edge map: one texel per tile of the picture, holding how wide (in
@@ -251,7 +243,7 @@ export function inkMaterial() {
         if (lit) c = setLight(c);
         if (!propInk) c = mix(c, vec4(INK, 1.0), best);
         // Transparent set details must also stay behind the expanded silhouette.
-        if (best > 0.0) gl_FragDepth = min(ownDepth, bestDepth);
+        if (best > 0.0) gl_FragDepth = nearerDepth(ownDepth, bestDepth);
         outColor = c;
       }
     `,
@@ -369,18 +361,21 @@ export function dustMaterial() {
       uniform sampler2D uDepth;
       uniform vec2 uRes;
       const vec3 DUST = ${glsl(PALETTE.dust)};
+      ${GLSL_DEPTH}
       void main() {
         float d = length(vCorner) - 1.0;
         float w = max(fwidth(d), 1e-4);
         float a = 1.0 - smoothstep(-w, w, d);
         if (a <= 0.0) discard;
-        if (gl_FragCoord.z > texture(uDepth, gl_FragCoord.xy / uRes).r + 1e-6) discard;
+        if (behindScene(gl_FragCoord.z, texture(uDepth, gl_FragCoord.xy / uRes).r)) discard;
         outColor = vec4(DUST, a * vOpacity);
       }
     `,
     uniforms: {
       uDepth: { value: null as Texture | null },
       uRes: { value: new Vector2() },
+      uNear: { value: 1 },
+      uFar: { value: 1000 },
     },
     transparent: true,
     blending: NormalBlending,

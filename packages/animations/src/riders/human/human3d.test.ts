@@ -300,7 +300,7 @@ describe('human skater', () => {
       'Inward Heelflip', 'Pressure Flip', 'Dolphin Flip', '360 Flip', 'Laser Flip', '360 Hardflip',
       '360 Inward Heelflip', 'Pop Shuvit',
       'Frontside Shuvit', 'Late Backside Shuvit', 'Late Frontside Shuvit', 'Late Kickflip', '360 Shuvit',
-      'Bigspin', 'Bigspin Flip', 'Backside Flip', 'Frontside Flip', 'Backside 360 Kickflip', 'Impossible',
+      'Bigspin', 'Bigspin Flip', 'Backside Flip', 'Frontside Flip', 'Backside 360 Kickflip', 'Ghetto Bird', 'Impossible',
     ];
     const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
     const style = resolveSkateStyle({ popHeight: 1, rotationSpeed: 1, flickStrength: 1 });

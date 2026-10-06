@@ -2,6 +2,7 @@ import { BufferGeometry, Float32BufferAttribute, GLSL3, NormalBlending, ShaderMa
 import { lambert, tone } from '../camera/camera';
 import type { V3 } from '../math';
 import { rgb, type RGB } from './materials';
+import { GLSL_DEPTH } from './depth';
 import type { Vec3 } from '../camera/view';
 
 /**
@@ -323,8 +324,9 @@ export function overlayMaterial(glow = false) {
       in vec2 vBand;
       uniform sampler2D uDepth;
       uniform vec2 uRes;
+      ${GLSL_DEPTH}
       void main() {
-        if (gl_FragCoord.z > texture(uDepth, gl_FragCoord.xy / uRes).r + 1e-6) discard;
+        if (behindScene(gl_FragCoord.z, texture(uDepth, gl_FragCoord.xy / uRes).r)) discard;
         float a = vColor.a;
         ${glow ? `
         // vBand.x is the glow's radius; vCorner its offset from the center.
@@ -336,6 +338,8 @@ export function overlayMaterial(glow = false) {
     uniforms: {
       uDepth: { value: null },
       uRes: { value: new Vector2() },
+      uNear: { value: 1 },
+      uFar: { value: 1000 },
     },
     transparent: true,
     blending: NormalBlending,

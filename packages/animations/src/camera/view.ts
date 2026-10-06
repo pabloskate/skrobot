@@ -68,6 +68,10 @@ export function fitViewBox(view: ViewBox, aspect: number): ViewBox {
   return { x: view.x, y: view.y - (height - view.height) / 2, width: view.width, height };
 }
 
+/** `camera` with the frame's sideways follow (a grind's approach) added to where it aims. */
+export const tracked = (camera: Readonly<SceneCamera>, frame: { track?: number }): Readonly<SceneCamera> =>
+  frame.track ? { ...camera, targetZ: (camera.targetZ ?? 0) + frame.track } : camera;
+
 export function stageView(lift: number, camera: Readonly<SceneCamera> = DEFAULT_SCENE_CAMERA, zoom = 1, aspect = STOCK_VIEW.width / STOCK_VIEW.height): StageView {
   const cam = makeCamera(lift, camera);
   const a = rad(camera.yaw);

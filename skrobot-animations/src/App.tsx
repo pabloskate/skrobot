@@ -14,7 +14,7 @@ import {
   grindTimelineFor,
   railLineFor,
   setInfo,
-  stairTimeline,
+  setTimeline,
   type FallVariant,
   type RailChoice,
   type RiderStance,
@@ -296,8 +296,8 @@ export default function App() {
       : null,
     [currentTrick, discipline, fallVariant, landed, selectedRiderStance, skateStyle, stageSet],
   );
-  // At El Toro a flatground trick goes down the stairs, on a clock stretched to the drop.
-  const stairs = discipline === 'flatground' && stageSet === 'el-toro' ? stairTimeline(skateStyle, landed !== false) : null;
+  // Every landmark's timeline follows its own drop and landing geometry.
+  const stairs = discipline === 'flatground' ? setTimeline(stageSet, skateStyle, landed !== false) : null;
   const duration = grind?.end ?? stairs?.end ?? ROLL_IN + FLIP_T + (landed === false ? FALL_T : LAND_T);
   const phases = stairs
     ? [
@@ -340,6 +340,7 @@ export default function App() {
   };
 
   const changeDiscipline = (next: Discipline) => {
+    if (next === 'grinds' && !setInfo(stageSet).grinds) return;
     setDiscipline(next);
     // Phase times differ between flatground and grinds; start the new one from its setup.
     setInspectionTime(0);
@@ -440,6 +441,7 @@ export default function App() {
                 key={option.id}
                 className={`${styles.stanceBtn} ${discipline === option.id ? styles.stanceBtnActive : ''}`}
                 onClick={() => changeDiscipline(option.id)}
+                disabled={option.id === 'grinds' && !setInfo(stageSet).grinds}
                 aria-pressed={discipline === option.id}
               >
                 {option.label}
@@ -617,7 +619,11 @@ export default function App() {
               <button
                 key={option.id}
                 className={`${styles.optionBtn} ${stageSet === option.id ? styles.optionBtnActive : ''}`}
-                onClick={() => setStageSet(option.id)}
+                onClick={() => {
+                  setStageSet(option.id);
+                  if (!option.grinds) setDiscipline('flatground');
+                  setInspectionTime(0);
+                }}
                 aria-pressed={stageSet === option.id}
               >
                 {option.label}
@@ -626,7 +632,7 @@ export default function App() {
           </div>
         </div>
 
-        {discipline === 'grinds' && setInfo(stageSet).rails && <div>
+        {discipline === 'grinds' && setInfo(stageSet).rails && setInfo(stageSet).rails?.sideGrinds !== false && <div>
           <h2 className={styles.sectionTitle}>Rail</h2>
           <p className={styles.styleNote}>A side rail is the one the grind comes in toward: {railLineFor(stageSet, currentTrick, selectedRiderStance, 'side')}</p>
           <div className={styles.optionGrid}>

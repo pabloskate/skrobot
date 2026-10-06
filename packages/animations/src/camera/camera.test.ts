@@ -7,7 +7,7 @@ import { planStage, stageFrame } from '../stage/stage';
 import { stageView } from './view';
 import type { RiderStance, Stance, Trick } from '../types';
 import { DEFAULT_SCENE_CAMERA, SCENE_CAMERA_BOUNDS, SCENE_ZOOM, cameraLift, clampSceneCamera, clampZoom, makeCamera, zoomedViewBox, type SceneCamera } from './camera';
-import { grindCameraLift, planGrind } from '../motion/grind';
+import { grindCameraLift, grindCameraTrack, planGrind } from '../motion/grind';
 import { BAR_HALF, BAR_Z, GRIND_BASES, exitEndsFor, grindSpecFor, joinGrindBase, joinGrindExit } from '../motion/grindDefinitions';
 import { solveGrindRig } from '../motion/grindRig';
 import { solveRig } from '../motion/rig';
@@ -44,7 +44,7 @@ function frameSweep() {
     if (over > (worst.get(edge)?.over ?? -Infinity)) worst.set(edge, { over, where });
   };
   return {
-    sample(rig: Rig, lift: number, where: string) {
+    sample(rig: Rig, lift: number, where: string, track = 0) {
       const antenna = rig.head.at(0, 28, 0);
       const extremes = [
         ...[-1, 1].flatMap((a) => [-1, 1].map((b) => rig.head.at(a * 14, 15, b * 18))),
@@ -52,7 +52,7 @@ function frameSweep() {
         ...rig.arms.map((arm) => arm.hand),
       ];
       for (const view of VIEWS) {
-        const cam = makeCamera(lift, view);
+        const cam = makeCamera(lift, track ? { ...view, targetZ: (view.targetZ ?? 0) + track } : view);
         const label = `${where} ${JSON.stringify(view)}`;
         push('top', -SKY_PAD - cam.project(antenna).y, label);
         for (const p of extremes) {
@@ -138,7 +138,7 @@ describe('Scene camera', () => {
             const plan = planGrind(spec!, mechanics, style, true, 'slam');
             for (let t = 0; t <= plan.end; t += 0.06) {
               const { rig, frame } = solveGrindRig(t, plan, mechanics, style);
-              sweep.sample(rig, grindCameraLift(plan, t, frame.rail, 0), `${name} ${stance} ${rider} pop ${popHeight} t=${t.toFixed(2)}`);
+              sweep.sample(rig, grindCameraLift(plan, t, frame.rail, 0), `${name} ${stance} ${rider} pop ${popHeight} t=${t.toFixed(2)}`, grindCameraTrack(plan, t));
             }
           }
         }

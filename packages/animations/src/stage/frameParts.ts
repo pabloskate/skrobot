@@ -1,6 +1,7 @@
 import { LIGHT } from '../camera/camera';
 import { ASPHALT } from '../camera/view';
-import { WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z, boardShadowPoints, type WheelSpin } from '../board/board';
+import { BOARD_WIDTH_SCALE } from '../board/boardDimensions';
+import { WHEEL_BOTTOM, WHEEL_HALF_W, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z, boardShadowPoints, type WheelSpin } from '../board/board';
 import { BOTTOM_LOCAL, TOP_LOCAL } from '../board/deck';
 import { clamp01, easeOutCubic, hull, type V3 } from '../math';
 import type { GrindPlan } from '../motion/grind';
@@ -52,6 +53,10 @@ export interface StageFrame {
   stairs: { dir: 1 | -1; shadowY: number; across: number } | null;
   wheels: WheelSpin;
   expression: Expression;
+  /** Where the rider is looking (stage/gaze.ts), in the rig's coordinates; set by stageFrame. */
+  gaze?: V3;
+  /** The crane's sideways follow (world units added to the camera's targetZ): a grind's angled approach (grindCameraTrack). */
+  track?: number;
   dust: Puff[];
   shadows: {
     bar: GroundPolygon[];
@@ -60,6 +65,13 @@ export interface StageFrame {
     /** Opacity of the board's and the rider's shadows: both fade as they rise. */
     boardOpacity: number;
     bodyOpacity: number;
+    /**
+     * Contact shadows, straight under the wheels touching the ground (and the
+     * deck just over it), not cast along the sun: where a board meets the ground
+     * the light is blocked from every side. `dark` scales the board's shadow
+     * there (over 1 is darker than its cast shadow).
+     */
+    contact?: Array<{ polygon: GroundPolygon; dark: number }>;
   };
 }
 
@@ -157,6 +169,16 @@ const BOARD_HULL: V3[] = (() => {
   return pts;
 })();
 
+/** Vertical clearance needed by the deck and wheel hull against a surface. */
+export function groundLift(rig: Rig, groundUnder: (p: V3) => number = () => ASPHALT): number {
+  let sunk = 0;
+  for (const local of BOARD_HULL) {
+    const p = rig.board.point(local);
+    sunk = Math.max(sunk, p.y - groundUnder(p));
+  }
+  return sunk;
+}
+
 /**
  * The board and feet lifted until no part of the board is under the
  * asphalt (or, given `groundUnder`, the ground's physics height under a
@@ -168,11 +190,7 @@ const BOARD_HULL: V3[] = (() => {
  * exactly where the rig solver put them.
  */
 export function onTheGround(rig: Rig, groundUnder: (p: V3) => number = () => ASPHALT): Rig {
-  let sunk = 0;
-  for (const local of BOARD_HULL) {
-    const p = rig.board.point(local);
-    sunk = Math.max(sunk, p.y - groundUnder(p));
-  }
+  const sunk = groundLift(rig, groundUnder);
   if (sunk <= 0) return rig;
   const up = (p: V3): V3 => ({ x: p.x, y: p.y - sunk, z: p.z });
   const by = { x: 0, y: -sunk, z: 0 };
@@ -219,7 +237,47 @@ export function riderShadows(rig: Rig, heights: { board: number; body: number },
     body: bodyShadows(rig, plane),
     boardOpacity: 0.34 * heightFade(heights.board),
     bodyOpacity: 0.3 * heightFade(heights.body),
+    contact: contactShadows(rig.board, plane ?? ASPHALT),
   };
+}
+
+/** How dark a wheel's contact shadow is, and how far (world units) a wheel rises before it's gone. */
+const WHEEL_CONTACT = 2.4;
+const DECK_CONTACT = 1.15;
+const CONTACT_FADE = 6;
+
+/** An ellipse on the ground about (x, z), `along` long the way `dir` points and `across` wide. */
+function groundEllipse(x: number, z: number, dir: { x: number; z: number }, along: number, across: number): GroundPolygon {
+  const len = Math.hypot(dir.x, dir.z) || 1;
+  const ax = dir.x / len, az = dir.z / len;
+  const out: GroundPolygon = [];
+  for (let k = 0; k < 12; k++) {
+    const a = (k / 12) * Math.PI * 2;
+    const u = Math.cos(a) * along, v = Math.sin(a) * across;
+    out.push({ x: x + ax * u - az * v, z: z + az * u + ax * v });
+  }
+  return out;
+}
+
+/** Contact shadows under the wheels near the ground at `ground` (a physics height), and a soft one under the deck between them. */
+function contactShadows(board: Rig['board'], ground: number): Array<{ polygon: GroundPolygon; dark: number }> {
+  const out: Array<{ polygon: GroundPolygon; dark: number }> = [];
+  const along = board.dir({ x: 1, y: 0, z: 0 });
+  let low = Infinity;
+  // Both board meshes draw the trucks BOARD_WIDTH_SCALE wider than the physics' wheel track.
+  for (const x of [-WHEEL_X, WHEEL_X]) for (const z of [-WHEEL_Z * BOARD_WIDTH_SCALE, WHEEL_Z * BOARD_WIDTH_SCALE]) {
+    const p = board.point({ x, y: WHEEL_BOTTOM, z });
+    const height = ground - p.y;
+    low = Math.min(low, height);
+    const near = 1 - clamp01(height / CONTACT_FADE);
+    if (near > 0) out.push({ polygon: groundEllipse(p.x, p.z, along, WHEEL_R * 0.9, WHEEL_HALF_W * 2.2), dark: WHEEL_CONTACT * near * near });
+  }
+  const near = 1 - clamp01(low / (CONTACT_FADE * 2));
+  if (near > 0) {
+    const c = board.point({ x: 0, y: WHEEL_BOTTOM, z: 0 });
+    out.push({ polygon: groundEllipse(c.x, c.z, along, WHEEL_X + 4, WHEEL_Z * BOARD_WIDTH_SCALE), dark: DECK_CONTACT * near });
+  }
+  return out;
 }
 
 /** The dust kicked up at time `at`, at (x, z) off the ground at `ground`, while it lasts. */

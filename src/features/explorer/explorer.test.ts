@@ -353,6 +353,8 @@ describe('Trick Explorer links', () => {
       flatState({ trick: 'Kickflip', set: 'plaza' }),
       grindState({ grind: 'Crooked Grind', set: 'waterfront', camera: 'follow' }),
       flatState({ trick: 'Kickflip', skater: 'human' }),
+      flatState({ trick: 'Kickflip', skater: 'realistic', rider: 'goofy', set: 'sunset-car-wash' }),
+      grindState({ grind: 'Crooked Grind', skater: 'realistic', into: 'Kickflip', out: { base: 'Heelflip', end: 'nose' } }),
       grindState({ grind: 'Lipslide', side: 'Backside', skater: 'human', set: 'plaza' }),
       flatState({ trick: 'Kickflip', skater: 'humanoid', set: 'el-toro', rider: 'goofy', stance: 'fakie' }),
       flatState({ set: 'el-toro', camera: 'bottom-center' }),
@@ -385,14 +387,14 @@ describe('Trick Explorer links', () => {
     expect(stateFromSearch('?skater=alien').skater).toBe('robot');
   });
 
-  it('keeps the humanoid selected when changing spots, modes, grinds, and random tricks', () => {
-    const initial = flatState({ skater: 'humanoid', trick: 'Heelflip' });
+  it.each(['humanoid', 'realistic'] as const)('keeps %s selected when changing spots, modes, grinds, and random tricks', (skater) => {
+    const initial = flatState({ skater, trick: 'Heelflip' });
     const onStairs = withSet(initial, 'el-toro');
     const onPlaza = withSet(onStairs, 'plaza');
     const grind = withGrind(withMode(onPlaza, 'grinds'), 'Nosegrind');
     for (const state of [onStairs, onPlaza, grind, shuffle(grind, seeded(24)), shuffle(onStairs, seeded(32))]) {
-      expect(state.skater).toBe('humanoid');
-      expect(stateFromSearch(searchFromState(state)).skater).toBe('humanoid');
+      expect(state.skater).toBe(skater);
+      expect(stateFromSearch(searchFromState(state)).skater).toBe(skater);
     }
   });
 
@@ -468,6 +470,31 @@ describe('Trick Explorer video', () => {
     expect(videoFilename('Fakie Hardflip', 0.25)).toBe('fakie-hardflip-0.25x.mp4');
     expect(videoFilename(stageTrick(grindState()).name, 0.5)).toMatch(/^[a-z0-9]+(-[a-z0-9.]+)*\.mp4$/);
     expect(videoFilename('???', 1)).toBe('trick.mp4');
+  });
+});
+
+describe('classic spot selection', () => {
+  it('opens bank and block spots on gap tricks, including old grind URLs', () => {
+    for (const set of ['wallenberg', 'sunset-car-wash'] as const) {
+      expect(withSet(grindState(), set)).toMatchObject({ set, mode: 'flatground' });
+      expect(withMode(flatState({ set }), 'grinds').mode).toBe('flatground');
+      expect(stateFromSearch(`?set=${set}`).mode).toBe('flatground');
+      expect(stateFromSearch(`?set=${set}&grind=boardslide`).mode).toBe('flatground');
+    }
+    expect(withSet(grindState(), 'hollywood-high').mode).toBe('grinds');
+    expect(withSet(grindState({ rail: 'side' }), 'hollywood-high').rail).toBe('center');
+    expect(stateFromSearch('?set=hollywood-high&grind=boardslide&rail=side').rail).toBe('center');
+    expect(railLine(grindState({ set: 'hollywood-high', rail: 'side' }))).toBe('center');
+  });
+
+  it('shares all new spots and offers their stationary filmers', () => {
+    for (const set of ['hollywood-high', 'wallenberg', 'sunset-car-wash'] as const) {
+      const state = flatState({ set, camera: 'tripod-side', rider: 'goofy', stance: 'fakie' });
+      expect(stateFromSearch(searchFromState(state))).toEqual(state);
+      expect(cameraPresetsFor(state).filter(p => p.tripod)).toHaveLength(3);
+      expect(sceneTripod(state)).toBe('side');
+      expect(sceneCamera({ ...state, camera: 'follow' }).yaw).toBeGreaterThan(0);
+    }
   });
 });
 

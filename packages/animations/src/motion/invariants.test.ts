@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  boardYawDeg,
   computeFrame,
   specFor,
   GROUND,
@@ -251,7 +252,7 @@ describe('specFor', () => {
 
   // Zero out the signed fields so the comparison still covers every other
   // Spec field, including ones added after this test was written.
-  const unsigned = (spec: Spec): Spec => ({ ...spec, flipDir: 0, spinDir: 0 });
+  const unsigned = (spec: Spec): Spec => ({ ...spec, flipDir: 0, spinDir: 0, bodySpinDir: 0 });
   const specs = (a: string, b: string): [Spec, Spec] =>
     [specFor(trick(a, 'regular')), specFor(trick(b, 'regular'))];
 
@@ -475,8 +476,8 @@ describe('computeFrame', () => {
           }
         }
         for (const s of [atTouchdown, landedFrame]) {
-          expect(s.yawDeg).toBeCloseTo((spec.spinDir || 1) * spec.yaw, 5);
-          expect(s.bodyYawDeg).toBeCloseTo((spec.spinDir || 1) * spec.bodyYaw, 5);
+          expect(s.yawDeg).toBeCloseTo(boardYawDeg(spec, 1, 1), 5);
+          expect(s.bodyYawDeg).toBeCloseTo((spec.bodySpinDir || 1) * spec.bodyYaw, 5);
         }
         if (!spec.bodyYaw) expect(atCatch.yawDeg).toBeCloseTo((spec.spinDir || 1) * spec.yaw, 5);
       }
@@ -486,11 +487,50 @@ describe('computeFrame', () => {
   it('nollie body-spin tricks keep board and body yaw aligned', () => {
     for (const base of BASES) {
       const spec = specFor(trick(base, 'nollie'));
-      if (!spec.bodyYaw) continue;
+      // A counter shuv's own shuv turns against the body by design.
+      if (!spec.bodyYaw || spec.counterShuv) continue;
 
       const frame = computeFrame(ROLL_IN + FLIP_T * 0.9, spec, true, 'slam');
       const rotation = orientTrickRotation(resolveRiderMechanics('regular', 'nollie'), frame.spin3d);
       expect(Math.sign(rotation.yawDeg), base).toBe(Math.sign(rotation.bodyYawDeg));
+    }
+  });
+
+  it('ghetto bird: a hardflip inside a backside 180, caught square under the feet part way round', () => {
+    const ghettoBird = specFor(trick('Ghetto Bird', 'regular'));
+    const hardflip = specFor(trick('Hardflip', 'regular'));
+    const backside180 = specFor(trick('Backside 180', 'regular'));
+    expect(ghettoBird).toMatchObject({
+      flips: hardflip.flips, flipDir: hardflip.flipDir, yaw: hardflip.yaw, spinDir: hardflip.spinDir, tilt: hardflip.tilt,
+      bodyYaw: backside180.bodyYaw, bodySpinDir: backside180.bodySpinDir,
+    });
+    for (const rotationSpeed of [SKATE_STYLE_BOUNDS.rotationSpeed.min, 1, SKATE_STYLE_BOUNDS.rotationSpeed.max]) {
+      const s = style({ rotationSpeed });
+      const spin = (p: number) => computeFrame(ROLL_IN + FLIP_T * p, ghettoBird, true, 'slam', 0.65, s).spin3d;
+      const samples = Array.from({ length: 201 }, (_, i) => i / 200).slice(0, -1);
+      const caught = samples.find((p) => Math.abs(spin(p).flipDeg) >= 360 - 1e-9)!;
+      // Caught with the back of the flight still to go...
+      expect(caught, `${rotationSpeed}`).toBeLessThan(0.65);
+      let prev = spin(0);
+      for (const p of samples) {
+        const now = spin(p);
+        const label = `${rotationSpeed} p=${p}`;
+        // ...the rider turning backside all the way, carrying the board, so
+        // to them it's a plain hardflip, its frontside shuv done by the catch...
+        expect(now.bodyYawDeg, label).toBeGreaterThanOrEqual(prev.bodyYawDeg);
+        expect(now.yawDeg - now.bodyYawDeg, label).toBeCloseTo(now.shuvDeg!, 6);
+        expect(now.shuvDeg, label).toBeCloseTo(-180 * Math.abs(now.flipDeg) / 360, 6);
+        prev = now;
+      }
+      // ...caught square under the feet, a bit past a quarter turn round in
+      // the world with the turn part done, and brought back straight by it.
+      const atCatch = spin(caught);
+      expect(atCatch.yawDeg - atCatch.bodyYawDeg).toBeCloseTo(-180, 6);
+      expect(atCatch.yawDeg).toBeLessThan(-90);
+      expect(atCatch.yawDeg).toBeGreaterThan(-135);
+      const touchdown = spin(1 - 1e-9);
+      expect(touchdown.bodyYawDeg).toBeCloseTo(180, 3);
+      expect(touchdown.yawDeg).toBeCloseTo(0, 3);
     }
   });
 

@@ -75,7 +75,8 @@ export function hopTrickFor(base: string, stance: Stance): HopTrick | null {
   const name = base.trim();
   const spec = specFor({ id: name, name, base: name, stance });
   const turnsBoard = spec.flips > 0 || spec.yaw > 0;
-  if (!turnsBoard || spec.bodyYaw % 180 !== 0 || spec.roll !== 0 || spec.forwardFlip) return null;
+  // A counter shuv is caught part way round a turn a hop has no room to finish.
+  if (!turnsBoard || spec.counterShuv || spec.bodyYaw % 180 !== 0 || spec.roll !== 0 || spec.forwardFlip) return null;
   // A 180 or 360 carries the board round under planted feet; only a flip or
   // a shuv past the rider's own spin turns it out from under them.
   const underFeet = spec.flips > 0 || spec.yaw !== spec.bodyYaw;

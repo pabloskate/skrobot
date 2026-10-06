@@ -13,7 +13,7 @@ import type { SceneRenderer } from './renderer';
 import { borrowRenderer, lookFor, returnRenderer } from './rendererPool';
 import { planStage, stageFrame } from '../stage/stage';
 import { useTrickSound } from '../sound/useTrickSound';
-import { STOCK_VIEW, stageView } from '../camera/view';
+import { STOCK_VIEW, stageView, tracked } from '../camera/view';
 import WaterfrontFar from '../sets/waterfront/waterfrontFar';
 
 /**
@@ -49,15 +49,15 @@ interface Props {
   leadIn?: LeadIn;
   /** Where the crane films from; the stock 3/4 view when omitted. */
   camera?: SceneCamera;
-  /** Film from a filmer standing still in the spot instead, where the set has that tripod (El Toro); else `camera`. */
+  /** Film from a filmer standing still in the spot instead, where the set has that tripod (the landmarks); else `camera`. */
   tripod?: TripodId | null;
   /** Magnify the picture about the rider, 1 stock. */
   zoom?: number;
-  /** The backdrop: the stock plaza, the bayside waterfront, or El Toro's 20 stair (flatground tricks go down it, grinds down its center rail). */
+  /** The backdrop: the stock plaza, the bayside waterfront, or a landmark (flatground tricks go down its drop, grinds down its handrail where it has one). */
   set?: StageSet;
   /** Where the set has several handrails (El Toro): the center one, or the side one the grind's approach takes. */
   rail?: RailChoice;
-  /** Who rides: the robot (its look from `robot`), illustrated human, or detailed humanoid. */
+  /** Who rides: the robot (its look from `robot`), illustrated human, realistic human, or detailed humanoid. */
   skater?: Skater;
   /** Play the attempt's sounds while its clock runs: the pop, the wheels, a grind or slide, the landing. Off by default. */
   sound?: boolean;
@@ -120,7 +120,7 @@ export default function TrickScene3D({
   // The canvas's shape, for framing the far layers the way the canvas is framed.
   const [aspect, setAspect] = useState(STOCK_VIEW.width / STOCK_VIEW.height);
   const frame = stageFrame(stage, time, effectivePlaybackRate, lead?.head?.(time));
-  const view = stageView(frame.lift, camera, zoom, aspect);
+  const view = stageView(frame.lift, tracked(camera, frame), zoom, aspect);
 
   const host = useRef<HTMLDivElement>(null);
   const slot = useRef<HTMLDivElement>(null);
@@ -147,6 +147,9 @@ export default function TrickScene3D({
     Object.assign(canvas.style, { display: 'block', width: '100%', height: '100%' });
     into.append(canvas);
     renderer.current = scene;
+    let active = true;
+    // A paused or reduced-motion scene has no animation tick to repaint decoded textures.
+    void scene.ready.then(() => { if (active) draw.current(); });
     const resize = () => {
       const rect = box.getBoundingClientRect();
       scene.setSize(rect.width, rect.height, PIXEL_RATIO);
@@ -157,6 +160,7 @@ export default function TrickScene3D({
     const observer = new ResizeObserver(resize);
     observer.observe(box);
     return () => {
+      active = false;
       observer.disconnect();
       renderer.current = null;
       canvas.remove();

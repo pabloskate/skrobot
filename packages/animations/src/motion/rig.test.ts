@@ -250,17 +250,71 @@ describe('Rider body physics', () => {
     const axes: V3[] = [{ x: 1, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }, { x: 0, y: 0, z: 1 }];
     for (const rotationSpeed of [SKATE_STYLE_BOUNDS.rotationSpeed.min, 1, SKATE_STYLE_BOUNDS.rotationSpeed.max]) {
       const spinStyle = resolveSkateStyle({ popHeight: 1, rotationSpeed, flickStrength: 1 });
-      const caught = ROLL_IN + catchFraction(spinStyle) * FLIP_T;
-      for (const base of ['Hardflip', 'Inward Heelflip', '360 Hardflip', '360 Inward Heelflip']) {
+      for (const base of ['Hardflip', 'Inward Heelflip', '360 Hardflip', '360 Inward Heelflip', 'Ghetto Bird']) {
         for (const rider of RIDERS) {
           for (const stance of STANCES) {
             const spec = specFor(trickOf(base, stance));
+            // The moment the spin clock runs out (a ghetto bird's comes early, for its turn).
+            let [spinning, caught] = [ROLL_IN, ROLL_IN + catchFraction(spinStyle) * FLIP_T];
+            for (let i = 0; i < 40; i++) {
+              const mid = (spinning + caught) / 2;
+              if (computeFrame(mid, spec, true, 'slam', 0.65, spinStyle).motion.rotation >= 1) caught = mid;
+              else spinning = mid;
+            }
             const deck = (t: number) => solveRig(
               computeFrame(t, spec, true, 'slam', 0.65, spinStyle), spec, resolveRiderMechanics(rider, stance), spinStyle, 'landed',
             ).board.dir;
             const [before, after] = [deck(caught - 1e-4), deck(Math.min(caught + 1e-4, ROLL_IN + FLIP_T + 0.05))];
             const jump = Math.max(...axes.map((a) => dist(before(a), after(a))));
             expect(jump, `${base} ${stance} ${rider} at ${rotationSpeed}`).toBeLessThan(0.01);
+          }
+        }
+      }
+    }
+  });
+
+  it('catches a ghetto bird\'s hardflip square under the feet part way round its turn, in every stance', () => {
+    const heading = (d: V3) => (Math.atan2(-d.z, d.x) * 180) / Math.PI;
+    const wrap = (deg: number) => ((((deg + 180) % 360) + 360) % 360) - 180;
+    const nose = (rig: Rig) => rig.board.dir({ x: 1, y: 0, z: 0 });
+    // Where the board points from the rider's own facing.
+    const underFeet = (rig: Rig) => heading(nose(rig)) - rig.bodyYawDeg;
+    for (const rider of RIDERS) {
+      for (const stance of STANCES) {
+        const spec = specFor(trickOf('Ghetto Bird', stance));
+        const at = (t: number) => rigAt('Ghetto Bird', stance, rider, 'landed', t);
+        // The catch: the moment the flip is done.
+        let [flipping, caught] = [ROLL_IN, ROLL_IN + FLIP_T];
+        for (let i = 0; i < 40; i++) {
+          const mid = (flipping + caught) / 2;
+          if (computeFrame(mid, spec, true, 'slam', 0.65, style).motion.rotation >= 1) caught = mid;
+          else flipping = mid;
+        }
+        const label = `${stance} ${rider}`;
+        const [start, atCatch, touchdown] = [at(ROLL_IN - 0.01), at(caught), at(ROLL_IN + FLIP_T - 1e-6)];
+        // Caught flat and square under the feet, nose and tail swapped as a
+        // hardflip leaves them, with the rider part way round the turn...
+        expect(Math.abs(nose(atCatch).y), label).toBeLessThan(0.02);
+        expect(Math.abs(wrap(underFeet(atCatch) - underFeet(start) - 180)), label).toBeLessThan(1);
+        const shown = Math.abs(wrap(heading(nose(atCatch)) - heading(nose(start))));
+        expect(shown, label).toBeGreaterThan(90);
+        expect(shown, label).toBeLessThan(135);
+        // ...who turns on with it to the full 180, bringing the board back straight.
+        for (const t of [caught + 0.1 * (ROLL_IN + FLIP_T - caught), (caught + ROLL_IN + FLIP_T) / 2]) {
+          expect(Math.abs(wrap(underFeet(at(t)) - underFeet(atCatch))), `${label} t=${t}`).toBeLessThan(1);
+        }
+        expect(Math.abs(touchdown.bodyYawDeg - start.bodyYawDeg), label).toBeCloseTo(180, 1);
+        expect(Math.abs(wrap(heading(nose(touchdown)) - heading(nose(start)))), label).toBeLessThan(1);
+        // Nothing jumps on the way, an under-rotated one's flight included
+        // (every shank lands crooked with a snap of its own). The pop's tail
+        // snap is the one allowed jolt.
+        for (const outcome of ['landed', 'shank'] as const) {
+          let prev: V3 | null = null;
+          const end = ROLL_IN + FLIP_T + (outcome === 'landed' ? LAND_T : 0);
+          for (let t = ROLL_IN + 0.05; t < end; t += 1 / 120) {
+            const now = nose(rigAt('Ghetto Bird', stance, rider, outcome, t));
+            if (prev) expect(dist(now, prev), `${label} ${outcome} t=${t.toFixed(3)}`).toBeLessThan(0.15);
+            prev = now;
           }
         }
       }

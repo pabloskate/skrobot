@@ -83,6 +83,8 @@ const FLATGROUND: [string, number][] = [
   ['BS Bigspin Heelflip', 12],
   ['FS Bigspin Heelflip', 8],
   ['Laser Flip', 9],
+  // A hardflip, caught, then a backside 180 with the board.
+  ['Ghetto Bird', 9],
   // The hardflip and inward heel with a full 360 shuv — harder than the laser.
   ['360 Hardflip', 9.5],
   ['360 Inward Heelflip', 9.5],
@@ -335,6 +337,7 @@ export const TRICK_BASE_ALIASES: Readonly<Partial<Record<string, readonly string
   'BS Bigspin Heelflip': ['backside bigspin heelflip', 'bigspin heelflip', 'bigspin heel'],
   'FS Bigspin Heelflip': ['frontside bigspin heelflip', 'front bigspin heelflip', 'fs bigspin heel'],
   'Laser Flip': ['laser'],
+  'Ghetto Bird': ['ghettobird', 'hardflip backside 180', 'hardflip bs 180', 'backside 180 hardflip', 'bs 180 hardflip'],
   '360 Hardflip': ['360 hard flip', 'three sixty hardflip'],
   '360 Inward Heelflip': ['360 inward heel', '360 inward heel flip', 'three sixty inward heelflip'],
   '360 Double Kickflip': ['360 double flip', 'double tre', 'double tre flip', 'tre double'],
@@ -476,6 +479,7 @@ const DESCRIPTIONS: Record<string, string> = {
   'BS Bigspin Heelflip': 'A backside bigspin paired with a heelflip instead of a kickflip — elite tech.',
   'FS Bigspin Heelflip': 'A frontside bigspin combined with a heelflip.',
   'Laser Flip': 'A 360 shuvit and a heelflip together — the gnarliest spinning flip there is.',
+  'Ghetto Bird': 'A hardflip backside 180 — flip the hardflip up between your legs, catch it early, then turn backside 180 and bring the board straight.',
   '360 Hardflip': 'A hardflip with a full frontside 360 shuv — the board flips up between your legs and keeps spinning all the way around.',
   '360 Inward Heelflip': 'An inward heelflip with a full backside 360 shuv — the heelflip spins in toward you all the way around.',
   '360 Double Kickflip': 'A 360 flip with two full kickflip rotations — pro-level hang-time tech.',

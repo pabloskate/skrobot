@@ -43,12 +43,12 @@ export {
   type TripodId,
 } from './camera/camera';
 /** The sets (spots) a trick can be staged at, and what each changes: stairs, handrails, tripods. */
-export { STAGE_SETS, railLineFor, setInfo, type RailChoice, type RailLine, type SetInfo, type SetRails, type StageSet } from './sets/sets';
+export { STAGE_SETS, railLineFor, setInfo, setTimeline, type RailChoice, type RailLine, type SetInfo, type SetRails, type StageSet } from './sets/sets';
 /** El Toro's 20 stair: its size and the moments of a trick down it. */
 export { FOOT, STAIR_DROP, STAIR_RUN, STAIR_STEPS, stairTimeline, type StairTimeline } from './sets/elToro/stairs';
-/** Who rides: robot, illustrated human, or detailed humanoid. */
+/** Who rides: robot, illustrated human, realistic human, or detailed humanoid. */
 export { SKATERS, skaterInfo, type Skater, type SkaterInfo } from './riders/skaters';
-/** Grinds and slides: on the flat bar, or down El Toro's handrail. */
+/** Grinds and slides: on the flat bar, or down a spot's handrail. */
 export { grindTimelineFor, type GrindTimeline, type Handrail } from './motion/grind';
 /**
  * Grind names. Flatground tricks can be popped into a grind ("Kickflip into
@@ -79,6 +79,7 @@ export {
   type RiderMechanics,
 } from './motion/stance';
 export { rpsSound, rpsVibrate, type RpsSound } from './sound/rpsFeedback';
+export { useSoundEffects, setSoundEffects } from './sound/preferences';
 export {
   DEFAULT_SKATE_STYLE,
   SKATE_STYLE_BOUNDS,
