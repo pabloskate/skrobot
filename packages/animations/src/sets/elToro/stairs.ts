@@ -236,6 +236,7 @@ export const EL_TORO_RAIL: Handrail = {
   end: STAIR_RUN + RAIL_EXT,
   top: RAIL_TOP + RAIL_R * Math.hypot(1, RISER / TREAD),
   slope: RISER / TREAD,
+  radius: RAIL_R,
   ground: stairGround,
   rest: (u) => Math.max(-STAIR_DROP, Math.min(0, nosingLine(u))),
   // A good roll for a rail: well under the speed it takes to jump the set.

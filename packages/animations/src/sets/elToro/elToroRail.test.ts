@@ -11,6 +11,8 @@ import { resolveSkateStyle } from '../../motion/style';
 import type { RiderStance, Robot, Stance } from '../../types';
 import { planStage, stageFrame, type StageFrame, type StagePlan } from '../../stage/stage';
 import { ASPHALT } from '../../camera/view';
+import { LEG_RADII } from '../../board/boardCollision';
+import type { Skater } from '../../riders/skaters';
 import type { RailChoice } from '../sets';
 import { CENTER_Z, FAR_RAIL_Z, HILL_EDGE, HILL_RAIL_Z, WALL_THICK, WALL_U0, WALL_U1, WALL_Z, wallTop } from './elToroLayout';
 
@@ -112,8 +114,10 @@ describe('El Toro handrail', () => {
       expect(ride.lockS / TREAD, base).toBeGreaterThan(4);
       expect(ride.lockS / TREAD, base).toBeLessThan(7);
       // Well under the rail's top end (3.6 ft): a truck grind no higher an ollie than the flat bar's,
-      // a slide a little higher, for the time over the rail to step across and turn into it.
-      expect(g.apex, base).toBeLessThan((g.spec.slide ? 2.75 : 2.3) * FOOT);
+      // a slide a little higher, for the time over the rail to step across and turn into it. Up on
+      // one truck (a 5-0, a nosegrind) the board's middle rides higher over the truck it's on.
+      const oneTruck = !g.spec.slide && g.spec.contact.at.x !== 0;
+      expect(g.apex, base).toBeLessThan((g.spec.slide ? 2.75 : oneTruck ? 2.35 : 2.3) * FOOT);
       // Gravity down the waxed rail wins: faster at the bottom, slides less so than grinds.
       expect(ride.offSpeed / ride.speed, base).toBeGreaterThan(g.spec.slide ? 1.25 : 1.4);
       const at = (t: number) => railTrack(g, t);
@@ -172,6 +176,53 @@ describe('El Toro handrail', () => {
     }
     expect(problems.slice(0, 8)).toEqual([]);
   }, 60_000);
+
+  it('keeps the rider\'s legs off the rail through the hop on, robot and person, every grind and trick in', () => {
+    // Leg thickness as drawn, hip to knee to ankle: the robot's, and a person's in jeans.
+    const LEGS: Record<'robot' | 'human', [number, number, number]> = {
+      robot: [LEG_RADII.hip, LEG_RADII.knee, LEG_RADII.ankle],
+      human: [7.5, 6.5, 6],
+    };
+    const hits: string[] = [];
+    for (const skater of ['robot', 'human'] as const) {
+      const [hipR, kneeR, ankleR] = LEGS[skater];
+      for (const grind of GRIND_BASES) {
+        for (const side of ['Frontside', 'Backside']) {
+          for (const into of ['', 'Kickflip into ', 'Heelflip into ']) {
+            for (const rider of RIDERS) {
+              const base = `${into}${side} ${grind}`;
+              const stage = planStage({ id: base, name: base, base, stance: 'regular' }, {
+                landed: true, riderStance: rider, style, fall: 'slam', shankProgress: 0.65, set: 'el-toro', skater: skater as Skater,
+              });
+              const g = grindOf(stage);
+              let worst = Infinity;
+              let when = 0;
+              for (let t = g.pop - 0.1; t <= g.lockAt; t += 1 / 60) {
+                const frame = stageFrame(stage, t, 1);
+                for (const leg of frame.rig.legs) {
+                  for (let k = 0; k <= 6; k++) {
+                    const u = k / 6;
+                    const thigh = fromRail(frame, add3(leg.hip, scale3(add3(leg.knee, scale3(leg.hip, -1)), u)));
+                    if (thigh != null && thigh - RAIL_R - (hipR + (kneeR - hipR) * u) < worst) {
+                      worst = thigh - RAIL_R - (hipR + (kneeR - hipR) * u);
+                      when = t - g.pop;
+                    }
+                    const shin = fromRail(frame, add3(leg.knee, scale3(add3(leg.ankle, scale3(leg.knee, -1)), u)));
+                    if (shin != null && shin - RAIL_R - (kneeR + (ankleR - kneeR) * u) < worst) {
+                      worst = shin - RAIL_R - (kneeR + (ankleR - kneeR) * u);
+                      when = t - g.pop;
+                    }
+                  }
+                }
+              }
+              if (worst < 0) hits.push(`${skater} ${base} ${rider} at pop+${when.toFixed(2)}: ${worst.toFixed(1)}`);
+            }
+          }
+        }
+      }
+    }
+    expect(hits.slice(0, 10)).toEqual([]);
+  }, 120_000);
 
   it('rides fakie down the same stairs backwards, and every stance down the same rail', () => {
     for (const stance of STANCES) {

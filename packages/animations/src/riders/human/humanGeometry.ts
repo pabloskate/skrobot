@@ -1,7 +1,7 @@
 import type { BufferGeometry } from 'three';
 import { smoothstep } from '../../math';
 import { loftGeometry } from '../../three/geometry';
-import { SHIN, THIGH } from '../../motion/skeleton';
+import { PERSON_SCALE, SHIN, THIGH } from '../../motion/skeleton';
 import type { Vec3 } from '../../camera/view';
 
 /**
@@ -21,7 +21,7 @@ import type { Vec3 } from '../../camera/view';
 // ---------- Size ----------
 
 /** How much bigger than modelled the person is drawn, and the rig grown: hips up, and the legs' bones. */
-export const HUMAN_SCALE = 1.42;
+export const HUMAN_SCALE = PERSON_SCALE;
 /** How much bigger than modelled the head is drawn: a grown-up's head is a smaller share of them than a kid's. */
 export const HUMAN_HEAD = 1.2;
 /** The person's leg bones (world units). */

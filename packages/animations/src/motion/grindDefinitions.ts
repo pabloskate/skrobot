@@ -73,8 +73,10 @@ interface GrindDef {
  */
 const GRINDS: Record<string, GrindDef> = {
   '50-50 Grind': { contact: 'trucks', yaw: 0, pitch: 0, roll: 0, feet: [22, -24], side: 'frontside' },
-  '5-0 Grind': { contact: 'tail truck', yaw: 0, pitch: -11, roll: 0, feet: [14, -31], side: 'backside' },
-  Nosegrind: { contact: 'nose truck', yaw: 0, pitch: 11, roll: 0, feet: [31, -14], side: 'frontside' },
+  // Up on one truck, the other end held well up: the kick comes down to a couple of inches
+  // over the bar (it would touch at about 42°), never onto it, so it can't read as a 50-50.
+  '5-0 Grind': { contact: 'tail truck', yaw: 0, pitch: -30, roll: 0, feet: [14, -31], side: 'backside' },
+  Nosegrind: { contact: 'nose truck', yaw: 0, pitch: 30, roll: 0, feet: [31, -14], side: 'frontside' },
   'Crooked Grind': { contact: 'nose truck', yaw: 36, pitch: 20, roll: -32, feet: [34, -12], side: 'backside' },
   'Overcrooked Grind': { contact: 'nose truck', yaw: -30, pitch: 16, roll: 28, feet: [34, -12], side: 'frontside' },
   'Smith Grind': { contact: 'tail truck', yaw: -24, pitch: 22, roll: -8, feet: [16, -29], side: 'backside' },

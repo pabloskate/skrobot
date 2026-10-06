@@ -567,9 +567,10 @@ export function stateFromSearch(search: string): ExplorerState {
   }, grind);
 }
 
-/** A downloaded video's file name: the trick, and its speed when slowed down ("kickflip-0.25x.mp4"). */
-export function videoFilename(trickName: string, rate: number): string {
-  return `${slug(trickName) || 'trick'}${rate === 1 ? '' : `-${rate}x`}.mp4`;
+/** A downloaded video's name: the trick, speed, and extension matching its encoded format. */
+export function videoFilename(trickName: string, rate: number, mimeType = 'video/mp4'): string {
+  const extension = mimeType.startsWith('video/webm') ? 'webm' : 'mp4';
+  return `${slug(trickName) || 'trick'}${rate === 1 ? '' : `-${rate}x`}.${extension}`;
 }
 
 /** The URL query that reopens this state: only what's on the stage, defaults left out. */

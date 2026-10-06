@@ -36,6 +36,11 @@ export const FOREARM = 12;
 /** Fixed bone lengths: the legs never stretch. */
 export const THIGH = 34;
 export const SHIN = 30;
+/**
+ * A person is the robot's rig grown this much, hips up and the legs' bones,
+ * over the same feet (riders/human/humanRig.ts): the biggest who rides.
+ */
+export const PERSON_SCALE = 1.42;
 const LEG_REACH = THIGH + SHIN - 0.4;
 /** Hip height above the deck center while cruising: an athletic, soft-kneed stance. */
 export const RIDE_HEIGHT = 63;

@@ -470,6 +470,8 @@ describe('Trick Explorer video', () => {
     expect(videoFilename('Fakie Hardflip', 0.25)).toBe('fakie-hardflip-0.25x.mp4');
     expect(videoFilename(stageTrick(grindState()).name, 0.5)).toMatch(/^[a-z0-9]+(-[a-z0-9.]+)*\.mp4$/);
     expect(videoFilename('???', 1)).toBe('trick.mp4');
+    expect(videoFilename('Kickflip', 1, 'video/webm;codecs=vp8,opus')).toBe('kickflip.webm');
+    expect(videoFilename('Fakie Hardflip', 0.25, 'video/mp4;codecs=avc1')).toBe('fakie-hardflip-0.25x.mp4');
   });
 });
 

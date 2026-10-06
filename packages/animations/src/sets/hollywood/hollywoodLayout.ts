@@ -43,6 +43,7 @@ export const HOLLYWOOD_RAIL: Handrail = {
   end: HOLLYWOOD_RAIL_END,
   top: HOLLYWOOD_RAIL_HEIGHT + HOLLYWOOD_RAIL_RADIUS * Math.hypot(1, HOLLYWOOD_GRADE),
   slope: HOLLYWOOD_GRADE,
+  radius: HOLLYWOOD_RAIL_RADIUS,
   ground: hollywoodGround,
   rest: (u) => Math.max(-HOLLYWOOD_DROP, Math.min(0, hollywoodNosing(u))),
   speed: 12 * F,

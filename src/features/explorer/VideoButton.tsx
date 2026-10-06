@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { TbAlertTriangle, TbCheck, TbDownload } from 'react-icons/tb';
 import type { TrickVideoOptions } from '@skrobot/animations/three/video';
+import { videoFilename } from './explorer';
 
 type Status =
   | { kind: 'idle' }
@@ -28,11 +29,11 @@ function saveFile(blob: Blob, filename: string) {
 }
 
 /**
- * Download an MP4 of what's on stage: the trick filmed once through, at the
+ * Download a video of what's on stage: the trick filmed once through, at the
  * stage's speed and camera, then saved as a file. Filming happens off screen
  * and takes a few seconds; pressing again while it runs cancels.
  */
-export default function VideoButton({ video, filename }: { video: Omit<TrickVideoOptions, 'onProgress' | 'signal'>; filename: string }) {
+export default function VideoButton({ video }: { video: Omit<TrickVideoOptions, 'onProgress' | 'signal'> }) {
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   const job = useRef<AbortController | null>(null);
 
@@ -60,7 +61,8 @@ export default function VideoButton({ video, filename }: { video: Omit<TrickVide
         signal: controller.signal,
         onProgress: (progress) => setStatus({ kind: 'filming', progress }),
       });
-      saveFile(blob, filename);
+      controller.signal.throwIfAborted();
+      saveFile(blob, videoFilename(video.trick.name, video.rate ?? 1, blob.type));
       setStatus({ kind: 'saved' });
     } catch (error) {
       if (controller.signal.aborted) setStatus({ kind: 'idle' });

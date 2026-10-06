@@ -16,7 +16,6 @@ import {
   stateFromSearch,
   timelineFor,
   trickSteps,
-  videoFilename,
   withSet,
   zoomAt,
   ZOOM_RANGE,
@@ -104,7 +103,6 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
         <div className="explorer-actions">
           <VideoButton
             video={{ robot: RIDER, trick, riderStance: state.rider, camera, tripod, zoom: state.zoom, set: state.set, rail: state.rail, skater: state.skater, rate, sound }}
-            filename={videoFilename(trick.name, rate)}
           />
           <button type="button" className="explorer-share" onClick={share}>
             {shared ? <TbCheck aria-hidden /> : <TbShare aria-hidden />}

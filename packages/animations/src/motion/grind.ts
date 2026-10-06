@@ -11,18 +11,23 @@ import {
   STREET_DASH_PERIOD,
   STREET_DASH_SECONDS,
   X0,
+  computeFrame,
+  specFor,
   type FallVariant,
 } from './trick';
 import { WHEEL_BOTTOM, WHEEL_HALF_W, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z } from '../board/board';
 import { BOTTOM_LOCAL, TIP_X } from '../board/deck';
-import { POP_RISE } from './rig';
+import { POP_RISE, solveRig } from './rig';
 import { FOLLOW_POP } from '../camera/camera';
 import {
   CROUCH_START,
   DECK_HALF_WIDTH,
   LAND_OMEGA,
   LAND_ZETA,
+  PERSON_SCALE,
   POP_HEIGHT,
+  SHIN,
+  THIGH,
   RIDE_HEIGHT,
   SQUAT_FLOOR,
   TOUCHDOWN_HEIGHT,
@@ -30,13 +35,14 @@ import {
   hermite,
   softFloor,
 } from './skeleton';
-import { clamp01, easeOutCubic, rotX, rotY, rotZ, smoothstep, type V3 } from '../math';
+import { add3, clamp01, dot3, easeOutCubic, norm3, rotX, rotY, rotZ, scale3, smoothstep, sub3, type V3 } from '../math';
 import {
   NO_SPIN,
   hopClock,
   hopFrame,
   hopMid,
   hopRate,
+  landingOnRail,
   poppingOff,
   settledHeading,
   settledSpin,
@@ -127,6 +133,8 @@ const SCOOP_STRIKE = 0.04;
 const SCOOP_HOLD = 0.03;
 const POP_OUT = 24;
 const SLIDE_POP_OUT = 10;
+/** Off one truck with the board already tipped toward the end it pops (a 5-0 off its tail), the snap levers on this much further. */
+const TRUCK_POP_LEVER = 8;
 
 /** Hip heights over the deck: locked on the bar, and the crouches that load each pop. */
 const GRIND_HEIGHT = 50;
@@ -264,6 +272,8 @@ export interface Handrail {
   /** Height of the line along the rail's top at s = 0, and how far it falls per unit along. */
   top: number;
   slope: number;
+  /** The pipe's radius. */
+  radius: number;
   /** Height of the ground at s: the top landing, the steps, the bottom landing. */
   ground: (s: number) => number;
   /** What a body lying on the steps rests on at s: the line of their edges, and the landings. */
@@ -334,6 +344,19 @@ const RAIL_TRICK_LIFT = 0.5;
  * keep their ends as far off.
  */
 const RAIL_BESIDE = 15;
+/**
+ * The rider's legs keep off it too, the biggest who rides (a person: the
+ * robot's legs grown PERSON_SCALE over the same feet), as thick as a person's
+ * legs in jeans: thigh and shin radii. The robot, smaller, clears it by more.
+ */
+const LEG_THIGH = 8;
+const LEG_SHIN = 6.5;
+/** Air left between a leg and the rail going past it: the jeans don't brush it, whoever's in them. */
+const LEG_AIR = 4;
+/** How far a person's knees turn from the rig's toward the way they face: over the toes (riders/realistic/skaterPose.ts KNEE_FORWARD). */
+const KNEE_TOWARD_TOES = 0.75;
+/** Points along each bone, hip to knee and knee to ankle, checked against the rail. */
+const LEG_POINTS = [0, 0.25, 0.5, 0.75, 1] as const;
 /** The steepest line (degrees off the rail's) the solver lets an angled-in deck's reach assume. */
 const APPROACH_MAX = 32;
 /** An easy line in (degrees), and how much higher (world units) a skater pops to keep to it. */
@@ -597,9 +620,23 @@ export function planGrind(
     const lockRise = GROUND - lockCenter.y;
     const apex = railed?.apex ?? Math.max(APEX + APEX_STYLE * (style.popHeight - 1) + (spec.entry?.lift ?? 0), APEX_MIN, lockRise + 12) + extra;
     const upT = railed?.upT ?? Math.sqrt((2 * apex) / GRAVITY) + Math.sqrt((2 * (apex - lockRise)) / GRAVITY);
+    const rate = entry ? hopRate(entry, upT) : 1;
+    // What's beside the rider through the hop, `along` ahead of the board's center: the rail (or
+    // the bar, which starts just short of the lock) as its axis's physics y and its radius.
+    const beside = (tau: number, along: number): { y: number; radius: number } | null => {
+      if (railed) {
+        const { rail, popS, speed } = railed.ride;
+        const s = popS + speed * tau + along;
+        if (s < rail.start || s > rail.end) return null;
+        return { y: railTopY(rail, s) + rail.radius * Math.hypot(1, rail.slope), radius: rail.radius };
+      }
+      return along < travel(upT - tau) - LOCK_MARGIN ? null : { y: BAR_TOP_Y + BAR_HALF, radius: BAR_HALF };
+    };
+    const board = boardReach(entry, rate, upT, level.yaw - heading, heading, (spec.dir === 1) === spec.popNose);
+    const legs = legReach(spec, entry, rate, upT, apex, mechanics, style, far, beside);
     const approach = approachLine(
       -far * (lockCenter.z - BAR_Z), upT, railed ? railed.ride.over : underBarShare(apex, upT),
-      boardReach(entry, entry ? hopRate(entry, upT) : 1, upT, level.yaw - heading, heading, (spec.dir === 1) === spec.popNose),
+      (s, angle) => Math.max(board(s, angle), legs(s, angle)),
       railed ? railed.ride.speed : travel(1),
     );
     return { railed, lockCenter, lockRise, apex, upT, approach };
@@ -617,11 +654,13 @@ export function planGrind(
   }
   const { railed, lockCenter, lockRise, apex, upT, approach } = on;
   const ride = railed ? railed.ride : null;
-  // Off the trucks the board pops to a set angle; a slide levers off the
-  // bar from whatever angle it was sliding at.
+  // Off the trucks the board pops to a set angle, or further than the lock
+  // already tips it that way (a 5-0's tail snaps down from where it rides);
+  // a slide levers off the bar from whatever angle it was sliding at.
+  const popEnd = spec.exitNose ? 1 : -1;
   const popOut = spec.slide
-    ? lock.pitch + (spec.exitNose ? 1 : -1) * SLIDE_POP_OUT
-    : (spec.exitNose ? 1 : -1) * POP_OUT;
+    ? lock.pitch + popEnd * SLIDE_POP_OUT
+    : popEnd * Math.max(POP_OUT, popEnd * lock.pitch + TRUCK_POP_LEVER);
   // The board's height over the bar's top at the lock: a flat bar's is BAR_TOP under the lock-in height.
   const overBar = ride ? lockRise - (GROUND - railTopY(ride.rail, ride.lockS)) : lockRise - BAR_TOP;
   const plainOffPop = Math.max(OFF_POP, ride ? WHEEL_BOTTOM + OFF_CLEAR - overBar : BAR_TOP + WHEEL_BOTTOM + OFF_CLEAR - lockRise);
@@ -781,12 +820,17 @@ export interface GrindFrame {
   rail: number;
 }
 
-/** Rolling in: the rider carves onto the angled line over CARVE seconds, settled on it SETTLED before the pop. */
-const CARVE = 0.35;
+/**
+ * Rolling in: the rider carves onto the angled line over CARVE seconds,
+ * settled on it SETTLED before the pop. A long, easy carve, begun several feet
+ * before the pop (for a plain grind, as the attempt starts): turned in late
+ * and quickly, the board swings round under the rider like a revert.
+ */
+const CARVE = 0.55;
 const SETTLED = 0.15;
-/** The furthest off the bar (world units) a roll-in starts, and the tightest a carve gets (share of its time). */
-const START_MAX = 100;
-const CARVE_TIGHTEST = 0.35;
+/** The furthest off the bar (world units, about 6 ft) a roll-in starts, and the tightest a carve gets (share of its time). */
+const START_MAX = 180;
+const CARVE_TIGHTEST = 0.5;
 /** Coming down onto the lock, the board keeps this much higher per unit it still has to go sideways. */
 const LOCK_SETTLE = 2;
 
@@ -867,6 +911,97 @@ function boardReach(entry: HopPlan | null, entryRate: number, upT: number, turn:
     }
     const a = (yaw * Math.PI) / 180;
     return TIP_X * Math.abs(Math.sin(a)) + HALF_WIDTH * Math.abs(Math.cos(a)) + RAIL_BESIDE - HALF_WIDTH;
+  };
+}
+
+/**
+ * How far off the rail's (or bar's) line the board's center keeps `s` through
+ * the hop on, angled in by `angle` degrees, so the rider's legs clear it as
+ * well as the board: a pop starts with the knees, and a flip's flicking foot,
+ * out over the side of the board and below the rail's top. Every point of the
+ * legs still too low to pass over the rail stands off it by the rail's radius
+ * and the leg's thickness. The legs are the hop's own flatground rig (what the
+ * grind wears until it hands over to the lock), grown to a person's, the board
+ * rising as the hop rises; `beside(tau, along)` is the rail's axis and radius
+ * `along` ahead of the board's center `tau` into the hop, or null where there's
+ * none. `far` is the rail's side.
+ */
+function legReach(
+  spec: GrindSpec,
+  entry: HopPlan | null,
+  rate: number,
+  upT: number,
+  apex: number,
+  mechanics: RiderMechanics,
+  style: SkateStyle,
+  far: 1 | -1,
+  beside: (tau: number, along: number) => { y: number; radius: number } | null,
+) {
+  const hopSpec = entry?.trick.spec ?? specFor({ id: 'ollie', name: 'Ollie', base: 'Ollie', stance: spec.stance });
+  const v0 = Math.sqrt(2 * GRAVITY * apex);
+  // The legs at each moment asked about, off the board's center (physics axes; the board's height
+  // added when it's asked): the angle turns them, the rail's height doesn't depend on it.
+  const known = new Map<number, { p: V3; radius: number }[]>();
+  const legsAt = (tau: number) => {
+    const cached = known.get(tau);
+    if (cached) return cached;
+    const f = landingOnRail(computeFrame(hopClock(tau, rate), hopSpec, true, 'slam', 0.65, style), hopSpec, style);
+    const rig = solveRig(f, hopSpec, mechanics, style, 'landed');
+    const points: { p: V3; radius: number }[] = [];
+    // A person on this rig, as riders/human/humanRig.ts grows them: hips up from between the
+    // ankles, pulled in toward the feet where a leg can't reach its ankle.
+    const at = (p: V3): V3 => ({ x: p.x - X0, y: p.y - f.board.y, z: p.z });
+    const [l0, l1] = rig.legs;
+    const feet = scale3(add3(at(l0.ankle), at(l1.ankle)), 0.5);
+    const a = THIGH * PERSON_SCALE, b = SHIN * PERSON_SCALE;
+    let shift: V3 = { x: 0, y: 0, z: 0 };
+    for (let pass = 0; pass < 2; pass++) {
+      for (const leg of rig.legs) {
+        const d = sub3(at(leg.ankle), add3(add3(feet, scale3(sub3(at(leg.hip), feet), PERSON_SCALE)), shift));
+        const len = Math.hypot(d.x, d.y, d.z);
+        if (len > (a + b) * 0.995) shift = add3(shift, scale3(d, (len - (a + b) * 0.995) / len));
+      }
+    }
+    for (const leg of rig.legs) {
+      const ankle = at(leg.ankle);
+      const hip = add3(add3(feet, scale3(sub3(at(leg.hip), feet), PERSON_SCALE)), shift);
+      const down = norm3(sub3(ankle, hip));
+      const offAxis = (v: V3) => sub3(v, scale3(down, dot3(v, down)));
+      const d = Math.min(a + b - 1e-3, Math.hypot(ankle.x - hip.x, ankle.y - hip.y, ankle.z - hip.z));
+      const along = (a * a - b * b + d * d) / (2 * d);
+      const out = Math.sqrt(Math.max(0, a * a - along * along));
+      // The knee bent the rig's way, and turned toward the toes as the realistic skater wears it: both kept clear.
+      const bent = norm3(offAxis(sub3(at(leg.knee), at(leg.hip))));
+      const toes = norm3(add3(scale3(bent, 1 - KNEE_TOWARD_TOES), scale3(norm3(offAxis(rig.torso.fwd)), KNEE_TOWARD_TOES)));
+      for (const pole of [bent, toes]) {
+        const knee = add3(add3(hip, scale3(down, along)), scale3(pole, out));
+        for (const k of LEG_POINTS) {
+          points.push({ p: add3(hip, scale3(sub3(knee, hip), k)), radius: LEG_THIGH });
+          points.push({ p: add3(knee, scale3(sub3(ankle, knee), k)), radius: LEG_SHIN });
+        }
+      }
+    }
+    known.set(tau, points);
+    return points;
+  };
+  return (s: number, angle: number) => {
+    const tau = s * upT;
+    const flown = scoops(entry) ? Math.max(0, tau - SCOOP_HOLD * (1 - smoothstep(tau / (2 * SCOOP_HOLD)))) : tau;
+    const boardY = GROUND - (v0 * flown - 0.5 * GRAVITY * flown * flown);
+    // Angled in, as the approach turns board and rider (approachYaw).
+    const yaw = -spec.dir * far * angle;
+    let reach = -Infinity;
+    for (const { p, radius } of legsAt(tau)) {
+      const q = rotY(p, yaw);
+      const rail = beside(tau, spec.dir * q.x);
+      if (!rail) continue;
+      // How far over the rail's axis the point is (physics y is down), and the room it needs round it.
+      const over = rail.y - (boardY + q.y);
+      const room = rail.radius + radius + LEG_AIR;
+      if (over >= room) continue;
+      reach = Math.max(reach, far * q.z + (over <= 0 ? room : Math.sqrt(room * room - over * over)));
+    }
+    return reach;
   };
 }
 

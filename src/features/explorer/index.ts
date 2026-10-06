@@ -6,7 +6,7 @@
  * go down the drop, grinds go down a handrail where there is one, and tripods
  * film from the bottom, the side, and the top), by the robot, the illustrated
  * or realistic human, or the detailed humanoid, with a
- * shareable URL for what's on stage and an MP4 of it to download.
+ * shareable URL for what's on stage and a video of it to download (MP4, with a WebM fallback).
  * Animation comes from @skrobot/animations/three (filming from its video entry);
  * names and descriptions from tricks.
  */
