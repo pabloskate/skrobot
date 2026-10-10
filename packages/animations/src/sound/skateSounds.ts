@@ -12,7 +12,9 @@ import { cuesBetween, type SoundCue, type Soundtrack } from './soundtrack';
  * (TRICK_SOUND_FILES), those play instead of their synthesized stand-ins.
  *
  * Kept under the game's own beeps: there to feel, not to notice. Slowed
- * down, everything drops in pitch a little, like slow-motion footage.
+ * down, everything drops in pitch a little, like slow-motion footage. The
+ * wheels follow the board's speed: rolling into a big set, they run quicker,
+ * higher, and louder than cruising on flat ground.
  */
 
 /**
@@ -34,6 +36,13 @@ const QUIET_EASE = 0.05;
  * (a quarter speed plays about two thirds as high), never higher than life.
  */
 export const slowPitch = (rate: number) => Math.max(0.25, Math.min(1, rate)) ** 0.3;
+
+/**
+ * How much quicker (and higher) the wheels run, and how much louder, at a
+ * speed (1 cruising on flat ground): less than in proportion, so the twice
+ * cruising speed of a big set runs about a third quicker and louder.
+ */
+export const rollRate = (speed: number) => Math.max(0.25, Math.min(3, speed)) ** 0.4;
 
 // ----- Sources -----
 
@@ -378,12 +387,12 @@ function playCue(ctx: BaseAudioContext, out: AudioNode, cue: SoundCue, when: num
 
 // ----- Beds -----
 
-/** The wheels rolling and the rail scraping: running sounds whose levels follow the soundtrack. */
+/** The wheels rolling and the rail scraping: running sounds whose levels, and the wheels' speed, follow the soundtrack. */
 interface Beds {
-  /** Ease toward these levels (0 → 1 of each bed's full level) from `when`. */
-  ease(roll: number, grind: number, when: number): void;
-  /** Lay these levels down exactly, evenly spread from `when` over `duration` — for rendering ahead. */
-  curve(roll: Float32Array, grind: Float32Array, when: number, duration: number): void;
+  /** Ease toward these levels (0 → 1 of each bed's full level) and wheel speed from `when`. */
+  ease(roll: number, grind: number, speed: number, when: number): void;
+  /** Lay these levels and speeds down exactly, evenly spread from `when` over `duration` — for rendering ahead. */
+  curve(roll: Float32Array, grind: Float32Array, speed: Float32Array, when: number, duration: number): void;
   /** Fall quiet from `when` (now, by default) and let the sources go. */
   stop(when?: number): void;
 }
@@ -391,6 +400,8 @@ interface Beds {
 function createBeds(ctx: BaseAudioContext, out: AudioNode, slide: boolean, pitch: number, when: number): Beds {
   const { white, wander, brown } = noises(ctx);
   const sources: AudioBufferSourceNode[] = [];
+  /** The wheels' sources, with the rate each plays at cruising speed. */
+  const wheelSources: Array<{ node: AudioBufferSourceNode; rate: number }> = [];
   const source = (buffer: AudioBuffer, rate: number) => {
     const node = ctx.createBufferSource();
     node.buffer = buffer;
@@ -432,6 +443,7 @@ function createBeds(ctx: BaseAudioContext, out: AudioNode, slide: boolean, pitch
   // over it, uneven as the ground is.
   const roll = gain(0);
   roll.connect(out);
+  const rollingSources = sources.length;
   const rolling = recordings.get('roll');
   if (rolling) {
     play(rolling, anywhereInLoop(rolling), when).connect(roll);
@@ -444,6 +456,7 @@ function createBeds(ctx: BaseAudioContext, out: AudioNode, slide: boolean, pitch
     loop(wander, 0.3 * pitch).connect(gain(0.25)).connect(rollGround.gain);
     rollGround.connect(roll);
   }
+  for (const node of sources.slice(rollingSources)) wheelSources.push({ node, rate: node.playbackRate.value });
 
   // The rail: the recording's glide; or, waxed, a board gliding along it —
   // a smooth, high hiss for the deck sliding, a high ringing scrape for the
@@ -475,18 +488,24 @@ function createBeds(ctx: BaseAudioContext, out: AudioNode, slide: boolean, pitch
   const rollLevel = rolling ? RECORDED_LEVEL.roll : ROLL_LEVEL;
   const grindLevel = scraping ? RECORDED_LEVEL[slide ? 'slide' : 'grind'] : slide ? SLIDE_LEVEL : GRIND_LEVEL;
 
-  const ease = (r: number, g: number, at: number, by = LEVEL_EASE) => {
+  const levels = (r: number, g: number, at: number, by: number) => {
     roll.gain.setTargetAtTime(r * rollLevel, at, by);
     grind.gain.setTargetAtTime(g * grindLevel, at, by);
   };
   return {
-    ease,
-    curve(r, g, at, duration) {
-      roll.gain.setValueCurveAtTime(r.map((x) => x * rollLevel), at, duration);
+    ease(r, g, speed, at) {
+      const quicker = rollRate(speed);
+      levels(r * quicker, g, at, LEVEL_EASE);
+      for (const { node, rate } of wheelSources) node.playbackRate.setTargetAtTime(rate * quicker, at, LEVEL_EASE);
+    },
+    curve(r, g, speed, at, duration) {
+      const quicker = speed.map(rollRate);
+      roll.gain.setValueCurveAtTime(r.map((x, i) => x * quicker[i] * rollLevel), at, duration);
       grind.gain.setValueCurveAtTime(g.map((x) => x * grindLevel), at, duration);
+      for (const { node, rate } of wheelSources) node.playbackRate.setValueCurveAtTime(quicker.map((x) => x * rate), at, duration);
     },
     stop(at = ctx.currentTime) {
-      ease(0, 0, at, QUIET_EASE);
+      levels(0, 0, at, QUIET_EASE);
       for (const node of sources) node.stop(at + QUIET_EASE * 6);
     },
   };
@@ -542,7 +561,7 @@ export class LiveSoundtrack {
       playCue(ctx, out, cue, now + Math.max(0, cue.at - t) / rate, pitch, this.track.slide);
     }
     this.heard = ahead;
-    this.beds.ease(this.track.roll(t), this.track.grind(t), now);
+    this.beds.ease(this.track.roll(t), this.track.grind(t), this.track.speed(t), now);
     clearTimeout(this.still);
     this.still = window.setTimeout(() => this.quiet(), STILL_MS);
   }
@@ -581,12 +600,14 @@ export async function renderSoundtrack(track: Soundtrack, end: number, rate: num
   const points = Math.max(2, Math.ceil(duration * CURVE_RATE) + 1);
   const roll = new Float32Array(points);
   const grind = new Float32Array(points);
+  const speed = new Float32Array(points);
   for (let i = 0; i < points; i++) {
     const at = (i / (points - 1)) * duration;
     const fade = Math.min(1, (duration - at) / TAIL_FADE);
     roll[i] = track.roll(at * rate) * fade;
     grind[i] = track.grind(at * rate) * fade;
+    speed[i] = track.speed(at * rate);
   }
-  beds.curve(roll, grind, 0, duration);
+  beds.curve(roll, grind, speed, 0, duration);
   return ctx.startRendering();
 }

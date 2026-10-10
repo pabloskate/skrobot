@@ -7,6 +7,7 @@ attribution:
 
 | File | Made from |
 |---|---|
+| `alien.glb` | the same as `skater.glb`, reshaped by MakeHuman's own head and hand targets and warped by the build script, without the brows, lashes, or beanie |
 | `skater.glb` | MakeHuman base mesh and default rig (via MPFB 2), system eyes, `eyebrow008`, `eyelashes01`, `male_casualsuit06`, `shoes06`; the beanie is modelled by the build script. Skinned, scaled to world units, with baked vertex occlusion. |
 | `skin.jpg` | system skin `young_caucasian_male` |
 | `skin_normal.jpg` | `mindfront_aksel_skin` normal map (Skins 02 pack, by Mindfront) |

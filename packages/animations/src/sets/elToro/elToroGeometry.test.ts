@@ -164,7 +164,7 @@ describe('El Toro environment geometry', () => {
       expect(STAIR_RUN / FOOT).toBe(20);
       expect(Math.max(...steps.map(({ y }) => y))).toBeCloseTo(0, 5);
       expect(Math.min(...steps.map(({ y }) => y))).toBeCloseTo(-STAIR_DROP, 5);
-      expect(STAIR_DROP / FOOT).toBe(9);
+      expect(STAIR_DROP / FOOT).toBe(9.5);
       for (const face of risers.values()) {
         const minZ = Math.min(...face.map(({ z }) => z));
         const maxZ = Math.max(...face.map(({ z }) => z));

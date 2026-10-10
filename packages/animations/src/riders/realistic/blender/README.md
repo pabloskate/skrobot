@@ -46,7 +46,17 @@ it:
 
 ```sh
 blender -b --python packages/animations/src/riders/realistic/blender/build_skater.py -- packages/animations/src/riders/realistic/assets
+blender -b --python packages/animations/src/riders/realistic/blender/build_skater.py -- packages/animations/src/riders/realistic/assets alien
 ```
+
+The second makes `alien.glb`: the same body, rig and clothes, reshaped by
+MakeHuman's head and hand targets (`ALIEN_TARGETS`: a domed cranium over a
+small, narrow face, a small nose and mouth, ears down to nubs, long thin
+fingers), each eye widened into an almond tilted up at its outer corner
+(`EYE_WARP`, about the eye bones' heads, so the eye and lid bones stay put),
+the little fingers capped off at the knuckle, and no brows, lashes, or
+beanie. Its eyes ride the head bone: they're solid black, so the lids carry
+the look. It writes no textures (it wears the skater's).
 
 Then check the skater in `/explore?skater=realistic` from a few angles, in
 both stances and a slam, and run `npm test` (`realisticHuman3d.test.ts`

@@ -6,7 +6,7 @@ import { SUN } from '../three/materials';
 
 export const BOARD_SURFACE = { grip: 0, underside: 1, maple: 2, aluminum: 3, bushing: 4, urethane: 5, steel: 6, bolt: 7, rubber: 8 } as const;
 
-/** Physical-style finish for the humanoid's board; both MRT targets remain valid. */
+/** Physical-style finish for the realistic human's board; both MRT targets remain valid. */
 export function realisticBoardMaterial(): ShaderMaterial {
   return new ShaderMaterial({
     glslVersion: GLSL3,

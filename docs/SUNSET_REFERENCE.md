@@ -82,6 +82,21 @@ spot identifiers—the steep painted bank, canopy lip, blue/orange fascia,
 open bays, projecting shrub planters, sidewalk and Sunset Boulevard—follow
 photographed features.
 
+## Contextual street life
+
+`sunsetStreetscape.ts` adds lived-in context that is composed, not surveyed:
+traffic on Sunset that keeps right (the inner near lane and both far lanes;
+the curb lane stays empty because the rollout reaches about twelve feet into
+it), cars being dried in the bays with their roofs over the bank crest, cars
+waiting in the side lot with its stall lines, vacuum stations, cashier booth,
+towel cart and puddles, coiled hoses on the bay columns, rooftop units and
+vents behind the roof approach, lane oil, tar-sealed cracks, manholes, gum,
+a hydrant with red curb, a bus bench and stop, a city trash can, a row of
+shopfronts with abstract sign lettering across the boulevard, a mini-mall past
+the lot, palms and street trees, and wooden power poles in the alley. Wheel
+marks and repainted patches on the bank follow its slope. Cars and trees are
+the shared realistic street props; everything else is baked geometry.
+
 ## Geometry and motion contract
 
 `sunsetLayout.ts` owns the profile and spatial surface sampler used by scenery

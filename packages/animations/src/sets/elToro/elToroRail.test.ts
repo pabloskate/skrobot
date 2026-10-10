@@ -179,12 +179,12 @@ describe('El Toro handrail', () => {
 
   it('keeps the rider\'s legs off the rail through the hop on, robot and person, every grind and trick in', () => {
     // Leg thickness as drawn, hip to knee to ankle: the robot's, and a person's in jeans.
-    const LEGS: Record<'robot' | 'human', [number, number, number]> = {
+    const LEGS: Record<'robot' | 'realistic', [number, number, number]> = {
       robot: [LEG_RADII.hip, LEG_RADII.knee, LEG_RADII.ankle],
-      human: [7.5, 6.5, 6],
+      realistic: [7.5, 6.5, 6],
     };
     const hits: string[] = [];
-    for (const skater of ['robot', 'human'] as const) {
+    for (const skater of ['robot', 'realistic'] as const) {
       const [hipR, kneeR, ankleR] = LEGS[skater];
       for (const grind of GRIND_BASES) {
         for (const side of ['Frontside', 'Backside']) {
@@ -325,16 +325,17 @@ describe('El Toro side rails', () => {
   /** How far inside the stairs from a side rail a set z is: positive on the steps' side. */
   const inside = (stage: StagePlan, z: number) => (stage.rail!.line === 'right' ? FAR_RAIL_Z - z : z - HILL_RAIL_Z);
 
-  it('takes the right rail for a regular backside boardslide and the left for a frontside one, mirrored goofy and fakie', () => {
+  it('takes the right rail for a regular frontside boardslide and the left for a backside one, mirrored goofy and fakie', () => {
     const line = (base: string, rider: RiderStance, stance: Stance = 'regular') => plan(base, { rider, stance, rail: 'side' }).rail?.line;
-    expect(line('Backside Boardslide', 'regular')).toBe('right');
-    expect(line('Frontside Boardslide', 'regular')).toBe('left');
-    expect(line('Backside Boardslide', 'goofy')).toBe('left');
-    expect(line('Frontside Boardslide', 'goofy')).toBe('right');
+    // Named by the approach, like every grind: frontside comes in with the rail on the toeside.
+    expect(line('Frontside Boardslide', 'regular')).toBe('right');
+    expect(line('Backside Boardslide', 'regular')).toBe('left');
+    expect(line('Frontside Boardslide', 'goofy')).toBe('left');
+    expect(line('Backside Boardslide', 'goofy')).toBe('right');
     // Riding fakie down the stairs, the toeside is on the other hand.
-    expect(line('Backside Boardslide', 'regular', 'fakie')).toBe('left');
-    // A 50-50 is named by its approach: frontside comes in with the rail on the toeside.
+    expect(line('Backside Boardslide', 'regular', 'fakie')).toBe('right');
     expect(line('Frontside 50-50 Grind', 'regular')).toBe('right');
+    expect(line('Frontside Noseslide', 'regular')).toBe('right');
     // The center rail unless a side one is asked for; flatground rides no rail.
     expect(plan('Backside Boardslide').rail).toEqual({ line: 'center', z: CENTER_Z });
     expect(plan('Kickflip', { rail: 'side' }).rail).toBeNull();

@@ -7,6 +7,7 @@ import { hash2 } from '../setKit';
 import { mixHex } from '../../math';
 import type { Vec3 } from '../../camera/view';
 import { sunsetLettering, sunsetPalm, sunsetShrub } from './sunsetDetails';
+import { buildSunsetStreetscape, SUNSET_STREET_PROPS } from './sunsetStreetscape';
 import * as layout from './sunsetLayout';
 
 // Detail coordinates are authored together at one scale, then baked to world
@@ -279,6 +280,20 @@ export function buildSunsetGeometry() {
     for (let atZ = z - depth / 2 + 20; atZ < z + depth / 2 - 20; atZ += 70) props.box([x + 0.6, lower + 25, atZ], [x + 1, lower + 138, atZ + 2], '#aeb5a7', '#aeb5a7', null);
     props.box([x - width - 7, lower + height, z - depth / 2 - 7], [x + 7, lower + height + 9, z + depth / 2 + 7], '#a9b2a2', '#b3b9a9', STRUCTURE);
   }
+  // Wheel marks and repainted patches on the bank, following its slope:
+  // the scuffs gather where riders touch down, the patches cover old tags.
+  const onBank = (x0: number, x1: number, z0: number, z1: number, lift: number, color: string) => {
+    const point = (u: number, v: number): Vec3 => [u, sunsetGround(u) + lift, v];
+    ground.quad(point(x0, z0), point(x1, z0), point(x1, z1), point(x0, z1), UP, { color }, NO_INK);
+  };
+  const landZ = layout.SUNSET_LANE_Z / SCALE;
+  for (let k = 0; k < 16; k++) {
+    const z = landZ + (hash2(k, 0, 870) - 0.5) * 110;
+    const x = 8 + hash2(k, 1, 871) * (SUNSET_TOE_START - 30);
+    onBank(x, Math.min(SUNSET_BANK_END - 2, x + 15 + hash2(k, 2, 872) * 40), z, z + 0.8 + hash2(k, 3, 873) * 1.2, 0.2, k % 3 ? '#8f9693' : '#9aa09c');
+  }
+  for (const [x0, x1, z0, z1, color] of [[30, 150, 140, 330, '#a6afae'], [12, 120, 820, 960, '#b4bcba'], [60, 200, 1460, 1600, '#a2abaa']] as const) onBank(x0, x1, z0, z1, 0.18, color);
+  buildSunsetStreetscape(ground, props);
   return {
     ground: ground.geometry().scale(SCALE, SCALE, SCALE), props: props.geometry().scale(SCALE, SCALE, SCALE),
     shadowBoxes: [
@@ -300,6 +315,7 @@ export class Sunset3D extends ClassicSpot3D {
       run: layout.SUNSET_BANK_END,
       drop: layout.SUNSET_DROP,
       framing: 0.82,
+      streetProps: SUNSET_STREET_PROPS,
       tripods: {
         bottom: { u: (SUNSET_BANK_END + 22 * FOOT) * SCALE, z: -12 * FOOT * SCALE, height: (-SUNSET_DROP + 3 * FOOT) * SCALE, frame: 24 * FOOT, place: 0.44 },
         side: { u: 13 * FOOT * SCALE, z: -32 * FOOT * SCALE, height: (-SUNSET_DROP + 6 * FOOT) * SCALE, frame: 27 * FOOT, place: 0.48 },

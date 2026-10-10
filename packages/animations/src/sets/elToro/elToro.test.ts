@@ -6,7 +6,7 @@ import { DEFAULT_SCENE_CAMERA } from '../../camera/camera';
 import { BOTTOM_LOCAL, TOP_LOCAL } from '../../board/deck';
 import { cross3, dot3, type V3 } from '../../math';
 import { SQUAT_FLOOR } from '../../motion/skeleton';
-import { FOOT, RISER, STAIR_DROP, STAIR_RUN, STAIR_STEPS, TREAD, stairClock, stairGround, stairTimeline } from './stairs';
+import { EL_TORO_TERRAIN, FOOT, RISER, STAIR_DROP, STAIR_RUN, STAIR_STEPS, TREAD, planStairs, stairClock, stairGround, stairTimeline } from './stairs';
 import { resolveSkateStyle } from '../../motion/style';
 import type { RiderStance, Robot, Stance, Trick } from '../../types';
 import { ElToro3D } from './elToro3d';
@@ -59,9 +59,9 @@ const RIDERS: RiderStance[] = ['regular', 'goofy'];
 const POPS = [0.45, 1, 1.15];
 
 describe('El Toro', () => {
-  it('is twenty steps falling nine feet over twenty, at a robot about five feet tall', () => {
+  it('is twenty steps falling nine and a half feet over twenty, at a robot about five feet tall', () => {
     expect(STAIR_STEPS).toBe(20);
-    expect(STAIR_DROP / FOOT).toBe(9);
+    expect(STAIR_DROP / FOOT).toBe(9.5);
     expect(STAIR_RUN / FOOT).toBe(20);
     expect(stairGround(-1)).toBe(0);
     expect(stairGround(TREAD * 0.5)).toBeCloseTo(-RISER);
@@ -71,6 +71,23 @@ describe('El Toro', () => {
     const tall = (height(standing.head.at(0, 15, 0)) - height(standing.board.center)) / FOOT;
     expect(tall).toBeGreaterThan(4.4);
     expect(tall).toBeLessThan(5.4);
+  });
+
+  it('adapts to the taller drop with the same gravity and pop, landing at the same distance', () => {
+    const gravity = 32.2 * FOOT;
+    for (const popHeight of POPS) {
+      const stairs = planStairs({ popHeight }, true);
+      const oldHeight = planStairs({ popHeight }, true, {
+        ...EL_TORO_TERRAIN, drop: 9 * FOOT, ground: () => -9 * FOOT,
+      });
+      expect(stairs.rise).toBe(oldHeight.rise);
+      expect(stairs.pop).toBe(oldHeight.pop);
+      expect(stairs.flight).toBeGreaterThan(oldHeight.flight);
+      expect(stairs.speed).toBeLessThan(oldHeight.speed);
+      expect(stairs.rise * stairs.flight - 0.5 * gravity * stairs.flight ** 2).toBeCloseTo(-9.5 * FOOT, 6);
+      expect(stairs.velocity.x * stairs.flight).toBeCloseTo(oldHeight.velocity.x * oldHeight.flight, 6);
+      expect(stairGround(STAIR_RUN + stairs.terrain.landPast)).toBe(-9.5 * FOOT);
+    }
   });
 
   it('clears every step and lands every trick past the bottom one, in every stance, whatever the pop', () => {
@@ -205,7 +222,7 @@ describe('El Toro', () => {
     }
   });
 
-  it('lands heavier off nine feet: deeper and longer in the crouch, never past the deepest squat', () => {
+  it('lands heavier off nine and a half feet: deeper and longer in the crouch, never past the deepest squat', () => {
     for (const pop of POPS) {
       const stairs = plan('Ollie', { pop });
       const flat = plan('Ollie', { pop, set: 'plaza' });

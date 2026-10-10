@@ -1,9 +1,11 @@
-import { BufferGeometry, Float32BufferAttribute, Group, Mesh, Vector3, Vector4, type Texture } from 'three';
-import type { SceneCamera, TripodId } from '../camera/camera';
+import { BufferGeometry, Float32BufferAttribute, Group, Mesh, Vector3, Vector4, type ShaderMaterial, type Texture } from 'three';
+import { DISTANCE, type SceneCamera, type TripodId } from '../camera/camera';
 import { stageView, tripodView, type StageView, type Vec3 } from '../camera/view';
 import type { StageFrame } from '../stage/stage';
+import type { Obstacle } from './sets';
 import { elToroPropMaterial, elToroSkyMaterial } from './elToro/elToroMaterials';
 import { StreetProps, type StreetPropPlacements } from './props/streetProps';
+import { wireMeshMaterial, type WireMesh } from './wireMesh';
 
 export interface SpotTripod { u: number; z: number; height: number; frame: number; place: number }
 export interface ClassicSpotConfig {
@@ -11,6 +13,8 @@ export interface ClassicSpotConfig {
     ground: BufferGeometry; props: BufferGeometry;
     railSegments?: Array<{ a: Vec3; b: Vec3; radius: number }>;
     shadowBoxes?: Array<{ min: Vec3; max: Vec3 }>;
+    /** Diamond-mesh fence panels (wireMesh.ts), drawn per pixel in the see-through pass. */
+    wireMesh?: WireMesh & { geometry: BufferGeometry };
   };
   laneZ: number;
   ground: (x: number) => number;
@@ -22,7 +26,18 @@ export interface ClassicSpotConfig {
   /** Camera corridor in the spot's coordinates, independent of the rider's line. */
   cameraZ?: [number, number];
   tripods?: Readonly<Record<TripodId, SpotTripod>>;
-  /** Realistic trees and parked cars, loaded after the set (props/streetProps.ts). */
+  /**
+   * Obstacles the crane films from up top (Hollywood's fence): it stays at
+   * the run-up's height and tilts down after the rider as they drop past
+   * the fence, as the filmer at the top does, rather than sinking down
+   * behind it and filming the pickets.
+   */
+  stayUp?: readonly Obstacle[];
+  /** Where the filmers stand instead for a trick over another obstacle (Hollywood's fence). */
+  obstacleTripods?: Partial<Record<Obstacle, Readonly<Record<TripodId, SpotTripod>>>>;
+  /** …and for a grind down one of the spot's ledges (Miami's slab edges), clear of the line in. */
+  ledgeTripods?: Readonly<Record<'left' | 'right', Readonly<Record<TripodId, SpotTripod>>>>;
+  /** Realistic trees and cars, parked or driving, loaded after the set (props/streetProps.ts). */
   streetProps?: StreetPropPlacements;
 }
 
@@ -91,11 +106,28 @@ function groundMaterial() {
   return material;
 }
 
+const DEG = Math.PI / 180;
+/** Steepest the crane tilts down after a rider below it: past this it reads as a drone, not a filmer. */
+const MAX_STAY_UP_PITCH = 40;
+
+/**
+ * The pitch that keeps the crane's eye where it was before the drop (up to
+ * MAX_STAY_UP_PITCH) while still aiming at the rider: it tilts down after
+ * them as they fall, as smoothly as the lift follows the drop.
+ */
+function stayUpPitch(lift: number, camera: Readonly<SceneCamera>): number {
+  const sink = Math.max(0, -lift);
+  if (sink === 0) return camera.pitch;
+  const reach = DISTANCE * camera.lens;
+  const rise = Math.min(Math.sin(MAX_STAY_UP_PITCH * DEG), Math.sin(camera.pitch * DEG) + sink / reach);
+  return Math.max(camera.pitch, Math.asin(rise) / DEG);
+}
+
 /** Shared rendering mechanics; each landmark owns all of its scenery and measured layout. */
 export class ClassicSpot3D {
   readonly group = new Group();
   readonly overlay = new Group();
-  readonly overlayMaterials = [];
+  readonly overlayMaterials: ShaderMaterial[] = [];
   readonly shadowGeometry = null;
   readonly propInk = '#70766e';
   private readonly sky = elToroSkyMaterial();
@@ -125,6 +157,12 @@ export class ClassicSpot3D {
     ground.renderOrder = -50;
     ground.frustumCulled = props.frustumCulled = false;
     this.scenery.add(ground, props);
+    if (built.wireMesh) {
+      const mesh = new Mesh(built.wireMesh.geometry, wireMeshMaterial(built.wireMesh));
+      mesh.frustumCulled = false;
+      this.overlay.add(mesh);
+      this.overlayMaterials.push(mesh.material as ShaderMaterial);
+    }
     this.streetProps = config.streetProps ? new StreetProps(config.streetProps) : null;
     if (this.streetProps) this.scenery.add(this.streetProps.group);
     this.ready = this.streetProps?.ready ?? Promise.resolve();
@@ -135,15 +173,19 @@ export class ClassicSpot3D {
     if (!frame.stairs) return null;
     zoom *= this.config.framing ?? 1;
     const across = frame.stairs.across;
-    if (tripod && this.config.tripods) {
-      const p = this.config.tripods[tripod];
+    const tripods = (frame.stairs.ledge && this.config.ledgeTripods?.[frame.stairs.ledge])
+      ?? (frame.stairs.obstacle && this.config.obstacleTripods?.[frame.stairs.obstacle]) ?? this.config.tripods;
+    if (tripod && tripods) {
+      const p = tripods[tripod];
       const eye: Vec3 = [p.u - frame.scroll, p.height, p.z - across];
       return tripodView(eye, frame.lift, p.frame, p.place, zoom, aspect);
     }
     const rad = Math.PI / 180;
     const uphill = Math.max(0, Math.sin(camera.yaw * rad));
     const floorPitch = Math.atan(this.config.grade * uphill + Math.tan(3 * rad)) / rad;
-    const safe = { ...camera, pitch: Math.max(camera.pitch, floorPitch) };
+    const up = frame.stairs.obstacle && this.config.stayUp?.includes(frame.stairs.obstacle);
+    const floored = { ...camera, pitch: Math.max(camera.pitch, floorPitch) };
+    const safe = up ? { ...floored, pitch: stayUpPitch(frame.lift, floored) } : floored;
     const view = stageView(frame.lift, safe, zoom, aspect);
     if (!this.config.cameraZ) return view;
     const [min, max] = this.config.cameraZ.map(z => z - across);
@@ -156,6 +198,8 @@ export class ClassicSpot3D {
 
   update(view: StageView, scroll: number, size: { width: number; height: number }, shadow: Texture, opacity: [number, number, number], frame?: StageFrame) {
     this.scenery.position.set(-scroll, 0, -(frame?.stairs?.across ?? this.config.laneZ));
+    this.overlay.position.copy(this.scenery.position);
+    this.streetProps?.drive(frame?.t ?? 0);
     const u = this.surface.uniforms;
     u.uShadow.value = shadow;
     u.uShadowOpacity.value.set(...opacity);
@@ -172,5 +216,7 @@ export class ClassicSpot3D {
     this.sky.dispose(); this.solid.dispose(); this.surface.dispose();
     this.streetProps?.dispose();
     this.group.traverse(o => { if (o instanceof Mesh && !(o.parent === this.streetProps?.group)) o.geometry.dispose(); });
+    this.overlay.traverse(o => { if (o instanceof Mesh) o.geometry.dispose(); });
+    for (const m of this.overlayMaterials) m.dispose();
   }
 }

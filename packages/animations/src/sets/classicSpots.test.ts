@@ -7,12 +7,13 @@ import { planStage, stageFrame } from '../stage/stage';
 import type { RiderStance, Stance } from '../types';
 import { setInfo, setTimeline, type StageSet } from './sets';
 import { SUNSET_BANK_END, SUNSET_LAND_X, SUNSET_POP_X, SUNSET_POP_Z, SUNSET_ROOF_Z0, sunsetGround, sunsetSlope } from './sunset/sunsetLayout';
-import { FOOT, terrainSurface } from './elToro/stairs';
+import { entryTurn, FOOT, terrainSurface, TURN_PAST_TOUCHDOWN } from './elToro/stairs';
+import { LEAN_PAST_TOUCHDOWN } from '../stage/bank';
 import { Sunset3D } from './sunset/sunset3d';
 import { DEFAULT_SCENE_CAMERA } from '../camera/camera';
 import { HOLLYWOOD_RAIL, HOLLYWOOD_RUN } from './hollywood/hollywoodLayout';
 
-const SPOTS: StageSet[] = ['hollywood-high', 'wallenberg', 'sunset-car-wash'];
+const SPOTS: StageSet[] = ['hollywood-high', 'wallenberg', 'sunset-car-wash', 'lyon-25', 'leap-of-faith', 'miami-triangle'];
 const plan = (set: StageSet, base = 'Kickflip', stance: Stance = 'regular', riderStance: RiderStance = 'regular', popHeight = 1) =>
   planStage({ id: base, name: base, base, stance }, {
     set, landed: true, riderStance, style: resolveSkateStyle({ popHeight, rotationSpeed: 1, flickStrength: 1 }), fall: 'slam', shankProgress: 0.65,
@@ -47,7 +48,7 @@ describe('classic spots use their actual terrain', () => {
       expect(frame.scroll).toBeCloseTo(stage.stairs!.terrain.run + stage.stairs!.terrain.landPast);
       expect(frame.stairs!.across).toBe(setInfo(set).terrain!.laneZ);
     }
-    expect(flights.size).toBe(3);
+    expect(flights.size).toBe(SPOTS.length);
   });
 
   it('clears the obstacles across tricks, both riders and forward/backward approaches', () => {
@@ -70,13 +71,25 @@ describe('classic spots use their actual terrain', () => {
     expect(failures.slice(0, 12)).toEqual([]);
   }, 60_000);
 
-  it('lands on Sunset’s bank, points both trucks downhill, then rolls onto the flat', () => {
+  it('lands on Sunset’s bank uphill truck first, settles both trucks downhill, then rolls onto the flat', () => {
     for (const stance of ['regular', 'fakie'] as Stance[]) for (const rider of ['regular', 'goofy'] as RiderStance[]) {
       const stage = plan('sunset-car-wash', 'Kickflip', stance, rider);
       const land = stage.stairs!.land;
       const touchdown = stageFrame(stage, land, 1);
-      const axis = touchdown.rig.board.dir({ x: 1, y: 0, z: 0 });
-      expect(axis.y / axis.x).toBeCloseTo(-sunsetSlope(SUNSET_LAND_X), 4);
+      // Wheel heights over the bank, uphill truck first.
+      const trucks = (frame: typeof touchdown) => [-WHEEL_X, WHEEL_X]
+        .map(x => frame.rig.board.point({ x, y: WHEEL_Y + WHEEL_R, z: WHEEL_Z }))
+        .sort((a, b) => a.x - b.x)
+        .map(p => ASPHALT - p.y - sunsetGround(frame.scroll + p.x - X0));
+      // Still leaning in as it lands: a little flatter than the bank, so the
+      // uphill truck touches while the nose is a few inches off it.
+      const [uphill, downhill] = trucks(touchdown);
+      expect(uphill).toBeLessThan(1);
+      expect(downhill).toBeGreaterThan(5);
+      const leaned = stageFrame(stage, land + LEAN_PAST_TOUCHDOWN, 1);
+      const axis = leaned.rig.board.dir({ x: 1, y: 0, z: 0 });
+      expect(axis.y / axis.x).toBeCloseTo(-sunsetSlope(leaned.scroll), 3);
+      for (const height of trucks(leaned)) expect(height).toBeLessThan(0.5);
       expect(touchdown.scroll).toBeCloseTo(SUNSET_LAND_X);
       expect(touchdown.scroll).toBeLessThan(SUNSET_BANK_END);
       const end = stageFrame(stage, stage.end, 1);
@@ -104,17 +117,24 @@ describe('classic spots use their actual terrain', () => {
         expect(SUNSET_ROOF_Z0 - touchdown.stairs!.across).toBe(9 * FOOT);
         expect(touchdown.scroll).toBeCloseTo(SUNSET_LAND_X);
         expect(touchdown.scroll).toBeCloseTo(3 * FOOT);
-        // The terrain contributes +90° before takeoff and 0° at touchdown,
-        // regardless of the selected trick's own yaw and forward/fakie stance.
-        expect(setup.rig.board.yawDeg - stageFrame(straight, pop - 0.2, 1).rig.board.yawDeg).toBeCloseTo(90);
-        expect(touchdown.rig.board.yawDeg - stageFrame(straight, land, 1).rig.board.yawDeg).toBeCloseTo(0);
+        // The terrain contributes +90° before takeoff, a few degrees still
+        // to carve at touchdown and none once that carve is done, regardless
+        // of the selected trick's own yaw and forward/fakie stance.
+        const terrainYaw = (t: number) => stageFrame(stage, t, 1).rig.board.yawDeg - stageFrame(straight, t, 1).rig.board.yawDeg;
+        expect(terrainYaw(pop - 0.2)).toBeCloseTo(90);
+        const left = 90 * (1 - entryTurn(stage.stairs!, land));
+        expect(left).toBeGreaterThan(8);
+        expect(left).toBeLessThan(25);
+        expect(touchdown.rig.board.yawDeg - stageFrame(straight, land, 1).rig.board.yawDeg).toBeCloseTo(left);
+        expect(terrainYaw(land + TURN_PAST_TOUCHDOWN)).toBeCloseTo(0);
         const middle = (pop + land) / 2;
         const turned = stageFrame(stage, middle, 1).rig;
         const original = stageFrame(straight, middle, 1).rig;
         // Own-trick rotations survive during flight, not just at its endpoints.
-        expect(turned.board.yawDeg - original.board.yawDeg).toBeCloseTo(45);
-        expect(turned.bodyYawDeg - original.bodyYawDeg).toBeCloseTo(45);
-        expect(turned.headYawDeg - original.headYawDeg).toBeCloseTo(45);
+        const midTurn = 90 * (1 - entryTurn(stage.stairs!, middle));
+        expect(turned.board.yawDeg - original.board.yawDeg).toBeCloseTo(midTurn);
+        expect(turned.bodyYawDeg - original.bodyYawDeg).toBeCloseTo(midTurn);
+        expect(turned.headYawDeg - original.headYawDeg).toBeCloseTo(midTurn);
         for (const seam of [pop, land]) {
           const before = stageFrame(stage, seam - 1e-5, 1);
           const after = stageFrame(stage, seam + 1e-5, 1);

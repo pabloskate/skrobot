@@ -276,6 +276,88 @@ export function skinMaterial(albedo: Texture, normal: Texture, hair: Texture, ha
   `, { uAlbedo: { value: albedo }, uNormal: { value: normal }, uHair: { value: hair }, uHairColor: { value: new Color(hairColor) } }, shadow, 245);
 }
 
+/** The alien's hide: its green, and the deeper green of its lips. sRGB. */
+export interface AlienSkin {
+  skin: string;
+  lips: string;
+}
+
+/**
+ * The alien's skin: a green hide, lit like skin (light scattered under it,
+ * here coming out yellow-green) with a softer sheen. The skater's map only
+ * lends it detail: its reddest parts (the lips) turn deep green, and its
+ * fine grain, the map over its own blur, shows; its painted stubble and
+ * shading don't.
+ */
+export function alienSkinMaterial(albedo: Texture, normal: Texture, look: AlienSkin, shadow: SunShadow): ShaderMaterial {
+  return material(/* glsl */ `
+    uniform sampler2D uAlbedo;
+    uniform sampler2D uNormal;
+    uniform vec3 uSkin;
+    uniform vec3 uLips;
+    void main() {
+      vec3 geo = surfaceNormal();
+      // Across a seam in the UVs (down the back of the bare head) a pixel's UVs jump, its
+      // texture reads go to the smallest mip and its tangent frame is meaningless:
+      // the detail borrowed from the maps fades out there.
+      float uvRate = max(length(dFdx(vUv)), length(dFdy(vUv))) * 2048.0;
+      float seam = smoothstep(32.0, 128.0, uvRate);
+      vec3 n = mapNormal(geo, texture(uNormal, vUv).xyz * 2.0 - 1.0, 0.3 * (1.0 - seam));
+      vec3 tex = texture(uAlbedo, vUv).rgb;
+      vec3 blur = textureLod(uAlbedo, vUv, 4.0).rgb;
+      const vec3 LUM = vec3(0.3, 0.59, 0.11);
+      float grain = mix(clamp(dot(tex, LUM) / max(dot(blur, LUM), 1e-3), 0.8, 1.15), 1.0, seam);
+      float lips = smoothstep(0.36, 0.24, tex.g / max(tex.r, 1e-3)) * (1.0 - seam);
+      // A mottled hide, drifting a little yellower and bluer across the body.
+      float mottle = noise3(vRest * 0.18) * 0.6 + noise3(vRest * 0.5) * 0.4;
+      vec3 base = uSkin * mix(0.88, 1.08, mottle) * mix(vec3(1.05, 1.0, 0.85), vec3(0.94, 1.0, 1.1), noise3(vRest * 0.09 + 3.0));
+      base = mix(base, uLips, lips * 0.85) * grain;
+      vec3 v = normalize(cameraPosition - vWorld);
+      float nv = max(0.0, dot(n, v));
+      float nl = dot(n, SUN_DIR);
+      float soft = mix(dot(geo, SUN_DIR), nl, 0.5);
+      float lam = max(0.0, soft);
+      float band = smoothstep(-0.35, 0.0, soft) * (1.0 - smoothstep(0.0, 0.45, soft));
+      float shade = sunlit(geo);
+      vec3 diffuse = vec3(lam) * shade + vec3(0.07, 0.14, 0.02) * band * shade
+        + vec3(0.04, 0.08, 0.01) * lam * smoothstep(0.0, 0.5, shade) * (1.0 - shade);
+      float ao = vAO;
+      vec3 color = base * (ambientLight(n) * ao + diffuse * SUN_RGB * mix(1.0, ao, 0.35));
+      // Thin edges (fingers, the little ears) glow when backlit.
+      color += base * vec3(0.2, 0.45, 0.08) * pow(max(0.0, dot(-v, SUN_DIR)), 3.0) * pow(1.0 - nv, 2.0);
+      vec3 h = normalize(v + SUN_DIR);
+      float nh = max(0.0, dot(n, h));
+      float lit = max(0.0, nl);
+      float fres = 0.028 + 0.972 * pow(1.0 - max(0.0, dot(v, h)), 5.0);
+      float spec = (ggx(nh, 0.45) * 0.5 + ggx(nh, 0.68) * 0.5) * visibility(lit, nv, 0.55) * fres;
+      color += SUN_RGB * spec * lit * 0.6 * shade;
+      color += ambientLight(reflect(-v, n)) * 0.05 * pow(1.0 - nv, 4.0);
+      outColor = vec4(display(color), 1.0);
+      outInfo = uInfo;
+    }
+  `, { uAlbedo: { value: albedo }, uNormal: { value: normal }, uSkin: { value: new Color(look.skin) }, uLips: { value: new Color(look.lips) } }, shadow, 245);
+}
+
+/** The alien's eyes: solid black and wet, mirroring the sky, with the sun's glint. */
+export function alienEyeMaterial(shadow: SunShadow): ShaderMaterial {
+  return material(/* glsl */ `
+    void main() {
+      // The cornea over the iris (the disc in the texture's corner) isn't drawn: the eye is one smooth black lens.
+      if (distance(vUv, vec2(0.934, 0.934)) < 0.08) discard;
+      vec3 n = surfaceNormal();
+      vec3 v = normalize(cameraPosition - vWorld);
+      float nv = max(0.0, dot(n, v));
+      float nl = max(0.0, dot(n, SUN_DIR)) * sunlit(n);
+      vec3 color = vec3(0.006, 0.009, 0.008) * (ambientLight(n) + nl * SUN_RGB);
+      color += ambientLight(reflect(-v, n)) * (0.04 + 0.96 * pow(1.0 - nv, 5.0));
+      vec3 h = normalize(v + SUN_DIR);
+      color += SUN_RGB * ggx(max(0.0, dot(n, h)), 0.12) * 0.03 * nl;
+      outColor = vec4(display(color), 1.0);
+      outInfo = uInfo;
+    }
+  `, {}, shadow, 245);
+}
+
 /** A knitted beanie: ribbed cuff, finer knit up the crown, a wool fuzz at the edges. */
 export function beanieMaterial(color: string, center: [number, number, number], brim: number, shadow: SunShadow): ShaderMaterial {
   return material(/* glsl */ `

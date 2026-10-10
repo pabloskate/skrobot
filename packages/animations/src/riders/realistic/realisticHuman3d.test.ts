@@ -3,8 +3,8 @@ import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Matrix4, Mesh, ShaderMaterial, SkinnedMesh, Texture, TextureLoader, Vector3 } from 'three';
 import { GLTFLoader, type GLTF } from 'three/addons/loaders/GLTFLoader.js';
-import { RealisticHuman3D, restSkeleton, skaterLoader } from './realisticHuman3d';
-import { SkaterSolver, type RestSkeleton, type SkeletonPose } from './skaterPose';
+import { RealisticHuman3D, restSkeleton, skaterLoader, type RealisticCharacter } from './realisticHuman3d';
+import { SkaterSolver, aroundBone, girthAt, girthFrame, type RestSkeleton, type SkeletonPose } from './skaterPose';
 import { DeltaMush } from './deltaMush';
 import { TeeDrape } from './teeDrape';
 import { planStage, stageFrame } from '../../stage/stage';
@@ -14,9 +14,11 @@ import { SHOE_HALF_HEIGHT } from '../../motion/skeleton';
 
 afterEach(() => vi.restoreAllMocks());
 
-/** The built skater, parsed from the package's own asset. */
-async function skater(): Promise<GLTF> {
-  const file = readFileSync(new URL('./assets/skater.glb', import.meta.url));
+const CHARACTERS: readonly RealisticCharacter[] = ['skater', 'alien'];
+
+/** The built skater (or the alien made from him), parsed from the package's own asset. */
+async function skater(character: RealisticCharacter = 'skater'): Promise<GLTF> {
+  const file = readFileSync(new URL(character === 'alien' ? './assets/alien.glb' : './assets/skater.glb', import.meta.url));
   const buffer = file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength);
   const gltf = await new Promise<GLTF>((resolve, reject) => skaterLoader().parse(buffer, '', resolve, reject));
   gltf.scene.updateMatrixWorld(true);
@@ -31,9 +33,9 @@ function meshes(gltf: GLTF) {
   return found;
 }
 
-async function rest(): Promise<RestSkeleton> {
-  const parts = meshes(await skater());
-  return restSkeleton(parts.get('body')!, parts.get('shoes')!);
+async function rest(character: RealisticCharacter = 'skater'): Promise<RestSkeleton> {
+  const parts = meshes(await skater(character));
+  return restSkeleton(parts.get('body')!, parts.get('shoes')!, parts.get('outfit'));
 }
 
 const trick = (base: string) => ({ id: base, name: base, base, stance: 'regular' as const });
@@ -55,9 +57,9 @@ function wear(gltf: GLTF, pose: SkeletonPose) {
   gltf.scene.updateMatrixWorld(true);
 }
 
-describe('realistic skater skeleton', () => {
+describe.each(CHARACTERS)('realistic %s skeleton', (character) => {
   it('keeps each sole on the rig’s sole and never stretches a bone, in both stances', async () => {
-    const skeleton = await rest();
+    const skeleton = await rest(character);
     const solver = new SkaterSolver(skeleton);
     const restLength = skeleton.bones.map((b) => (b.parent >= 0 ? b.head.distanceTo(skeleton.bones[b.parent].head) : 0));
     for (const base of ['Ollie', 'Kickflip', '360 Flip', 'Kickflip into Backside Boardslide']) {
@@ -86,7 +88,7 @@ describe('realistic skater skeleton', () => {
   });
 
   it('bends the knees forward, over the feet, while riding', async () => {
-    const skeleton = await rest();
+    const skeleton = await rest(character);
     const solver = new SkaterSolver(skeleton);
     const stage = planStage(trick('Kickflip'), options('regular'));
     for (const share of [0.05, 0.2, 0.35, 0.8]) {
@@ -107,7 +109,7 @@ describe('realistic skater skeleton', () => {
   });
 
   it('keeps a slammed body on top of the ground', async () => {
-    const skeleton = await rest();
+    const skeleton = await rest(character);
     const solver = new SkaterSolver(skeleton);
     const stage = planStage(trick('Kickflip'), options('regular', false));
     const trunk = ['root', 'spine03', 'spine01', 'neck01', 'head'].map((n) => named(skeleton, n));
@@ -118,7 +120,7 @@ describe('realistic skater skeleton', () => {
   });
 
   it('holds a hand open out for balance and relaxed (curled, wrist lifted, fingers together) while riding', async () => {
-    const skeleton = await rest();
+    const skeleton = await rest(character);
     const solver = new SkaterSolver(skeleton);
     const stage = planStage(trick('Kickflip'), options('regular'));
     const at = (pose: { head: Vector3[] }, name: string) => pose.head[named(skeleton, name)].clone();
@@ -143,7 +145,7 @@ describe('realistic skater skeleton', () => {
   });
 
   it('lets the arms follow through only while playback runs forward', async () => {
-    const skeleton = await rest();
+    const skeleton = await rest(character);
     const still = new SkaterSolver(skeleton);
     const playing = new SkaterSolver(skeleton);
     const stage = planStage(trick('Kickflip'), options('regular'));
@@ -159,7 +161,7 @@ describe('realistic skater skeleton', () => {
   });
 
   it('turns a limb only a little against what it hangs off, whichever way the rider faces, and never over between frames', async () => {
-    const skeleton = await rest();
+    const skeleton = await rest(character);
     const solver = new SkaterSolver(skeleton);
     const delta = (pose: SkeletonPose, i: number) => pose.quat[i].clone().multiply(skeleton.bones[i].quat.clone().invert());
     /** How far a bone is turned about itself against the one it hangs off (degrees). */
@@ -193,11 +195,50 @@ describe('realistic skater skeleton', () => {
       }
     }
   });
+  it('rests the hands on the jeans, never in them, through tricks in both stances', async () => {
+    const skeleton = await rest(character);
+    const jeans = skeleton.jeans!;
+    const solver = new SkaterSolver(skeleton);
+    const bone = (name: string) => named(skeleton, name);
+    let deepest = 0;
+    for (const base of ['Ollie', 'Kickflip', '360 Flip', 'Backside 180', 'Kickflip into Backside Boardslide']) {
+      for (const stance of ['regular', 'goofy'] as const) {
+        const stage = planStage(trick(base), options(stance));
+        let last = -1;
+        for (let k = 0; k <= 60; k++) {
+          const t = (stage.end * k) / 60;
+          const pose = solver.solve(stageFrame(stage, t, 1).rig, { dt: last < 0 ? -1 : t - last, time: t });
+          last = t;
+          for (const hand of ['L', 'R']) {
+            for (const f of [2, 3, 4, 5]) {
+              const [k1, k2, k3] = [1, 2, 3].map((j) => bone(`finger${f}-${j}.${hand}`));
+              if (!skeleton.skinned![k1]) continue;
+              const tip = pose.head[k3].clone().add(pose.head[k3].clone().sub(pose.head[k2]));
+              for (const p of [pose.head[k1], pose.head[k2], pose.head[k3], tip]) {
+                for (const leg of ['L', 'R'] as const) {
+                  for (const [from, to, girth] of [[`upperleg01.${leg}`, `lowerleg01.${leg}`, jeans[leg].thigh], [`lowerleg01.${leg}`, `foot.${leg}`, jeans[leg].shin]] as const) {
+                    const b = bone(from);
+                    const turn = pose.quat[b].clone().multiply(skeleton.bones[b].quat.clone().invert());
+                    const frame = girthFrame(pose.head[b], pose.head[bone(to)], new Vector3(0, 0, 1).applyQuaternion(turn));
+                    const { t: along, off, angle } = aroundBone(p, pose.head[b], frame);
+                    const reach = girthAt(girth, along, angle);
+                    if (along >= 0 && along <= 1 && reach > 0) deepest = Math.max(deepest, reach - off);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    // Without the jeans to keep out of, fingers went about 12 units into a thigh.
+    expect(deepest).toBeLessThan(2.5);
+  });
 });
 
 describe('realistic skater assets', () => {
-  function loaders() {
-    vi.spyOn(GLTFLoader.prototype, 'loadAsync').mockImplementation(() => skater());
+  function loaders(character: RealisticCharacter = 'skater') {
+    vi.spyOn(GLTFLoader.prototype, 'loadAsync').mockImplementation(() => skater(character));
     const textures: Texture<HTMLImageElement>[] = [];
     vi.spyOn(TextureLoader.prototype, 'loadAsync').mockImplementation(async () => {
       const texture = new Texture<HTMLImageElement>();
@@ -207,9 +248,9 @@ describe('realistic skater assets', () => {
     return textures;
   }
 
-  it('dresses every part in its own outline-free material and poses it, in both stances', async () => {
-    loaders();
-    const rider = new RealisticHuman3D();
+  it.each(CHARACTERS)('dresses every part of the %s in its own outline-free material and poses it, in both stances', async (character) => {
+    loaders(character);
+    const rider = new RealisticHuman3D(character);
     await rider.ready;
     const parts = new Set<string>();
     rider.group.traverse((o) => {
@@ -219,7 +260,7 @@ describe('realistic skater assets', () => {
         parts.add(o.name);
       }
     });
-    expect(parts.size).toBeGreaterThanOrEqual(7);
+    expect(parts.size).toBeGreaterThanOrEqual(character === 'alien' ? 4 : 7);
     for (const stance of ['regular', 'goofy'] as const) {
       const stage = planStage(trick('Kickflip'), options(stance));
       for (const share of [0, 0.35, 0.7]) {
@@ -302,6 +343,25 @@ describe('realistic skater assets', () => {
     expect(rider.group.children).toHaveLength(0);
     expect(geometry).toHaveBeenCalledTimes(1);
     for (const d of released) expect(d).toHaveBeenCalledTimes(1);
+  });
+
+  it('builds the alien from the skater: the same skeleton and soles, three fingers and a thumb, eyes riding the head, no brows, lashes, or beanie', async () => {
+    const [human, alien] = await Promise.all([rest('skater'), rest('alien')]);
+    expect(alien.bones.map((b) => b.name)).toEqual(human.bones.map((b) => b.name));
+    for (const side of ['L', 'R'] as const) {
+      expect(alien.soles[side].center.distanceTo(human.soles[side].center)).toBeLessThan(0.5);
+      expect(alien.skinned![named(alien, `finger5-1.${side}`)]).toBe(false);
+      expect(alien.skinned![named(alien, `finger4-3.${side}`)]).toBe(true);
+      expect(human.skinned![named(human, `finger5-1.${side}`)]).toBe(true);
+    }
+    const parts = meshes(await skater('alien'));
+    expect([...parts.keys()].sort()).toEqual(['body', 'eyes', 'outfit', 'shoes']);
+    const eyes = parts.get('eyes')!;
+    const index = eyes.geometry.getAttribute('skinIndex'), weight = eyes.geometry.getAttribute('skinWeight');
+    const head = eyes.skeleton.bones.findIndex((b) => b.name === 'head');
+    for (let i = 0; i < index.count; i++) {
+      for (let k = 0; k < 4; k++) if (weight.getComponent(i, k) > 0.01) expect(index.getComponent(i, k)).toBe(head);
+    }
   });
 
   it('is built as an adult about 1.8 m tall standing on its soles, toes forward', async () => {

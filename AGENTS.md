@@ -57,6 +57,7 @@ src/
 │   ├── api/me/           #   Current user + voice quota
 │   ├── tune/             #   /tune → robot behavior editor shell
 │   ├── explore/          #   /explore → Trick Explorer shell (/explore/3d redirects to it)
+│   ├── dream-tricks/     #   /dream-tricks → Dream Tricks shell (player-facing explorer)
 │   └── globals.css       #   all styling (class-based, mobile-first)
 ├── features/             # One folder per web feature; public API is index.ts
 │   ├── auth/             # Passwordless sign-in UI + server session/magic-link code
@@ -70,7 +71,7 @@ src/
 │   ├── skater/           # Player model: skate score (unlocks at 8 games, beta-gated), robot-ladder placement, adaptive rival robot
 │   ├── home/             # Landing screen / flatground robot choice
 │   ├── install/          # App Store handoff + Android PWA install guidance (web-only)
-│   ├── explorer/         # Trick Explorer at /explore (/explore/3d redirects here): tricks + grind combos, robot or one of three human skaters, camera angles, spots (plaza, waterfront, El Toro's 20 stair and its handrails, Hollywood 16, Wallenberg, Sunset Car Wash), tripod angles at the landmarks, shareable links, MP4 download
+│   ├── explorer/         # Trick Explorer at /explore (/explore/3d redirects here): tricks + grind combos, robot, the realistic human, or the alien, camera angles, spots (plaza, waterfront, El Toro's 20 stair and its handrails, Hollywood 16 down the stairs or over the fence, Wallenberg, Sunset Car Wash, Lyon 25, Leap of Faith, the Miami Triangle (onto the granite triangle, over it, or grinds down its edges)), tripod angles at the landmarks, shareable links, MP4 download; plus Dream Tricks at /dream-tricks, the same stage for players (landmark spot first, then what to hit, the trick, and who rides)
 │   └── gallery/          # Flatground trick gallery + player trick book (search, stance filters, video tips, want-to-learn shelf, proven marks, consistency stats)
 ├── platform/             # Runtime infrastructure (Cloudflare env, D1 bindings)
 └── shared/               # Primitive domain-neutral helpers (online status, etc.)

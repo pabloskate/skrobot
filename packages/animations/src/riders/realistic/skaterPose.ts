@@ -75,6 +75,51 @@ export interface SolveOptions {
 export interface RestSkeleton {
   bones: RestBone[];
   soles: { L: Sole; R: Sole };
+  /** The jeans round each thigh and shin at rest, which the hands keep out of. */
+  jeans?: { L: LegGirth; R: LegGirth };
+  /** Per bone, whether any of the body's skin follows it (the alien's little fingers' don't). */
+  skinned?: boolean[];
+}
+
+/**
+ * How far cloth reaches out from a bone's line (its head to the next joint's)
+ * at rest: GIRTH_ALONG steps down the bone by GIRTH_AROUND directions round
+ * it, from its front (girthFrame) toward its `across`. 0 where there's no cloth.
+ */
+export type Girth = number[][];
+export interface LegGirth {
+  thigh: Girth;
+  shin: Girth;
+}
+export const GIRTH_ALONG = 8;
+export const GIRTH_AROUND = 12;
+
+/** A bone's line and the directions round it: `forward` (rest +z, or as posed) made square to the line. */
+export function girthFrame(head: Vector3, tail: Vector3, forward: Vector3) {
+  const axis = tail.clone().sub(head);
+  const length = axis.length();
+  axis.divideScalar(length);
+  const front = forward.clone().addScaledVector(axis, -forward.dot(axis)).normalize();
+  const across = new Vector3().crossVectors(axis, front);
+  return { axis, length, front, across };
+}
+
+/** Where a point is round a bone's line: how far down it (0 head, 1 tail), its distance off the line and the way out to it, and its direction round it (radians from the front). */
+export function aroundBone(p: Vector3, head: Vector3, frame: ReturnType<typeof girthFrame>) {
+  const d = p.clone().sub(head);
+  const along = d.dot(frame.axis);
+  const out = d.addScaledVector(frame.axis, -along);
+  return { t: along / frame.length, off: out.length(), out, angle: Math.atan2(out.dot(frame.across), out.dot(frame.front)) };
+}
+
+/** The cloth's reach at a step down the bone and a direction round it, interpolated. */
+export function girthAt(girth: Girth, t: number, angle: number): number {
+  const y = Math.max(0, Math.min(GIRTH_ALONG - 1, t * GIRTH_ALONG - 0.5));
+  const x = ((angle / (2 * Math.PI)) * GIRTH_AROUND % GIRTH_AROUND + GIRTH_AROUND) % GIRTH_AROUND;
+  const y0 = Math.floor(y), y1 = Math.min(GIRTH_ALONG - 1, y0 + 1), fy = y - y0;
+  const x0 = Math.floor(x), x1 = (x0 + 1) % GIRTH_AROUND, fx = x - x0;
+  const row = (r: number[]) => r[x0] * (1 - fx) + r[x1] * fx;
+  return row(girth[y0]) * (1 - fy) + row(girth[y1]) * fy;
 }
 
 /** The posed skeleton: per bone, its head and world rotation. */
@@ -222,6 +267,8 @@ const HEAD_OMEGA = 11;
 /** How much the head keeps level with the world rather than tilting with the chest, while the rider is up. */
 const HEAD_LEVEL = 0.85;
 const EYE_OMEGA = 45;
+/** How far the upper lids follow the eyes down (of the eyes' pitch), so the whites never show above the iris. */
+export const LID_FOLLOW = 0.7;
 /** Per expression: degrees the upper lids close and the lower lids rise. */
 const LIDS: Record<Expression, [number, number]> = {
   open: [0, 0],
@@ -319,21 +366,33 @@ const KNEE_SPLAY = -0.12;
  * Arms, from the rig's angles (radians): the rig's riding arm is ARM_OUT_RIG_RIDE
  * out from the side, a person's ARM_OUT_RIDE, and as the rig raises an arm the
  * person raises it ARM_OUT_GAIN as far; never closer in than ARM_OUT_MIN (clear of
- * the hips). Swing fore and aft is kept nearly whole. A relaxed elbow is always a
- * little bent. Each arm drifts on its own, slowly, by up to ARM_DRIFT.
+ * the hips). Swing fore and aft is kept nearly whole. A relaxed elbow is always
+ * bent, ARM_ELBOW_REST plus ARM_ELBOW_GAIN of the rig's, and bends ARM_ELBOW_CROUCH
+ * degrees more per degree the knees bend past ARM_ELBOW_CROUCH_FROM (riding). It
+ * folds the forearm forward and ARM_HINGE_IN across toward the body (a hanging
+ * upper arm is turned in a little, the palm to the thigh), so the bend shows from
+ * the front, not only from the side; the carrying angle, out from the elbow, only
+ * shows on a nearly straight arm. Each arm drifts on its own, slowly, by up to ARM_DRIFT.
  */
 const ARM_OUT_RIG_RIDE = 22 * DEG;
 const ARM_OUT_RIDE = 6 * DEG;
 const ARM_OUT_GAIN = 0.82;
 const ARM_OUT_MIN = 4 * DEG;
 const ARM_SWING_GAIN = 0.9;
-const ARM_ELBOW_REST = 9 * DEG;
+const ARM_ELBOW_REST = 14 * DEG;
 const ARM_ELBOW_GAIN = 0.72;
+const ARM_ELBOW_CROUCH = 0.3;
+const ARM_ELBOW_CROUCH_FROM = 70;
 const ARM_ELBOW_MAX = 110 * DEG;
+const ARM_HINGE_IN = 0.45;
 const ARM_CARRY = 0.13;
 const ARM_DRIFT = { out: 2 * DEG, swing: 3.5 * DEG, elbow: 5 * DEG } as const;
 /** How far from the spine a hand stays: clear of the hips and the tee. */
 const HAND_CLEARANCE = 19;
+/** How far outside the jeans a hand stays (half a finger's thickness, and a little air). */
+const HAND_OFF_JEANS = 1.6;
+/** How quickly (s) a hand the jeans pushed out settles back once nothing holds it there: a leg that swept through where the arm hangs lets it go gently. */
+const HAND_JEANS_RELEASE = 0.07;
 
 interface Limb {
   /** The bone and its twist bone, for each half. */
@@ -393,12 +452,15 @@ export class SkaterSolver {
   private readonly handShape: Record<SideKey, Springs> = { L: new Springs(7), R: new Springs(7) };
   /** Each wrist where it was last frame, for how fast the arm is moving. */
   private readonly lastWrist: Record<SideKey, Vector3 | null> = { L: null, R: null };
+  /** How far each hand was last pushed out of the jeans, in the hips' frame. */
+  private readonly jeansPush: Record<SideKey, Vector3> = { L: new Vector3(), R: new Vector3() };
   /** Each hand's follow-through. */
   private readonly follow: Record<SideKey, Spring> = { L: new Spring(ARM_SPRING), R: new Spring(ARM_SPRING) };
   /** The trunk as spheres for keeping it out of the ground: bone, radius, and how far up the bone the middle is. */
   private readonly trunk: [number, number, number][];
 
-  constructor(rest: RestSkeleton) {
+  /** `lidFollow`: how far the upper lids follow the eyes down (LID_FOLLOW for eyes with whites). */
+  constructor(rest: RestSkeleton, private readonly lidFollow = LID_FOLLOW) {
     this.rest = rest;
     const bones = rest.bones;
     // glTF loaders drop the dots from node names (upperleg01.L → upperleg01L); match either.
@@ -651,16 +713,17 @@ export class SkaterSolver {
       };
       const out = Math.max(ARM_OUT_MIN, ARM_OUT_RIDE + (outR - ARM_OUT_RIG_RIDE) * ARM_OUT_GAIN + ARM_DRIFT.out * drift(0));
       const swing = swingR * ARM_SWING_GAIN + ARM_DRIFT.swing * drift(1);
-      const bend = clamp(ARM_ELBOW_REST + elbowR * ARM_ELBOW_GAIN + ARM_DRIFT.elbow * drift(2), ARM_ELBOW_MAX);
+      const crouchBend = ARM_ELBOW_CROUCH * Math.max(0, bend - ARM_ELBOW_CROUCH_FROM) * DEG;
+      const elbow = clamp(ARM_ELBOW_REST + elbowR * ARM_ELBOW_GAIN + crouchBend + ARM_DRIFT.elbow * drift(2), ARM_ELBOW_MAX);
       const upperH = chestFwd.clone().multiplyScalar(Math.sin(swing))
         .addScaledVector(down, Math.cos(swing) * Math.cos(out))
         .addScaledVector(outward, Math.cos(swing) * Math.sin(out)).normalize();
-      // The elbow folds the forearm forward and up, toward the chest; the forearm
-      // carries out a little from the elbow (the carrying angle), clear of the hips.
-      const hinge = chestFwd.clone().addScaledVector(torsoUp, 0.35);
+      // The elbow folds the forearm forward and up, in across the body; a nearly
+      // straight forearm carries out a little from the elbow (the carrying angle).
+      const hinge = chestFwd.clone().addScaledVector(torsoUp, 0.35).addScaledVector(outward, -ARM_HINGE_IN);
       hinge.addScaledVector(upperH, -hinge.dot(upperH)).normalize();
-      const foreH = upperH.clone().multiplyScalar(Math.cos(bend)).addScaledVector(hinge, Math.sin(bend))
-        .addScaledVector(outward, ARM_CARRY).normalize();
+      const foreH = upperH.clone().multiplyScalar(Math.cos(elbow)).addScaledVector(hinge, Math.sin(elbow))
+        .addScaledVector(outward, ARM_CARRY * (1 - smoothstep(elbow / (30 * DEG)))).normalize();
       human[s] = { upper: upperH, fore: foreH, out };
       // Collarbones rise as an arm does.
       const raise = smoothstep((out - 0.6) / 0.9);
@@ -691,6 +754,27 @@ export class SkaterSolver {
       this.aimLimb(A.upper, A.root, A.mid, A.normal, shoulder, elbow, normal, 0.4);
       const fore = this.aimLimb(A.lower, A.mid, A.tip, A.normal, elbow, wrist, normal, 1);
       this.handPose(s, fore, wrist, wrist.clone().sub(elbow).normalize(), upperH, outward, torsoUp, chestFwd, dt, time);
+      // A hand hanging by a leg, or brought against one in a crouch, rests on the jeans,
+      // not in them: the arm reaches the wrist out as far as the hand went in, the hand
+      // held as it was (its bones are posed in the world, so it moves out whole).
+      // Let go of, the hand eases back from where it was held (kept with the hips, which may be spinning).
+      const hips = this.pose.quat[this.root];
+      const held = dt > 0 && dt <= 0.1 ? this.jeansPush[s].clone().applyQuaternion(hips).multiplyScalar(Math.exp(-dt / HAND_JEANS_RELEASE)) : new Vector3();
+      const reached = wrist.clone();
+      const pushed = new Vector3();
+      for (let tries = 0; tries < 2; tries++) {
+        this.forward();
+        let push = this.intoJeans(s);
+        if (tries === 0 && held.lengthSq() > (push?.lengthSq() ?? 0)) push = held;
+        if (!push) break;
+        pushed.add(push);
+        const moved = twoBone(shoulder, reached.add(push), A.a, A.b, pole);
+        reached.copy(moved.end);
+        this.aimLimb(A.upper, A.root, A.mid, A.normal, shoulder, moved.mid, moved.normal, 0.4);
+        const reFore = this.aimLimb(A.lower, A.mid, A.tip, A.normal, moved.mid, moved.end, moved.normal, 1);
+        this.twistForearm(s, this.delta[this.hands[s].wrist], reFore, moved.end.clone().sub(moved.mid).normalize());
+      }
+      this.jeansPush[s].copy(pushed).applyQuaternion(hips.clone().invert());
     }
 
     // Eyes: on what the rider is watching, as far as the head left them to turn;
@@ -716,12 +800,81 @@ export class SkaterSolver {
     // Lids: a relaxed, slightly hooded look; narrowed in focus, shut in a wince, lifted by a smile.
     const [upperShut, lowerLift] = LIDS[expression];
     for (const lid of this.lids) {
-      drive(lid.upper, new Quaternion().setFromAxisAngle(headLeft, (upperShut - pitch * 0.7) * DEG).multiply(head));
+      drive(lid.upper, new Quaternion().setFromAxisAngle(headLeft, (upperShut - pitch * this.lidFollow) * DEG).multiply(head));
       drive(lid.lower, new Quaternion().setFromAxisAngle(headLeft, -lowerLift * DEG).multiply(head));
     }
 
     this.forward();
     return this.pose;
+  }
+
+  /**
+   * How far a hand, as posed, has to move to be out of the jeans (null if it
+   * is): its fingers (the ones it has skin on), knuckle to tip, against each
+   * thigh and shin, the jeans as thick round the posed leg as round it at rest
+   * (RestSkeleton.jeans). It comes out sideways, toward its own side of the
+   * body: beside a hanging thigh, beside the knee of one raised in a crouch.
+   * Straight out from the bone would flip it across a leg it's deep in, and
+   * up onto a rising thigh would hold it there until the arm had swung
+   * through to underneath, then drop it.
+   */
+  private intoJeans(side: SideKey): Vector3 | null {
+    const jeans = this.rest.jeans;
+    if (!jeans) return null;
+    const head = this.pose.head;
+    const outward = head[this.legs.R.upper[0]].clone().sub(head[this.legs.L.upper[0]]).normalize();
+    if (side === 'L') outward.negate();
+    const points: Vector3[] = [];
+    for (const chain of this.hands[side].fingers) {
+      if (this.rest.skinned && !this.rest.skinned[chain[0]]) continue;
+      const [k, m, tip] = chain.map((b) => head[b]);
+      // The last bone is about as long as the one before it.
+      points.push(k, m, tip, tip.clone().add(tip.clone().sub(m)));
+    }
+    const legs = SIDES.flatMap((s) => {
+      const L = this.legs[s];
+      return ([[L.upper[0], L.lower[0], jeans[s].thigh], [L.lower[0], L.foot, jeans[s].shin]] as const).map(([bone, next, girth]) => {
+        const turn = this.pose.quat[bone].clone().multiply(this.rest.bones[bone].quat.clone().invert());
+        return { at: head[bone], frame: girthFrame(head[bone], head[next], this.restFwd.clone().applyQuaternion(turn)), girth };
+      });
+    });
+    const moved = new Vector3();
+    for (let pass = 0; pass < 2; pass++) {
+      let push: Vector3 | null = null;
+      let most = 0;
+      for (const { at, frame, girth } of legs) {
+        const dir = outward.clone().addScaledVector(frame.axis, -outward.dot(frame.axis));
+        // A leg held out sideways: nowhere sideways to go round it.
+        if (dir.lengthSq() < 0.1) continue;
+        dir.normalize();
+        const dirAngle = Math.atan2(dir.dot(frame.across), dir.dot(frame.front));
+        for (const point of points) {
+          const { t, off, out, angle } = aroundBone(point.clone().add(moved), at, frame);
+          if (t < 0 || t > 1) continue;
+          const reach = girthAt(girth, t, angle);
+          const wide = girthAt(girth, t, dirAngle) + HAND_OFF_JEANS;
+          if (reach <= 0 || off >= reach + HAND_OFF_JEANS) continue;
+          // Out along `dir` to where the jeans' edge is that way.
+          const along = out.dot(dir);
+          const far = -along + Math.sqrt(Math.max(0, along * along - off * off + wide * wide));
+          if (far > most) {
+            most = far;
+            push = dir.clone().multiplyScalar(far);
+          }
+        }
+      }
+      if (!push) break;
+      moved.add(push);
+    }
+    return moved.lengthSq() > 0 ? moved : null;
+  }
+
+  /** The forearm's twist bones take part of the hand's turn about the forearm. */
+  private twistForearm(s: SideKey, hand: Quaternion, fore: Quaternion, foreDir: Vector3) {
+    const A = this.arms[s];
+    const turn = twistAbout(hand.clone().multiply(fore.clone().invert()), foreDir);
+    this.delta[A.lower[0]].copy(new Quaternion().slerp(turn, 0.25).multiply(fore));
+    this.delta[A.lower[1]].copy(new Quaternion().slerp(turn, 0.7).multiply(fore));
   }
 
   /** Midway between the eyes as currently posed (the head, if the skeleton has no eye bones). */
@@ -784,7 +937,6 @@ export class SkaterSolver {
    */
   private handPose(s: SideKey, fore: Quaternion, wrist: Vector3, foreDir: Vector3, upperDir: Vector3, outward: Vector3, up: Vector3, chestFwd: Vector3, dt: number, time: number) {
     const H = this.hands[s];
-    const A = this.arms[s];
     const out = smoothstep((upperDir.dot(outward) + 0.1) / 0.8) * (1 - smoothstep((upperDir.dot(up) - 0.5) / 0.4));
     const palm = outward.clone().multiplyScalar(-(1 - out)).addScaledVector(up, -out).addScaledVector(chestFwd, -0.35 * (1 - out));
     palm.addScaledVector(foreDir, -palm.dot(foreDir));
@@ -818,10 +970,7 @@ export class SkaterSolver {
     const hand = new Quaternion().setFromAxisAngle(palm, devSign * dev * DEG)
       .multiply(new Quaternion().setFromAxisAngle(flexAxis, flex * DEG))
       .multiply(base);
-    // The forearm's twist bones take part of the hand's turn about the forearm.
-    const turn = twistAbout(hand.clone().multiply(fore.clone().invert()), foreDir);
-    this.delta[A.lower[0]].copy(new Quaternion().slerp(turn, 0.25).multiply(fore));
-    this.delta[A.lower[1]].copy(new Quaternion().slerp(turn, 0.7).multiply(fore));
+    this.twistForearm(s, hand, fore, foreDir);
     for (const b of [H.wrist, ...H.metacarpals]) {
       this.delta[b].copy(hand);
       this.driven[b] = true;

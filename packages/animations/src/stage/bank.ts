@@ -3,20 +3,36 @@ import { rotY, smoothstep } from '../math';
 import { ASPHALT } from '../camera/view';
 import { GROUND, X0 } from '../motion/trick';
 import type { Frame3, Rig } from '../motion/skeleton';
-import type { StairPlan } from '../sets/elToro/stairs';
+import { rideGrade, routeHeight, type StairPlan } from '../sets/elToro/stairs';
 import { WHEEL_X } from '../board/board';
 
-/** Turn into the bank, then pitch into its plane, preserving local foot/board transforms. */
+/**
+ * Seconds past touchdown the rider is still leaning into the bank: its board
+ * meets the bank a little flatter than it, so the uphill truck lands first
+ * and the nose comes down onto the bank just after.
+ */
+export const LEAN_PAST_TOUCHDOWN = 0.12;
+
+/**
+ * Turn into the bank, then pitch into its plane (finishing just after
+ * touchdown), preserving local foot/board transforms. Down a roll-in the
+ * rider rides square to the ramp under the board, as gravity along it
+ * leaves them standing.
+ */
 export function bankRig(rig: Rig, plan: StairPlan, time: number, u: number, heading = 0): Rig {
   const { terrain } = plan;
-  if (!terrain.slope && !heading) return rig;
+  const rolling = plan.dropIn != null && time <= plan.pop;
+  if (!terrain.slope && !heading && !rolling) return rig;
   const landing = terrain.run + terrain.landPast;
-  // The axle-to-axle chord rolls both trucks through the rounded bank toe.
+  // The axle-to-axle chord rolls both trucks through the rounded bank toe,
+  // and tips the nose down off a raised edge until both are on the ground.
   const slope = !terrain.slope ? 0 : time < plan.land
     ? terrain.slope(landing)
-    : (terrain.ground(u + WHEEL_X) - terrain.ground(u - WHEEL_X)) / (2 * WHEEL_X);
-  const phase = (time - plan.pop) / plan.flight;
-  const angle = -Math.atan(slope) * smoothstep((phase - 0.66) / 0.34);
+    : (routeHeight(plan, u + WHEEL_X) - routeHeight(plan, u - WHEEL_X)) / (2 * WHEEL_X);
+  const leanFrom = plan.pop + 0.66 * plan.flight;
+  const angle = rolling
+    ? -Math.atan(rideGrade(plan, time))
+    : -Math.atan(slope) * smoothstep((time - leanFrom) / (plan.land + LEAN_PAST_TOUCHDOWN - leanFrom));
   if (Math.abs(angle) < 1e-9 && Math.abs(heading) < 1e-9) return rig;
   const c = Math.cos(angle), s = Math.sin(angle);
   const pivot = { x: X0, y: rig.board.center.y + ASPHALT - GROUND };

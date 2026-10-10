@@ -20,8 +20,9 @@ import type { Vec3 } from '../../camera/view';
 
 /**
  * Realistic street props for the classic spots: trees from Poly Haven scans
- * (CC0), rebuilt for phones by blender/build_tree.py, and parked cars
- * modelled by blender/build_cars.py. They load after the set is drawn
+ * (CC0), rebuilt for phones by blender/build_tree.py, and cars modelled by
+ * blender/build_cars.py, parked or driving down the street on the
+ * attempt's clock (`drive`). They load after the set is drawn
  * (`ready`) and are shaded in the set's own light: the same sun, the same
  * haze with distance, and no ink outline.
  */
@@ -41,12 +42,19 @@ const METRE = 29 / 0.3048;
 
 export type CarModel = 'sedan' | 'hatchback' | 'suv';
 
-/** A parked car: where its middle is on the ground, which way its nose points (degrees about up, 0 = +x), and its paint. */
+/** A car: where its middle is on the ground, which way its nose points (degrees about up, 0 = +x), and its paint. */
 export interface CarPlacement {
   at: Vec3;
   yaw: number;
   model: CarModel;
   paint: string;
+  /**
+   * Driving: world units a second along its nose, from `at` at the
+   * attempt's start, coming round again every `lap` units (centered on
+   * `at`) so it's always somewhere down the street. Parked when omitted.
+   */
+  speed?: number;
+  lap?: number;
 }
 
 /** A tree standing at `at` (the set's coordinates, y up), `height` world units tall, turned `yaw` degrees. */
@@ -144,7 +152,7 @@ function leafMaterial(map: Texture): ShaderMaterial {
 /** Surface numbers, carried ×1/8 in the car models' vertex color green (blender/build_cars.py). */
 const CAR_SURFACES = ['PAINT', 'GLASS', 'TRIM', 'TIRE', 'RIM', 'HEAD', 'TAIL', 'PLATE'];
 
-/** Parked cars: paint and glass that mirror the sky, rubber, alloy, lamps; occlusion baked in the vertex colors. */
+/** Cars: paint and glass that mirror the sky, rubber, alloy, lamps; occlusion baked in the vertex colors. */
 function carMaterial(): ShaderMaterial {
   const surfaces = CAR_SURFACES.map((name, i) => `const float ${name} = ${i}.0;`).join('\n');
   return sceneMaterial(VERT.replace('out vec3 vWorld;', `
@@ -211,6 +219,9 @@ export class StreetProps {
   private readonly geometries: BufferGeometry[] = [];
   private readonly materials: ShaderMaterial[] = [];
   private readonly textures: Texture[] = [];
+  /** Cars that drive, each with the instance it's drawn as. */
+  private readonly traffic: Array<{ mesh: InstancedMesh; index: number; car: CarPlacement }> = [];
+  private driven = 0;
   private disposed = false;
 
   constructor(placements: StreetPropPlacements) {
@@ -273,10 +284,28 @@ export class StreetProps {
         mesh.setMatrixAt(i, placement(car.at, car.yaw, METRE));
         // Stored as written: these shaders work in display color.
         mesh.setColorAt(i, new Color().setStyle(car.paint, LinearSRGBColorSpace));
+        if (car.speed) this.traffic.push({ mesh, index: i, car });
       });
       this.add(mesh, geometry, material);
     });
     this.release(model.scene);
+    this.drive(this.driven);
+  }
+
+  /** Moves the driving cars to where they are `t` seconds into the attempt. */
+  drive(t: number) {
+    this.driven = t;
+    const moved = new Set<InstancedMesh>();
+    for (const { mesh, index, car } of this.traffic) {
+      const lap = car.lap ?? Infinity;
+      const run = car.speed! * t;
+      const along = Number.isFinite(lap) ? run - lap * Math.floor(run / lap + 0.5) : run;
+      const yaw = (car.yaw * Math.PI) / 180;
+      const at: Vec3 = [car.at[0] + along * Math.cos(yaw), car.at[1], car.at[2] - along * Math.sin(yaw)];
+      mesh.setMatrixAt(index, placement(at, car.yaw, METRE));
+      moved.add(mesh);
+    }
+    for (const mesh of moved) mesh.instanceMatrix.needsUpdate = true;
   }
 
   /** Every mesh of `scene` drawn once per matrix, in the material its name asks for. */

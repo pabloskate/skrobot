@@ -30,13 +30,13 @@ describe('renderer pool', () => {
     const b = borrowRenderer(lookFor(robot, 'robot'), 'plaza');
     expect(b).not.toBe(a);
     returnRenderer(a);
-    expect(borrowRenderer(lookFor(robot, 'human'), 'plaza')).not.toBe(a);
+    expect(borrowRenderer(lookFor(robot, 'realistic'), 'plaza')).not.toBe(a);
     expect(borrowRenderer(lookFor(robot, 'robot'), 'el-toro')).not.toBe(a);
   });
 
   it('lets go of renderers nobody asks for again', () => {
     vi.useFakeTimers();
-    const kept = borrowRenderer(lookFor(robot, 'humanoid'), 'el-toro') as unknown as { disposed: boolean };
+    const kept = borrowRenderer(lookFor(robot, 'realistic'), 'el-toro') as unknown as { disposed: boolean };
     returnRenderer(kept as never);
     expect(kept.disposed).toBe(false);
     vi.advanceTimersByTime(60_000);

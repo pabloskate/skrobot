@@ -24,7 +24,11 @@ import type { DeltaMush } from './deltaMush';
  *    before it touches so it bulges rather than creases;
  *  - how far the tee moved is spread through its neighbors, so it bulges
  *    round a leg instead of tenting, and anything the spreading left inside a
- *    leg is pushed out again.
+ *    leg is pushed out again;
+ *  - the tee's folded-under inside (its hem turned up, and where the suit
+ *    tucks it down into the jeans) isn't draped itself: it moves as the cloth
+ *    over it does, so a hem lifted onto a thigh carries its inside with it
+ *    rather than leaving it to come out through the front.
  *
  * It's all worked out from the pose alone, so a frozen frame, a scrub and
  * playback draw the same cloth.
@@ -34,7 +38,7 @@ import type { DeltaMush } from './deltaMush';
 const CLEAR = 0.6;
 const SOFT = 1.5;
 /** Passes of spreading a push through the tee's neighbors. */
-const SPREAD = 4;
+const SPREAD = 32;
 /** Of the height a thigh lifts the tee by, the share it then lies forward along the thigh: the fabric keeps its length. */
 const DRAPE_SLIDE = 0.8;
 /** The most a thigh lifts the tee by; past it the lift fades out over the last quarter, and a leg only pushes the cloth aside. */
@@ -64,6 +68,18 @@ const SAMPLES = [
 ] as const;
 /** How much farther than at rest posed denim may stand out from its bone (a thigh's seat bulges as the hip folds), for the cheap tests. */
 const BULGE = 1.5;
+/**
+ * The tee's folded-under inside lies at most FOLD (world units) under the
+ * cloth over it, and rides the same bones: of their skin weights they share at
+ * least SEWN. The trunk under a sleeve shares far less, so it isn't taken for a fold.
+ */
+const FOLD = 5;
+const SEWN = 0.5;
+/** However the skinning squashes a fold, its inside stays at least this share of its depth at rest under the cloth over it. */
+const FOLD_KEEP = 0.5;
+/** Bins round the trunk, and up it (world units), the tee's triangles are sorted into to find what covers each node. */
+const COVER_ANGLES = 96;
+const COVER_HEIGHT = 2;
 const TAU = Math.PI * 2;
 
 /**
@@ -291,12 +307,138 @@ class Leg {
   }
 }
 
+/**
+ * The tee's folded-under inside, from the rest pose: each node with more of the
+ * tee over it, looking straight out from the trunk's axis, within FOLD and
+ * skinned alike. For each, the triangle of the outside over it (its nodes),
+ * where in it the line out crosses (barycentric), and how deep under it the
+ * node lies (along the way the triangle faces, so its sign says which side is
+ * under). Of what covers a node, only triangles of the outside count, so every
+ * fold hangs off cloth that is draped.
+ */
+function foldedUnder(mush: DeltaMush, isTee: Uint8Array, axisX: number, axisZ: number) {
+  const { rest: p, faces: f, joints, weights } = mush;
+  const sewn = (a: number, b: number) => {
+    let shared = 0;
+    for (let i = 0; i < 4; i++) {
+      for (let j = 0; j < 4; j++) if (joints[a * 4 + i] === joints[b * 4 + j]) shared += Math.min(weights[a * 4 + i], weights[b * 4 + j]);
+    }
+    return shared;
+  };
+  const around = (k: number) => {
+    const angle = Math.atan2(p[k * 3 + 2] - axisZ, p[k * 3] - axisX);
+    return angle < 0 ? angle + TAU : angle;
+  };
+  // The tee's triangles, binned by the angles round the axis and the heights each spans.
+  let low = Infinity;
+  for (let k = 0; k < mush.nodes; k++) if (isTee[k]) low = Math.min(low, p[k * 3 + 1]);
+  const bins = new Map<number, number[]>();
+  const width = TAU / COVER_ANGLES;
+  for (let t = 0; t < f.length; t += 3) {
+    if (!isTee[f[t]] || !isTee[f[t + 1]] || !isTee[f[t + 2]]) continue;
+    const a0 = around(f[t]);
+    let lo = a0, hi = a0, bottom = Infinity, top = -Infinity;
+    for (let v = 0; v < 3; v++) {
+      let a = around(f[t + v]) - a0;
+      if (a > Math.PI) a -= TAU;
+      else if (a < -Math.PI) a += TAU;
+      lo = Math.min(lo, a0 + a);
+      hi = Math.max(hi, a0 + a);
+      bottom = Math.min(bottom, p[f[t + v] * 3 + 1]);
+      top = Math.max(top, p[f[t + v] * 3 + 1]);
+    }
+    for (let row = Math.floor((bottom - low) / COVER_HEIGHT); row <= Math.floor((top - low) / COVER_HEIGHT); row++) {
+      for (let col = Math.floor(lo / width); col <= Math.floor(hi / width); col++) {
+        const key = row * COVER_ANGLES + (((col % COVER_ANGLES) + COVER_ANGLES) % COVER_ANGLES);
+        const bin = bins.get(key);
+        if (bin) bin.push(t);
+        else bins.set(key, [t]);
+      }
+    }
+  }
+  // The nearest triangle over node k (that `counts`) the line out from the axis crosses within FOLD, and where.
+  const crossed = { t: -1, u: 0, v: 0 };
+  const over = (k: number, counts: (t: number) => boolean) => {
+    const ox = p[k * 3], oy = p[k * 3 + 1], oz = p[k * 3 + 2];
+    const out = Math.hypot(ox - axisX, oz - axisZ) || 1;
+    const dx = (ox - axisX) / out, dz = (oz - axisZ) / out;
+    let best = FOLD;
+    crossed.t = -1;
+    const key = Math.floor((oy - low) / COVER_HEIGHT) * COVER_ANGLES + Math.min(COVER_ANGLES - 1, Math.floor(around(k) / width));
+    for (const t of bins.get(key) ?? []) {
+      const i = f[t] * 3, j = f[t + 1] * 3, l = f[t + 2] * 3;
+      if (f[t] === k || f[t + 1] === k || f[t + 2] === k) continue;
+      // Möller–Trumbore, for the level line (dx, 0, dz).
+      const e1x = p[j] - p[i], e1y = p[j + 1] - p[i + 1], e1z = p[j + 2] - p[i + 2];
+      const e2x = p[l] - p[i], e2y = p[l + 1] - p[i + 1], e2z = p[l + 2] - p[i + 2];
+      const qx = -dz * e2y, qy = dz * e2x - dx * e2z, qz = dx * e2y;
+      const det = e1x * qx + e1y * qy + e1z * qz;
+      if (Math.abs(det) < 1e-9) continue;
+      const sx = ox - p[i], sy = oy - p[i + 1], sz = oz - p[i + 2];
+      const u = (sx * qx + sy * qy + sz * qz) / det;
+      if (u < 0 || u > 1) continue;
+      const rx = sy * e1z - sz * e1y, ry = sz * e1x - sx * e1z, rz = sx * e1y - sy * e1x;
+      const v = (dx * rx + dz * rz) / det;
+      if (v < 0 || u + v > 1) continue;
+      const along = (e2x * rx + e2y * ry + e2z * rz) / det;
+      if (along <= 1e-3 || along >= best || !counts(t)) continue;
+      best = along;
+      crossed.t = t;
+      crossed.u = u;
+      crossed.v = v;
+    }
+    return crossed.t >= 0;
+  };
+  const alike = (k: number) => (t: number) => sewn(k, f[t]) >= SEWN && sewn(k, f[t + 1]) >= SEWN && sewn(k, f[t + 2]) >= SEWN;
+  const folded = new Uint8Array(mush.nodes);
+  for (let k = 0; k < mush.nodes; k++) if (isTee[k] && over(k, alike(k))) folded[k] = 1;
+  const under: number[] = [], cover: number[] = [], weight: number[] = [], depth: number[] = [];
+  const frame = new Float64Array(9);
+  for (let k = 0; k < mush.nodes; k++) {
+    if (!folded[k]) continue;
+    const same = alike(k);
+    if (!over(k, (t) => !folded[f[t]] && !folded[f[t + 1]] && !folded[f[t + 2]] && same(t))) {
+      // Only more folds over it, nothing of the outside within reach: it's draped as the outside is.
+      folded[k] = 0;
+      continue;
+    }
+    const t = crossed.t;
+    const w = [1 - crossed.u - crossed.v, crossed.u, crossed.v];
+    under.push(k);
+    cover.push(f[t], f[t + 1], f[t + 2]);
+    weight.push(...w);
+    frameOf(p, f[t] * 3, f[t + 1] * 3, f[t + 2] * 3, frame);
+    let deep = 0;
+    for (let e = 0; e < 3; e++) deep += (p[k * 3 + e] - w[0] * p[f[t] * 3 + e] - w[1] * p[f[t + 1] * 3 + e] - w[2] * p[f[t + 2] * 3 + e]) * frame[6 + e];
+    depth.push(deep);
+  }
+  return { folded, under: Uint32Array.from(under), cover: Uint32Array.from(cover), weight: Float32Array.from(weight), depth: Float32Array.from(depth) };
+}
+
+/** The frame of the triangle of nodes a, b, c (offsets into `p`) into `f`: along its edge ab, across it, and the way it faces. */
+function frameOf(p: Float32Array, a: number, b: number, c: number, f: Float64Array): void {
+  const ux = p[b] - p[a], uy = p[b + 1] - p[a + 1], uz = p[b + 2] - p[a + 2];
+  const vx = p[c] - p[a], vy = p[c + 1] - p[a + 1], vz = p[c + 2] - p[a + 2];
+  let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+  const n = Math.hypot(nx, ny, nz) || 1;
+  const u = Math.hypot(ux, uy, uz) || 1;
+  nx /= n; ny /= n; nz /= n;
+  f[0] = ux / u; f[1] = uy / u; f[2] = uz / u;
+  f[3] = ny * f[2] - nz * f[1]; f[4] = nz * f[0] - nx * f[2]; f[5] = nx * f[1] - ny * f[0];
+  f[6] = nx; f[7] = ny; f[8] = nz;
+}
+
 /** The legs and tee of one outfit (a DeltaMush over the skater's clothes). */
 export class TeeDrape {
   private readonly mush: DeltaMush;
-  /** The tee's nodes; the rest are denim. */
-  private readonly tee: Uint32Array;
-  private readonly isTee: Uint8Array;
+  /** The tee's outside, which is draped; the rest are denim, or the tee's folded-under inside. */
+  private readonly outside: Uint32Array;
+  private readonly isOutside: Uint8Array;
+  /** The tee's folded-under inside, and for each, the outside's triangle over it, where under it (barycentric), and how deep at rest. */
+  private readonly under: Uint32Array;
+  private readonly cover: Uint32Array;
+  private readonly coverWeight: Float32Array;
+  private readonly coverDepth: Float32Array;
   private readonly thighs: Leg[];
   private readonly shins: Leg[];
   private readonly root: Bone;
@@ -304,6 +446,9 @@ export class TeeDrape {
   private readonly skinned: Float32Array;
   private readonly shift: Float32Array;
   private readonly spread: Float32Array;
+  /** A cover's frame (along an edge, across, and facing), skinned and draped. */
+  private readonly before = new Float64Array(9);
+  private readonly after = new Float64Array(9);
 
   /**
    * `uv` tells the tee (its UVs' top half) from the jeans; `bones` is the
@@ -312,9 +457,8 @@ export class TeeDrape {
   constructor(mush: DeltaMush, uv: BufferAttribute | InterleavedBufferAttribute, skeleton: Skeleton) {
     this.mush = mush;
     const nodes = mush.nodes;
-    this.isTee = new Uint8Array(nodes);
-    for (let n = 0; n < nodes; n++) this.isTee[n] = uv.getY(mush.first[n]) < 0.5 ? 1 : 0;
-    this.tee = Uint32Array.from({ length: nodes }, (_, n) => n).filter((n) => this.isTee[n]);
+    const isTee = new Uint8Array(nodes);
+    for (let n = 0; n < nodes; n++) isTee[n] = uv.getY(mush.first[n]) < 0.5 ? 1 : 0;
     const bones = skeleton.bones;
     const index = new Map(bones.map((b, i) => [b.name.replace(/\./g, ''), i]));
     const bone = (name: string) => {
@@ -333,7 +477,7 @@ export class TeeDrape {
       const out: number[] = [];
       const f = mush.faces;
       for (let t = 0; t < f.length; t += 3) {
-        if (this.isTee[f[t]] || this.isTee[f[t + 1]] || this.isTee[f[t + 2]]) continue;
+        if (isTee[f[t]] || isTee[f[t + 1]] || isTee[f[t + 2]]) continue;
         if (share(f[t]) + share(f[t + 1]) + share(f[t + 2]) >= 3 * CARRIED) out.push(f[t], f[t + 1], f[t + 2]);
       }
       return Uint32Array.from(out);
@@ -343,6 +487,28 @@ export class TeeDrape {
     this.shins = ['L', 'R'].map((s) => leg([`lowerleg01${s}`, `lowerleg02${s}`], `lowerleg01${s}`, `foot${s}`));
     this.root = bones[bone('root')];
     this.neck = bones[bone('neck01')];
+    // The suit the outfit was cut from sews its shirt's inside to the trousers'
+    // waistband. A tee isn't sewn to its jeans, and lifted onto a thigh it would
+    // drag that seam out across it, so the seam isn't drawn.
+    const drawn = mush.geometry.getIndex();
+    if (drawn) {
+      const kept: number[] = [];
+      for (let t = 0; t < drawn.count; t += 3) {
+        let tee = 0;
+        for (let v = 0; v < 3; v++) if (uv.getY(drawn.getX(t + v)) < 0.5) tee++;
+        if (tee === 0 || tee === 3) kept.push(drawn.getX(t), drawn.getX(t + 1), drawn.getX(t + 2));
+      }
+      mush.geometry.setIndex(kept);
+    }
+    // The trunk's axis at rest: straight up through the hips.
+    const hips = new Matrix4().copy(skeleton.boneInverses[bone('root')]).invert().elements;
+    const { folded, under, cover, weight, depth } = foldedUnder(mush, isTee, hips[12], hips[14]);
+    this.isOutside = isTee.map((tee, n) => (tee && !folded[n] ? 1 : 0));
+    this.outside = Uint32Array.from({ length: nodes }, (_, n) => n).filter((n) => this.isOutside[n]);
+    this.under = under;
+    this.cover = cover;
+    this.coverWeight = weight;
+    this.coverDepth = depth;
     this.skinned = new Float32Array(nodes * 3);
     this.shift = new Float32Array(nodes * 3);
     this.spread = new Float32Array(nodes * 3);
@@ -352,7 +518,7 @@ export class TeeDrape {
   fit(p: Float32Array): void {
     const legs = [...this.thighs, ...this.shins];
     for (const leg of legs) leg.pose(p);
-    const { tee, skinned, shift, spread, isTee } = this;
+    const { outside, skinned, shift, spread, isOutside } = this;
     skinned.set(p);
 
     // The body's up, the way the tee hangs: from the hips to the base of the neck.
@@ -366,7 +532,7 @@ export class TeeDrape {
       const across = 1 - (u[0] * up[0] + u[1] * up[1] + u[2] * up[2]) ** 2;
       const fade = smoothstep((across - DRAPE_FROM) / DRAPE_FADE);
       if (fade <= 0) continue;
-      for (const node of tee) {
+      for (const node of outside) {
         const k = node * 3;
         const lift = this.liftOnto(thigh, p[k], p[k + 1], p[k + 2], up) * fade;
         if (lift <= 0) continue;
@@ -381,7 +547,7 @@ export class TeeDrape {
         p[k + 2] = z + up[2] * rise;
       }
     }
-    for (const node of tee) for (const leg of legs) leg.pushOut(p, node * 3);
+    for (const node of outside) for (const leg of legs) leg.pushOut(p, node * 3);
 
     // Cloth spreads a push: smooth how far each node moved over its neighbors,
     // so the tee bulges round a leg rather than fraying into spikes where
@@ -389,18 +555,18 @@ export class TeeDrape {
     // nothing inside a leg.
     const { offsets, neighbors } = this.mush;
     shift.fill(0);
-    for (const node of tee) {
+    for (const node of outside) {
       const k = node * 3;
       shift[k] = p[k] - skinned[k];
       shift[k + 1] = p[k + 1] - skinned[k + 1];
       shift[k + 2] = p[k + 2] - skinned[k + 2];
     }
     for (let pass = 0; pass < SPREAD; pass++) {
-      for (const node of tee) {
+      for (const node of outside) {
         let sx = 0, sy = 0, sz = 0, count = 0;
         for (let e = offsets[node]; e < offsets[node + 1]; e++) {
           const j = neighbors[e];
-          if (!isTee[j]) continue;
+          if (!isOutside[j]) continue;
           sx += shift[j * 3];
           sy += shift[j * 3 + 1];
           sz += shift[j * 3 + 2];
@@ -412,28 +578,57 @@ export class TeeDrape {
         spread[k + 1] = 0.5 * shift[k + 1] + (0.5 * sy) / c;
         spread[k + 2] = 0.5 * shift[k + 2] + (0.5 * sz) / c;
       }
-      for (const node of tee) {
+      for (const node of outside) {
         const k = node * 3;
         shift[k] = spread[k];
         shift[k + 1] = spread[k + 1];
         shift[k + 2] = spread[k + 2];
       }
     }
-    for (const node of tee) {
+    for (const node of outside) {
       const k = node * 3;
       p[k] = skinned[k] + shift[k];
       p[k + 1] = skinned[k + 1] + shift[k + 1];
       p[k + 2] = skinned[k + 2] + shift[k + 2];
       for (const leg of legs) leg.pushOut(p, k);
     }
+
+    // The folded-under inside moves with the outside over it, turning as it turns
+    // (a hem laid forward along a thigh), so it stays just as far under it; and
+    // where the skinning alone (the inside rides the hips more) squashes the fold, it
+    // stays under all the same.
+    const { under, cover, coverWeight, coverDepth, before, after } = this;
+    for (let i = 0; i < under.length; i++) {
+      const k = under[i] * 3;
+      const a = cover[i * 3] * 3, b = cover[i * 3 + 1] * 3, c = cover[i * 3 + 2] * 3;
+      const wa = coverWeight[i * 3], wb = coverWeight[i * 3 + 1], wc = coverWeight[i * 3 + 2];
+      frameOf(skinned, a, b, c, before);
+      frameOf(p, a, b, c, after);
+      // Where it lies from the point of the cover over it, in the cover's frame as skinned.
+      const ox = skinned[k] - wa * skinned[a] - wb * skinned[b] - wc * skinned[c];
+      const oy = skinned[k + 1] - wa * skinned[a + 1] - wb * skinned[b + 1] - wc * skinned[c + 1];
+      const oz = skinned[k + 2] - wa * skinned[a + 2] - wb * skinned[b + 2] - wc * skinned[c + 2];
+      const along = ox * before[0] + oy * before[1] + oz * before[2];
+      const across = ox * before[3] + oy * before[4] + oz * before[5];
+      const rest = coverDepth[i];
+      let depth = ox * before[6] + oy * before[7] + oz * before[8];
+      if (depth * Math.sign(rest) < FOLD_KEEP * Math.abs(rest)) depth = FOLD_KEEP * rest;
+      for (let e = 0; e < 3; e++) {
+        p[k + e] = wa * p[a + e] + wb * p[b + e] + wc * p[c + e] + along * after[e] + across * after[3 + e] + depth * after[6 + e];
+      }
+    }
   }
 
-  /** How deep the tee's deepest node sits in a leg (world units; negative: clear of every leg), the legs read off `p`. */
+  /**
+   * How deep the tee's outside sits in a leg at its deepest (world units;
+   * negative: clear of every leg), the legs read off `p`. Its folded-under
+   * inside lies under the outside, so where the outside rests on a leg it's in it.
+   */
   deepest(p: Float32Array): number {
     const legs = [...this.thighs, ...this.shins];
     for (const leg of legs) leg.pose(p);
     let most = -Infinity;
-    for (const node of this.tee) {
+    for (const node of this.outside) {
       for (const leg of legs) {
         leg.at(p[node * 3], p[node * 3 + 1], p[node * 3 + 2]);
         const r = leg.surface();

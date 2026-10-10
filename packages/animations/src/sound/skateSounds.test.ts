@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { crossfadeLoop, rms, slowPitch, weave } from './skateSounds';
+import { crossfadeLoop, rms, rollRate, slowPitch, weave } from './skateSounds';
 
 /**
  * A recording dropped in for the wheels or the rail has to loop without a
@@ -77,5 +77,15 @@ describe('slowPitch', () => {
     expect(slowPitch(2)).toBe(1);
     expect(slowPitch(0.5)).toBeLessThan(1);
     expect(slowPitch(0.25)).toBeCloseTo(0.66, 2);
+  });
+});
+
+describe('rollRate', () => {
+  it('runs the wheels quicker with speed, less than in proportion, and as recorded at cruising speed', () => {
+    expect(rollRate(1)).toBe(1);
+    expect(rollRate(2.3)).toBeGreaterThan(1.3);
+    expect(rollRate(2.3)).toBeLessThan(1.5);
+    expect(rollRate(0.4)).toBeLessThan(1);
+    expect(rollRate(0)).toBeGreaterThan(0.5);
   });
 });

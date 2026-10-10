@@ -27,6 +27,9 @@ import {
   HIP_BACK,
   HEAD_STEADY,
   LOOK_DOWN_OLLIE,
+  LEAN_IMPACT,
+  HIP_BACK_IMPACT,
+  LOOK_DOWN_IMPACT,
   type LegRig,
   type ArmRig,
   type Frame3,
@@ -41,6 +44,7 @@ import {
   ARM_LOAD,
   ARM_AIR,
   ARM_LAND,
+  ARM_BRACE,
   mixPose,
   armDirs,
 } from './skeleton';
@@ -125,9 +129,9 @@ const LOOK_DOWN_TRICK = 16;
 const TUCK_LEAD = 0.12;
 const TUCK_LAG = 0.1;
 /** Room a tucked foot keeps from the board. */
-const TUCK_MARGIN = 0.4;
+export const TUCK_MARGIN = 0.4;
 /** Overlap too slight to tuck for: a sole set down on the grip. */
-const TUCK_SLACK = 0.5;
+export const TUCK_SLACK = 0.5;
 /** Share of a foot's tuck past HIP_FOLLOW_FROM that the hips rise by, and
  *  the gentler lead and lag (s) they follow it with. */
 const HIP_FOLLOW = 1;
@@ -336,14 +340,16 @@ function popPitch(f: Frame, spec: Spec): number {
 type Outcome = 'landed' | FallVariant;
 /** How far each foot (left, right) is lifted, along its sole's up, off the
  *  physics' placement. */
-type Tuck = readonly [number, number];
+export type Tuck = readonly [number, number];
 
+/** The rider at frame `f`; `impact` (0 → 1) is how hard a drop's landing is hitting them now (stage/downhill.ts). */
 export function solveRig(
   f: Frame,
   spec: Spec,
   mechanics: RiderMechanics,
   skateStyle: SkateStyle,
   outcome: Outcome = 'landed',
+  impact = 0,
 ): Rig {
   const track = tuckTrack(spec, mechanics, skateStyle, outcome);
   const nose = mechanics.noseFoot === 'left';
@@ -357,22 +363,26 @@ export function solveRig(
   // than a foot, so the hips follow a gentler version of the tuck.
   const [ha, hb] = tuckAt(track, f.t, HIP_LEAD, HIP_LAG);
   const jumpUp = softCap(HIP_FOLLOW * Math.max(0, Math.max(ha, hb) * down - HIP_FOLLOW_FROM), HIP_FOLLOW_MAX / 2, HIP_FOLLOW_MAX);
-  return poseRig(f, spec, mechanics, skateStyle, outcome, tuck, jumpUp);
+  return poseRig(f, spec, mechanics, skateStyle, outcome, tuck, jumpUp, impact);
 }
 
 // ----- Board tuck -----
 
-interface TuckTrack {
+export interface TuckTrack {
   times: number[];
-  /** Per foot (nose, tail): how far it must lift to clear the board at each time. */
+  /** Per foot: how far it must lift to clear the board at each time. */
   need: [number[], number[]];
+  /** Per time, if set: the window (from, to) the feet may be off the deck in
+   *  for it. The lift eases in and back down inside it, quicker if it must. */
+  within?: ReadonlyArray<readonly [number, number]>;
 }
 
 const TUCK_TRACKS = new Map<string, TuckTrack>();
 
 /**
- * Measure, once per trick, where the flight would put the board
- * through each foot, and how far that foot must lift to clear it.
+ * Measure where the board passes through each foot of the rider posed at
+ * `times` (`pose(k, tuck)`: the rider at times[k], each foot, left and right,
+ * lifted by `tuck`), and how far that foot must lift to clear it.
  *
  * Lifting a foot ahead of one moment can carry it into the board at another
  * (a rolling, pitched deck has parts above the foot too), and a shoe can
@@ -380,40 +390,25 @@ const TUCK_TRACKS = new Map<string, TuckTrack>();
  * moment is posed again with the tuck it actually gets, and wherever the
  * shoe is still in the board, or the leg is, that foot lifts further. Extra
  * lift for a leg that never comes clear is dropped: it would only look
- * worse. The wrap foot of an impossible is left out: the board is posed
- * around it (wrapBoard), so it clears it by construction.
+ * worse. A foot that isn't `free` is left where it is.
  */
-function tuckTrack(spec: Spec, mechanics: RiderMechanics, style: SkateStyle, outcome: Outcome): TuckTrack {
-  // Regular and goofy are mirror images, a slam or bail flies the same
-  // flight as a landing, and the pop's height lifts board and rider alike:
-  // one track serves them all, kept by foot role (nose, tail) rather than
-  // by anatomical side.
-  const roles = { pop: mechanics.popFoot === mechanics.noseFoot, flick: mechanics.flickFoot === mechanics.noseFoot };
-  const key = JSON.stringify([spec, roles, style.rotationSpeed, style.flickStrength, outcome === 'shank']);
-  const known = TUCK_TRACKS.get(key);
-  if (known) return known;
-  const noseFirst = mechanics.noseFoot === 'left';
-  const landed = outcome === 'landed';
-  const free = (leg: LegRig) => spec.roll === 0 || leg.side !== mechanics.popFoot;
-  const track: TuckTrack = { times: [], need: [[], []] };
-  const frames: Frame[] = [];
-  for (let k = 0; k <= TUCK_SAMPLES; k++) {
-    const t = ROLL_IN + (FLIP_T * k) / TUCK_SAMPLES;
-    track.times.push(t);
-    frames.push(computeFrame(t, spec, landed, landed ? 'slam' : outcome, 0.65, style));
-    track.need[0].push(0);
-    track.need[1].push(0);
-  }
-  const legExtra = frames.map(() => [0, 0]);
-  const legStuck = frames.map(() => [false, false]);
+export function measureTuck(
+  times: number[],
+  pose: (k: number, tuck: Tuck) => Rig,
+  free: (leg: LegRig) => boolean = () => true,
+  within?: TuckTrack['within'],
+): TuckTrack {
+  const track: TuckTrack = { times, need: [times.map(() => 0), times.map(() => 0)], within };
+  const legExtra = times.map(() => [0, 0]);
+  const legStuck = times.map(() => [false, false]);
   // Moments to check: all of them, then only those near a change.
-  let check = frames.map(() => true);
+  let check = times.map(() => true);
   for (let pass = 0; pass < TUCK_PASSES && check.some(Boolean); pass++) {
-    const changed = frames.map(() => false);
-    frames.forEach((f, k) => {
+    const changed = times.map(() => false);
+    times.forEach((t, k) => {
       if (!check[k]) return;
-      const tuck = tuckAt(track, f.t, TUCK_LEAD, TUCK_LAG);
-      const rig = poseRig(f, spec, mechanics, style, landed ? 'landed' : outcome, tuck);
+      const tuck = tuckAt(track, t, TUCK_LEAD, TUCK_LAG);
+      const rig = pose(k, tuck);
       rig.legs.forEach((leg, i) => {
         if (!free(leg)) return;
         const left = soleClearance(rig.board, leg.shoe, leg.shoe.up);
@@ -425,11 +420,41 @@ function tuckTrack(spec: Spec, mechanics: RiderMechanics, style: SkateStyle, out
         changed[k] = true;
       });
     });
-    check = track.times.map((t) => track.times.some((u, j) => changed[j] && u - t < TUCK_LEAD && t - u < TUCK_LAG));
+    check = times.map((t) => times.some((u, j) => changed[j] && u - t < TUCK_LEAD && t - u < TUCK_LAG));
   }
   legStuck.forEach((stuck, k) => stuck.forEach((s, i) => { if (s) track.need[i][k] -= legExtra[k][i]; }));
+  return track;
+}
+
+/**
+ * Measure, once per trick, where the flight would put the board through
+ * each foot (measureTuck). The wrap foot of an impossible is left out: the
+ * board is posed around it (wrapBoard), so it clears it by construction.
+ */
+function tuckTrack(spec: Spec, mechanics: RiderMechanics, style: SkateStyle, outcome: Outcome): TuckTrack {
+  // Regular and goofy are mirror images, a slam or bail flies the same
+  // flight as a landing, and the pop's height lifts board and rider alike:
+  // one track serves them all, kept by foot role (nose, tail) rather than
+  // by anatomical side.
+  const roles = { pop: mechanics.popFoot === mechanics.noseFoot, flick: mechanics.flickFoot === mechanics.noseFoot };
+  const key = JSON.stringify([spec, roles, style.rotationSpeed, style.flickStrength, outcome === 'shank']);
+  const known = TUCK_TRACKS.get(key);
+  if (known) return known;
+  const landed = outcome === 'landed';
+  const times: number[] = [];
+  const frames: Frame[] = [];
+  for (let k = 0; k <= TUCK_SAMPLES; k++) {
+    const t = ROLL_IN + (FLIP_T * k) / TUCK_SAMPLES;
+    times.push(t);
+    frames.push(computeFrame(t, spec, landed, landed ? 'slam' : outcome, 0.65, style));
+  }
+  const track = measureTuck(
+    times,
+    (k, tuck) => poseRig(frames[k], spec, mechanics, style, landed ? 'landed' : outcome, tuck),
+    (leg) => spec.roll === 0 || leg.side !== mechanics.popFoot,
+  );
   // Store nose foot first.
-  if (!noseFirst) track.need.reverse();
+  if (mechanics.noseFoot !== 'left') track.need.reverse();
   if (TUCK_TRACKS.size >= 512) TUCK_TRACKS.clear();
   TUCK_TRACKS.set(key, track);
   return track;
@@ -443,13 +468,17 @@ export function boardTuck(spec: Spec, mechanics: RiderMechanics, style: SkateSty
 
 /** Each foot's lift at `t`: up `lead` seconds ahead of every moment it
  *  needs the room, and back down over `lag` after, eased so it never jumps. */
-function tuckAt(track: TuckTrack, t: number, lead: number, lag: number): Tuck {
+export function tuckAt(track: TuckTrack, t: number, lead = TUCK_LEAD, lag = TUCK_LAG): Tuck {
   const lift = (need: number[]) => {
     let best = 0;
     for (let k = 0; k < need.length; k++) {
       if (need[k] <= best) continue;
       const ahead = track.times[k] - t;
-      const ease = ahead >= 0 ? 1 - smoothstep(ahead / lead) : 1 - smoothstep(-ahead / lag);
+      const window = track.within?.[k];
+      if (window && (t < window[0] || t > window[1])) continue;
+      const before = window ? Math.min(lead, track.times[k] - window[0]) : lead;
+      const after = window ? Math.min(lag, window[1] - track.times[k]) : lag;
+      const ease = ahead === 0 ? 1 : ahead > 0 ? 1 - smoothstep(ahead / before) : 1 - smoothstep(-ahead / after);
       best = Math.max(best, need[k] * ease);
     }
     return best;
@@ -513,6 +542,7 @@ function poseRig(
   outcome: Outcome,
   tuck: Tuck,
   jumpUp = 0,
+  impact = 0,
 ): Rig {
   const landed = outcome === 'landed';
   // Slams and bails come down with the trick's rotation complete, but the
@@ -753,10 +783,13 @@ function poseRig(
   const hipY = (f.board.y - hip.overDeck) * (1 - fallBlend) + f.body.y * fallBlend;
   const posture = 1 - fallBlend;
   const squat = clamp01((RIDE_HEIGHT - hip.overDeck) / (RIDE_HEIGHT - SQUAT_FLOOR));
-  const leanDeg = (LEAN_REST + LEAN_SQUAT * squat) * posture;
+  // A drop's hard landing (`impact`, 0 → 1) folds the rider past the squat:
+  // chest further over the knees, hips further back to keep the weight over
+  // the feet.
+  const leanDeg = (LEAN_REST + LEAN_SQUAT * squat + LEAN_IMPACT * impact) * posture;
   const hipShift = add3(
     scale3(centerOffset, posture),
-    boardSpaceDir({ x: 0, y: 0, z: -toeDir * HIP_BACK * squat * posture }),
+    boardSpaceDir({ x: 0, y: 0, z: -toeDir * HIP_BACK * (squat + HIP_BACK_IMPACT * impact) * posture }),
   );
   const anchor: V3 = add3({ x: f.body.x, y: hipY, z: 0 }, hipShift);
 
@@ -811,6 +844,7 @@ function poseRig(
     let pose = mixPose(ARM_RIDE[role], ARM_LOAD[role], hip.load);
     pose = mixPose(pose, ARM_AIR[role], hip.air);
     pose = mixPose(pose, ARM_LAND[role], press);
+    pose = mixPose(pose, ARM_BRACE[role], impact);
     pose = { out: pose.out + awkward * 10 * hip.air, swing: pose.swing + sway, elbow: pose.elbow + awkward * 8 * hip.air };
     const [upper, fore] = armDirs(pose, sideZ as 1 | -1);
     const shoulderL: V3 = { x: SHOULDER.x, y: SHOULDER.y, z: sideZ * SHOULDER.z };
@@ -833,7 +867,7 @@ function poseRig(
   // ----- Head -----
   // The head rides on the leaning torso but only takes part of the lean, and
   // nods down to watch the board while it's in the air.
-  const lookDown = (spec.flips || spec.yaw || spec.roll ? LOOK_DOWN_TRICK : LOOK_DOWN_OLLIE) * hip.air;
+  const lookDown = (spec.flips || spec.yaw || spec.roll ? LOOK_DOWN_TRICK : LOOK_DOWN_OLLIE) * hip.air + LOOK_DOWN_IMPACT * impact;
   const headLean = leanX * (1 - HEAD_STEADY);
   const headRelYaw = headYawDeg - oriented.bodyYawDeg - restingBodyYaw;
   const headDir = (d: V3) =>

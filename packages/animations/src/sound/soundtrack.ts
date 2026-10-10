@@ -1,11 +1,13 @@
+import { grindSpeed, travel } from '../motion/grind';
 import { FLIP_T, ROLL_IN } from '../motion/trick';
+import { stairSpeed } from '../sets/elToro/stairs';
 import type { StagePlan } from '../stage/stage';
 
 /**
  * What an attempt sounds like, on its own clock: the moments that make a
  * sound — the tail snapping off the ground, the board meeting the rail and
  * popping off it, the wheels coming back down — and how loud the wheels roll
- * and the rail scrapes at any moment. Worked out from the stage plan alone,
+ * and the rail scrapes at any moment, and how fast the wheels are going. Worked out from the stage plan alone,
  * so the sound keeps time with the picture at any speed; skateSounds.ts
  * plays it, live or into a video.
  */
@@ -31,6 +33,12 @@ export interface Soundtrack {
   roll(t: number): number;
   /** 0 → 1: how hard the rail scrapes at clock time t. */
   grind(t: number): number;
+  /**
+   * How fast the wheels roll at clock time t, as a share of cruising on flat
+   * ground: quicker into a big set, picking up speed down a roll-in or a
+   * handrail, a riderless board slowing to a stop.
+   */
+  speed(t: number): number;
 }
 
 /** Landing weights off the stairs' nine feet and the bottom of El Toro's handrail. */
@@ -51,6 +59,20 @@ function wheels(pop: number, down: number, ridden: boolean) {
     return ridden ? 1 : RIDERLESS_ROLL * Math.exp(-(t - down) / RIDERLESS_STOP);
   };
 }
+
+/**
+ * The wheels' speed, from the rider's (world units a second) as a share of
+ * cruising on flat ground; from `down`, a riderless board slows as it fades.
+ */
+function rolling(speed: (t: number) => number, down: number, ridden: boolean) {
+  return (t: number) => {
+    const share = speed(t) / CRUISE;
+    return ridden || t < down ? share : share * Math.exp(-(t - down) / RIDERLESS_STOP);
+  };
+}
+
+/** World units a second rolling on flat ground. */
+const CRUISE = travel(1);
 
 const quiet = () => 0;
 
@@ -77,6 +99,7 @@ export function soundtrackFor(stage: StagePlan): Soundtrack {
       slide: grind.spec.slide,
       roll: wheels(grind.pop, down, grind.fail == null),
       grind: (t) => (t >= grind.lockAt && t < leave ? 1 : 0),
+      speed: rolling((t) => grindSpeed(grind, t), down, grind.fail == null),
     };
   }
   const pop = stairs?.pop ?? ROLL_IN;
@@ -90,6 +113,7 @@ export function soundtrackFor(stage: StagePlan): Soundtrack {
     slide: false,
     roll: wheels(pop, down, landed),
     grind: quiet,
+    speed: rolling(stairs ? (t) => stairSpeed(stairs, t) : () => CRUISE, down, landed),
   };
 }
 

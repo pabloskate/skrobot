@@ -118,7 +118,7 @@ function wheelAssembly(): BufferGeometry {
   return a.finish();
 }
 
-/** The humanoid's board, sharing the exact motion and ground-contact contract. */
+/** The realistic human's board, sharing the exact motion and ground-contact contract. */
 export class RealisticBoard3D {
   readonly group = new Group();
   private readonly material = realisticBoardMaterial();
@@ -126,7 +126,7 @@ export class RealisticBoard3D {
   private disposed = false;
 
   constructor() {
-    this.group.name = 'humanoid-realistic-board';
+    this.group.name = 'realistic-board';
     this.group.matrixAutoUpdate = false;
     const body = boardAssembly();
     const wheel = wheelAssembly();

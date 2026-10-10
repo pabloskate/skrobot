@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SCENE_CAMERA, FLIP_T, FOOT, LAND_T, ROLL_IN, SCENE_ORBIT_BOUNDS, SCENE_ZOOM, SKATERS, TRICK_BASES, grindSpecFor, grindTimelineFor, setInfo, stairTimeline } from '@skrobot/animations';
+import { DEFAULT_SCENE_CAMERA, FLIP_T, FOOT, LAND_T, ROLL_IN, SCENE_ORBIT_BOUNDS, SCENE_ZOOM, SKATERS, TRICK_BASES, grindSpecFor, grindTimelineFor, setInfo, setTimeline, stairTimeline } from '@skrobot/animations';
 import { TRICK_BY_ID } from '@/features/tricks';
 import {
   CAMERA_PRESETS,
@@ -18,6 +18,7 @@ import {
   cameraPresetsFor,
   grindMatchesSearch,
   outEndsFor,
+  picksObstacle,
   sceneCamera,
   sceneTripod,
   searchFromState,
@@ -198,14 +199,39 @@ describe('Trick Explorer spots', () => {
     const boardslide = (side: 'Frontside' | 'Backside', patch: Partial<ExplorerState> = {}) =>
       grindState({ set: 'el-toro', grind: 'Boardslide', side, ...patch });
     expect(railLine(boardslide('Backside'))).toBe('center');
-    // Going down the stairs, a regular rider's backside boardslide takes the right rail, a frontside one the left.
-    expect(railLine(boardslide('Backside', { rail: 'side' }))).toBe('right');
-    expect(railLine(boardslide('Frontside', { rail: 'side' }))).toBe('left');
-    expect(railLine(boardslide('Backside', { rail: 'side', rider: 'goofy' }))).toBe('left');
+    // Going down the stairs, a regular rider's frontside boardslide (chest to the rail coming in) takes the right rail, a backside one the left.
+    expect(railLine(boardslide('Backside', { rail: 'side' }))).toBe('left');
+    expect(railLine(boardslide('Frontside', { rail: 'side' }))).toBe('right');
+    expect(railLine(boardslide('Backside', { rail: 'side', rider: 'goofy' }))).toBe('right');
     // No rail where there's no handrail, or no grind.
     expect(railLine(boardslide('Backside', { rail: 'side', set: 'plaza' }))).toBeNull();
     expect(railLine(flatState({ set: 'el-toro', rail: 'side' }))).toBeNull();
-    expect(trickSteps(boardslide('Backside', { rail: 'side' })).map((step) => step.detail).join(' ')).toMatch(/right rail on your toeside/);
+    expect(trickSteps(boardslide('Backside', { rail: 'side' })).map((step) => step.detail).join(' ')).toMatch(/left rail on your heelside/);
+  });
+
+  it('grinds one of the Miami triangle’s edges, the one the trick comes in toward', () => {
+    const at = (grind: string, side: 'Frontside' | 'Backside', patch: Partial<ExplorerState> = {}) =>
+      grindState({ set: 'miami-triangle', grind, side, ...patch });
+    expect(stateFromSearch('?grind=boardslide&set=miami-triangle')).toMatchObject({ mode: 'grinds', set: 'miami-triangle' });
+    // Coming in from outside the edge with the slab past it: a regular rider's frontside 50-50 takes the left edge.
+    expect(railLine(at('50-50 Grind', 'Frontside'))).toBe('left');
+    expect(railLine(at('50-50 Grind', 'Backside'))).toBe('right');
+    expect(railLine(at('50-50 Grind', 'Frontside', { rider: 'goofy' }))).toBe('right');
+    // A boardslide is named for its approach, as a bluntslide is: frontside comes in toeside.
+    expect(railLine(at('Boardslide', 'Frontside'))).toBe('left');
+    expect(railLine(at('Bluntslide', 'Frontside'))).toBe('left');
+    expect(trickSteps(at('Boardslide', 'Frontside')).map((step) => step.detail).join(' ')).toMatch(/left edge on your toeside/);
+    // At El Toro too: toeside, the right rail going down.
+    expect(railLine(grindState({ set: 'el-toro', grind: 'Boardslide', side: 'Frontside', rail: 'side' }))).toBe('right');
+    // There's nothing to choose: the rail picker's side has no say.
+    expect(railLine(at('50-50 Grind', 'Frontside', { rail: 'side' }))).toBe('left');
+    const steps = trickSteps(at('50-50 Grind', 'Frontside')).map((step) => step.detail).join(' ');
+    expect(steps).toMatch(/left edge on your toeside/);
+    expect(steps).toMatch(/low corner/);
+    expect(steps).not.toMatch(/\brail\b|\bbar\b/);
+    // The timeline is the grind across the gap and down the edge.
+    const timeline = timelineFor(at('50-50 Grind', 'Frontside'), undefined);
+    expect(timeline.duration).not.toBe(timelineFor(at('50-50 Grind', 'Frontside', { set: 'el-toro' }), undefined).duration);
   });
 
   it('links to the side rail, and leaves the center one out of the link', () => {
@@ -352,15 +378,13 @@ describe('Trick Explorer links', () => {
       grindState({ grind: 'Lipslide', camera: { yaw: -10, pitch: 20, lens: 1.1 }, zoom: SCENE_ZOOM.min }),
       flatState({ trick: 'Kickflip', set: 'plaza' }),
       grindState({ grind: 'Crooked Grind', set: 'waterfront', camera: 'follow' }),
-      flatState({ trick: 'Kickflip', skater: 'human' }),
       flatState({ trick: 'Kickflip', skater: 'realistic', rider: 'goofy', set: 'sunset-car-wash' }),
       grindState({ grind: 'Crooked Grind', skater: 'realistic', into: 'Kickflip', out: { base: 'Heelflip', end: 'nose' } }),
-      grindState({ grind: 'Lipslide', side: 'Backside', skater: 'human', set: 'plaza' }),
-      flatState({ trick: 'Kickflip', skater: 'humanoid', set: 'el-toro', rider: 'goofy', stance: 'fakie' }),
+      grindState({ grind: 'Lipslide', side: 'Backside', skater: 'realistic', set: 'plaza' }),
+      flatState({ trick: 'Kickflip', skater: 'realistic', set: 'el-toro', rider: 'goofy', stance: 'fakie' }),
       flatState({ set: 'el-toro', camera: 'bottom-center' }),
       flatState({ set: 'el-toro', camera: 'bottom-right', stance: 'fakie' }),
       flatState({ set: 'el-toro', camera: { yaw: 145.5, pitch: 0, lens: 1.1 } }),
-      grindState({ grind: 'Crooked Grind', skater: 'humanoid', into: 'Kickflip', out: { base: 'Heelflip', end: 'nose' } }),
     ];
     for (const state of states) expect(stateFromSearch(searchFromState(state)), searchFromState(state)).toEqual(state);
   });
@@ -373,21 +397,23 @@ describe('Trick Explorer links', () => {
     expect(stateFromSearch('?grind=50-50-grind&out=frontside-flip').out).toEqual({ base: 'Frontside Flip', end: 'tail' });
     expect(searchFromState({ ...DEFAULT_STATE, zoom: 1.5 })).toBe('?grind=50-50-grind&zoom=1.5');
     expect(searchFromState({ ...DEFAULT_STATE, set: 'plaza' })).toBe('?grind=50-50-grind&set=plaza');
-    expect(searchFromState({ ...DEFAULT_STATE, skater: 'human' })).toBe('?grind=50-50-grind&skater=human');
-    expect(searchFromState({ ...DEFAULT_STATE, skater: 'humanoid' })).toBe('?grind=50-50-grind&skater=humanoid');
+    expect(searchFromState({ ...DEFAULT_STATE, skater: 'realistic' })).toBe('?grind=50-50-grind&skater=realistic');
   });
 
   it('opens with the robot, and accepts every selectable skater in shared links', () => {
     expect(DEFAULT_STATE.skater).toBe('robot');
     expect(stateFromSearch('?grind=lipslide').skater).toBe('robot');
-    expect(SKATERS.map((option) => option.id)).toContain('humanoid');
+    expect(SKATERS.map((option) => option.id)).toEqual(['robot', 'realistic', 'alien']);
     for (const { id } of SKATERS) {
       expect(stateFromSearch(`?trick=heelflip&skater=${id}`).skater).toBe(id);
     }
-    expect(stateFromSearch('?skater=alien').skater).toBe('robot');
+    expect(stateFromSearch('?skater=ghost').skater).toBe('robot');
+    // Links from before the illustrated human and humanoid were retired open with the robot.
+    expect(stateFromSearch('?trick=heelflip&skater=human').skater).toBe('robot');
+    expect(stateFromSearch('?trick=heelflip&skater=humanoid').skater).toBe('robot');
   });
 
-  it.each(['humanoid', 'realistic'] as const)('keeps %s selected when changing spots, modes, grinds, and random tricks', (skater) => {
+  it.each(['realistic', 'alien'] as const)('keeps %s selected when changing spots, modes, grinds, and random tricks', (skater) => {
     const initial = flatState({ skater, trick: 'Heelflip' });
     const onStairs = withSet(initial, 'el-toro');
     const onPlaza = withSet(onStairs, 'plaza');
@@ -476,8 +502,8 @@ describe('Trick Explorer video', () => {
 });
 
 describe('classic spot selection', () => {
-  it('opens bank and block spots on gap tricks, including old grind URLs', () => {
-    for (const set of ['wallenberg', 'sunset-car-wash'] as const) {
+  it('opens gap-only landmarks on gap tricks, including old grind URLs', () => {
+    for (const set of ['wallenberg', 'sunset-car-wash', 'lyon-25', 'leap-of-faith'] as const) {
       expect(withSet(grindState(), set)).toMatchObject({ set, mode: 'flatground' });
       expect(withMode(flatState({ set }), 'grinds').mode).toBe('flatground');
       expect(stateFromSearch(`?set=${set}`).mode).toBe('flatground');
@@ -489,8 +515,49 @@ describe('classic spot selection', () => {
     expect(railLine(grindState({ set: 'hollywood-high', rail: 'side' }))).toBe('center');
   });
 
+  it('lets a flatground trick at Hollywood go over the fence instead of down the stairs, and shares it', () => {
+    const over = flatState({ set: 'hollywood-high', obstacle: 'fence' });
+    expect(picksObstacle(over)).toBe(true);
+    expect(searchFromState(over)).toMatch(/obstacle=fence/);
+    expect(stateFromSearch(searchFromState(over))).toEqual(over);
+    // Down the stairs is the default, and left out of links.
+    expect(DEFAULT_STATE.obstacle).toBe('stairs');
+    expect(searchFromState({ ...over, obstacle: 'stairs' })).not.toMatch(/obstacle=/);
+    // The fence's flight is its own.
+    expect(timelineFor(over, undefined).duration).toBe(setTimeline('hollywood-high', undefined, true, 'fence')!.end);
+    expect(timelineFor(over, undefined).duration).not.toBe(timelineFor({ ...over, obstacle: 'stairs' }, undefined).duration);
+    // Grinds ride the rail; spots with one way down offer no choice.
+    expect(picksObstacle({ ...over, mode: 'grinds' })).toBe(false);
+    expect(searchFromState({ ...grindState({ set: 'hollywood-high' }), obstacle: 'fence' })).not.toMatch(/obstacle=/);
+    for (const set of ['el-toro', 'wallenberg', 'waterfront', 'lyon-25', 'leap-of-faith'] as const) {
+      expect(picksObstacle(flatState({ set }))).toBe(false);
+      expect(withSet(over, set).obstacle).toBe('stairs');
+      expect(stateFromSearch(`?trick=kickflip&set=${set}&obstacle=fence`).obstacle).toBe('stairs');
+    }
+    expect(withSet(withSet(over, 'hollywood-high'), 'hollywood-high').obstacle).toBe('fence');
+    expect(stateFromSearch('?trick=kickflip&set=hollywood-high&obstacle=wall').obstacle).toBe('stairs');
+  });
+
+  it('lets a flatground trick at Miami go over the triangle instead of onto it, and shares it', () => {
+    const over = flatState({ set: 'miami-triangle', obstacle: 'triangle' });
+    expect(picksObstacle(over)).toBe(true);
+    expect(searchFromState(over)).toMatch(/obstacle=triangle/);
+    expect(stateFromSearch(searchFromState(over))).toEqual(over);
+    // The bank is the default line, and left out of links.
+    expect(searchFromState({ ...over, obstacle: 'stairs' })).not.toMatch(/obstacle=/);
+    // The flight over the triangle is its own.
+    expect(timelineFor(over, undefined).duration).toBe(setTimeline('miami-triangle', undefined, true, 'triangle')!.end);
+    expect(timelineFor(over, undefined).duration).not.toBe(timelineFor({ ...over, obstacle: 'stairs' }, undefined).duration);
+    // The fence is Hollywood's and the triangle is Miami's: neither carries over.
+    expect(stateFromSearch('?trick=kickflip&set=miami-triangle&obstacle=fence').obstacle).toBe('stairs');
+    expect(withSet(flatState({ set: 'hollywood-high', obstacle: 'fence' }), 'miami-triangle').obstacle).toBe('stairs');
+    expect(stateFromSearch('?trick=kickflip&set=hollywood-high&obstacle=triangle').obstacle).toBe('stairs');
+    expect(withSet(over, 'hollywood-high').obstacle).toBe('stairs');
+    expect(withSet(withSet(over, 'miami-triangle'), 'miami-triangle').obstacle).toBe('triangle');
+  });
+
   it('shares all new spots and offers their stationary filmers', () => {
-    for (const set of ['hollywood-high', 'wallenberg', 'sunset-car-wash'] as const) {
+    for (const set of ['hollywood-high', 'wallenberg', 'sunset-car-wash', 'lyon-25', 'leap-of-faith', 'miami-triangle'] as const) {
       const state = flatState({ set, camera: 'tripod-side', rider: 'goofy', stance: 'fakie' });
       expect(stateFromSearch(searchFromState(state))).toEqual(state);
       expect(cameraPresetsFor(state).filter(p => p.tripod)).toHaveLength(3);

@@ -6,7 +6,7 @@ import { resolveSkateStyle } from '../motion/style';
 import { useTrickPlayback } from './useTrickPlayback';
 import { randomFallVariant, randomShankProgress, type FallVariant } from '../motion/trick';
 import { DEFAULT_SCENE_CAMERA, type SceneCamera, type TripodId } from '../camera/camera';
-import { setInfo, type RailChoice, type StageSet } from '../sets/sets';
+import { setInfo, type Obstacle, type RailChoice, type StageSet } from '../sets/sets';
 import type { LeadIn } from '../types';
 import type { Skater } from '../riders/skaters';
 import type { SceneRenderer } from './renderer';
@@ -57,7 +57,9 @@ interface Props {
   set?: StageSet;
   /** Where the set has several handrails (El Toro): the center one, or the side one the grind's approach takes. */
   rail?: RailChoice;
-  /** Who rides: the robot (its look from `robot`), illustrated human, realistic human, or detailed humanoid. */
+  /** Where the set has several ways down (Hollywood): what a gap trick goes over, the stairs or the fence. */
+  obstacle?: Obstacle;
+  /** Who rides: the robot (its look from `robot`), the realistic human, or the alien. */
   skater?: Skater;
   /** Play the attempt's sounds while its clock runs: the pop, the wheels, a grind or slide, the landing. Off by default. */
   sound?: boolean;
@@ -85,6 +87,7 @@ export default function TrickScene3D({
   set = 'plaza',
   skater = 'robot',
   rail = 'center',
+  obstacle = 'stairs',
   sound = false,
 }: Props) {
   const idBase = useId().replace(/:/g, '');
@@ -94,10 +97,10 @@ export default function TrickScene3D({
   const [shankProgress] = useState(randomShankProgress);
   const fall = forcedFall ?? fallVariant ?? randomizedFall;
   const stage = useMemo(
-    () => planStage(trick, { landed, riderStance, style, fall, shankProgress, skater, set, rail }),
+    () => planStage(trick, { landed, riderStance, style, fall, shankProgress, skater, set, rail, obstacle }),
     // The trick's name and id don't change what is skated.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [robot, trick.base, trick.stance, landed, riderStance, style, fall, shankProgress, skater, set, rail],
+    [robot, trick.base, trick.stance, landed, riderStance, style, fall, shankProgress, skater, set, rail, obstacle],
   );
   const {
     time, firstRun, isPlaying, staticTime, speedToggleVisible, effectivePlaybackRate,
@@ -181,6 +184,7 @@ export default function TrickScene3D({
       data-set={set}
       data-skater={skater}
       data-rail={stage.rail?.line}
+      data-obstacle={stage.obstacle ?? undefined}
       data-rider-stance={riderStance}
       data-nose-foot={stage.mechanics.noseFoot}
       data-toe-side={stage.mechanics.orientationSign}

@@ -52,12 +52,6 @@ interface GrindDef {
   feet: readonly [number, number];
   /** Side assumed when the name doesn't give one. */
   side: GrindSide;
-  /**
-   * Named for the way the body turns onto the bar, not the side it comes in
-   * on: skaters call the boardslide that comes in with the bar on the
-   * toeside, nose over and back to the way down, a backside boardslide.
-   */
-  namedByTurn?: true;
 }
 
 /**
@@ -85,13 +79,32 @@ const GRINDS: Record<string, GrindDef> = {
   'Salad Grind': { contact: 'tail truck', yaw: -32, pitch: -13, roll: 0, feet: [14, -30], side: 'backside' },
   'Suski Grind': { contact: 'tail truck', yaw: 32, pitch: -13, roll: 0, feet: [14, -30], side: 'frontside' },
   'Willy Grind': { contact: 'nose truck', yaw: 24, pitch: -22, roll: -8, feet: [29, -16], side: 'backside' },
-  Boardslide: { contact: 'middle', yaw: 90, pitch: 0, roll: 0, feet: [22, -22], side: 'backside', namedByTurn: true },
+  Boardslide: { contact: 'middle', yaw: 90, pitch: 0, roll: 0, feet: [22, -22], side: 'backside' },
   Lipslide: { contact: 'middle', yaw: -90, pitch: 0, roll: 0, feet: [22, -22], side: 'frontside' },
   // The kick lies flat on the bar and the rest of the board angles up off it.
   Noseslide: { contact: 'nose', yaw: 90, pitch: KICK_DEG, roll: 0, feet: [32, -12], side: 'backside' },
   Tailslide: { contact: 'tail', yaw: -90, pitch: -KICK_DEG, roll: 0, feet: [12, -32], side: 'frontside' },
   Bluntslide: { contact: 'tail blunt', yaw: 90, pitch: -BLUNT_DEG, roll: 0, feet: [20, -34], side: 'backside' },
   'Noseblunt Slide': { contact: 'nose blunt', yaw: -90, pitch: BLUNT_DEG, roll: 0, feet: [34, -20], side: 'backside' },
+};
+
+/**
+ * How far short of its lock (degrees of the board's turn) a spin onto the bar
+ * can touch down, the bar's grip finishing the turn. What has to get over the
+ * bar is what rides it: both trucks come down on it together, so a 50-50 is
+ * all but straight; one truck pivots on it a little, the other end in the
+ * air; a deck across it (a board- or lipslide, the trucks either side) or a
+ * kick on it (the trucks never over it) pivots on it freely.
+ */
+const RAIL_FINISH: Record<Contact, number> = {
+  trucks: 8,
+  'tail truck': 15,
+  'nose truck': 15,
+  middle: 30,
+  nose: 30,
+  tail: 30,
+  'tail blunt': 20,
+  'nose blunt': 20,
 };
 
 /** Every grind and slide the stage can put on the bar, in rough order of difficulty. */
@@ -127,6 +140,14 @@ function overBar(edge: number, deg: number): V3 {
 }
 const TAIL_BLUNT = overBar(-BLUNT_EDGE, -BLUNT_DEG);
 const NOSE_BLUNT = overBar(BLUNT_EDGE, BLUNT_DEG);
+/**
+ * A blunt on a ledge (Miami's slab) stands up less than on a bar, 45°: the
+ * back wheels rest on the ledge's top instead of hooking down past a bar,
+ * so the corner sits further down the kick, toward the tail end, and the
+ * tail hangs down outside the edge.
+ */
+const LEDGE_BLUNT_DEG = 45;
+const LEDGE_BLUNT_EDGE = 41;
 
 const BEARINGS: Record<Contact, Bearing> = {
   trucks: { at: { x: 0, y: HANGER_BOTTOM, z: 0 }, lines: [hanger(-WHEEL_X), hanger(WHEEL_X)] },
@@ -138,6 +159,14 @@ const BEARINGS: Record<Contact, Bearing> = {
   'tail blunt': { at: TAIL_BLUNT, lines: [underside(TAIL_BLUNT.x)] },
   'nose blunt': { at: NOSE_BLUNT, lines: [underside(NOSE_BLUNT.x)] },
 };
+
+/** Onto a ledge, a blunt's own stand-up, bearing and pop pivot: on the kick where it meets the ledge's corner. */
+function ledgeBlunt(contact: Contact): { pitch: number; bearing: Bearing; pivot: V3 } | null {
+  if (contact !== 'tail blunt' && contact !== 'nose blunt') return null;
+  const end = contact === 'tail blunt' ? -1 : 1;
+  const at = { x: end * LEDGE_BLUNT_EDGE, y: deckBottomY(end * LEDGE_BLUNT_EDGE), z: 0 };
+  return { pitch: end * LEDGE_BLUNT_DEG, bearing: { at, lines: [underside(at.x)] }, pivot: at };
+}
 
 /**
  * What the board levers off popping out of the grind: the truck it rides
@@ -264,6 +293,11 @@ export interface GrindSpec {
   reversed: boolean;
   /** Pops onto the bar off the nose (nollie). */
   popNose: boolean;
+  /**
+   * Degrees of a spin onto the bar the board can still have to go as it touches down, for the bar to
+   * finish (RAIL_FINISH): as a share of the lock's turn, the angle it came in at unwinding with it.
+   */
+  railFinish: number;
   /** Pops off the end off the nose. */
   exitNose: boolean;
   /** The flatground trick popped into the grind, if any. */
@@ -282,7 +316,7 @@ export interface GrindSpec {
  * out of a grind (see canEnterGrind), or off an end the grind doesn't ride
  * (see exitEndsFor), makes the whole name no grind.
  */
-export function grindSpecFor(trick: Pick<Trick, 'base' | 'stance'>): GrindSpec | null {
+export function grindSpecFor(trick: Pick<Trick, 'base' | 'stance'>, options: { ledge?: boolean } = {}): GrindSpec | null {
   const { entry: entryBase, grind, exit: exitName } = splitGrindBase(trick.base);
   const entry = entryBase == null ? null : hopTrickFor(entryBase, trick.stance);
   if (entryBase != null && !entry) return null;
@@ -296,29 +330,30 @@ export function grindSpecFor(trick: Pick<Trick, 'base' | 'stance'>): GrindSpec |
   // Without a trick out, the board pops off the end it rides, or the tail.
   const exitNose = exitName ? exitName.end === 'nose' : popEnds(def.contact)[0] === 'nose';
   const slide = def.contact !== 'trucks' && !def.contact.endsWith(' truck');
+  const blunt = options.ledge ? ledgeBlunt(def.contact) : null;
   return {
     base: name,
     side,
     stance: trick.stance,
     dir: trick.stance === 'fakie' ? -1 : 1,
     slide,
-    contact: BEARINGS[def.contact],
-    pivot: popPivot(def.contact, exitNose),
+    contact: blunt?.bearing ?? BEARINGS[def.contact],
+    pivot: blunt?.pivot ?? popPivot(def.contact, exitNose),
     yaw: def.yaw,
-    pitch: def.pitch,
+    pitch: blunt?.pitch ?? def.pitch,
     roll: def.roll,
     feet: def.feet,
-    // Grinds and slides are named for the side of the body facing the bar
-    // on the way in, except boardslides, named for the way the body turns: a
-    // frontside boardslide comes in with the bar on the heelside, swings the
-    // nose over and turns the body frontside to face down the bar; a
-    // frontside lipslide comes in toeside, swings the tail over and turns
-    // frontside too. Bluntslides turn like noseslides, noseblunts like
-    // tailslides. After a 180 the side is the one the rider rides it on, so
-    // they rolled in with the bar on the other side.
-    toesideApproach: ((side === 'frontside') !== (def.namedByTurn === true)) !== reversed,
+    // Every grind and slide is named for the side of the body facing the bar
+    // before the pop: frontside comes in with the bar on the toeside,
+    // boardslides included, so a frontside boardslide turns like a frontside
+    // noseslide or bluntslide (nose over, back to the way down) and a
+    // frontside lipslide like a frontside tailslide. After a 180 the side is
+    // the one the rider rides it on, so they rolled in with the bar on the
+    // other side.
+    toesideApproach: (side === 'frontside') !== reversed,
     reversed,
     popNose: trick.stance === 'nollie',
+    railFinish: RAIL_FINISH[def.contact],
     exitNose,
     entry,
     exit,

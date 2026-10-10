@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { TbAlertTriangle, TbCheck, TbDownload } from 'react-icons/tb';
-import type { TrickVideoOptions } from '@skrobot/animations/three/video';
+import type { RenderQuality, TrickVideoOptions } from '@skrobot/animations/three/video';
 import { videoFilename } from './explorer';
+import ExportDialog from './ExportDialog';
 
 type Status =
   | { kind: 'idle' }
@@ -29,12 +30,13 @@ function saveFile(blob: Blob, filename: string) {
 }
 
 /**
- * Download a video of what's on stage: the trick filmed once through, at the
- * stage's speed and camera, then saved as a file. Filming happens off screen
- * and takes a few seconds; pressing again while it runs cancels.
+ * Choose an original or cinematic export after comparing the same pose.
+ * Film the captured scene once through at its speed and camera off screen;
+ * pressing the download button again while filming cancels.
  */
 export default function VideoButton({ video }: { video: Omit<TrickVideoOptions, 'onProgress' | 'signal'> }) {
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
+  const [exportVideo, setExportVideo] = useState<TrickVideoOptions | null>(null);
   const job = useRef<AbortController | null>(null);
 
   useEffect(() => () => job.current?.abort(), []);
@@ -45,7 +47,9 @@ export default function VideoButton({ video }: { video: Omit<TrickVideoOptions, 
     return () => window.clearTimeout(timer);
   }, [status.kind]);
 
-  const film = async () => {
+  const film = async (quality: RenderQuality) => {
+    const capturedVideo = exportVideo ?? video;
+    setExportVideo(null);
     if (job.current) {
       job.current.abort();
       return;
@@ -57,12 +61,16 @@ export default function VideoButton({ video }: { video: Omit<TrickVideoOptions, 
       // The encoder loads only when someone films.
       const { recordTrickVideo } = await import('@skrobot/animations/three/video');
       const blob = await recordTrickVideo({
-        ...video,
+        ...capturedVideo,
+        quality,
+        width: quality === 'cinematic' ? 1920 : 1280,
+        fps: quality === 'cinematic' ? 30 : 60,
         signal: controller.signal,
         onProgress: (progress) => setStatus({ kind: 'filming', progress }),
       });
       controller.signal.throwIfAborted();
-      saveFile(blob, videoFilename(video.trick.name, video.rate ?? 1, blob.type));
+      const filename = videoFilename(capturedVideo.trick.name, capturedVideo.rate ?? 1, blob.type);
+      saveFile(blob, quality === 'cinematic' ? filename.replace(/\.(mp4|webm)$/, '-cinematic.$1') : filename);
       setStatus({ kind: 'saved' });
     } catch (error) {
       if (controller.signal.aborted) setStatus({ kind: 'idle' });
@@ -87,16 +95,19 @@ export default function VideoButton({ video }: { video: Omit<TrickVideoOptions, 
   }[status.kind];
 
   return (
-    <button
-      type="button"
-      className={`explorer-download ${status.kind}`}
-      onClick={film}
-      aria-label={aria}
-      title={status.kind === 'failed' ? aria : undefined}
-      style={{ '--progress': status.kind === 'filming' ? status.progress : 0 } as CSSProperties}
-    >
-      {icon}
-      <span className="explorer-download-label">{label}</span>
-    </button>
+    <>
+      <button
+        type="button"
+        className={`explorer-download ${status.kind}`}
+        onClick={() => { if (job.current) job.current.abort(); else setExportVideo({ ...video }); }}
+        aria-label={aria}
+        title={status.kind === 'failed' ? aria : undefined}
+        style={{ '--progress': status.kind === 'filming' ? status.progress : 0 } as CSSProperties}
+      >
+        {icon}
+        <span className="explorer-download-label">{label}</span>
+      </button>
+    {exportVideo && <ExportDialog video={exportVideo} onClose={() => setExportVideo(null)} onExport={quality => { void film(quality); }} />}
+    </>
   );
 }

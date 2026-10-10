@@ -28,16 +28,22 @@ import type { Rig } from '../../motion/skeleton';
 import type { Expression } from '../look';
 import { toThree, type StageView } from '../../camera/view';
 import type { StageFrame } from '../../stage/stage';
-import { SkaterSolver, type RestBone, type RestSkeleton, type Sole } from './skaterPose';
+import {
+  aroundBone, girthFrame, GIRTH_ALONG, GIRTH_AROUND, LID_FOLLOW, SkaterSolver,
+  type Girth, type LegGirth, type RestBone, type RestSkeleton, type Sole,
+} from './skaterPose';
 import { DeltaMush } from './deltaMush';
 import { TeeDrape } from './teeDrape';
 import {
-  beanieMaterial, eyeMaterial, hairCardMaterial, outfitMaterial, shadowCasterMaterial, shoeMaterial, skinMaterial, sunShadow,
-  SHADOW_SIZE, type Knees,
+  alienEyeMaterial, alienSkinMaterial, beanieMaterial, eyeMaterial, hairCardMaterial, outfitMaterial, shadowCasterMaterial,
+  shoeMaterial, skinMaterial, sunShadow, SHADOW_SIZE, type AlienSkin, type Knees, type SunShadow,
 } from './realisticMaterials';
 
 // Each URL a literal, so bundlers (webpack, Vite) find and ship the file.
-const MODEL = new URL('./assets/skater.glb', import.meta.url).href;
+const MODELS = {
+  skater: new URL('./assets/skater.glb', import.meta.url).href,
+  alien: new URL('./assets/alien.glb', import.meta.url).href,
+} as const;
 const TEXTURES = {
   skin: new URL('./assets/skin.jpg', import.meta.url).href,
   skinNormal: new URL('./assets/skin_normal.jpg', import.meta.url).href,
@@ -63,14 +69,54 @@ export const SKATER_OUTFIT = {
   beanie: '#4b5052',
 } as const;
 
-/** The beanie's knit is laid out round this point (rest pose), from its brim's front edge up. */
-const BEANIE_CENTER: [number, number, number] = [0, 174.6, 6];
-const BEANIE_BRIM = 167.3;
+/** The alien's green. */
+export const ALIEN_SKIN: AlienSkin = { skin: '#7fb062', lips: '#3d6236' };
+
+/**
+ * Who wears the realistic rider's clothes: the skater, or the green alien the
+ * build makes from him (blender/build_skater.py): the same body, rig, tee,
+ * jeans and shoes, with a bare domed head, big black almond eyes, and long
+ * three-fingered hands.
+ */
+export type RealisticCharacter = keyof typeof MODELS;
+
+type Textures = Record<TextureName, Texture>;
+
+interface Character {
+  /** The textures its materials read. */
+  textures: readonly TextureName[];
+  /** The beanie's knit is laid out round this point (rest pose), from its brim's front edge up; none if bareheaded. */
+  beanie?: { center: [number, number, number]; brim: number };
+  skin: (tex: Textures, shadow: SunShadow) => ShaderMaterial;
+  eyes: (tex: Textures, shadow: SunShadow) => ShaderMaterial;
+  /** How far the upper lids follow a look down (SkaterSolver). */
+  lidFollow: number;
+}
+
+const OUTFIT_TEXTURES = ['outfit', 'outfitNormal', 'outfitAO'] as const;
+
+const CHARACTERS: Record<RealisticCharacter, Character> = {
+  skater: {
+    textures: [...OUTFIT_TEXTURES, 'skin', 'skinNormal', 'hair', 'eye', 'brows', 'lashes'],
+    beanie: { center: [0, 174.6, 6], brim: 167.3 },
+    skin: (tex, shadow) => skinMaterial(tex.skin, tex.skinNormal, tex.hair, SKATER_OUTFIT.hair, shadow),
+    eyes: (tex, shadow) => eyeMaterial(tex.eye, shadow),
+    lidFollow: LID_FOLLOW,
+  },
+  alien: {
+    textures: [...OUTFIT_TEXTURES, 'skin', 'skinNormal'],
+    skin: (tex, shadow) => alienSkinMaterial(tex.skin, tex.skinNormal, ALIEN_SKIN, shadow),
+    eyes: (_tex, shadow) => alienEyeMaterial(shadow),
+    // No whites to hide: the lids only hint at a look down, and the big eyes stay open.
+    lidFollow: 0.15,
+  },
+};
 
 /**
  * A realistic skater: a MakeHuman-built adult (CC0), skinned to a full
  * human skeleton and posed every frame from the trick rig by SkaterSolver.
- * The mesh, its rig, and its textures are made by blender/build_skater.py.
+ * The mesh, its rig, and its textures are made by blender/build_skater.py,
+ * which also makes the alien (`character`) from the same body.
  *
  * The body shades itself: before each frame (`prepare`) its parts are
  * drawn from the sun into a small depth map that every material reads.
@@ -105,15 +151,16 @@ export class RealisticHuman3D {
   /** Hip, knee, and ankle bones per leg, left then right. */
   private legBones: [number, number, number][] = [];
 
-  constructor() {
-    this.group.name = 'realistic-human';
+  constructor(readonly character: RealisticCharacter = 'skater') {
+    this.group.name = `realistic-${character}`;
     this.ready = this.load().catch(() => {});
   }
 
   private async load(): Promise<void> {
-    const names = Object.keys(TEXTURES) as TextureName[];
+    const look = CHARACTERS[this.character];
+    const names = look.textures;
     const results = await Promise.allSettled([
-      skaterLoader().loadAsync(MODEL),
+      skaterLoader().loadAsync(MODELS[this.character]),
       ...names.map((name) => new TextureLoader().loadAsync(TEXTURES[name])),
     ]);
     const [model, ...maps] = results;
@@ -131,7 +178,7 @@ export class RealisticHuman3D {
       this.release(model.status === 'fulfilled' ? model.value.scene : null);
       return;
     }
-    const tex = loaded as Record<TextureName, Texture>;
+    const tex = loaded as Textures;
     const scene = model.value.scene;
     scene.updateMatrixWorld(true);
 
@@ -148,11 +195,11 @@ export class RealisticHuman3D {
       this.release(scene);
       return;
     }
-    const rest = restSkeleton(body, shoes);
+    const rest = restSkeleton(body, shoes, meshes.get('outfit'));
     this.bones = body.skeleton.bones;
     this.parents = rest.bones.map((b) => b.parent);
     this.root = Math.max(0, rest.bones.findIndex((b) => b.name === 'root'));
-    this.solver = new SkaterSolver(rest);
+    this.solver = new SkaterSolver(rest, look.lidFollow);
     const soles = rest.soles;
     for (const bone of this.bones) {
       bone.matrixAutoUpdate = false;
@@ -166,12 +213,13 @@ export class RealisticHuman3D {
     this.knees.uKneeR.value.copy(rest.bones[this.legBones[1][1]].head);
     this.knees.uHem.value = floor + 7;
     const shadow = this.shadow;
+    const beanie = look.beanie;
     const make: Record<string, () => ShaderMaterial> = {
-      body: () => skinMaterial(tex.skin, tex.skinNormal, tex.hair, SKATER_OUTFIT.hair, shadow),
-      beanie: () => beanieMaterial(SKATER_OUTFIT.beanie, BEANIE_CENTER, BEANIE_BRIM, shadow),
+      body: () => look.skin(tex, shadow),
+      ...(beanie && { beanie: () => beanieMaterial(SKATER_OUTFIT.beanie, beanie.center, beanie.brim, shadow) }),
       outfit: () => outfitMaterial(tex.outfit, tex.outfitNormal, tex.outfitAO, SKATER_OUTFIT, this.knees, shadow),
       shoes: () => shoeMaterial({ upper: SKATER_OUTFIT.shoe, sole: SKATER_OUTFIT.sole, soleTop: 2.6, floor }, shadow),
-      eyes: () => eyeMaterial(tex.eye, shadow),
+      eyes: () => look.eyes(tex, shadow),
       brows: () => hairCardMaterial(tex.brows, SKATER_OUTFIT.hair, shadow),
       lashes: () => hairCardMaterial(tex.lashes, '#140e0b', shadow),
     };
@@ -312,18 +360,66 @@ export class RealisticHuman3D {
 /** A loader for the skater: its meshes are meshopt-compressed (gltfpack). */
 export const skaterLoader = () => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 
-/** The skeleton at rest (world), and the soles of the shoes, from the loaded skater (its matrices up to date). */
-export function restSkeleton(body: SkinnedMesh, shoes: SkinnedMesh): RestSkeleton {
+/** The skeleton at rest (world), the soles of the shoes, and the jeans round the legs, from the loaded skater (its matrices up to date). */
+export function restSkeleton(body: SkinnedMesh, shoes: SkinnedMesh, outfit?: SkinnedMesh): RestSkeleton {
   const bones = body.skeleton.bones;
   const index = new Map(bones.map((b, i) => [b as Object3D, i]));
-  return {
-    bones: bones.map((bone): RestBone => {
-      const head = new Vector3(), quat = new Quaternion(), scale = new Vector3();
-      bone.matrixWorld.decompose(head, quat, scale);
-      return { name: bone.name, parent: bone.parent ? index.get(bone.parent) ?? -1 : -1, head, quat };
-    }),
-    soles: soleOf(shoes),
+  const rest = bones.map((bone): RestBone => {
+    const head = new Vector3(), quat = new Quaternion(), scale = new Vector3();
+    bone.matrixWorld.decompose(head, quat, scale);
+    return { name: bone.name, parent: bone.parent ? index.get(bone.parent) ?? -1 : -1, head, quat };
+  });
+  return { bones: rest, soles: soleOf(shoes), jeans: outfit ? jeansOf(outfit, rest) : undefined, skinned: skinnedBones(body) };
+}
+
+/** Per bone, whether any vertex of the mesh follows it. */
+function skinnedBones(mesh: SkinnedMesh): boolean[] {
+  const skinned = mesh.skeleton.bones.map(() => false);
+  const index = mesh.geometry.getAttribute('skinIndex');
+  const weight = mesh.geometry.getAttribute('skinWeight');
+  for (let i = 0; i < index.count; i++) {
+    for (let k = 0; k < 4; k++) {
+      if (weight.getComponent(i, k) > 0.01) skinned[index.getComponent(i, k)] = true;
+    }
+  }
+  return skinned;
+}
+
+/** How thick the jeans (the outfit's lower half) are round each thigh and shin, at rest. */
+function jeansOf(outfit: SkinnedMesh, bones: RestBone[]): { L: LegGirth; R: LegGirth } {
+  const position = outfit.geometry.getAttribute('position');
+  const uv = outfit.geometry.getAttribute('uv');
+  const points: Vector3[] = [];
+  for (let i = 0; i < position.count; i++) {
+    if (uv.getY(i) >= 0.5) points.push(new Vector3().fromBufferAttribute(position, i).applyMatrix4(outfit.matrixWorld));
+  }
+  const at = (name: string) => bones.find((b) => b.name.replace(/\./g, '') === name)?.head ?? new Vector3();
+  const forward = new Vector3(0, 0, 1);
+  const girth = (sign: number, head: Vector3, tail: Vector3): Girth => {
+    const frame = girthFrame(head, tail, forward);
+    const reach = Array.from({ length: GIRTH_ALONG }, () => new Array<number>(GIRTH_AROUND).fill(0));
+    for (const p of points) {
+      if (Math.sign(p.x) !== sign) continue;
+      const { t, off, angle } = aroundBone(p, head, frame);
+      if (t < 0 || t >= 1) continue;
+      const row = reach[Math.floor(t * GIRTH_ALONG)];
+      const k = ((Math.round((angle / (2 * Math.PI)) * GIRTH_AROUND) % GIRTH_AROUND) + GIRTH_AROUND) % GIRTH_AROUND;
+      row[k] = Math.max(row[k], off);
+    }
+    // A direction the mesh happens to have no vertex in takes its neighbours' reach;
+    // only a run of them (between the legs at the top) is left without cloth.
+    return reach.map((row) => row.map((r, k) => {
+      if (r > 0) return r;
+      const [before, after] = [row[(k + GIRTH_AROUND - 1) % GIRTH_AROUND], row[(k + 1) % GIRTH_AROUND]];
+      return before > 0 && after > 0 ? (before + after) / 2 : 0;
+    }));
   };
+  // MakeHuman's left is +x.
+  const leg = (s: 'L' | 'R', sign: number): LegGirth => ({
+    thigh: girth(sign, at(`upperleg01${s}`), at(`lowerleg01${s}`)),
+    shin: girth(sign, at(`lowerleg01${s}`), at(`foot${s}`)),
+  });
+  return { L: leg('L', 1), R: leg('R', -1) };
 }
 
 /** Each shoe's sole, from the shoe mesh at rest: its middle underneath, and which way its toe points. */

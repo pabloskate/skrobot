@@ -2,28 +2,30 @@ import { describe, expect, it } from 'vitest';
 import { DoubleSide, Mesh, MeshBasicMaterial, Raycaster, Vector3 } from 'three';
 import { buildHollywoodGeometry } from './hollywood3d';
 import {
-  HOLLYWOOD_BUILDING_FACE, HOLLYWOOD_DROP, HOLLYWOOD_FOOT, HOLLYWOOD_GRADE,
-  HOLLYWOOD_LANE_Z, HOLLYWOOD_LEFT_Z, HOLLYWOOD_RAIL, HOLLYWOOD_RAIL_LINES,
-  HOLLYWOOD_RIGHT_Z, HOLLYWOOD_RISER, HOLLYWOOD_RUN, HOLLYWOOD_STEPS,
-  HOLLYWOOD_TREAD, hollywoodGround,
+  HOLLYWOOD_BUILDING_FACE, HOLLYWOOD_CURB_Z, HOLLYWOOD_DROP, HOLLYWOOD_FAR_CURB_Z,
+  HOLLYWOOD_FOOT, HOLLYWOOD_GRADE, HOLLYWOOD_LANE_Z, HOLLYWOOD_LEFT_Z,
+  HOLLYWOOD_RAIL, HOLLYWOOD_RAIL_LINES, HOLLYWOOD_RIGHT_Z, HOLLYWOOD_RISER,
+  HOLLYWOOD_ROAD_Y, HOLLYWOOD_RUN, HOLLYWOOD_STEPS, HOLLYWOOD_TREAD,
+  hollywoodGround, hollywoodSurface,
 } from './hollywoodLayout';
 
 describe('Hollywood High 16 photograph-derived geometry', () => {
-  it('partitions parking, street, sidewalk and landing into one floor per footprint', () => {
+  it('partitions sidewalk, road, far side and landing into one floor per footprint', () => {
     const built = buildHollywoodGeometry();
     const material = new MeshBasicMaterial({ side: DoubleSide });
     try {
       const mesh = new Mesh(built.ground, material);
       const F = HOLLYWOOD_FOOT, bottom = -HOLLYWOOD_DROP;
-      const floorHeights = [bottom, bottom - 1, bottom - 1.2, bottom + 4];
+      const floorHeights = [bottom, HOLLYWOOD_ROAD_Y];
       const samples = [
-        [-11.37 * F, HOLLYWOOD_LEFT_Z - 9.31 * F, bottom - 1],
-        [-11.37 * F, HOLLYWOOD_LEFT_Z - 16.91 * F, bottom - 1],
-        [-11.37 * F, HOLLYWOOD_LEFT_Z - 17.09 * F, bottom - 1.2],
-        [-11.37 * F, HOLLYWOOD_LEFT_Z - 41.31 * F, bottom - 1.2],
-        [HOLLYWOOD_RUN + 7.31 * F, HOLLYWOOD_LEFT_Z - 41.31 * F, bottom - 1.2],
-        [-11.37 * F, HOLLYWOOD_LEFT_Z - 2.13 * F, bottom + 4],
-        [HOLLYWOOD_RUN + 7.31 * F, HOLLYWOOD_LEFT_Z - 2.13 * F, bottom + 4],
+        // The wide sidewalk past the fence, beside the stairs and the run-up.
+        [-11.37 * F, HOLLYWOOD_LEFT_Z - 6.13 * F, bottom],
+        [7.31 * F, HOLLYWOOD_CURB_Z + 0.61 * F, bottom],
+        // The road, near lane and far, and the far side beyond it.
+        [-11.37 * F, HOLLYWOOD_CURB_Z - 5.31 * F, HOLLYWOOD_ROAD_Y],
+        [HOLLYWOOD_RUN + 7.31 * F, HOLLYWOOD_FAR_CURB_Z + 2.13 * F, HOLLYWOOD_ROAD_Y],
+        [-11.37 * F, HOLLYWOOD_FAR_CURB_Z - 5.17 * F, bottom],
+        // The bottom landing, and where it meets the sidewalk.
         [HOLLYWOOD_RUN + 7.31 * F, HOLLYWOOD_LEFT_Z - 3.91 * F, bottom],
         [HOLLYWOOD_RUN + 7.31 * F, HOLLYWOOD_LEFT_Z + 3.17 * F, bottom],
       ];
@@ -34,6 +36,7 @@ describe('Hollywood High 16 photograph-derived geometry', () => {
         const floors = ray.intersectObject(mesh).filter(hit => floorHeights.some(height => Math.abs(hit.point.y - height) < 0.005));
         expect(floors, `floor at (${x}, ${z})`).toHaveLength(1);
         expect(floors[0].point.y).toBeCloseTo(y, 4);
+        expect(hollywoodSurface(x, z), `surface at (${x}, ${z})`).toBeCloseTo(y, 4);
       }
     } finally {
       material.dispose();

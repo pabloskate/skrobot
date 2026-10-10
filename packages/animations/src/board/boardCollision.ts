@@ -196,7 +196,7 @@ function intersects(a: Convex, b: Convex): boolean {
   return dot3(state.point, state.point) <= EPSILON * EPSILON;
 }
 
-interface BoardModel { origin: V3; axes: V3[]; solids: LocalConvex[] }
+interface BoardModel { origin: V3; axes: V3[]; bounds: Bounds[]; solid(index: number): Convex }
 const BOARD_MODELS = new WeakMap<BoardRig, Map<number, BoardModel>>();
 
 function boardModel(board: BoardRig, downwardSweep: number): BoardModel {
@@ -213,42 +213,41 @@ function boardModel(board: BoardRig, downwardSweep: number): BoardModel {
   });
   const toWorld = (point: V3): V3 => add3(origin,
     add3(add3(scale3(axes[0], point.x), scale3(axes[1], point.y)), scale3(axes[2], point.z)));
-  const solids = BOARD_SOLIDS.map((solid): LocalConvex => {
-    const min = { ...solid.bounds.min };
-    const max = { ...solid.bounds.max };
-    for (const [i, key] of (['x', 'y', 'z'] as const).entries()) {
-      min[key] += Math.min(0, axes[i].y * sweep);
-      max[key] += Math.max(0, axes[i].y * sweep);
-    }
-    return {
-      center: add3(toWorld(solid.center), { x: 0, y: sweep / 2, z: 0 }),
-      // Minkowski sum with a world-down segment; this does not overgrow x/z.
-      support: (direction) => add3(toWorld(solid.support(toLocalDirection(direction))),
-        { x: 0, y: direction.y > 0 ? sweep : 0, z: 0 }),
-      bounds: { min, max },
-    };
-  });
-  const model = { origin, axes, solids };
+  const bounds = BOARD_SOLIDS.map(({ bounds: { min, max } }): Bounds => (sweep ? {
+    min: { x: min.x + Math.min(0, axes[0].y * sweep), y: min.y + Math.min(0, axes[1].y * sweep), z: min.z + Math.min(0, axes[2].y * sweep) },
+    max: { x: max.x + Math.max(0, axes[0].y * sweep), y: max.y + Math.max(0, axes[1].y * sweep), z: max.z + Math.max(0, axes[2].y * sweep) },
+  } : { min, max }));
+  // A solid is put in the world only once something reaches its bounds: most checks never get that far.
+  const solids: (Convex | undefined)[] = [];
+  const solid = (index: number): Convex => solids[index] ??= {
+    center: add3(toWorld(BOARD_SOLIDS[index].center), { x: 0, y: sweep / 2, z: 0 }),
+    // Minkowski sum with a world-down segment; this does not overgrow x/z.
+    support: (direction) => add3(toWorld(BOARD_SOLIDS[index].support(toLocalDirection(direction))),
+      { x: 0, y: direction.y > 0 ? sweep : 0, z: 0 }),
+  };
+  const model = { origin, axes, bounds, solid };
   models.set(sweep, model);
   return model;
 }
 
 function hitsBoard(board: BoardRig, robot: Convex, clearance: number, downwardSweep: number): boolean {
-  const { origin, axes, solids } = boardModel(board, downwardSweep);
+  const { origin, axes, bounds, solid } = boardModel(board, downwardSweep);
   const margin = Math.max(0, clearance);
   const padded: Convex = margin ? {
     center: robot.center,
     support: (direction) => add3(robot.support(direction), scale3(norm3(direction), margin)),
   } : robot;
-  const bounds: Bounds = { min: { ...ZERO }, max: { ...ZERO } };
+  const reach: Bounds = { min: { ...ZERO }, max: { ...ZERO } };
   for (const [i, key] of (['x', 'y', 'z'] as const).entries()) {
-    bounds.min[key] = dot3(sub3(padded.support(scale3(axes[i], -1)), origin), axes[i]);
-    bounds.max[key] = dot3(sub3(padded.support(axes[i]), origin), axes[i]);
+    reach.min[key] = dot3(sub3(padded.support(scale3(axes[i], -1)), origin), axes[i]);
+    reach.max[key] = dot3(sub3(padded.support(axes[i]), origin), axes[i]);
   }
-  for (const solid of solids) {
-    if ((['x', 'y', 'z'] as const).some((key) => bounds.max[key] < solid.bounds.min[key] - EPSILON
-      || bounds.min[key] > solid.bounds.max[key] + EPSILON)) continue;
-    if (intersects(padded, solid)) return true;
+  for (let i = 0; i < bounds.length; i++) {
+    const { min, max } = bounds[i];
+    if (reach.max.x < min.x - EPSILON || reach.min.x > max.x + EPSILON
+      || reach.max.y < min.y - EPSILON || reach.min.y > max.y + EPSILON
+      || reach.max.z < min.z - EPSILON || reach.min.z > max.z + EPSILON) continue;
+    if (intersects(padded, solid(i))) return true;
   }
   return false;
 }

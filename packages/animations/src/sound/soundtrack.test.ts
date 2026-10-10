@@ -114,6 +114,45 @@ describe('soundtrackFor', () => {
     }
   });
 
+  it('rolls the wheels at the speed the spot is ridden at', () => {
+    const cruise = soundtrackFor(plan('Kickflip'));
+    for (const { v } of sample(plan('Kickflip'), cruise.speed)) expect(v).toBeCloseTo(1, 9);
+    for (const { v } of sample(plan('Frontside 50-50 Grind'), soundtrackFor(plan('Frontside 50-50 Grind')).speed)) expect(v).toBeCloseTo(1, 9);
+    // Into a big set at about twice cruising speed, and away from it as fast.
+    const stairs = plan('Kickflip', { set: 'el-toro' });
+    const set = soundtrackFor(stairs);
+    expect(set.speed(stairs.stairs!.pop - 0.1)).toBeGreaterThan(1.8);
+    expect(set.speed(stairs.stairs!.land + 0.1)).toBeCloseTo(set.speed(stairs.stairs!.pop - 0.1), 9);
+    // Down a handrail: rolled in a little quicker than cruising, ridden off the bottom quicker still.
+    const rail = plan('Frontside 50-50 Grind', { set: 'el-toro' });
+    const grind = rail.grind!;
+    const down = soundtrackFor(rail);
+    expect(down.speed(grind.pop - 0.1)).toBeGreaterThan(1);
+    expect(down.speed(grind.land + 0.1)).toBeGreaterThan(down.speed(grind.pop - 0.1));
+  });
+
+  it('picks up speed down a roll-in and down a bank', () => {
+    const dropIn = plan('Kickflip', { set: 'wallenberg' });
+    const rollIn = soundtrackFor(dropIn);
+    const speeds = sample(dropIn, rollIn.speed).filter(({ t }) => t >= 0 && t < dropIn.stairs!.pop).map(({ v }) => v);
+    expect(speeds[0]).toBeLessThan(0.6);
+    for (let i = 1; i < speeds.length; i++) expect(speeds[i]).toBeGreaterThanOrEqual(speeds[i - 1] - 1e-6);
+    // Reaching the set's speed at the ramp's foot, and holding it on to the pop.
+    expect(speeds[speeds.length - 1]).toBeCloseTo(rollIn.speed(dropIn.stairs!.pop), 1);
+    expect(rollIn.speed(dropIn.stairs!.pop)).toBeGreaterThan(1.8);
+    const bank = plan('Kickflip', { set: 'sunset-car-wash' });
+    const away = soundtrackFor(bank);
+    expect(away.speed(bank.end - 0.1)).toBeGreaterThan(away.speed(bank.stairs!.pop));
+  });
+
+  it('slows a riderless board to a stop', () => {
+    const stage = plan('Kickflip', { landed: false });
+    const track = soundtrackFor(stage);
+    const after = sample(stage, track.speed).filter(({ t }) => t >= ROLL_IN + FLIP_T);
+    for (let i = 1; i < after.length; i++) expect(after[i].v).toBeLessThanOrEqual(after[i - 1].v);
+    expect(after[after.length - 1].v).toBeLessThan(0.1);
+  });
+
   it('pops into and out of a grind with a trick at the same moments', () => {
     const stage = plan('Kickflip into Backside 5-0 Grind Kickflip Out');
     const grind = stage.grind!;

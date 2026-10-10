@@ -144,6 +144,7 @@ const TRICK_MOTIONS: Readonly<Record<string, TrickMotion>> = {
   'Backside 360': { yaw: 360, bodyYaw: 360, spinDir: 1 },
   'Frontside 360': { yaw: 360, bodyYaw: 360, spinDir: -1 },
   'Backside 360 Kickflip': { flips: 1, yaw: 360, bodyYaw: 360, flipDir: 1, spinDir: 1 },
+  'Backside 360 Heelflip': { flips: 1, yaw: 360, bodyYaw: 360, flipDir: -1, spinDir: 1 },
   'Frontside 360 Kickflip': { flips: 1, yaw: 360, bodyYaw: 360, flipDir: 1, spinDir: -1 },
   // Nollie wraps the other way because it pops the nose; fakie only
   // reverses travel and still scoops the tail, so it keeps regular's sign.

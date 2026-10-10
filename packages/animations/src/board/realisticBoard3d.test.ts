@@ -45,7 +45,7 @@ describe('Humanoid realistic skateboard', () => {
       for (const base of ['Kickflip', '360 Flip', 'Frontside 50-50 Grind']) {
         for (const stance of ['regular', 'fakie', 'switch', 'nollie'] as const) {
           const plan = planStage({ id: base, name: base, base, stance }, {
-            landed: true, riderStance: 'goofy', style: resolveSkateStyle(), fall: 'slam', shankProgress: 0.65, skater: 'humanoid', set: 'el-toro',
+            landed: true, riderStance: 'goofy', style: resolveSkateStyle(), fall: 'slam', shankProgress: 0.65, skater: 'realistic', set: 'el-toro',
           });
           for (const fraction of [0, 0.22, 0.49, 0.71, 0.9, 1]) {
             const frame = stageFrame(plan, plan.end * fraction, 1);

@@ -15,7 +15,7 @@ import {
   specFor,
   type FallVariant,
 } from './trick';
-import { WHEEL_BOTTOM, WHEEL_HALF_W, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z } from '../board/board';
+import { HANGER_BOTTOM, WHEEL_BOTTOM, WHEEL_HALF_W, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z } from '../board/board';
 import { BOTTOM_LOCAL, TIP_X } from '../board/deck';
 import { POP_RISE, solveRig } from './rig';
 import { FOLLOW_POP } from '../camera/camera';
@@ -44,12 +44,15 @@ import {
   hopRate,
   landingOnRail,
   poppingOff,
+  railSpinFor,
+  railSpinShare,
   settledHeading,
   settledSpin,
   thenSpin,
   wrapSpin,
   type HopFrame,
   type HopPlan,
+  type RailSpin,
   type TrickSpin,
 } from './grindTricks';
 
@@ -89,6 +92,17 @@ import {
 
 /** Gravity for the hops on and off the bar, world units / s². */
 export const GRAVITY = 1150;
+/**
+ * In the air the rider is the free body: the hips fly gravity's arc from the
+ * pop to the lock, and nothing pushes them higher on the way. The board goes
+ * where the legs put it: snapped up past the hips, drawn up under them by the
+ * knees (`tuck` under the straight line between the hips' pop and touchdown
+ * heights, hopLegs) and pushed down onto the bar. So the board's own arc falls
+ * faster than gravity, the more so the shorter the hop.
+ */
+export const boardGravity = (tuck: number, upT: number) => GRAVITY + (8 * tuck) / (upT * upT);
+/** Passes that settle a hop's time with the board's gravity, which depends on it. */
+const HOP_PASSES = 10;
 /** Seconds locked on the bar. */
 const GRIND_T = 1.1;
 /** How far the bar runs behind the board's center at lock-in, and past it at pop off. */
@@ -106,6 +120,45 @@ const APEX_MIN = BAR_TOP + 21;
  */
 const LOCK_IN = { from: 0.35, span: 0.5 };
 const ENTRY_LOCK_IN = { from: 0.5, span: 0.45 };
+/** Most of a spin onto the bar (a share) left for the bar to finish, however much it would let pivot (GrindSpec.railFinish). */
+const SPIN_LEFT_MAX = 0.3;
+/**
+ * Turning into the lock without a spin (TurnIn): the share of the turn the
+ * board makes at an even rate off the pop, and the power the rest comes on
+ * at toward the bar. A lock that swings the popped end over the bar (a
+ * lipslide's tail, a noseblunt's) holds more of it back until that end is up.
+ */
+const TURN_EARLY = 0.4;
+const TURN_LATE = 3;
+const OVER_EARLY = 0.15;
+const OVER_LATE = 4;
+/** How far past the bar's far side (world units) the popped end has to swing for the turn to wait for it. */
+const OVER_REACH = 20;
+/** Seconds the board takes to come up to its even rate off the pop. */
+const TURN_UP = 0.08;
+/** Most of the turn (a share) a board touches down short of, for the bar to stop. */
+const TURN_LEFT_MAX = 0.15;
+/** Share of the hop by which the shoulders have come round, ahead of the board. */
+const SHOULDERS_BY = 0.8;
+/** Power of the turn's progress a lock's dip comes on at: the end goes down as it comes across. */
+const DIP_LATE = 3;
+/**
+ * A lock with wheels hooked just past the bar's side (a blunt's) can't come
+ * down short of its turn: short, they'd sit deeper in the bar by more than
+ * HOOK_DEPTH (world units). It's turned in by HOOK_BY of the hop instead,
+ * before they drop past the bar's top.
+ */
+const HOOK_BY = 0.94;
+const HOOK_DEPTH = 0.3;
+/**
+ * Nor can a lock with an end dipped down beside the bar (a smith's, a
+ * feeble's, a willy's): that truck hangs more than HOOK_HANG (world units)
+ * under the bar's top, and has to be across before it drops past it. A
+ * slide's wheels hang about half that.
+ */
+const HOOK_HANG = 18;
+/** Seconds before the pop off that a rider starts turning into a spin out. */
+const SPIN_OUT_LEAD = 0.18;
 /** How far the board rises popping off the end, and how far its wheels
  *  must then clear the bar's top (a dipped truck has further to come up). */
 const OFF_POP = 12;
@@ -274,10 +327,14 @@ export interface Handrail {
   slope: number;
   /** The pipe's radius. */
   radius: number;
-  /** Height of the ground at s: the top landing, the steps, the bottom landing. */
-  ground: (s: number) => number;
-  /** What a body lying on the steps rests on at s: the line of their edges, and the landings. */
-  rest: (s: number) => number;
+  /**
+   * Height of the ground at s: the top landing, the steps, the bottom landing.
+   * Where it changes across the line too (a ledge across a gap), `z` is how far
+   * across from the rail, toward the camera; a stair set's ignores it.
+   */
+  ground: (s: number, z?: number) => number;
+  /** What a body lying on the steps rests on at s (and `z` across): the line of their edges, and the landings. */
+  rest: (s: number, z?: number) => number;
   /** How fast a skater rolls in to it, world units a second. */
   speed: number;
   /**
@@ -286,6 +343,21 @@ export interface Handrail {
    * the grind came in from.
    */
   edge?: boolean;
+  /**
+   * A ledge reached across a gap rather than a rail beside the stairs (Miami's
+   * granite triangle, off its terrace): the pop is fixed where the takeoff is,
+   * `s` along the rail's line (short of its start) and at least `off` out from
+   * it on the side the grind comes in from. The hop over the gap is the least
+   * that brings the board's center down onto the rail `lock` past its start;
+   * a higher popper or a trick in pops higher and comes down further along.
+   */
+  takeoff?: { s: number; off: number; lock: number };
+  /**
+   * The rail is a ledge's edge (Miami's slab): behind it, on the far side of
+   * the approach, its top face falls away `fall` per unit across. A lock
+   * can't hang through it: what it hangs over that side rests on it instead.
+   */
+  ledge?: { fall: number };
 }
 
 /**
@@ -335,8 +407,9 @@ const WHEELS_DOWN: Bearing = {
   at: { x: 0, y: WHEEL_BOTTOM, z: 0 },
   lines: [[{ x: -WHEEL_X, y: WHEEL_BOTTOM, z: 0 }, { x: WHEEL_X, y: WHEEL_BOTTOM, z: 0 }]],
 };
-/** Share of a trick's hang time (HopTrick.lift) that a trick into a handrail adds over the rail. */
+/** Share of a trick's hang time (HopTrick.lift) that a trick into a handrail adds over the rail; across a gap, to a ledge. */
 const RAIL_TRICK_LIFT = 0.5;
+const GAP_TRICK_LIFT = 0.35;
 /**
  * Hopping on, the board keeps its center this far off the rail or bar (its
  * wheels clear of the pipe) until it's up over its line. A spin in swings the
@@ -388,6 +461,62 @@ const spinsIn = (spec: GrindSpec) => spec.entry != null && (spec.entry.spec.yaw 
 const GRIND_FRICTION = 0.2;
 const SLIDE_FRICTION = 0.27;
 
+/**
+ * Turning into a lock without a spin to carry it (an ollie or a flip into a
+ * slide, a crook, a feeble). The turn comes from the rider: the shoulders
+ * come round off the pop and the legs bring the board round under them. So
+ * the board starts turning as it leaves the ground, part of the turn at an
+ * even rate (`early`) and the rest coming on harder toward the bar (as the
+ * `late` power of the hop), the rider whipping it in at the last moment. It
+ * touches down still turning, `left` short of the lock, and the bar stops it,
+ * slowing it evenly over `finishT`: nothing in the air stops it dead. A
+ * hooked lock (HOOK_BY) instead eases all the way in by `by` of the hop.
+ */
+export interface TurnIn {
+  upT: number;
+  early: number;
+  late: number;
+  left: number;
+  finishT: number;
+  by: number;
+}
+
+/** Hop share `x` → the even part of the turn, coming up to speed over TURN_UP. */
+const evenTurn = (x: number, upT: number) => {
+  const r = Math.min(0.5, TURN_UP / upT);
+  return x < r ? (x * x) / (2 * r) : x - r / 2;
+};
+
+function turnInFor(upT: number, left: number, popOver: boolean, hooked: boolean): TurnIn {
+  const early = popOver ? OVER_EARLY : TURN_EARLY;
+  const late = popOver ? OVER_LATE : TURN_LATE;
+  if (hooked) return { upT, early, late, left: 0, finishT: 0, by: HOOK_BY };
+  // Its rate (shares a second) at touchdown, which the bar slows evenly to a stop.
+  const w = ((1 - left) * (early / evenTurn(1, upT) + (1 - early) * late)) / upT;
+  return { upT, early, late, left, finishT: (2 * left) / w, by: 1 };
+}
+
+/** 0 → 1: how far the board has turned into the lock `tau` seconds after the pop (past `upT`, on the bar). */
+export function turnInShare(tau: number, turn: TurnIn): number {
+  const { upT, early, late, left, finishT, by } = turn;
+  if (tau <= 0) return 0;
+  if (by < 1) {
+    // Hooked: both parts ease off to a stop as it gets there.
+    const x = Math.min(1, tau / (by * upT));
+    const even = evenTurn(x, by * upT) / evenTurn(1, by * upT);
+    return early * (1 - (1 - even) ** 2) + (1 - early) * smoothstep(x ** 1.5);
+  }
+  if (tau <= upT) {
+    const x = tau / upT;
+    return (1 - left) * ((early * evenTurn(x, upT)) / evenTurn(1, upT) + (1 - early) * x ** late);
+  }
+  const u = finishT ? Math.min(1, (tau - upT) / finishT) : 1;
+  return 1 - left * (1 - u) ** 2;
+}
+
+/** 0 → 1: how far round the shoulders have come into a TurnIn's lock, ahead of the board. */
+const shouldersIn = (tau: number, turn: TurnIn) => smoothstep(tau / (SHOULDERS_BY * turn.upT));
+
 /** Physics y of a handrail's top line at `s` along it. */
 const railTopY = (rail: Handrail, s: number) => GROUND + WHEEL_BOTTOM - (rail.top - rail.slope * s);
 
@@ -407,6 +536,103 @@ function onRail(pose: BoardPose, bearing: Bearing, rail: Handrail, tilt: number,
   return { x: X0, y: railTopY(rail, s - dir * o.x) + o.y, z: BAR_Z + o.z };
 }
 
+/** Board-local points a lock over a ledge's top must keep out of it: the deck's underside and the wheels' rims. */
+const LEDGE_POINTS: V3[] = (() => {
+  const pts: V3[] = [...BOTTOM_LOCAL];
+  for (const x of [-WHEEL_X, WHEEL_X]) for (const z of [-WHEEL_Z - WHEEL_HALF_W, -WHEEL_Z + WHEEL_HALF_W, WHEEL_Z - WHEEL_HALF_W, WHEEL_Z + WHEEL_HALF_W]) {
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2;
+      pts.push({ x: x + WHEEL_R * Math.cos(a), y: WHEEL_Y + WHEEL_R * Math.sin(a), z });
+    }
+  }
+  return pts;
+})();
+/** Board-local points that come down past a bar's side onto a lock (crossingFor): the deck's underside, the hangers, and the wheels' rims, finely round. */
+const CROSS_POINTS: V3[] = (() => {
+  const pts: V3[] = [...BOTTOM_LOCAL];
+  for (const x of [-WHEEL_X, WHEEL_X]) {
+    for (let z = -5; z <= 5; z += 2.5) pts.push({ x, y: HANGER_BOTTOM, z });
+    for (const z of [-WHEEL_Z - WHEEL_HALF_W, -WHEEL_Z + WHEEL_HALF_W, WHEEL_Z - WHEEL_HALF_W, WHEEL_Z + WHEEL_HALF_W]) {
+      for (let k = 0; k < 32; k++) {
+        const a = (k / 32) * Math.PI * 2;
+        pts.push({ x: x + WHEEL_R * Math.cos(a), y: WHEEL_Y + WHEEL_R * Math.sin(a), z });
+      }
+    }
+  }
+  return pts;
+})();
+/** How far a part resting on a ledge's top may sit in it (world units): touching, not through. */
+const LEDGE_TOUCH = 0.3;
+/** The most a lock tips up off a ledge's top, each way (degrees). */
+const LEDGE_TIP_MAX = 45;
+
+/**
+ * A lock over a ledge's top (Miami's slab, falling away behind the edge),
+ * `far` being the side it's on: whatever the pose hangs over that side
+ * can't go through the top, so the board tips up off it, about what rides
+ * the edge, by as little pitch and roll as lets every part clear. A
+ * feeble's front wheels come to rest on the top, as on any ledge; a
+ * boardslide's far truck lifts its end. Seated mid-ledge, where it's the
+ * same all along.
+ */
+function ledgeLock(pose: BoardPose, spec: GrindSpec, rail: Handrail, far: 1 | -1): BoardPose {
+  if (!rail.ledge) return pose;
+  const s = (rail.start + rail.end) / 2;
+  const tilt = pose.fall ?? 0;
+  const into = (p: BoardPose) => ledgeDepth(onRail(p, spec.contact, rail, tilt, spec.dir, s), p, rail, far, s, spec.dir);
+  if (into(pose) <= LEDGE_TOUCH) return pose;
+  // Out in rings of pitch and roll, the least tip that clears.
+  for (let ring = 1; ring <= LEDGE_TIP_MAX; ring++) {
+    let best: BoardPose | null = null;
+    let least = Infinity;
+    for (let dp = -ring; dp <= ring; dp++) for (let dr = -ring; dr <= ring; dr++) {
+      if (Math.max(Math.abs(dp), Math.abs(dr)) !== ring || dp * dp + dr * dr >= least) continue;
+      const tipped = { ...pose, pitch: pose.pitch + dp, roll: pose.roll + dr };
+      if (into(tipped) <= LEDGE_TOUCH) {
+        best = tipped;
+        least = dp * dp + dr * dr;
+      }
+    }
+    if (best) return best;
+  }
+  return pose;
+}
+
+/**
+ * How deep (world units) the board, its center at `center` in `pose` with the
+ * rider `s` along the rail, goes into a ledge's top on the `far` side: as far
+ * as the lowest of LEDGE_POINTS over there is under it (negative, clear).
+ */
+function ledgeDepth(center: V3, pose: BoardPose, rail: Handrail, far: 1 | -1, s: number, dir: 1 | -1): number {
+  const fall = rail.ledge?.fall ?? 0;
+  const attitude = poseDir(pose);
+  let worst = -Infinity;
+  for (const local of LEDGE_POINTS) {
+    const q = add3(center, attitude(local));
+    const across = far * (q.z - BAR_Z);
+    if (across <= 0) continue;
+    worst = Math.max(worst, q.y - (railTopY(rail, s + dir * (q.x - X0)) + fall * across));
+  }
+  return worst;
+}
+
+/**
+ * Popping off a ledge, the snap off the lock (`popOut`, pitch) stops where
+ * whatever it drives down meets the ledge's top, as a tail strikes it: no
+ * further than the board stays out of it.
+ */
+function ledgePopOut(lock: BoardPose, popOut: number, spec: GrindSpec, rail: Handrail, far: 1 | -1): number {
+  if (!rail.ledge) return popOut;
+  const s = (rail.start + rail.end) / 2;
+  const seat = onRail(lock, spec.contact, rail, lock.fall ?? 0, spec.dir, s);
+  for (let k = 20; k > 0; k--) {
+    const extra = ((popOut - lock.pitch) * k) / 20;
+    const snap = snapped(seat, lock, extra, spec.pivot);
+    if (ledgeDepth(snap.center, snap.pose, rail, far, s, spec.dir) <= LEDGE_TOUCH) return lock.pitch + extra;
+  }
+  return lock.pitch;
+}
+
 /**
  * The ride down a handrail for a grind or a slide, locked in `lock` (tipped
  * with the rail), with `lift` more rise over the rail for a trick into it.
@@ -421,7 +647,7 @@ function onRail(pose: BoardPose, bearing: Bearing, rail: Handrail, tilt: number,
  * wherever along the rail the speed has carried it by then. The board
  * crosses over once its wheels are over the rail.
  */
-function rideFor(rail: Handrail, spec: GrindSpec, lock: BoardPose, style: SkateStyle, lift: number, across: number, turn: number, extra = 0) {
+function rideFor(rail: Handrail, spec: GrindSpec, lock: BoardPose, style: SkateStyle, lift: number, across: number, turn: number, extra: number, g: number) {
   const fall = Math.atan(rail.slope);
   const tilt = (spec.dir * fall * 180) / Math.PI;
   const friction = spec.slide ? SLIDE_FRICTION : GRIND_FRICTION;
@@ -431,16 +657,33 @@ function rideFor(rail: Handrail, spec: GrindSpec, lock: BoardPose, style: SkateS
   const lean = Math.atan2(along * Math.cos(fall), GRAVITY - along * Math.sin(fall));
   const { speed } = rail;
 
-  const popS = rail.start - RAIL_POP_BEFORE;
+  const popS = rail.takeoff?.s ?? rail.start - RAIL_POP_BEFORE;
   const under = GROUND - onRail(lock, spec.contact, rail, tilt, spec.dir, popS).y;
+  // Across a gap the board comes down onto the rail the takeoff's `lock` past its start, where the
+  // seat is `seat` over the deck. Rolling in at the rail's speed that's the least hop; a higher
+  // popper or a trick in rises further over it, rolling in that much slower to come down in the
+  // same place, the edge being short. The gap's hop already hangs longer than a flatground trick,
+  // so a trick in asks for about a third less lift than onto a rail. Nothing is under the board until the
+  // rail starts, so it turns in from the top of the arc.
+  if (rail.takeoff) {
+    const lockS = rail.start + rail.takeoff.lock;
+    const seat = under - rail.slope * (lockS - popS);
+    const leastT = (lockS - popS) / speed;
+    const least = (seat + 0.5 * g * leastT * leastT) / leastT;
+    const more = Math.max(0, 0.5 * APEX_STYLE * (style.popHeight - 1)) + GAP_TRICK_LIFT * lift + (spinsIn(spec) ? RAIL_SPIN_ROOM : 0) + extra;
+    const launch = Math.sqrt(least * least + 2 * g * more);
+    const upT = (launch + Math.sqrt(Math.max(0, launch * launch - 2 * g * seat))) / g;
+    const ride = railRide(rail, spec, tilt, accel, lean, popS, lockS, launch / g / upT, (lockS - popS) / upT);
+    return { ride, upT, apex: (launch * launch) / (2 * g) };
+  }
   // How far a level board's wheels sit over where the lock seats its center.
   const wheels = Math.max(0, onRail(lock, spec.contact, rail, tilt, spec.dir, popS).y - onRail({ yaw: 0, pitch: 0, roll: 0 }, WHEELS_DOWN, rail, tilt, spec.dir, popS).y);
   const base = Math.max(2, RAIL_CLEAR + 0.5 * APEX_STYLE * (style.popHeight - 1) + RAIL_TRICK_LIFT * lift + (spinsIn(spec) ? RAIL_SPIN_ROOM : 0)) + extra;
   // The hop for a given room over the rail: its time, and the share of it spent under the rail's line.
   const hop = (room: number) => {
-    const launch = Math.sqrt(2 * GRAVITY * (under + wheels + room));
-    const upT = (launch + Math.sqrt(2 * GRAVITY * (wheels + room))) / GRAVITY;
-    return { room, launch, upT, over: (launch - Math.sqrt(2 * GRAVITY * room)) / (GRAVITY * upT) };
+    const launch = Math.sqrt(2 * g * (under + wheels + room));
+    const upT = (launch + Math.sqrt(2 * g * (wheels + room))) / g;
+    return { room, launch, upT, over: (launch - Math.sqrt(2 * g * room)) / (g * upT) };
   };
   // A long step across (`across` from beside the rail to the lock) or a big turn into it (`turn`, deg)
   // pops a little higher, for the time over the rail's line to make it.
@@ -448,12 +691,18 @@ function rideFor(rail: Handrail, spec: GrindSpec, lock: BoardPose, style: SkateS
   let h = hop(base);
   while (h.room < base + RAIL_ACROSS_ROOM && (CROSS_TO - CROSS_FROM) * (1 - h.over) * h.upT < needs) h = hop(h.room + 1);
   const { launch, upT } = h;
-  const lockS = popS + speed * upT;
+  const ride = railRide(rail, spec, tilt, accel, lean, popS, popS + speed * upT, h.over);
+  // The pop itself, off the top landing: the speed over the falling line, less the line's fall.
+  const pop = launch - rail.slope * speed;
+  return { ride, upT, apex: (pop * pop) / (2 * g) };
+}
 
+/** The ride down a handrail from the lock at `lockS` to the pop off its end, rolling in at `speed` and speeding up down it. */
+function railRide(rail: Handrail, spec: GrindSpec, tilt: number, accel: number, lean: number, popS: number, lockS: number, over: number, speed = rail.speed): HandrailRide {
   const offS = rail.end - END_MARGIN;
   const length = offS - lockS;
   const grindT = accel > 0 ? (Math.sqrt(speed * speed + 2 * accel * length) - speed) / accel : length / speed;
-  const ride: HandrailRide = {
+  return {
     rail,
     tilt,
     speed,
@@ -464,11 +713,8 @@ function rideFor(rail: Handrail, spec: GrindSpec, lock: BoardPose, style: SkateS
     lockS,
     offS,
     grindT,
-    over: h.over,
+    over,
   };
-  // The pop itself, off the top landing: the speed over the falling line, less the line's fall.
-  const pop = launch - rail.slope * speed;
-  return { ride, upT, apex: (pop * pop) / (2 * GRAVITY) };
 }
 
 /**
@@ -484,6 +730,18 @@ export function railTrack(plan: GrindPlan, time: number): number {
   const k = FALL_DECAY[plan.fall];
   const slip = riding(plan, ride, plan.fail);
   return slip.s + (slip.speed * (1 - Math.exp(-k * (time - plan.fail)))) / k;
+}
+
+/**
+ * How fast (world units a second, along the way of travel) the board is
+ * carried at a clock time: the street's speed past a flat bar; down a
+ * handrail, rolling in, speeding up down it and off the bottom — or as fast
+ * as it was going when it slipped.
+ */
+export function grindSpeed(plan: GrindPlan, time: number): number {
+  const ride = plan.handrail;
+  if (!ride) return travel(1);
+  return riding(plan, ride, plan.fail == null ? time : Math.min(time, plan.fail)).speed;
 }
 
 /** Where along a handrail and how fast, riding it out: the approach speed, the speed-up down it, the speed off its bottom. */
@@ -519,6 +777,8 @@ export interface GrindPlan {
   endSpin: TrickSpin;
   /** The lock pose, turned through `heading`. */
   lock: BoardPose;
+  /** Degrees of roll the lock tips up off a ledge's top (ledgeLock), let go of as the board snaps off it; 0 elsewhere. */
+  ledgeRoll: number;
   /** Board pitch at the instant it leaves the bar. */
   popOut: number;
   popIn: number;
@@ -527,6 +787,25 @@ export interface GrindPlan {
   /** Flatground seconds per second of the hops, for the tricks popped into and out of the grind. */
   entryRate: number;
   exitRate: number;
+  /** A body spin onto the bar: at one speed through the hop, the bar finishing it (RailSpin); null without one. */
+  spinIn: RailSpin | null;
+  /** Without one, the board's own turn into the lock (TurnIn); null for a trick in that turns the deck. */
+  turnIn: TurnIn | null;
+  /** Share of that spin, or of that turn, still to go as the board touches down. */
+  spinLeft: number;
+  /** The board's center at touchdown, off where the lock seats it: short of its turn, it pivots on what rides the bar. */
+  touchdown: V3;
+  /**
+   * Coming down across the bar or a handrail onto the lock (crossingFor):
+   * what of the board comes to rest past its far side and under its top, how
+   * far under (`under`) and past (`past`). None on a ledge.
+   */
+  crossing: Crossing[];
+  /**
+   * A body spin out: the rider starts turning into it `lead` seconds before the
+   * pop off, `angle` degrees of it by the pop, coming up to the spin's speed.
+   */
+  spinOut: { angle: number; lead: number } | null;
   /** Board center z rolling in. */
   /** Where the board's center is across (z) at the pop. */
   laneZ: number;
@@ -545,6 +824,10 @@ export interface GrindPlan {
   /** Board center rise above rolling height: top of the hop on, and at lock-in. */
   apex: number;
   lockRise: number;
+  /** The gravity the board's arc onto the bar falls at (boardGravity): the hips' own, plus the legs' tuck. */
+  boardG: number;
+  /** Hip height over the board as it pops: the flatground pop's, which the hop carries on from. */
+  popHip: number;
   /** How far the board rises over the lock-in height popping off, and how much of that is for the trick out. */
   offPop: number;
   exitLift: number;
@@ -605,8 +888,24 @@ export function planGrind(
   // the bar on their other side and points the nose back up it.
   const riderFar = spec.reversed ? -far : far;
   const level: BoardPose = { yaw: heading - riderFar * spec.yaw, pitch: spec.pitch, roll: -riderFar * spec.roll };
-  // Down a handrail the lock tips with the rail, and the grind takes as long as the rail is.
-  const lock: BoardPose = rail ? { ...level, fall: (spec.dir * Math.atan(rail.slope) * 180) / Math.PI } : level;
+  // Down a handrail the lock tips with the rail, and the grind takes as long as the rail is. Over a
+  // ledge's top it rests on it rather than hanging through it.
+  const tipped: BoardPose = rail ? { ...level, fall: (spec.dir * Math.atan(rail.slope) * 180) / Math.PI } : level;
+  const lock = rail?.ledge ? ledgeLock(tipped, spec, rail, far) : tipped;
+  // A body spin onto the bar touches down as far short of its lock as what rides the bar lets it pivot there.
+  const spinLeft = entry && entry.trick.spec.bodyYaw ? Math.min(SPIN_LEFT_MAX, spec.railFinish / Math.max(1, Math.abs(level.yaw))) : 0;
+  // Without a spin to carry it the board turns into the lock on its own (TurnIn), touching down
+  // as far short as that lets it too. Swinging its popped end out over the bar's far side (the low
+  // end off the pop), it waits for that end to come up.
+  const turnLeft = spinsIn(spec) ? null : Math.min(TURN_LEFT_MAX, spec.railFinish / Math.max(1, Math.abs(level.yaw - heading)));
+  const poppedEnd = poseDir(level)({ x: spec.popNose ? TIP_X : -TIP_X, y: 0, z: 0 });
+  const popOver = far * (onBar(level, spec.contact).z + poppedEnd.z - BAR_Z) - BAR_HALF > OVER_REACH;
+  const short = turnLeft == null ? 0 : turnLeft * (level.yaw - heading);
+  const hooked = !rail?.ledge && (
+    barDepth({ ...level, yaw: level.yaw - short }, spec.contact) > barDepth(level, spec.contact) + HOOK_DEPTH
+    || hangBeside(level, spec.contact) > HOOK_HANG
+  );
+  const tuck = entry ? TUCK_TRICK : TUCK_ON;
   // How far the board steps across a handrail onto its lock: from beside it to as far past it as the lock sits.
   const across = rail ? RAIL_BESIDE + far * (onBar(level, spec.contact).z - BAR_Z) : 0;
   // The hop on and the line in, for `extra` more height over the rail. A skater would rather pop a
@@ -614,13 +913,24 @@ export function planGrind(
   // angle come down to APPROACH_EASY. A plain grind comes in nearly along the rail; a spin in or a
   // lock across it keeps its angle, the room it needs being across, not up.
   const hopOn = (extra: number) => {
-    // A trick in that turns the deck carries the lock's turn round with it (turnShare): no extra time for it over the rail.
-    const railed = rail ? rideFor(rail, spec, lock, style, spec.entry?.lift ?? 0, across, spinsIn(spec) ? 0 : level.yaw - heading, extra) : null;
-    const lockCenter = railed ? onRail(lock, spec.contact, railed.ride.rail, railed.ride.tilt, spec.dir, railed.ride.lockS) : onBar(lock, spec.contact);
-    const lockRise = GROUND - lockCenter.y;
-    const apex = railed?.apex ?? Math.max(APEX + APEX_STYLE * (style.popHeight - 1) + (spec.entry?.lift ?? 0), APEX_MIN, lockRise + 12) + extra;
-    const upT = railed?.upT ?? Math.sqrt((2 * apex) / GRAVITY) + Math.sqrt((2 * (apex - lockRise)) / GRAVITY);
+    // The board's arc under its own gravity (boardGravity), which depends on the hop's time.
+    const flight = (g: number) => {
+      // A trick in that turns the deck carries the lock's turn round with it (turnShare): no extra time for it over the rail.
+      const railed = rail ? rideFor(rail, spec, lock, style, spec.entry?.lift ?? 0, across, spinsIn(spec) ? 0 : level.yaw - heading, extra, g) : null;
+      const lockCenter = railed ? onRail(lock, spec.contact, railed.ride.rail, railed.ride.tilt, spec.dir, railed.ride.lockS) : onBar(lock, spec.contact);
+      const lockRise = GROUND - lockCenter.y;
+      const apex = railed?.apex ?? Math.max(APEX + APEX_STYLE * (style.popHeight - 1) + (spec.entry?.lift ?? 0), APEX_MIN, lockRise + 12) + extra;
+      const upT = railed?.upT ?? Math.sqrt((2 * apex) / g) + Math.sqrt((2 * (apex - lockRise)) / g);
+      return { railed, lockCenter, lockRise, apex, upT, g };
+    };
+    // A rail's or a ledge's hop is fitted to its line (rideFor) with the board on gravity's own arc:
+    // the time over the line to step across and dip in is set by it, so it keeps it.
+    let hop = flight(GRAVITY);
+    if (!rail) for (let pass = 0; pass < HOP_PASSES; pass++) hop = flight(boardGravity(tuck, hop.upT));
+    const { railed, lockCenter, lockRise, apex, upT, g } = hop;
     const rate = entry ? hopRate(entry, upT) : 1;
+    const spin = spinLeft > 0 ? railSpinFor(upT, spinLeft) : null;
+    const turnIn = turnLeft == null ? null : turnInFor(upT, turnLeft, popOver, hooked);
     // What's beside the rider through the hop, `along` ahead of the board's center: the rail (or
     // the bar, which starts just short of the lock) as its axis's physics y and its radius.
     const beside = (tau: number, along: number): { y: number; radius: number } | null => {
@@ -632,35 +942,45 @@ export function planGrind(
       }
       return along < travel(upT - tau) - LOCK_MARGIN ? null : { y: BAR_TOP_Y + BAR_HALF, radius: BAR_HALF };
     };
-    const board = boardReach(entry, rate, upT, level.yaw - heading, heading, (spec.dir === 1) === spec.popNose);
-    const legs = legReach(spec, entry, rate, upT, apex, mechanics, style, far, beside);
+    const board = boardReach(entry, rate, spin, turnIn, upT, level.yaw - heading, heading, (spec.dir === 1) === spec.popNose);
+    const legs = legReach(spec, entry, rate, spin, turnIn, level.yaw - heading, upT, apex, g, mechanics, style, far, beside);
     const approach = approachLine(
-      -far * (lockCenter.z - BAR_Z), upT, railed ? railed.ride.over : underBarShare(apex, upT),
+      -far * (lockCenter.z - BAR_Z), upT, railed ? railed.ride.over : underBarShare(apex, upT, g),
       (s, angle) => Math.max(board(s, angle), legs(s, angle)),
       railed ? railed.ride.speed : travel(1),
+      rail?.takeoff?.off ?? 0,
     );
-    return { railed, lockCenter, lockRise, apex, upT, approach };
+    return { railed, lockCenter, lockRise, apex, upT, g, approach, spin, turnIn };
   };
-  // A trick in pops at least as high as the plain grind would.
+  // A trick in pops at least as high as the plain grind would. Across a gap the takeoff sets the
+  // line in, so popping higher wouldn't ease it.
   const plainLift = spec.entry ? planGrind({ ...spec, entry: null }, mechanics, style, landed, fall, rail).approachLift : 0;
   let approachLift = plainLift;
   let on = hopOn(approachLift);
   const highest = (spec.slide ? APPROACH_APEX_SLIDE : APPROACH_APEX) + (spec.entry?.lift ?? 0);
-  for (let extra = approachLift + 2; on.approach.angle > APPROACH_EASY && extra <= APPROACH_LIFT; extra += 2) {
+  for (let extra = approachLift + 2; !rail?.takeoff && on.approach.angle > APPROACH_EASY && extra <= APPROACH_LIFT; extra += 2) {
     const higher = hopOn(extra);
     if (higher.approach.angle >= on.approach.angle - 0.5 || higher.apex > highest) break;
     on = higher;
     approachLift = extra;
   }
-  const { railed, lockCenter, lockRise, apex, upT, approach } = on;
+  const { railed, lockCenter, lockRise, apex, upT, g: boardG, approach, spin: spinIn, turnIn } = on;
   const ride = railed ? railed.ride : null;
+  const approachYaw = -spec.dir * far * approach.angle;
+  // Touching down short of its turn, the board seats what rides the bar where the lock will, turned
+  // that much less: it pivots on it into the lock.
+  const left = spinIn ? 1 - railSpinShare(upT, spinIn) : turnIn ? turnIn.left : 0;
+  const seat = (pose: BoardPose) => (ride ? onRail(pose, spec.contact, ride.rail, ride.tilt, spec.dir, ride.lockS) : onBar(pose, spec.contact));
+  const touchPose = { ...lock, yaw: lock.yaw + (approachYaw - lock.yaw) * left };
+  const touchdown = sub3(seat(touchPose), seat(lock));
   // Off the trucks the board pops to a set angle, or further than the lock
   // already tips it that way (a 5-0's tail snaps down from where it rides);
   // a slide levers off the bar from whatever angle it was sliding at.
   const popEnd = spec.exitNose ? 1 : -1;
-  const popOut = spec.slide
+  const snapOut = spec.slide
     ? lock.pitch + popEnd * SLIDE_POP_OUT
     : popEnd * Math.max(POP_OUT, popEnd * lock.pitch + TRUCK_POP_LEVER);
+  const popOut = rail?.ledge ? ledgePopOut(lock, snapOut, spec, rail, far) : snapOut;
   // The board's height over the bar's top at the lock: a flat bar's is BAR_TOP under the lock-in height.
   const overBar = ride ? lockRise - (GROUND - railTopY(ride.rail, ride.lockS)) : lockRise - BAR_TOP;
   const plainOffPop = Math.max(OFF_POP, ride ? WHEEL_BOTTOM + OFF_CLEAR - overBar : BAR_TOP + WHEEL_BOTTOM + OFF_CLEAR - lockRise);
@@ -683,6 +1003,12 @@ export function planGrind(
   const offRise = ride ? landY - offFrom : lockRise;
   const offT = (offLaunch + Math.sqrt(offLaunch * offLaunch + 2 * GRAVITY * offRise)) / GRAVITY;
   const land = off + offT;
+  const exitRate = exit ? hopRate(exit, offT, true) : 1;
+  // A spin out turns at one speed from the pop (the flatground trick's), and the rider comes up to it on the bar:
+  // easing into the turn so they're turning at that speed by the pop, `angle` round by then.
+  const exitTurn = exit ? settledHeading(exit) : 0;
+  const k = (exitRate * SPIN_OUT_LEAD) / (2 * FLIP_T);
+  const spinOut = exitTurn ? { angle: (exitTurn * k) / (1 + k), lead: SPIN_OUT_LEAD } : null;
   const fail = landed ? null
     : fall === 'slam' ? lockAt + 0.16
       : fall === 'shank' ? lockAt + grindT * 0.5
@@ -705,18 +1031,30 @@ export function planGrind(
     endHeading: heading + (exit ? settledHeading(exit) : 0),
     endSpin: exit ? wrapSpin(thenSpin(entrySpin, settledSpin(exit))) : entrySpin,
     lock,
+    ledgeRoll: lock.roll - tipped.roll,
     popOut,
     popIn: (spec.popNose ? 1 : -1) * POP_IN,
     popInRise: scoops(entry) ? SCOOP_STRIKE : POP_RISE,
     entryRate: entry ? hopRate(entry, upT) : 1,
-    exitRate: exit ? hopRate(exit, offT, true) : 1,
+    exitRate,
+    spinIn,
+    turnIn,
+    spinLeft: left,
+    touchdown,
+    crossing: rail?.ledge ? [] : ride
+      ? crossingFor(seat(touchPose), touchPose, far, (q) => railTopY(ride.rail, ride.lockS + spec.dir * (q.x - X0)), ride.rail.radius)
+      : crossingFor(seat(touchPose), touchPose, far, () => BAR_TOP_Y, BAR_HALF),
+    spinOut,
     approachLift,
     carveTight: carveTightness(approach.popOff, approach.across),
     laneZ: BAR_Z - far * approach.popOff,
-    approachSpeed: far * approach.across,
-    approachYaw: -spec.dir * far * approach.angle,
+    // Straight at where the board touches down: short of its turn, off where the lock seats it.
+    approachSpeed: far * approach.across + touchdown.z / upT,
+    approachYaw,
     lockCenter,
     apex,
+    boardG,
+    popHip: popHipFor(entry, spec, mechanics, style),
     lockRise,
     offPop,
     exitLift: offPop - plainOffPop,
@@ -775,7 +1113,7 @@ export function grindTimelineFor(
   fall: FallVariant,
   rail: Handrail | null = null,
 ): GrindTimeline | null {
-  const spec = grindSpecFor(trick);
+  const spec = grindSpecFor(trick, { ledge: rail?.ledge != null });
   if (!spec) return null;
   return grindTimeline(planGrind(spec, resolveRiderMechanics(riderStance, trick.stance), resolveSkateStyle(style), landed, fall, rail));
 }
@@ -794,6 +1132,8 @@ export interface GrindFrame {
   heading: number;
   /** Degrees of `heading` that are the approach's angle in (plan.approachYaw), unwinding into the lock. */
   approach: number;
+  /** Degrees of the board's own turn into the lock (`pose.yaw - heading`) the shoulders have come round ahead of it (TurnIn). */
+  lead: number;
   /** The deck turned under the feet by the tricks popped into and out of the grind, on top of `pose`. */
   spin: TrickSpin;
   /** 0 → 1: feet off the deck while it turns, and the flicking foot out over the rail. */
@@ -831,8 +1171,14 @@ const SETTLED = 0.15;
 /** The furthest off the bar (world units, about 6 ft) a roll-in starts, and the tightest a carve gets (share of its time). */
 const START_MAX = 180;
 const CARVE_TIGHTEST = 0.5;
-/** Coming down onto the lock, the board keeps this much higher per unit it still has to go sideways. */
+/** Coming down onto the lock, the board keeps at least this much higher per unit it still has to go sideways. */
 const LOCK_SETTLE = 2;
+/** World units over which the board eases onto that floor where its flight comes under it. */
+const SETTLE_EASE = 1;
+/** The least room (world units) past the bar's side a part coming to rest beside it comes straight down in (crossingFor). */
+const CROSS_LEAST = 0.5;
+/** Times its flight's gravity, at most, the legs push the board down at off where a crossing held it up: a slap onto the lock, never a drop in a frame. */
+const CROSS_PUSH = 64;
 
 /**
  * Carving onto the line in, at time `t` before the pop at `pop`: how far
@@ -873,14 +1219,15 @@ function carveTightness(popOff: number, across: number): number {
  * comes in from (negative past it). `over`: the share of the hop spent under
  * the rail's line. `reach(s, angle)`: how far off the line the board's center
  * must keep `s` through the hop, angled in by `angle` degrees. `speed`: the
- * rolling speed. Returns how far off the line it pops (`popOff`), how fast it
+ * rolling speed. `least`: how far off it the takeoff is, across a gap.
+ * Returns how far off the line it pops (`popOff`), how fast it
  * closes in (`across`, world units a second), and the angle it comes in at.
  */
-function approachLine(lock: number, upT: number, over: number, reach: (s: number, angle: number) => number, speed: number) {
+function approachLine(lock: number, upT: number, over: number, reach: (s: number, angle: number) => number, speed: number, least = 0) {
   let angle = 0;
   let popOff = RAIL_BESIDE;
   for (let pass = 0; pass < 4; pass++) {
-    popOff = Math.max(RAIL_BESIDE, lock + 1);
+    popOff = Math.max(RAIL_BESIDE, lock + 1, least);
     for (let k = 0; k <= 40; k++) {
       const s = (k / 40) * over;
       popOff = Math.max(popOff, (reach(s, angle) - lock * s) / (1 - s));
@@ -895,9 +1242,10 @@ function approachLine(lock: number, upT: number, over: number, reach: (s: number
  * How far off the rail's line the board's center keeps `s` through the hop
  * onto it, for the trick popped onto it, angled in by `angle` degrees: a
  * plain ollie RAIL_BESIDE; a deck turned across the line (a spin coming
- * round) reaches its nose or tail that much further.
+ * round, or the board turning into the lock on its own, `turnIn`) reaches
+ * its nose or tail that much further.
  */
-function boardReach(entry: HopPlan | null, entryRate: number, upT: number, turn: number, settled: number, lowEndLeads: boolean) {
+function boardReach(entry: HopPlan | null, entryRate: number, spin: RailSpin | null, turnIn: TurnIn | null, upT: number, turn: number, settled: number, lowEndLeads: boolean) {
   return (s: number, angle: number) => {
     // Angled in, the leading end points at the rail. Popped off the trailing end (an ollie) it's
     // up and clear; popped off the leading end (a nollie, a fakie ollie) it's the low one, and
@@ -906,12 +1254,22 @@ function boardReach(entry: HopPlan | null, entryRate: number, upT: number, turn:
     // The popped end is only low through the snap; the board levels out after it.
     let yaw = lowEndLeads ? angle * (1 - smoothstep((s * upT - POP_RISE) / POP_RISE)) : 0;
     if (entry && (entry.trick.spec.yaw !== 0 || entry.trick.spec.bodyYaw !== 0)) {
-      const hop = hopFrame(entry, hopClock(s * upT, entryRate), true);
+      const hop = hopFrame(entry, hopClock(s * upT, entryRate), spunIn(spin, s * upT));
       yaw = angle + hop.heading + hop.spin.yaw + turn * (turnShare(entry, settled, hop) ?? 0);
+    } else if (turnIn) {
+      yaw = Math.max(yaw, Math.abs(turn) * turnInShare(s * upT, turnIn));
     }
     const a = (yaw * Math.PI) / 180;
     return TIP_X * Math.abs(Math.sin(a)) + HALF_WIDTH * Math.abs(Math.cos(a)) + RAIL_BESIDE - HALF_WIDTH;
   };
+}
+
+/** Hip height over the board at the pop of the flatground trick (an ollie for a plain grind) the hop rides. */
+function popHipFor(entry: HopPlan | null, spec: GrindSpec, mechanics: RiderMechanics, style: SkateStyle): number {
+  const hopSpec = entry?.trick.spec ?? specFor({ id: 'ollie', name: 'Ollie', base: 'Ollie', stance: spec.stance });
+  const f = landingOnRail(computeFrame(hopClock(0, 1), hopSpec, true, 'slam', 0.65, style), hopSpec, 1);
+  const rig = solveRig(f, hopSpec, mechanics, style, 'landed');
+  return f.board.y - (rig.legs[0].hip.y + rig.legs[1].hip.y) / 2;
 }
 
 /**
@@ -924,33 +1282,38 @@ function boardReach(entry: HopPlan | null, entryRate: number, upT: number, turn:
  * grind wears until it hands over to the lock), grown to a person's, the board
  * rising as the hop rises; `beside(tau, along)` is the rail's axis and radius
  * `along` ahead of the board's center `tau` into the hop, or null where there's
- * none. `far` is the rail's side.
+ * none. `far` is the rail's side. Turning into the lock on its own (`turnIn`),
+ * the rider turns with the board through `turn` degrees.
  */
 function legReach(
   spec: GrindSpec,
   entry: HopPlan | null,
   rate: number,
+  spin: RailSpin | null,
+  turnIn: TurnIn | null,
+  turn: number,
   upT: number,
   apex: number,
+  g: number,
   mechanics: RiderMechanics,
   style: SkateStyle,
   far: 1 | -1,
   beside: (tau: number, along: number) => { y: number; radius: number } | null,
 ) {
   const hopSpec = entry?.trick.spec ?? specFor({ id: 'ollie', name: 'Ollie', base: 'Ollie', stance: spec.stance });
-  const v0 = Math.sqrt(2 * GRAVITY * apex);
+  const v0 = Math.sqrt(2 * g * apex);
   // The legs at each moment asked about, off the board's center (physics axes; the board's height
   // added when it's asked): the angle turns them, the rail's height doesn't depend on it.
   const known = new Map<number, { p: V3; radius: number }[]>();
   const legsAt = (tau: number) => {
     const cached = known.get(tau);
     if (cached) return cached;
-    const f = landingOnRail(computeFrame(hopClock(tau, rate), hopSpec, true, 'slam', 0.65, style), hopSpec, style);
+    const f = landingOnRail(computeFrame(hopClock(tau, rate), hopSpec, true, 'slam', 0.65, style), hopSpec, spunIn(spin, tau));
     const rig = solveRig(f, hopSpec, mechanics, style, 'landed');
     const points: { p: V3; radius: number }[] = [];
     // A person on this rig, as riders/human/humanRig.ts grows them: hips up from between the
     // ankles, pulled in toward the feet where a leg can't reach its ankle.
-    const at = (p: V3): V3 => ({ x: p.x - X0, y: p.y - f.board.y, z: p.z });
+    const at = (p: V3): V3 => ({ x: p.x - f.board.x, y: p.y - f.board.y, z: p.z });
     const [l0, l1] = rig.legs;
     const feet = scale3(add3(at(l0.ankle), at(l1.ankle)), 0.5);
     const a = THIGH * PERSON_SCALE, b = SHIN * PERSON_SCALE;
@@ -987,9 +1350,10 @@ function legReach(
   return (s: number, angle: number) => {
     const tau = s * upT;
     const flown = scoops(entry) ? Math.max(0, tau - SCOOP_HOLD * (1 - smoothstep(tau / (2 * SCOOP_HOLD)))) : tau;
-    const boardY = GROUND - (v0 * flown - 0.5 * GRAVITY * flown * flown);
-    // Angled in, as the approach turns board and rider (approachYaw).
-    const yaw = -spec.dir * far * angle;
+    const boardY = GROUND - (v0 * flown - 0.5 * g * flown * flown);
+    // Angled in, as the approach turns board and rider (approachYaw), unwinding as they turn into the lock.
+    const k = turnIn ? turnInShare(tau, turnIn) : 0;
+    const yaw = -spec.dir * far * angle * (1 - k) + turn * k;
     let reach = -Infinity;
     for (const { p, radius } of legsAt(tau)) {
       const q = rotY(p, yaw);
@@ -1006,11 +1370,14 @@ function legReach(
 }
 
 /** Share of a flat-bar hop spent with the wheels still under the bar's top: they cross its line only after. */
-function underBarShare(apex: number, upT: number): number {
-  const v0 = Math.sqrt(2 * GRAVITY * apex);
+function underBarShare(apex: number, upT: number, g: number): number {
+  const v0 = Math.sqrt(2 * g * apex);
   const clear = Math.min(apex, BAR_TOP + WHEEL_BOTTOM + 3);
-  return (v0 - Math.sqrt(Math.max(0, v0 * v0 - 2 * GRAVITY * clear))) / (GRAVITY * upT);
+  return (v0 - Math.sqrt(Math.max(0, v0 * v0 - 2 * g * clear))) / (g * upT);
 }
+
+/** 0 → 1: how far round a body spin onto the bar has come `tau` seconds after the pop (railSpinShare); 1 without one. */
+export const spunIn = (spin: RailSpin | null, tau: number) => (spin ? railSpinShare(tau, spin) : 1);
 
 /**
  * 0 → 1: how far round a trick into the grind that turns the deck has come
@@ -1024,6 +1391,81 @@ function turnShare(entry: HopPlan | null, settled: number, hop: HopFrame | null)
   return entry.trick.spec.yaw ? clamp01(hop.rotation) : null;
 }
 
+/** A part of the board that comes to rest `past` the bar's far side and `under` its top (world units). */
+interface Crossing {
+  under: number;
+  past: number;
+}
+
+/**
+ * Touching down on the bar (or a handrail) with the board's center `at` in
+ * `pose`, coming across it to its `far` side: what of the board comes to rest
+ * past that side and under the top (`top`, the physics y of it over a point;
+ * `half` its half width) crossed over it on the way (a blunt's back wheels),
+ * the deepest for how close it is. Each keeps the board up over the lock by as
+ * much as it's under, until it's that far from it (crossedOver): touching at
+ * most (LEDGE_TOUCH), once the floor's ease has given up its bit (SETTLE_EASE).
+ */
+function crossingFor(at: V3, pose: BoardPose, far: 1 | -1, top: (q: V3) => number, half: number): Crossing[] {
+  const dir = poseDir(pose);
+  const parts: Crossing[] = [];
+  for (const p of CROSS_POINTS) {
+    const q = add3(at, dir(p));
+    const under = q.y - top(q) - LEDGE_TOUCH + SETTLE_EASE / 2;
+    const past = far * (q.z - BAR_Z) - half + LEDGE_TOUCH;
+    if (under > 0 && past >= 0) parts.push({ under, past });
+  }
+  // Only the deepest for how close it comes: the rest are over the bar's top whenever those are.
+  const deepest = parts.filter((a, i) => !parts.some((b, j) => b.under >= a.under && b.past <= a.past && (b.under > a.under || b.past < a.past || j < i)));
+  return deepest;
+}
+
+/**
+ * How high over the lock the board keeps, `left` world units short of it across
+ * the bar, for what comes to rest past the bar's far side to be over the bar's
+ * top until it's past: coming straight on from each, down the last CROSS_LEAST,
+ * or as far as it goes across (at `speed`) while the legs push it down that far
+ * (CROSS_PUSH times `g`), if that's further: a part that comes to rest right
+ * beside the bar, deep under its top, grazes its side rather than the board
+ * dropping onto the lock all at once. A handrail's top under the board is
+ * `climb` higher still than where it locks.
+ */
+const crossedOver = (crossing: readonly Crossing[], left: number, climb: number, speed: number, g: number) =>
+  crossing.reduce((high, { under, past }) => {
+    const down = under + climb;
+    const across = Math.max(CROSS_LEAST, past, speed * Math.sqrt((2 * down) / (CROSS_PUSH * g)));
+    return Math.max(high, down * Math.min(1, left / across));
+  }, 0);
+
+/** How far (world units) the board hangs under the bar's top off to its side, seated on it in `pose`. */
+function hangBeside(pose: BoardPose, bearing: Bearing): number {
+  const at = onBar(pose, bearing);
+  const dir = poseDir(pose);
+  return Math.max(...LEDGE_POINTS.map((p) => {
+    const q = add3(at, dir(p));
+    return Math.min(q.y - BAR_TOP_Y, Math.abs(q.z - BAR_Z) - BAR_HALF);
+  }));
+}
+
+/** How deep (world units) the board's wheels or deck sit in the bar, seated on it in `pose`. */
+function barDepth(pose: BoardPose, bearing: Bearing): number {
+  const at = onBar(pose, bearing);
+  const dir = poseDir(pose);
+  return Math.max(...LEDGE_POINTS.map((p) => {
+    const q = add3(at, dir(p));
+    return Math.min(q.y - BAR_TOP_Y, BAR_TOP_Y + 2 * BAR_HALF - q.y, BAR_HALF - Math.abs(q.z - BAR_Z));
+  }));
+}
+
+/**
+ * Share of a spin or a turn onto the bar (of `spinLeft` at touchdown) the bar
+ * has still to finish at a clock time on it, slowing it evenly to a stop.
+ */
+function finishing(plan: GrindPlan, time: number): number {
+  const finishT = plan.spinIn?.finishT ?? plan.turnIn?.finishT;
+  return finishT ? plan.spinLeft * (1 - clamp01((time - plan.lockAt) / finishT)) ** 2 : 0;
+}
+
 /** Damped spring from `from` (moving at `speed`) back to `rest`, `u` seconds on. */
 function spring(from: number, speed: number, rest: number, u: number): number {
   const w = LAND_OMEGA;
@@ -1035,8 +1477,8 @@ function spring(from: number, speed: number, rest: number, u: number): number {
 }
 
 /** Hip height over the deck through a hop (s = 0 → 1): extend, tuck, reach down. */
-const hopLegs = (tuck: number, s: number) =>
-  POP_HEIGHT + (TOUCHDOWN_HEIGHT - POP_HEIGHT) * s - 4 * tuck * s * (1 - s);
+const hopLegs = (tuck: number, s: number, from = POP_HEIGHT) =>
+  from + (TOUCHDOWN_HEIGHT - from) * s - 4 * tuck * s * (1 - s);
 
 const mix = (a: number, b: number, k: number) => a + (b - a) * k;
 const mixFeet = (a: readonly [number, number], b: readonly [number, number], k: number): [number, number] =>
@@ -1062,18 +1504,18 @@ function loadAndPop(t: number, at: number, from: number, squat: number, takeoff:
 export function grindFrame(time: number, plan: GrindPlan): GrindFrame {
   const { spec, handrail: ride } = plan;
   const t = Math.max(0, time);
-  const v0 = Math.sqrt(2 * GRAVITY * plan.apex);
+  const v0 = Math.sqrt(2 * plan.boardG * plan.apex);
   const v1 = Math.sqrt(2 * GRAVITY * plan.offPop);
   // Hip speeds (over the deck, up positive) where the board leaves or meets
   // something: the hips carry their world speed across, the board's doesn't.
   const tuckOn = plan.entry ? TUCK_TRICK : TUCK_ON;
-  const upLegs0 = (TOUCHDOWN_HEIGHT - POP_HEIGHT - 4 * tuckOn) / plan.upT;
-  const upLegs1 = (TOUCHDOWN_HEIGHT - POP_HEIGHT + 4 * tuckOn) / plan.upT;
+  const upLegs0 = (TOUCHDOWN_HEIGHT - plan.popHip - 4 * tuckOn) / plan.upT;
+  const upLegs1 = (TOUCHDOWN_HEIGHT - plan.popHip + 4 * tuckOn) / plan.upT;
   const offLegs0 = (TOUCHDOWN_HEIGHT - POP_HEIGHT - 4 * TUCK_OFF) / plan.offT;
   const offLegs1 = (TOUCHDOWN_HEIGHT - POP_HEIGHT + 4 * TUCK_OFF) / plan.offT;
   const onTakeoff = v0 + upLegs0;
   // A handrail goes on falling under the board after the lock, so the legs take less of the landing on it.
-  const onArrive = v0 - GRAVITY * plan.upT + upLegs1 + (ride ? ride.rail.slope * ride.speed : 0);
+  const onArrive = v0 - plan.boardG * plan.upT + upLegs1 + (ride ? ride.rail.slope * ride.speed : 0);
   const offTakeoff = v1 + offLegs0;
   const offArrive = plan.offLaunch - GRAVITY * plan.offT + offLegs1;
   const popFeet = spec.popNose ? NOSE_POP_FEET : TAIL_POP_FEET;
@@ -1098,6 +1540,7 @@ export function grindFrame(time: number, plan: GrindPlan): GrindFrame {
     streetDist: time,
     rail: 0,
     approach: 0,
+    lead: 0,
   };
 
   if (t < plan.pop) {
@@ -1129,7 +1572,7 @@ export function grindFrame(time: number, plan: GrindPlan): GrindFrame {
     // A scoop holds the flight back while the tail strikes, then catches it up (SCOOP_STRIKE).
     const scoop = scoops(plan.entry);
     const flown = scoop ? Math.max(0, tau - SCOOP_HOLD * (1 - smoothstep(tau / (2 * SCOOP_HOLD)))) : tau;
-    const rise = v0 * flown - 0.5 * GRAVITY * flown * flown;
+    const rise = v0 * flown - 0.5 * plan.boardG * flown * flown;
     // The board rises clear of the bar's height before it's over the bar,
     // then turns into the trick as it comes down onto it. Beside a handrail
     // it waits until the rail has fallen away under its line, tipped to
@@ -1137,21 +1580,45 @@ export function grindFrame(time: number, plan: GrindPlan): GrindFrame {
     const ramp = plan.entry ? ENTRY_LOCK_IN : LOCK_IN;
     const over = ride ? clamp01((s - ride.over) / (1 - ride.over)) : 0;
     const lockIn = ride ? smoothstep((over - 0.5) / 0.48) : smoothstep((s - ramp.from) / ramp.span);
-    const trick = plan.entry ? hopFrame(plan.entry, hopClock(tau, plan.entryRate), true) : null;
+    const trick = plan.entry ? hopFrame(plan.entry, hopClock(tau, plan.entryRate), spunIn(plan.spinIn, tau)) : null;
     // A spin in carries the board round into the lock with it: the lock's own turn comes on as the
-    // spin does, so the board keeps turning one way and arrives in the lock as the spin comes round
-    // (a 360 into a lipslide turns 270 or 450), rather than spinning round and turning back. Without
-    // one, over a handrail's line the board turns across it as it steps over; only dipping an end
-    // below it waits until it's across.
-    const turnIn = turnShare(plan.entry, plan.heading, trick)
-      ?? (ride ? smoothstep((over - CROSS_FROM) / (CROSS_TO + 0.05 - CROSS_FROM)) : lockIn);
+    // spin does, so the board keeps turning one way, at one speed, down onto the bar, and the bar
+    // finishes the turn (a 360 into a lipslide turns 270 or 450), rather than spinning round and
+    // turning back, or stopping in the air. Without one the rider turns it in off the pop (TurnIn),
+    // shoulders first; only dipping an end below a handrail's line waits until it's across.
+    const turnIn = turnShare(plan.entry, plan.heading, trick) ?? (plan.turnIn ? turnInShare(tau, plan.turnIn) : lockIn);
+    const lead = plan.turnIn ? (plan.lock.yaw - plan.heading) * (shouldersIn(tau, plan.turnIn) - turnIn) : 0;
+    // Turning in on its own, the board dips an end into the lock no sooner than it turns that end across.
+    // Down a handrail it tips with the rail as it comes over (`tip`). A lock that tips it back against
+    // the rail's fall (a 5-0's tail, a suski's) does so as it tips with it, so the board goes straight
+    // from level to its lock: never nose down with the rail first and then back, the tail foot lifting
+    // and stamping down. (A lock with an end hanging down beside the rail, a feeble's, keeps to its
+    // turn: that end has to swing across before it dips.)
+    const tip = ride ? smoothstep((s - ride.over + 0.2) / 0.35) : 0;
+    // (Its pitch along the rail: a slide's, turned across it, tips it across the rail's fall, not against it.)
+    const along = plan.lock.pitch * Math.cos((plan.lock.yaw * Math.PI) / 180);
+    const against = ride != null && along * ride.tilt < 0 && Math.abs(along) > 1
+      && hangBeside({ yaw: plan.lock.yaw, pitch: plan.lock.pitch, roll: plan.lock.roll }, spec.contact) <= HOOK_HANG;
+    const dip = against ? tip : plan.turnIn ? Math.min(lockIn, clamp01(turnIn / (1 - plan.turnIn.left)) ** DIP_LATE) : lockIn;
     const [noseFoot, tailFoot] = mixFeet(popFeet, spec.feet, smoothstep((s - 0.15) / 0.7));
-    // Sideways, the board goes on at the speed the approach gave it: a straight line onto the lock.
-    // Coming in across a bar, it settles onto it no sooner than it gets across: still above the
-    // lock by as much as it has left to go sideways, so the far wheel clears the bar's top.
+    // Sideways, the board goes on at the speed the approach gave it: a straight line onto where it
+    // touches down, still short of its turn and pivoting into the lock from there. Coming in across
+    // a bar, it settles onto it no sooner than it gets across: no lower than the lock by as much as
+    // it has left to go sideways, so the far wheel clears the bar's top, and what comes to rest past
+    // the bar's far side stays over it until it's across (plan.crossing). Its flight mostly comes down
+    // that high anyway; only where it would dip under is the board held up, never lifted over it
+    // (that would be the legs pulling it up, and they push it down into a lock).
     const left = Math.abs(plan.approachSpeed) * Math.max(0, plan.upT - tau);
-    const settle = LOCK_SETTLE * left * smoothstep((s - 0.7) / 0.25);
-    const ref = { x: X0, y: GROUND - rise - settle, z: plan.laneZ + plan.approachSpeed * tau };
+    const climb = ride ? ride.rail.slope * ride.speed * (plan.upT - tau) : 0;
+    const floor = Math.max(LOCK_SETTLE * left, crossedOver(plan.crossing, left, climb, Math.abs(plan.approachSpeed), plan.boardG));
+    const under = smoothstep((s - 0.7) / 0.25) * (floor - (rise - (v0 * plan.upT - 0.5 * plan.boardG * plan.upT * plan.upT)));
+    const settle = under <= 0 ? 0 : under < SETTLE_EASE ? (under * under) / (2 * SETTLE_EASE) : under - SETTLE_EASE / 2;
+    // Still short of its turn as it comes down, it seats what rides the bar where the lock will.
+    const ref = {
+      x: X0,
+      y: GROUND - rise - settle + plan.touchdown.y * lockIn,
+      z: plan.laneZ + plan.approachSpeed * tau,
+    };
     // The pop turns the board about its middle, as on flatground: the tail
     // strike tips it up over the entry's snap and it levels off on flatground's
     // clock; a trick's own pitch comes straight from the flatground physics,
@@ -1174,9 +1641,9 @@ export function grindFrame(time: number, plan: GrindPlan): GrindFrame {
         // Hopping onto a handrail the board angles toward where it's heading across, until it turns into the lock.
         yaw: heading + (plan.lock.yaw - plan.heading) * turnIn,
         // The pop's own pitch gives way to the lock's as the board settles into it.
-        pitch: plan.lock.pitch * lockIn + pop * (1 - lockIn),
-        roll: plan.lock.roll * lockIn,
-        ...(ride ? { fall: ride.tilt * smoothstep((s - ride.over + 0.2) / 0.35) } : null),
+        pitch: plan.lock.pitch * dip + pop * (1 - dip),
+        roll: plan.lock.roll * dip,
+        ...(ride ? { fall: ride.tilt * tip } : null),
       },
     };
     // The tail strike pivots the board up off its tail: while the pop tips it,
@@ -1191,13 +1658,14 @@ export function grindFrame(time: number, plan: GrindPlan): GrindFrame {
       ...board,
       heading,
       approach,
+      lead,
       ...(trick ? { spin: trick.spin, offDeck: trick.offDeck, flickOut: trick.flickOut } : null),
       ref,
       noseFoot,
       tailFoot,
-      // The hips ride up with feet that have left the deck, so the legs stay
-      // open instead of folding tight around them.
-      overDeck: hopLegs(tuckOn, s) + (trick && plan.entry ? TRICK_HIP_LIFT * trick.offDeck * plan.entry.trick.feetLift : 0),
+      // The hips fly gravity's arc whatever the board does under them (boardGravity): the legs
+      // take up its tuck, a trick's feet coming up off it, and settling it into the lock.
+      overDeck: ref.y - (GROUND - (v0 * tau - 0.5 * plan.boardG * tau * tau) - hopLegs(tuckOn, s, plan.popHip)),
       air: smoothstep(tau / 0.16),
       rail: smoothstep(s),
     };
@@ -1205,15 +1673,22 @@ export function grindFrame(time: number, plan: GrindPlan): GrindFrame {
 
   if (t < plan.off) {
     const u = t - plan.lockAt;
+    // The bar takes up what's left of a spin or a turn onto it: the board pivots on what rides the
+    // bar into the lock, catching up with the shoulders.
+    const spinning = finishing(plan, t);
+    // Before a spin out the rider starts turning into it, up to its speed by the pop.
+    const into = plan.spinOut ? plan.spinOut.angle * clamp01((t - (plan.off - plan.spinOut.lead)) / plan.spinOut.lead) ** 2 : 0;
     // Balance: a slow sway the board and arms share, faded in after the
     // lock-in and out before the pop.
     const settle = smoothstep(u / 0.3) * (1 - smoothstep((t - (plan.off - EXIT_CROUCH - 0.2)) / 0.2));
     const sway = Math.sin(u * Math.PI * 1.7 + 0.5) * settle;
     const oneTruck = spec.contact.at.x !== 0 && !spec.slide;
+    // Snapping off a ledge, the board lets go of the roll that held it up off the top.
+    const snapping = plan.ledgeRoll ? smoothstep((t - (plan.off - SNAP)) / SNAP) : 0;
     const held: BoardPose = {
-      yaw: plan.lock.yaw + (spec.slide ? WOBBLE_SLIDE : WOBBLE_YAW) * sway,
+      yaw: plan.lock.yaw + (spec.slide ? WOBBLE_SLIDE : WOBBLE_YAW) * sway + (plan.approachYaw - plan.lock.yaw) * spinning,
       pitch: plan.lock.pitch + (oneTruck ? WOBBLE_PITCH * sway : 0),
-      roll: plan.lock.roll,
+      roll: plan.lock.roll - plan.ledgeRoll * snapping,
       ...(ride ? { fall: ride.tilt } : null),
     };
     // Down a handrail the board rides it down as the rider speeds along it.
@@ -1229,6 +1704,9 @@ export function grindFrame(time: number, plan: GrindPlan): GrindFrame {
       ...base,
       phase: 'lock',
       ...board,
+      heading: plan.heading + (plan.approachYaw - plan.heading) * spinning + into,
+      approach: plan.approachYaw * spinning,
+      lead: plan.turnIn ? (plan.lock.yaw - plan.heading) * spinning : 0,
       ref,
       noseFoot,
       tailFoot,
@@ -1251,8 +1729,10 @@ export function grindFrame(time: number, plan: GrindPlan): GrindFrame {
     const turnOut = smoothstep((s - 0.06) / 0.62);
     const trick = plan.exit ? hopFrame(plan.exit, hopClock(tau, plan.exitRate)) : null;
     // The board turns out of the lock to the way the rider is headed, and a
-    // 180 out carries rider and board round on top of that.
+    // 180 out carries rider and board round on top of that. The rider, already
+    // turning into it on the bar, leads the board round until it catches up.
     const heading = plan.heading + (trick?.heading ?? 0);
+    const lead = plan.spinOut && trick ? plan.spinOut.angle * (1 - trick.heading / (plan.endHeading - plan.heading)) : 0;
     const [noseFoot, tailFoot] = mixFeet(exitFeet, RIDE_FEET, smoothstep((s - 0.2) / 0.7));
     const ref = { x: X0, y: plan.landY - rise, z: plan.lockCenter.z };
     const board = snapped(
@@ -1260,7 +1740,7 @@ export function grindFrame(time: number, plan: GrindPlan): GrindFrame {
       {
         yaw: heading + (plan.lock.yaw - plan.heading) * (1 - turnOut),
         pitch: plan.lock.pitch * (1 - level),
-        roll: plan.lock.roll * (1 - smoothstep(s / 0.5)),
+        roll: (plan.lock.roll - plan.ledgeRoll) * (1 - smoothstep(s / 0.5)),
         // Off the bottom of a handrail the board keeps the rail's slope a while, levelling for the landing.
         ...(ride ? { fall: ride.tilt * (1 - smoothstep(s / 0.6)) } : null),
       },
@@ -1272,7 +1752,7 @@ export function grindFrame(time: number, plan: GrindPlan): GrindFrame {
       phase: 'off',
       ...board,
       ...(trick && plan.exit
-        ? { heading, spin: thenSpin(base.spin, trick.spin), offDeck: trick.offDeck, flickOut: trick.flickOut }
+        ? { heading: heading + lead, spin: thenSpin(base.spin, trick.spin), offDeck: trick.offDeck, flickOut: trick.flickOut }
         : null),
       ref,
       noseFoot,
@@ -1415,13 +1895,26 @@ export function handrailHeight(plan: GrindPlan, time: number): number {
   return Math.max(ground, air(from, 0, t - plan.fail));
 }
 
-/** Share of the board's sideways distance from its lock the crane follows on the way in. */
+/**
+ * Where across (z, in the grind's own frame) the board's center is on its
+ * planned line at a clock time: carving in, crossing over in the hop, then on
+ * the lock, and riding away from there.
+ */
+export function grindLane(plan: GrindPlan, time: number): number {
+  // Touching down short of its turn, it pivots from where it touched down into the lock.
+  if (time >= plan.lockAt) return plan.lockCenter.z + (plan.spinLeft ? (plan.touchdown.z * finishing(plan, time)) / plan.spinLeft : 0);
+  return time < plan.pop
+    ? plan.laneZ - plan.approachSpeed * carve(time, plan.pop, plan.carveTight).across
+    : plan.laneZ + plan.approachSpeed * (time - plan.pop);
+}
+
+/** Share of the board's sideways distance from its touchdown the crane follows on the way in. */
 const CAMERA_TRACK = 0.6;
 
 /**
  * The crane's sideways follow (world units, added to the camera's targetZ),
  * as the rider carves in on an angled line and hops across onto the bar: a
- * share of how far the board still is from where it locks; nothing once it's
+ * share of how far the board still is from where it touches down; nothing once it's
  * on, so the grind itself is framed as it always was.
  */
 export function grindCameraTrack(plan: GrindPlan, time: number): number {
@@ -1429,7 +1922,7 @@ export function grindCameraTrack(plan: GrindPlan, time: number): number {
   const z = time < plan.pop
     ? plan.laneZ - plan.approachSpeed * carve(time, plan.pop, plan.carveTight).across
     : plan.laneZ + plan.approachSpeed * (time - plan.pop);
-  return CAMERA_TRACK * (z - plan.lockCenter.z);
+  return CAMERA_TRACK * (z - plan.lockCenter.z - plan.touchdown.z);
 }
 
 /**

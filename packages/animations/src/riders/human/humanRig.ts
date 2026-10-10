@@ -1,7 +1,7 @@
 import { add3, cross3, dot3, norm3, scale3, smoothstep, sub3, type V3 } from '../../math';
 import type { ArmRig, BoardRig, Frame3, LegRig, Rig } from '../../motion/skeleton';
 import { capsuleIntersectsBoard } from '../../board/boardCollision';
-import { HUMAN_FOREARM, HUMAN_HEAD, HUMAN_SCALE, HUMAN_SHIN, HUMAN_THIGH, HUMAN_UPPER_ARM, shinRadius, thighRadius } from './humanGeometry';
+import { HUMAN_FOREARM, HUMAN_HEAD, HUMAN_SCALE, HUMAN_SHIN, HUMAN_THIGH, HUMAN_UPPER_ARM, shinRadius, thighRadius } from './humanProportions';
 import { ASPHALT } from '../../camera/view';
 
 /**

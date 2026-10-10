@@ -23,7 +23,7 @@ import { FOOT } from '../sets/elToro/stairs';
  */
 
 /** Camera distance from its target at lens 1; closer = stronger perspective. */
-const DISTANCE = 520;
+export const DISTANCE = 520;
 /** Focal length in viewBox units at lens 1. FOCAL / DISTANCE is the rider's scale. */
 const FOCAL = 720;
 /** Target height above the asphalt: roughly the resting hip. */
