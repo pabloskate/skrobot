@@ -8,6 +8,7 @@ import {
   cameraLabel,
   cameraPreset,
   cameraPresetsFor,
+  picksObstacle,
   railLine,
   sceneCamera,
   sceneTripod,
@@ -102,7 +103,7 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
         </div>
         <div className="explorer-actions">
           <VideoButton
-            video={{ robot: RIDER, trick, riderStance: state.rider, camera, tripod, zoom: state.zoom, set: state.set, rail: state.rail, skater: state.skater, rate, sound }}
+            video={{ robot: RIDER, trick, riderStance: state.rider, camera, tripod, zoom: state.zoom, set: state.set, rail: state.rail, obstacle: state.obstacle, skater: state.skater, rate, sound }}
           />
           <button type="button" className="explorer-share" onClick={share}>
             {shared ? <TbCheck aria-hidden /> : <TbShare aria-hidden />}
@@ -114,7 +115,7 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
       <div className="explorer-layout">
         <div className="explorer-stage-col">
           <ExplorerStage
-            key={`${trick.id}:${state.rider}`}
+            key={`${trick.id}:${state.rider}:${state.obstacle}`}
             robot={RIDER}
             trick={trick}
             rider={state.rider}
@@ -124,6 +125,7 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
             zoom={state.zoom}
             set={state.set}
             rail={state.rail}
+            obstacle={state.obstacle}
             skater={state.skater}
             cameraLabel={cameraLabel(state)}
             customCamera={preset == null}
@@ -196,6 +198,27 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
               </div>
               {setInfo(state.set).description && <p className="explorer-spot-description">{setInfo(state.set).description}</p>}
             </div>
+            {picksObstacle(state) && (
+              <div className="explorer-field explorer-field-inline">
+                <span className="explorer-field-label" id="explorer-obstacle-label">
+                  Obstacle <small>{setInfo(state.set).obstacles?.find((o) => o.id === state.obstacle)?.hint}</small>
+                </span>
+                <div className="explorer-segmented explorer-segmented-compact" role="radiogroup" aria-labelledby="explorer-obstacle-label">
+                  {setInfo(state.set).obstacles!.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={state.obstacle === option.id}
+                      className={state.obstacle === option.id ? 'active' : ''}
+                      onClick={() => setState({ ...state, obstacle: option.id })}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             {pickRail && (
               <div className="explorer-field explorer-field-inline">
                 <span className="explorer-field-label" id="explorer-rail-label">

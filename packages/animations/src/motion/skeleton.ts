@@ -59,7 +59,7 @@ export const KNEE_AIM_BACK = 62;
 const SHIN_TILT_MAX = 45;
 const KNEE_TWIST_MAX = 60;
 /** A soft twist: shortfall (world units of knee height) it eases in over, and how hard it leans. */
-const SOFT_TWIST = 5;
+const SOFT_TWIST = 7;
 const SOFT_GAIN = 2.5;
 /** How far the hips slide along the board toward the midpoint of the feet:
  *  the weight sits between them, not over the physics' body anchor. */
@@ -80,6 +80,15 @@ export const HIP_BACK = 14;
 /** How much of the torso lean the head undoes to keep the eyes level. */
 export const HEAD_STEADY = 0.6;
 export const LOOK_DOWN_OLLIE = 7;
+/**
+ * The hardest drop's landing (an impact of 1) past what the bottomed-out
+ * squat already shows: the chest folds this much further over the knees
+ * (deg), the hips sit back this much more of HIP_BACK, and the chin drops
+ * this far (deg) as the body takes the hit.
+ */
+export const LEAN_IMPACT = 20;
+export const HIP_BACK_IMPACT = 0.6;
+export const LOOK_DOWN_IMPACT = 12;
 
 export interface Frame3 {
   origin: V3;
@@ -291,6 +300,11 @@ export const ARM_AIR: Record<'front' | 'back', ArmPose> = {
 export const ARM_LAND: Record<'front' | 'back', ArmPose> = {
   front: { out: 44, swing: 26, elbow: 30 },
   back: { out: 40, swing: -4, elbow: 26 },
+};
+/** A drop's hard landing: both arms thrown out and down in front of the knees, catching the balance. */
+export const ARM_BRACE: Record<'front' | 'back', ArmPose> = {
+  front: { out: 54, swing: 48, elbow: 44 },
+  back: { out: 52, swing: 24, elbow: 40 },
 };
 
 export const mixPose = (a: ArmPose, b: ArmPose, k: number): ArmPose => ({

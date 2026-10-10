@@ -10,6 +10,7 @@ import { TIP_X, deckBottomY } from '../board/deck';
 import { EL_TORO_RAIL } from '../sets/elToro/stairs';
 import { DEFAULT_SCENE_CAMERA, fallSink, makeCamera } from '../camera/camera';
 import {
+  GRAVITY,
   barSpan,
   carve,
   grindCameraLift,
@@ -37,7 +38,7 @@ import {
 import { canEnterGrind, canExitGrind, thenSpin } from './grindTricks';
 import { boardRigAt, solveGrindRig } from './grindRig';
 import { add3, dot3, rotX, rotY, scale3, sub3, type V3 } from '../math';
-import { DECK_HALF_WIDTH, SHIN, SHOE_HALF_HEIGHT, THIGH, type Rig } from './skeleton';
+import { DECK_HALF_WIDTH, PERSON_SCALE, SHIN, SHOE_HALF_HEIGHT, THIGH, type Rig } from './skeleton';
 
 /**
  * Grinds are their own trick motion, so these pin the physics a skater would
@@ -97,6 +98,44 @@ function* everyGrind() {
         for (const stance of STANCES) yield { base, side, rider, stance, label: `${side} ${base} ${stance} ${rider}` };
       }
     }
+  }
+}
+
+/** The drawn rider's hip height (physics y): `grow` times the rig over the same feet (riders/human/humanRig.ts). */
+function grownHipY(plan: GrindPlan, mechanics: ReturnType<typeof resolveRiderMechanics>, grow: number) {
+  return (t: number) => {
+    const { legs } = solveGrindRig(t, plan, mechanics, NEUTRAL, grow).rig;
+    const feet = (legs[0].ankle.y + legs[1].ankle.y) / 2;
+    return feet + grow * ((legs[0].hip.y + legs[1].hip.y) / 2 - feet);
+  };
+}
+
+/**
+ * Into a takeoff the hips crouch once and rise once: from the bottom of the
+ * crouch they never sink again, never snap, and nothing pulls them down
+ * faster than gravity (beyond a foot coming up off the deck at the pop).
+ */
+function expectOneRise(hipY: (t: number) => number, takeoff: number, label: string) {
+  const DT = 1 / 240;
+  const from = takeoff - 0.25;
+  let bottom = from;
+  let low = hipY(from);
+  for (let t = from + DT; t < takeoff; t += DT) {
+    const y = hipY(t);
+    if (y > low) [bottom, low] = [t, y];
+  }
+  let high = low;
+  let sink = 0;
+  for (let t = bottom; t < takeoff + 0.05; t += 2 * DT) {
+    const y = hipY(t);
+    high = Math.min(high, y);
+    sink = Math.max(sink, y - high);
+  }
+  expect(sink, `${label}: sinks again after the crouch`).toBeLessThan(0.25);
+  for (let t = from; t < takeoff + 0.05; t += 0.01) {
+    const a = (hipY(t + DT) - 2 * hipY(t) + hipY(t - DT)) / (DT * DT);
+    expect(Math.abs(a), `${label}: snaps at ${(t - takeoff).toFixed(2)}`).toBeLessThan(20 * GRAVITY);
+    if (t > bottom && t < takeoff) expect(a, `${label}: pulled down at ${(t - takeoff).toFixed(2)}`).toBeLessThan(1.75 * GRAVITY);
   }
 }
 
@@ -167,20 +206,20 @@ describe('Grind catalog', () => {
     }
   });
 
-  it('comes in frontside with the bar on the toeside and backside on the heelside, boardslides the other way round', () => {
-    // Boardslides are named for the way the body turns: a backside one comes in facing the bar.
+  it('comes in frontside with the bar on the toeside and backside on the heelside, boardslides too', () => {
+    // Frontside is the chest facing the bar before the pop, whatever the slide.
     for (const { base, side, rider, stance, label } of everyGrind()) {
       const { plan } = planFor(base, side, stance, rider, null);
       const barToward = Math.sign(BAR_Z - plan.laneZ);
-      const toeside = (side === 'frontside') !== (base === 'Boardslide');
+      const toeside = side === 'frontside';
       expect(barToward, label).toBe(toeside ? plan.toeDir : -plan.toeDir);
     }
   });
 
-  it('turns into slides the way their names say: frontside board-, lip-, tail- and noseblunt slides face down the bar, nose- and bluntslides up it', () => {
+  it('turns into slides the way their names say: frontside lip-, tail- and noseblunt slides face down the bar, board-, nose- and bluntslides up it', () => {
     // Facing = the toeside of the locked board, against the direction of travel.
     const facesDownBar: Record<string, Record<GrindSide, boolean>> = {
-      Boardslide: { frontside: true, backside: false },
+      Boardslide: { frontside: false, backside: true },
       Lipslide: { frontside: true, backside: false },
       Noseslide: { frontside: false, backside: true },
       Tailslide: { frontside: true, backside: false },
@@ -202,6 +241,61 @@ describe('Grind catalog', () => {
 });
 
 describe('Grind physics', () => {
+  it('turns a slide in off the pop and whips it round toward the bar: still turning as it touches down, for the bar to stop', () => {
+    const FRAME = 1 / 120;
+    for (const rail of [null, EL_TORO_RAIL]) {
+      for (const { base, side, rider, stance, label: name } of everyGrind()) {
+        const spec = grindSpecFor({ base: nameOf(base, side), stance })!;
+        if (Math.abs(spec.yaw) !== 90) continue;
+        const plan = planGrind(spec, resolveRiderMechanics(rider, stance), NEUTRAL, true, 'slam', rail);
+        const label = `${name} ${rail ? 'rail' : 'bar'}`;
+        const turn = plan.lock.yaw - plan.approachYaw;
+        const share = (t: number) => (grindFrame(t, plan).pose.yaw - plan.approachYaw) / turn;
+        const rate = (t: number) => (share(t + FRAME) - share(t)) / FRAME;
+        // Under way off the pop (if slowly while a popped end swings over the bar).
+        expect(share(plan.pop + 0.3 * plan.upT), label).toBeGreaterThan(0.03);
+        const turnIn = plan.turnIn!;
+        // A blunt's wheels hook just past the bar's side: short of its turn, they'd be in the bar.
+        expect(turnIn.by < 1, label).toBe(/blunt/i.test(base));
+        if (turnIn.by < 1) {
+          // So it's turned all the way in, eased to a stop, before they drop past the bar's top.
+          expect(Math.abs(1 - share(plan.pop + turnIn.by * plan.upT)), label).toBeLessThan(0.01);
+          expect(Math.abs(rate(plan.pop + turnIn.by * plan.upT - FRAME) * turn), label).toBeLessThan(30);
+          continue;
+        }
+        // Anything else comes on harder toward the bar, comes down still turning, short of the lock, and the bar stops it.
+        expect(rate(plan.pop + 0.75 * plan.upT), label).toBeGreaterThan(rate(plan.pop + 0.35 * plan.upT));
+        const short = 1 - share(plan.lockAt);
+        expect(short, label).toBeGreaterThan(0.05);
+        expect(short, label).toBeLessThan(0.16);
+        expect(Math.abs(rate(plan.lockAt - FRAME) * turn), label).toBeGreaterThan(150);
+        // Only the balance wobble left (WOBBLE_SLIDE at most).
+        expect(Math.abs(grindFrame(plan.lockAt + turnIn.finishT, plan).pose.yaw - plan.lock.yaw), label).toBeLessThan(3);
+      }
+    }
+  }, 30_000);
+
+  it('flies the rider on gravity alone onto the bar and off it: one push up into each hop, the knees push the board down, nothing pushes the hips back up', () => {
+    const DT = 1 / 240;
+    for (const { base, side, rider, stance, label } of everyGrind()) {
+      if (rider !== 'regular') continue;
+      const { plan, mechanics } = planFor(base, side, stance, rider, null);
+      // The robot, and a person grown over the same feet (riders/human/humanRig.ts).
+      for (const grow of [1, PERSON_SCALE]) {
+        const hipY = grownHipY(plan, mechanics, grow);
+        expectOneRise(hipY, plan.pop, `${label} x${grow} pop`);
+        expectOneRise(hipY, plan.off, `${label} x${grow} pop off`);
+        for (const [from, to] of [[plan.pop, plan.lockAt], [plan.off, plan.land]]) {
+          for (let t = from + 2 * DT; t < to - 2 * DT; t += 0.03) {
+            // Falling no slower than gravity (a leg at full stretch can only let a foot off the board).
+            const fall = (hipY(t + DT) - 2 * hipY(t) + hipY(t - DT)) / (DT * DT);
+            expect(fall, `${label} x${grow} t=${t.toFixed(2)}`).toBeGreaterThan(0.98 * GRAVITY);
+          }
+        }
+      }
+    }
+  }, 60_000);
+
   it('locks the riding part of the board exactly onto the bar for the whole grind', () => {
     for (const { base, side, rider, stance, label } of everyGrind()) {
       const { plan, spec, mechanics } = planFor(base, side, stance, rider, null);
@@ -304,7 +398,8 @@ describe('Grind physics', () => {
       }
       // Toward the bar, and landing on the lock.
       expect(Math.sign(plan.approachSpeed || plan.far), label).toBe(plan.far);
-      expect(z(plan.lockAt), label).toBeCloseTo(plan.lockCenter.z, 6);
+      // Where it touches down: short of its turn, it pivots from there into the lock.
+      expect(z(plan.lockAt), label).toBeCloseTo(plan.lockCenter.z + plan.touchdown.z, 6);
     }
   });
 });
@@ -578,8 +673,8 @@ describe('Trick into grind', () => {
             sweep.below('shin length error', Math.abs(dist(leg.knee, leg.ankle) - SHIN), 0.5e-6, `${label} t=${t.toFixed(2)}`);
             if (frame.flickOut > 0.9 && leg.flicking && (entry === 'Kickflip' || entry === 'Heelflip')) {
               // Out past the rail: heelside for a kickflip, toeside for a heelflip.
-              // (Measured across the rider's line, since the flipping deck's own sides swap.)
-              const side = rotY({ x: 0, y: 0, z: 1 }, frame.approach);
+              // (Measured across the rider's line, turning into the lock with the board, since the flipping deck's own sides swap.)
+              const side = rotY({ x: 0, y: 0, z: 1 }, frame.pose.yaw);
               const across = dot3(sub3(leg.shoe.origin, rig.board.center), side);
               expect(Math.sign(across) * rig.toeDir, `${label} t=${t.toFixed(2)}`).toBe(entry === 'Heelflip' ? 1 : -1);
               expect(Math.abs(across), label).toBeGreaterThan(DECK_HALF_WIDTH - 3);
@@ -663,6 +758,14 @@ describe('Trick into grind', () => {
     }
     sweep.verify();
   }, 30_000);
+
+  it('pushes up into the pop once, however the trick sets up', () => {
+    for (const { entry, base, side, rider, stance, label } of everyEntry()) {
+      if (rider !== 'regular' || stance === 'fakie' || stance === 'switch') continue;
+      const { plan, mechanics } = entryPlan(entry, base, side, stance, rider, null);
+      for (const grow of [1, PERSON_SCALE]) expectOneRise(grownHipY(plan, mechanics, grow), plan.pop, `${label} x${grow}`);
+    }
+  }, 60_000);
 
   it('stages finite geometry and plans the entry trick', () => {
     for (const entry of ENTRIES) {
@@ -753,8 +856,7 @@ describe('Spin into grind', () => {
     for (const { entry, base, side, rider, stance, label } of everySpin()) {
       const { plan } = spinPlan(entry, base, side, stance, rider, null);
       const barToward = Math.sign(BAR_Z - plan.laneZ);
-      // Boardslides are named for the way the body turns, so they come in the other way round.
-      const onToeside = ((side === 'frontside') !== (base === 'Boardslide')) !== HALF.has(entry);
+      const onToeside = (side === 'frontside') !== HALF.has(entry);
       expect(barToward, label).toBe(onToeside ? plan.toeDir : -plan.toeDir);
     }
   });
@@ -811,6 +913,34 @@ describe('Spin into grind', () => {
       expect(lifted > 0.9, label).toBe(bigspin || flip);
     }
   });
+
+  it('spins at one speed all the way down onto the bar, and the bar finishes the turn: nothing stops it in the air', () => {
+    const FRAME = 1 / 120;
+    for (const rail of [null, EL_TORO_RAIL]) {
+      for (const { entry, base, side, rider, stance, label: name } of everySpin(['regular', 'fakie'])) {
+        const spec = grindSpecFor({ base: joinGrindBase(entry, nameOf(base, side)), stance })!;
+        const plan = planGrind(spec, resolveRiderMechanics(rider, stance), NEUTRAL, true, 'slam', rail);
+        const label = `${name} ${rail ? 'rail' : 'bar'}`;
+        const rate = (t: number) => (grindFrame(t + FRAME, plan).heading - grindFrame(t, plan).heading) / FRAME;
+        // Steady from once it's up to speed off the pop to the instant it touches down.
+        const steady = rate(plan.pop + 0.1);
+        expect(Math.abs(steady), label).toBeGreaterThan(100);
+        for (let t = plan.pop + 0.1; t < plan.lockAt - FRAME; t += 0.02) expect(rate(t), `${label} t=${t.toFixed(3)}`).toBeCloseTo(steady, 3);
+        // It comes down still turning, short of the lock by no more than what rides the bar can pivot
+        // (that share of the turn, the angle it came in at unwinding with it), and the bar slows it to
+        // a stop from that speed.
+        const short = Math.abs(grindFrame(plan.lockAt, plan).pose.yaw - plan.lock.yaw);
+        const unwinding = Math.abs(plan.lock.yaw - plan.approachYaw) / Math.abs(plan.lock.yaw);
+        expect(short, label).toBeGreaterThan(0.5 * Math.min(spec.railFinish, 0.3 * Math.abs(plan.lock.yaw)));
+        expect(short, label).toBeLessThan(1.01 * spec.railFinish * unwinding);
+        expect(rate(plan.lockAt) / steady, label).toBeGreaterThan(0.85);
+        const settled = plan.lockAt + plan.spinIn!.finishT;
+        expect(grindFrame(settled, plan).heading, label).toBeCloseTo(plan.heading, 6);
+        // Only the balance wobble left (WOBBLE_SLIDE at most).
+        expect(Math.abs(grindFrame(settled, plan).pose.yaw - plan.lock.yaw), label).toBeLessThan(3);
+      }
+    }
+  }, 30_000);
 
   it('never stretches a leg, keeps the soles on the grip off the hop, moves continuously, and stays in the stage', () => {
     const sweep = sweepBounds();
@@ -993,6 +1123,29 @@ describe('Trick out of grind', () => {
             expect(worst, label).toBeLessThan((turn / plan.offT) * FRAME * 2 + 1e-6);
             expect(grindFrame(plan.land, plan).heading, label).toBeCloseTo(plan.endHeading, 6);
           }
+        }
+      }
+    }
+  });
+
+  it('starts turning into a spin out on the bar, and is turning at its speed by the pop off', () => {
+    const FRAME = 1 / 240;
+    for (const exit of ['Backside 180', 'Frontside 180', 'Bigspin', 'Frontside Flip']) {
+      for (const base of GRINDS) {
+        for (const end of exitEndsFor(base)) {
+          const { plan } = exitPlan(exit, end, base, 'backside', 'regular', 'regular', null);
+          const label = `${base} ${end} ${exit}`;
+          const way = Math.sign(plan.endHeading - plan.heading);
+          const { lead } = plan.spinOut!;
+          // Square to the board until the lead-in, then a little way round before the board leaves.
+          expect(grindFrame(plan.off - lead - FRAME, plan).heading, label).toBeCloseTo(plan.heading, 9);
+          const before = way * (grindFrame(plan.off - FRAME, plan).heading - plan.heading);
+          expect(before, label).toBeGreaterThan(15);
+          expect(before, label).toBeLessThan(60);
+          expect(grindFrame(plan.off - FRAME, plan).pose.yaw, label).toBeCloseTo(grindFrame(plan.off - lead, plan).pose.yaw, 0);
+          // No jolt at the pop: the same speed either side of it.
+          const rate = (t: number) => (grindFrame(t + FRAME, plan).heading - grindFrame(t, plan).heading) / FRAME;
+          expect(rate(plan.off - 2 * FRAME) / rate(plan.off + FRAME), label).toBeCloseTo(1, 1);
         }
       }
     }

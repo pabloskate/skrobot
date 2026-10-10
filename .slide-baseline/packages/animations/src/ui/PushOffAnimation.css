@@ -1,0 +1,126 @@
+/* ---------- Push Off game start ---------- */
+.push-off-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: #6431d8;
+  background-image: radial-gradient(70% 30% at 50% 38%, rgba(255,255,255,.14), transparent 70%);
+  color: #23232e;
+  cursor: pointer;
+  animation: push-off-wipe .3s cubic-bezier(.25,.8,.3,1) both;
+}
+@keyframes push-off-wipe {
+  from { clip-path: polygon(0 100%,100% calc(100% - 34px),100% 100%,0 100%); }
+  to { clip-path: polygon(0 -40px,100% -74px,100% 100%,0 100%); }
+}
+.push-off-overlay.is-exiting { animation: push-off-exit .3s ease both; }
+@keyframes push-off-exit { to { opacity: 0; transform: scale(1.05); } }
+.push-off-stage {
+  position: relative;
+  width: min(100%, 390px);
+  height: 100dvh;
+  max-height: 844px;
+  overflow: hidden;
+  background: #6431d8;
+  background-image:
+    radial-gradient(70% 30% at 50% 38%, rgba(255,255,255,.14), transparent 70%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.15' numOctaves='2' seed='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .08 0 0 0 0 .02 0 0 0 0 .25 0 0 0 1.25 -.52'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.push-off-world { position: absolute; inset: 0; width: 100%; height: 100%; }
+.push-off-title {
+  position: absolute;
+  top: 23.2%;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.push-off-lets {
+  z-index: 1;
+  align-self: center;
+  margin: 0 0 -12px -150px;
+  padding: 8px 20px 7px;
+  background: linear-gradient(#fffaf0,#f6ecd4);
+  color: #23232e;
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  transform: rotate(-7deg);
+  clip-path: polygon(3% 0,97% 0,100% 20%,97% 42%,100% 64%,97.5% 84%,99.5% 100%,1% 100%,3.5% 80%,0 60%,3% 40%,0 18%);
+  filter: drop-shadow(0 4px 0 rgba(20,6,70,.28));
+  animation: push-off-tape .38s cubic-bezier(.2,1.45,.4,1) both;
+}
+@keyframes push-off-tape { from { opacity: 0; transform: scale(1.8) rotate(10deg); } to { opacity: 1; transform: rotate(-7deg); } }
+.push-off-tiles { display: flex; gap: 10px; }
+.push-off-tiles.is-jolting { animation: push-off-jolt .28s ease-out both; }
+@keyframes push-off-jolt { 30% { transform: translateY(6px) scaleY(.96); } 65% { transform: translateY(-2px); } }
+.push-off-slot { position: relative; width: 60px; height: 60px; border: 2px dashed rgba(255,255,255,.3); border-radius: 19px; }
+.push-off-tile {
+  position: absolute;
+  inset: -2px;
+  display: grid;
+  place-items: center;
+  border: 4.5px solid #fff;
+  border-radius: 19px;
+  background: var(--tile-color);
+  color: #23232e;
+  font-size: 32px;
+  font-weight: 900;
+  box-shadow: 0 3px 0 rgba(20,6,70,.28), 0 10px 18px rgba(20,6,70,.35);
+  transform: rotate(var(--tile-rot));
+  animation: push-off-tile-slam .26s cubic-bezier(.2,1.45,.4,1) both;
+}
+.push-off-tile::after { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg,rgba(255,255,255,.6), transparent 42%); }
+@keyframes push-off-tile-slam { from { opacity: 0; transform: translateY(-26px) rotate(15deg) scale(1.8); } 40% { opacity: 1; transform: rotate(var(--tile-rot)) scale(.9); } to { transform: rotate(var(--tile-rot)); } }
+.push-off-head {
+  position: absolute;
+  top: 73.2%;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 18px;
+  text-align: center;
+}
+.push-off-head strong {
+  display: block;
+  max-width: 100%;
+  font-size: clamp(30px, 10vw, 44px);
+  font-weight: 900;
+  line-height: 1.02;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: #fff;
+  -webkit-text-stroke: 10px #23232e;
+  paint-order: stroke fill;
+  filter: drop-shadow(0 5px 0 rgba(20,6,70,.3));
+  animation: push-off-slam .34s cubic-bezier(.2,1.45,.4,1) both;
+}
+.push-off-head strong + strong { color: #ffd166; animation-delay: .08s; }
+@keyframes push-off-slam { from { opacity: 0; transform: scale(2.1) rotate(-4deg); } 60% { opacity: 1; transform: scale(.94); } }
+.push-off-head p { margin: 14px 0 0; max-width: 320px; font-size: 15px; font-weight: 700; line-height: 1.4; animation: push-off-rise .35s ease both; }
+@keyframes push-off-rise { from { opacity: 0; transform: translateY(10px); } }
+.push-off-skip {
+  position: absolute;
+  right: 12px;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  border: 0;
+  background: transparent;
+  padding: 10px;
+  color: rgba(34,26,78,.7);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.push-off-skip:focus-visible { outline: 2px solid #fff; border-radius: 6px; }
+@media (prefers-reduced-motion: reduce) {
+  .push-off-overlay, .push-off-lets, .push-off-tile, .push-off-head strong, .push-off-head p { animation: none !important; }
+}
+

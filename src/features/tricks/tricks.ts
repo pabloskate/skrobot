@@ -77,6 +77,7 @@ const FLATGROUND: [string, number][] = [
   // Full 360 body rotation + kickflip — a step above the 180 flip combos.
   ['Backside 360 Kickflip', 9],
   ['Frontside 360 Kickflip', 9],
+  ['Backside 360 Heelflip', 9],
   // Elite contest-level tech: only a few pros carry it, at low consistency.
   ['FS Bigspin Flip', 11.5],
   // Harder than the display cap of 10 so even pros only scrape a low land rate.
@@ -318,6 +319,7 @@ export const TRICK_BASE_ALIASES: Readonly<Partial<Record<string, readonly string
     'fs kickflip',
   ],
   'Backside 360 Kickflip': ['bs 360 kickflip', 'backside three sixty kickflip'],
+  'Backside 360 Heelflip': ['bs 360 heelflip', 'bs 360 heel', 'backside three sixty heelflip'],
   'Frontside 360 Kickflip': ['fs 360 kickflip', 'frontside three sixty kickflip'],
   Bigspin: ['big spin'],
   'FS Bigspin': ['frontside bigspin', 'frontside big spin', 'front bigspin'],
@@ -456,6 +458,7 @@ const DESCRIPTIONS: Record<string, string> = {
   'Backside Flip': 'A kickflip and a backside 180 at once — the board flips as you spin behind you.',
   'Frontside Flip': 'A kickflip folded into a frontside 180 — flip and rotation in one pop.',
   'Backside 360 Kickflip': 'A kickflip wrapped into a full backside 360 — body and board spin all the way around while the deck flips.',
+  'Backside 360 Heelflip': 'A heelflip wrapped into a full backside 360 — body and board spin all the way around while the deck flips off the heel side.',
   'Frontside 360 Kickflip': 'A kickflip wrapped into a full frontside 360 — flip and a complete frontside body rotation in one pop.',
   Bigspin: 'A 360° shuvit paired with a 180° body turn, board and rider spinning together.',
   'Varial Kickflip': 'A kickflip blended with a pop shuvit so the board flips and spins 180° at once.',

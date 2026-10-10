@@ -6,12 +6,13 @@ import { BOTTOM_LOCAL, TOP_LOCAL } from '../board/deck';
 import { clamp01, easeOutCubic, hull, type V3 } from '../math';
 import type { GrindPlan } from '../motion/grind';
 import { kneeBetween } from '../motion/grindRig';
-import { moveFrame, tiltHead, type LegRig, type Rig } from '../motion/skeleton';
+import { PERSON_SCALE, moveFrame, tiltHead, type LegRig, type Rig } from '../motion/skeleton';
 import { FLIP_T, JUMP, ROLL_IN } from '../motion/trick';
 import { humanRig } from '../riders/human/humanRig';
 import type { Expression } from '../riders/look';
 import { skaterInfo, type Skater } from '../riders/skaters';
 import type { BarSpan } from '../sets/bar';
+import type { Obstacle } from '../sets/sets';
 import type { HeadPose } from '../types';
 
 /**
@@ -47,10 +48,11 @@ export interface StageFrame {
    * the height (three's y) the cast shadows are laid at — the step the
    * rider's shadow falls on — and where across the set the rider's line runs
    * (the set's own z under the stage's z = 0): down the left-hand flight, or
-   * on the rail a grind rides. Null on flat ground, where shadows lie
-   * on the asphalt.
+   * on the rail a grind rides — and, where the set has a choice, what the
+   * trick goes over (the set's tripods and crane film each its own way).
+   * Null on flat ground, where shadows lie on the asphalt.
    */
-  stairs: { dir: 1 | -1; shadowY: number; across: number } | null;
+  stairs: { dir: 1 | -1; shadowY: number; across: number; obstacle?: Obstacle; ledge?: 'left' | 'right' } | null;
   wheels: WheelSpin;
   expression: Expression;
   /** Where the rider is looking (stage/gaze.ts), in the rig's coordinates; set by stageFrame. */
@@ -211,6 +213,9 @@ export const hipsOf = (rig: Rig): V3 => ({
   y: (rig.legs[0].hip.y + rig.legs[1].hip.y) / 2,
   z: (rig.legs[0].hip.z + rig.legs[1].hip.z) / 2,
 });
+
+/** How much bigger than the rig the stage's skater is drawn over the same feet (humanRig.ts). */
+export const grownBy = (skater: Skater) => (skaterInfo(skater).person ? PERSON_SCALE : 1);
 
 /**
  * The solved rig as it's shown: a lead-in's head move on top, and worn by

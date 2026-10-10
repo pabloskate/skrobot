@@ -18,7 +18,9 @@ The user's October 4 reference photo and clarification supersede the earlier
 rail reconstruction: one center rail, no kinks at the ends, and the school and
 locker frontage across the stairs on the opposite side from the dirt bank.
 The building, fence, lantern and its rear grove move together. The twenty risers,
-nine-foot drop and twenty-foot run remain unchanged. The rider's line is six feet
+nine-and-a-half-foot drop and twenty-foot run define the current model. The drop
+was revised from nine feet at the user's request on October 7; it is a modeling
+choice, not a newly surveyed measurement. The rider's line is six feet
 left of the center rail when looking up the stairs, halfway across that flight.
 The school keeps its placement when the flight is narrowed, leaving the upper
 walkway open beside it.
@@ -51,9 +53,11 @@ explorer's link). The three rails are the same pipe (`EL_TORO_RAIL` in
 `sets/elToro/stairs.ts`; where each stands is `rails` in `sets/sets.ts`; the
 motion is the flat-bar grind in `motion/grind.ts` with a `Handrail`). A side
 rail isn't picked by hand: it's the one the grind's approach puts on the
-rider's far side, coming in from the steps. Going down, a regular rider's
-backside boardslide (toeside approach) takes the right rail, by the side wall,
-and a frontside one the left, by the bank; goofy, fakie, and spins into the
+rider's far side, coming in from the steps. Every grind and slide is named
+for the side facing the rail before the pop, boardslides included (frontside:
+chest to the rail, toeside). Going down, a regular rider's frontside
+boardslide takes the right rail, by the side wall, and a backside one the
+left, by the bank; goofy, fakie, and spins into the
 grind swap it as they swap the rider's toeside. A slip off a side rail falls
 back onto the steps. The physics follows a real down rail rather than the
 flat bar's:
@@ -68,8 +72,9 @@ flat bar's:
   steps across and turns into the lock; the lock pose is the flat bar's, tipped
   with the rail, so slides sit across it and grinds along it.
 - Down the rail it speeds up: gravity along the slope less a waxed rail's
-  friction (trucks 0.2, a deck's wood 0.27), about 13 → 19.7 ft/s for a grind and
-  13 → 18 ft/s for a slide. The body leans down the rail, square to what it feels.
+  friction (trucks 0.2, a deck's wood 0.27). Exit speed is derived from the
+  current rail slope and contact distance. The body leans down the rail, square
+  to what it feels.
 - It pops off the bottom already falling with the rail and lands on the bottom
   landing about seven feet past the last step. Fakie rides the same stairs
   backwards; a slip comes down on the steps and lies along their edges.
@@ -120,12 +125,12 @@ Repeat these checks when changing the spot. The Contact sheet currently has no
 El Toro selector; inspect the spot itself in the Explorer at the matching fixed
 moments for each rider stance.
 
-- [ ] Confirm the stair count, height and length remain unchanged, the center rail
+- [ ] Confirm twenty risers, a 9.5-foot drop and a twenty-foot run, the center rail
   bisects the stairs, and the rider stays on the left flight.
 - [ ] Play regular and fakie approaches through takeoff, flight, landing and
   roll-away; verify the same downhill layout and camera, with fakie facing backward.
 - [ ] Compare regular and goofy rider stances in the playground Contact sheet
-  for the affected trick family, including the robot, human and humanoid riders.
+  for the affected trick family, including the robot and realistic riders.
 - [ ] Inspect cameras looking from the run-up and from the landing, plus the
   normal side view: check roof shape, fence transparency, rail connections,
   vegetation overlap and the rider's visibility.
@@ -154,7 +159,7 @@ moments for each rider stance.
   54,572 triangles; its realistic skateboard uses five draws and 18,336 triangles.
   Body and board tests cover finite geometry, contact geometry, motion and disposal.
 - Final mobile and desktop checks cover centered stairs, the left riding line,
-  the right-hand canopy, continuous concrete without a grid, and the humanoid's
+  the right-hand canopy, continuous concrete without a grid, and the realistic rider's
   realistic board. Bottom-center framing, full-circle drag/keyboard input and
   shared camera links were checked in both Explorer routes.
 - Browser viewport emulation is not a physical-device GPU performance benchmark.

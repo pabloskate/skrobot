@@ -85,7 +85,7 @@ interface SearchProps {
   label: string;
 }
 
-function SearchField({ value, onChange, placeholder, label }: SearchProps) {
+export function SearchField({ value, onChange, placeholder, label }: SearchProps) {
   return (
     <label className="explorer-search">
       <TbSearch aria-hidden />

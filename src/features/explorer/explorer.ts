@@ -10,7 +10,10 @@ import {
   STAGE_SETS,
   SKATERS,
   canEnterGrind,
+  hasObstacle,
   railLineFor,
+  setGrindSpec,
+  setHandrail,
   setInfo,
   canExitGrind,
   clampOrbitCamera,
@@ -23,6 +26,7 @@ import {
   specFor,
   setTimeline,
   wrapOrbitYaw,
+  type Obstacle,
   type PopEnd,
   type RailChoice,
   type RailLine,
@@ -87,7 +91,9 @@ export interface ExplorerState {
   set: StageSet;
   /** At a spot with several handrails, which one a grind rides: the center one, or the side one the trick's approach takes. */
   rail: RailChoice;
-  /** Who skates it: the robot, illustrated human, realistic human, or humanoid. */
+  /** At a spot with more than one way down, what a flatground trick goes over: its stairs, or (Hollywood) the fence beside them. */
+  obstacle: Obstacle;
+  /** Who skates it: the robot, the realistic human, or the alien. */
   skater: Skater;
 }
 
@@ -207,13 +213,24 @@ export const DEFAULT_STATE: Readonly<ExplorerState> = Object.freeze({
   zoom: 1,
   set: 'waterfront',
   rail: 'center',
+  obstacle: 'stairs',
   skater: 'robot',
 });
 
-/** Move to another spot; gap-only spots open the saved gap trick. */
+/** Move to another spot; gap-only spots open the saved gap trick, and an obstacle the new spot lacks goes back to its stairs. */
 export function withSet(state: ExplorerState, set: StageSet): ExplorerState {
-  return { ...state, set, mode: setInfo(set).grinds ? state.mode : 'flatground', rail: setInfo(set).rails?.sideGrinds === false ? 'center' : state.rail };
+  return {
+    ...state,
+    set,
+    mode: setInfo(set).grinds ? state.mode : 'flatground',
+    rail: setInfo(set).rails?.sideGrinds === false ? 'center' : state.rail,
+    obstacle: hasObstacle(set, state.obstacle) ? state.obstacle : DEFAULT_STATE.obstacle,
+  };
 }
+
+/** Whether the stage offers a choice of obstacle: a flatground trick at a spot with more than one way down. */
+export const picksObstacle = (state: Pick<ExplorerState, 'mode' | 'set'>) =>
+  state.mode === 'flatground' && (setInfo(state.set).obstacles?.length ?? 0) > 1;
 
 /** Switch between gap/flatground tricks and grinds where the spot supports them. */
 export function withMode(state: ExplorerState, mode: ExplorerMode): ExplorerState {
@@ -284,16 +301,24 @@ export function trickSteps(state: ExplorerState): TrickStep[] {
     const description = trickDescription(trick);
     return description ? [{ label: trick.name, detail: description }] : [];
   }
-  const spec = grindSpecFor(stageTrick(state));
+  const spec = setGrindSpec(state.set, stageTrick(state));
   if (!spec) return [];
   const riding = state.stance === 'regular' ? 'rolling' : `riding ${state.stance}`;
   const side = spec.toesideApproach ? 'toeside' : 'heelside';
   // At a spot with handrails the grind goes down one: the center one, or (El Toro) the side one it comes in toward.
+  // At Miami it's one of the slab's edges, across the gap from the terrace.
   const line = railLine(state);
   const rail = line != null;
-  const bar = line === 'left' || line === 'right' ? `${line} rail` : rail ? 'rail' : 'bar';
+  const ledge = rail && setInfo(state.set).ledges != null;
+  const bar = ledge ? `${line} edge` : line === 'left' || line === 'right' ? `${line} rail` : rail ? 'rail' : 'bar';
+  const along = ledge ? 'edge' : 'rail';
   const steps: TrickStep[] = [
-    { label: 'Approach', detail: `Come in ${riding} with the ${bar} on your ${side}${rail ? ', a little slower than you would to jump the set' : ''}.` },
+    {
+      label: 'Approach',
+      detail: ledge
+        ? `Come in ${riding} along the deck with the slab’s ${bar} on your ${side}, then carve in toward it before the tip.`
+        : `Come in ${riding} with the ${bar} on your ${side}${rail ? ', a little slower than you would to jump the set' : ''}.`,
+    },
     state.into
       ? {
         label: state.into,
@@ -303,15 +328,21 @@ export function trickSteps(state: ExplorerState): TrickStep[] {
       }
       : {
         label: state.stance === 'nollie' ? 'Nollie on' : 'Ollie on',
-        detail: rail ? 'Pop as the rail starts beside you. Your speed carries you on while it drops away under the board, so lock on a few stairs down.' : 'Pop up and lock onto the bar.',
+        detail: ledge
+          ? 'Pop on the flat short of the rim and fly the gap, turning in the air to line up with the edge, and lock on a couple of feet below the apex.'
+          : rail ? 'Pop as the rail starts beside you. Your speed carries you on while it drops away under the board, so lock on a few stairs down.' : 'Pop up and lock onto the bar.',
       },
-    { label: `${state.side} ${state.grind}`, detail: `${grindDescription(state.grind)}${rail ? ' Stay over it as it picks up speed down the rail.' : ''}` },
+    { label: `${state.side} ${state.grind}`, detail: `${grindDescription(state.grind)}${rail ? ` Stay over it as it picks up speed down the ${along}.` : ''}` },
     state.out
       ? {
         label: outName(state.out),
         detail: `Pop ${withArticle(`${state.out.end === 'nose' ? 'nollie ' : ''}${state.out.base}`)} off the ${state.out.end} as you leave the ${bar}.`,
       }
-      : { label: 'Pop off', detail: rail ? 'Pop off the bottom of the rail and ride away from the landing.' : 'Pop off the end of the bar and ride away.' },
+      : {
+        label: 'Pop off',
+        detail: ledge ? 'Pop off the low corner and ride away across the plaza.'
+          : rail ? 'Pop off the bottom of the rail and ride away from the landing.' : 'Pop off the end of the bar and ride away.',
+      },
   ];
   return steps;
 }
@@ -332,7 +363,7 @@ export interface Timeline {
 export function timelineFor(state: ExplorerState, style: SkateStyle | undefined): Timeline {
   if (state.mode === 'flatground' && setInfo(state.set).terrain) {
     // Down the stairs the flight is the drop's: longer the lower the robot pops.
-    const stairs = setTimeline(state.set, style)!;
+    const stairs = setTimeline(state.set, style, true, state.obstacle)!;
     return {
       duration: stairs.end,
       phases: [
@@ -357,7 +388,7 @@ export function timelineFor(state: ExplorerState, style: SkateStyle | undefined)
       ],
     };
   }
-  const grind = grindTimelineFor(stageTrick(state), state.rider, style, true, 'slam', setInfo(state.set).rails?.handrail ?? null);
+  const grind = grindTimelineFor(stageTrick(state), state.rider, style, true, 'slam', setHandrail(state.set, stageTrick(state), state.rider, state.rail));
   if (!grind) return { phases: [{ label: 'Set up', time: 0 }], duration: ROLL_IN + FLIP_T + LAND_T };
   return {
     duration: grind.end,
@@ -545,6 +576,7 @@ export function stateFromSearch(search: string): ExplorerState {
     zoom: params.has('zoom') ? parseZoom(params.get('zoom')) : defaultZoomForCamera(camera),
     set,
     rail: params.get('rail') === 'side' && setInfo(set).rails?.sideGrinds !== false ? 'side' : DEFAULT_STATE.rail,
+    obstacle: setInfo(set).obstacles?.find((o) => o.id === params.get('obstacle'))?.id ?? DEFAULT_STATE.obstacle,
     skater: SKATERS.find((option) => option.id === params.get('skater'))?.id ?? DEFAULT_STATE.skater,
   };
   const grind = fromSlug(GRIND_CHOICES, params.get('grind'));
@@ -599,6 +631,7 @@ export function searchFromState(state: ExplorerState): string {
   if (state.zoom !== defaultZoomForCamera(state.camera)) params.set('zoom', String(round(state.zoom, 2)));
   if (state.set !== DEFAULT_STATE.set) params.set('set', state.set);
   if (state.rail !== DEFAULT_STATE.rail) params.set('rail', state.rail);
+  if (picksObstacle(state) && state.obstacle !== DEFAULT_STATE.obstacle) params.set('obstacle', state.obstacle);
   if (state.skater !== DEFAULT_STATE.skater) params.set('skater', state.skater);
   return `?${params.toString()}`;
 }

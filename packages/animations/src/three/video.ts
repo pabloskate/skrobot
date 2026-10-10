@@ -14,9 +14,11 @@ import {
 import type { RiderStance, Robot, Trick } from '../types';
 import { resolveSkateStyle } from '../motion/style';
 import { DEFAULT_SCENE_CAMERA, type SceneCamera, type TripodId } from '../camera/camera';
-import { setInfo, type RailChoice, type StageSet } from '../sets/sets';
+import { setInfo, type Obstacle, type RailChoice, type StageSet } from '../sets/sets';
 import type { Skater } from '../riders/skaters';
 import { SceneRenderer } from './renderer';
+import type { RenderQuality } from './cinematic';
+export type { RenderQuality } from './cinematic';
 import { lookFor } from './rendererPool';
 import { renderSoundtrack } from '../sound/skateSounds';
 import { soundtrackFor } from '../sound/soundtrack';
@@ -51,7 +53,9 @@ export interface TrickVideoOptions {
   set?: StageSet;
   /** Which of the set's handrails a grind rides, as on the live stage. */
   rail?: RailChoice;
-  /** The same robot, illustrated/realistic human, or humanoid selected in the live scene. */
+  /** What a gap trick goes over where the set has a choice, as on the live stage. */
+  obstacle?: Obstacle;
+  /** The same robot or realistic human selected in the live scene. */
   skater?: Skater;
   /** Playback speed: at 0.25 the trick fills four times as long a video. */
   rate?: number;
@@ -60,6 +64,8 @@ export interface TrickVideoOptions {
   /** Opt into an audio track; off by default and omitted where the browser can't encode audio. */
   sound?: boolean;
   fps?: number;
+  /** Export-only physical surface finish and contact shading. */
+  quality?: RenderQuality;
   /** The share of the video filmed so far, 0 to 1. */
   onProgress?: (share: number) => void;
   signal?: AbortSignal;
@@ -102,8 +108,10 @@ export async function recordTrickVideo({
   set = 'plaza',
   skater = 'robot',
   rail = 'center',
+  obstacle = 'stairs',
   rate = 1,
-  width: requestedWidth = 1280,
+  quality = 'standard',
+  width: requestedWidth = quality === 'cinematic' ? 1920 : 1280,
   sound = false,
   fps = 60,
   onProgress,
@@ -128,10 +136,10 @@ export async function recordTrickVideo({
   const ctx = film.getContext('2d');
   if (!ctx) throw new VideoUnsupportedError();
   const style = resolveSkateStyle(robot.skateStyle);
-  const stage = planStage(trick, { landed: true, riderStance, style, fall: 'slam', shankProgress: 0.5, skater, set, rail });
+  const stage = planStage(trick, { landed: true, riderStance, style, fall: 'slam', shankProgress: 0.5, skater, set, rail, obstacle });
   const glCanvas = document.createElement('canvas');
-  const scene = new SceneRenderer(glCanvas, lookFor(robot, skater), set);
-  scene.setSize(width, height, 1);
+  const scene = new SceneRenderer(glCanvas, lookFor(robot, skater), set, quality);
+  scene.setSize(width, height, quality === 'cinematic' ? Math.min(1.5, 2560 / width) : 1);
   const far = setInfo(set).farPanorama ? new FarPainter(width, height) : null;
 
   const bitrate = Math.round(BITRATE * ((width * height) / (1280 * 1034)) * (fps / 60));
@@ -143,6 +151,7 @@ export async function recordTrickVideo({
     if (backdrop) ctx.drawImage(backdrop, 0, 0, width, height);
     // Copied in the same task it's drawn, while the WebGL canvas still holds the frame.
     scene.render(frame, camera, zoom, tripod);
+    ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(glCanvas, 0, 0, width, height);
   };
   // Frame i shows the trick at i / fps of video time, so the last lands exactly
@@ -211,4 +220,43 @@ class FarPainter {
   dispose() {
     this.root.unmount();
   }
+}
+
+/** Same moment, camera and rig in both export finishes. No encoder or live-stage changes. */
+export async function renderTrickPreview(options: TrickVideoOptions): Promise<{ standard: string; cinematic: string }> {
+  const { robot, trick, skater = 'robot', set = 'plaza', riderStance = 'regular',
+    rail = 'center', obstacle = 'stairs', camera = DEFAULT_SCENE_CAMERA, zoom = 1, tripod = null, signal } = options;
+  const stage = planStage(trick, { landed: true, riderStance, style: resolveSkateStyle(robot.skateStyle),
+    fall: 'slam', shankProgress: 0.5, skater, set, rail, obstacle });
+  const previewTime = stage.grind ? (stage.grind.lockAt + stage.grind.off) / 2 : stage.end * 0.45;
+  const frame = stageFrame(stage, previewTime, options.rate ?? 1);
+  const width = 960;
+  const height = Math.round(width / (STOCK_VIEW.width / STOCK_VIEW.height));
+  const output = document.createElement('canvas');
+  output.width = width;
+  output.height = height;
+  const ctx = output.getContext('2d');
+  if (!ctx) throw new VideoUnsupportedError();
+  const far = setInfo(set).farPanorama ? new FarPainter(width, height) : null;
+  const result = { standard: '', cinematic: '' };
+  try {
+    const backdrop = await far?.paint(frame, camera, zoom);
+    for (const quality of ['standard', 'cinematic'] as const) {
+      signal?.throwIfAborted();
+      const canvas = document.createElement('canvas');
+      const scene = new SceneRenderer(canvas, lookFor(robot, skater), set, quality);
+      try {
+        scene.setSize(width, height, quality === 'cinematic' ? 1.5 : 1);
+        await scene.ready;
+        signal?.throwIfAborted();
+        scene.render(frame, camera, zoom, tripod);
+        ctx.clearRect(0, 0, width, height);
+        if (backdrop) ctx.drawImage(backdrop, 0, 0, width, height);
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(canvas, 0, 0, width, height);
+        result[quality] = output.toDataURL('image/png');
+      } finally { scene.dispose(); }
+    }
+    return result;
+  } finally { far?.dispose(); }
 }

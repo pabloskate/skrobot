@@ -25,8 +25,6 @@ import type { BoardLook, WheelSpin } from '../board/board';
 import { Board3D } from '../board/board3d';
 import { RealisticBoard3D } from '../board/realisticBoard3d';
 import type { BoardRig, Rig } from '../motion/skeleton';
-import { Human3D } from '../riders/human/human3d';
-import { Humanoid3D } from '../riders/humanoid/humanoid3d';
 import { RealisticHuman3D } from '../riders/realistic/realisticHuman3d';
 import type { Expression, RobotLook } from '../riders/look';
 import { Robot3D } from '../riders/robot/robot3d';
@@ -36,6 +34,9 @@ import { ElToro3D } from '../sets/elToro/elToro3d';
 import { Hollywood3D } from '../sets/hollywood/hollywood3d';
 import { Wallenberg3D } from '../sets/wallenberg/wallenberg3d';
 import { Sunset3D } from '../sets/sunset/sunset3d';
+import { Lyon3D } from '../sets/lyon/lyon3d';
+import { LeapOfFaith3D } from '../sets/leapOfFaith/leapOfFaith3d';
+import { Miami3D } from '../sets/miami/miami3d';
 import { Plaza3D } from '../sets/plaza3d';
 import { setInfo, type StageSet } from '../sets/sets';
 import { Waterfront3D } from '../sets/waterfront/waterfront3d';
@@ -43,6 +44,7 @@ import type { GroundPolygon, StageFrame } from '../stage/stage';
 import { rgb, shadowShapeMaterial } from './materials';
 import { SCENE_FAR as FAR, SceneCamera3D, prepareReversedDepth, sceneNear } from './depth';
 import { ScreenPass } from './screenPass';
+import { cinematicContactMaterial, prepareCinematicSurfaces, type RenderQuality } from './cinematic';
 import { blurMaterial, copyMaterial, dustMaterial, EDGE_TILE, edgeMaterial, fxaaMaterial, inkMaterial, shadowChannel } from './post';
 
 /** A rider's meshes, posed from the rig every frame. */
@@ -90,14 +92,16 @@ const SET_PIECES: Record<StageSet, () => SetPiece> = {
   'hollywood-high': () => new Hollywood3D(),
   wallenberg: () => new Wallenberg3D(),
   'sunset-car-wash': () => new Sunset3D(),
+  'lyon-25': () => new Lyon3D(),
+  'leap-of-faith': () => new LeapOfFaith3D(),
+  'miami-triangle': () => new Miami3D(),
 };
 
 /** Each skater's body, and the board they ride. */
-const RIDER_PIECES: Record<Skater, (look: RendererLook) => { rider: RiderPiece; board: BoardPiece }> = {
-  robot: (look) => ({ rider: new Robot3D(look.robot), board: new Board3D(look.board) }),
-  human: (look) => ({ rider: new Human3D(), board: new Board3D(look.board) }),
+const RIDER_PIECES: Record<Skater, (look: RendererLook, quality: RenderQuality) => { rider: RiderPiece; board: BoardPiece }> = {
+  robot: (look, quality) => ({ rider: new Robot3D(look.robot), board: quality === 'cinematic' ? new RealisticBoard3D() : new Board3D(look.board) }),
   realistic: () => ({ rider: new RealisticHuman3D(), board: new RealisticBoard3D() }),
-  humanoid: () => ({ rider: new Humanoid3D(), board: new RealisticBoard3D() }),
+  alien: () => ({ rider: new RealisticHuman3D('alien'), board: new RealisticBoard3D() }),
 };
 
 /**
@@ -167,9 +171,11 @@ export class SceneRenderer {
   private readonly inkQuad: ScreenPass;
   private readonly blurQuad: ScreenPass;
   private readonly fxaaQuad: ScreenPass;
+  private readonly contact: ShaderMaterial | null;
+  private readonly contactQuad: ScreenPass | null;
   private size = { width: 1, height: 1, ratio: 1 };
 
-  constructor(canvas: HTMLCanvasElement, look: RendererLook, set: StageSet = 'plaza') {
+  constructor(canvas: HTMLCanvasElement, look: RendererLook, set: StageSet = 'plaza', quality: RenderQuality = 'standard') {
     this.canvas = canvas;
     this.renderer = new WebGLRenderer({ canvas, antialias: false, alpha: true, premultipliedAlpha: true, powerPreference: 'high-performance', reversedDepthBuffer: true });
     this.camera = new SceneCamera3D(this.renderer.capabilities.reversedDepthBuffer);
@@ -178,12 +184,19 @@ export class SceneRenderer {
     this.camera.matrixAutoUpdate = false;
     this.camera.matrixWorldAutoUpdate = false;
 
-    ({ rider: this.rider, board: this.board } = RIDER_PIECES[look.skater ?? 'robot'](look));
+    ({ rider: this.rider, board: this.board } = RIDER_PIECES[look.skater ?? 'robot'](look, quality));
     this.set = SET_PIECES[set]();
     this.ready = Promise.all([this.rider.ready, this.set.ready]).then(() => {});
     this.setLight = setInfo(set).farPanorama;
     this.scene.add(this.set.group, this.bar.group, this.board.group, this.rider.group);
     this.overlayScene.add(this.set.overlay);
+    this.contact = quality === 'cinematic' ? cinematicContactMaterial() : null;
+    this.contactQuad = this.contact ? new ScreenPass(this.contact) : null;
+    if (quality === 'cinematic') {
+      prepareCinematicSurfaces(this.scene);
+      // Some riders install decoded materials asynchronously.
+      this.ready = this.ready.then(() => { prepareCinematicSurfaces(this.scene); });
+    }
     // Three r185 reverses the entire render list, including explicit ordering,
     // and complements Always/Equal depth tests. Preserve the scene's intended
     // sky-first order and the ink pass's unconditional depth copy.
@@ -328,7 +341,18 @@ export class SceneRenderer {
     if (this.dustGeometry.instanceCount > 0) r.render(this.dustScene, this.camera);
 
     // 5. Antialias onto the canvas.
-    this.fxaa.uniforms.tDiffuse.value = this.composite.texture;
+    if (this.contact && this.contactQuad) {
+      const u = this.contact.uniforms;
+      u.uSource.value = this.composite.texture;
+      u.uDepth.value = this.main.depthTexture;
+      u.uTexel.value.set(1 / width, 1 / height);
+      u.uNear.value = this.camera.near;
+      u.uFar.value = FAR;
+      u.uFocalPx.value = focalPx;
+      r.setRenderTarget(this.post);
+      this.contactQuad.render(r);
+    }
+    this.fxaa.uniforms.tDiffuse.value = this.contact ? this.post.texture : this.composite.texture;
     this.fxaa.uniforms.resolution.value.set(1 / width, 1 / height);
     r.setRenderTarget(null);
     this.fxaaQuad.render(r);
@@ -406,6 +430,8 @@ export class SceneRenderer {
     for (const m of [this.ink, this.edge, this.blur, this.fxaa, this.dust, this.copy, this.propShadowMaterial] as ShaderMaterial[]) m.dispose();
     for (const q of [this.inkQuad, this.edgeQuad, this.blurQuad, this.fxaaQuad, this.copyQuad]) q.dispose();
     for (const t of [this.main, this.post, this.composite, this.edges, this.shadowA, this.shadowB]) t.dispose();
+    this.contact?.dispose();
+    this.contactQuad?.dispose();
     this.renderer.dispose();
     // Let the context go now rather than at garbage collection: browsers cap
     // live contexts, and the one they drop first may be a stage still on screen.

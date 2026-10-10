@@ -4,7 +4,6 @@ import { ASPHALT } from '../camera/view';
 import { clearFeet } from '../board/footContact';
 import { wheelRoll } from '../board/board';
 import { barSpan, grindCameraLift, grindCameraTrack, grindStreetDist, planGrind, travel, type GrindPlan } from '../motion/grind';
-import { grindSpecFor } from '../motion/grindDefinitions';
 import { solveGrindRig } from '../motion/grindRig';
 import { solveRig } from '../motion/rig';
 import { resolveRiderMechanics, type RiderMechanics } from '../motion/stance';
@@ -12,13 +11,14 @@ import { FALL_T, FLIP_T, GROUND, LAND_T, ROLL_IN, X0, computeFrame, specFor, typ
 import type { Skater } from '../riders/skaters';
 import { barShadowParts } from '../sets/bar';
 import { planStairs, type StairPlan } from '../sets/elToro/stairs';
-import { setInfo, sideRailFor, type RailChoice, type RailLine, type StageSet } from '../sets/sets';
+import { hasObstacle, ledgeFor, setGrindSpec, setInfo, setTerrain, sideRailFor, type Obstacle, type RailChoice, type RailLine, type StageSet } from '../sets/sets';
 import { railFrame, stairFrame } from './downhill';
 import { gazeAt } from './gaze';
 import {
   expressionAt,
   grindExpression,
   groundHull,
+  grownBy,
   hipsOf,
   kickedUp,
   onTheGround,
@@ -44,10 +44,16 @@ export interface StagePlan {
   spec: Spec;
   /** A grind: on the flat bar, or down a set's handrail (`grind.handrail`). */
   grind: GrindPlan | null;
-  /** Down a set's handrails: which one the grind rides, and where it stands across the set (z). Null otherwise. */
-  rail: { line: RailLine; z: number } | null;
+  /**
+   * Down a set's handrails: which one the grind rides, and where it stands
+   * across the set (z). A ledge at an angle (Miami's) also starts `x` along
+   * the set and runs `yaw` degrees off it. Null otherwise.
+   */
+  rail: { line: RailLine; z: number; x?: number; yaw?: number } | null;
   /** A gap trick down a fixed obstacle, including a bank landing; null on flat ground. */
   stairs: StairPlan | null;
+  /** What that gap trick goes over where the set has a choice (Hollywood's stairs or fence); null otherwise. */
+  obstacle: Obstacle | null;
   mechanics: RiderMechanics;
   style: SkateStyle;
   landed: boolean;
@@ -55,7 +61,7 @@ export interface StagePlan {
   shankProgress: number;
   /** Clock time the attempt ends at. */
   end: number;
-  /** The robot, or a human/humanoid with a person's reach (humanRig.ts). */
+  /** The robot, or a person (the realistic human, the alien) with a person's reach (humanRig.ts). */
   skater: Skater;
 }
 
@@ -71,24 +77,32 @@ export function planStage(
     set?: StageSet;
     /** Where the set has several handrails: the center one, or the side one the grind's approach takes. */
     rail?: RailChoice;
+    /** Where the set has several ways down: what a gap trick goes over (the stairs, or Hollywood's fence). */
+    obstacle?: Obstacle;
   },
 ): StagePlan {
-  const { landed, riderStance, style, fall, shankProgress, skater = 'robot', set = 'plaza', rail: choice = 'center' } = options;
+  const { landed, riderStance, style, fall, shankProgress, skater = 'robot', set = 'plaza', rail: choice = 'center', obstacle } = options;
   const spec = specFor(trick);
-  const grindSpec = grindSpecFor(trick);
+  const grindSpec = setGrindSpec(set, trick);
   const mechanics = resolveRiderMechanics(riderStance, spec.stance);
   // Where the set has handrails a grind rides one down the stairs; where it has a drop a flatground trick goes down it.
-  const { rails, terrain, grinds } = setInfo(set);
-  const line: RailLine | null = grindSpec && rails ? (choice === 'side' && rails.sideGrinds !== false ? sideRailFor(grindSpec, mechanics) : 'center') : null;
+  const { rails, grinds, ledges } = setInfo(set);
+  const terrain = setTerrain(set, obstacle);
+  // Where the set has a ledge either side instead (Miami's slab), the grind takes the one it comes in toward.
+  const ledge = grindSpec && ledges ? ledges[ledgeFor(grindSpec, mechanics)] : null;
+  const line: RailLine | null = grindSpec && ledges ? ledgeFor(grindSpec, mechanics)
+    : grindSpec && rails ? (choice === 'side' && rails.sideGrinds !== false ? sideRailFor(grindSpec, mechanics) : 'center') : null;
   // A side rail stands at the edge of the stairs, with nothing past it to fall onto.
-  const handrail = rails && line ? (line === 'center' ? rails.handrail : { ...rails.handrail, edge: true }) : null;
+  const handrail = ledge ? ledge.handrail : rails && line ? (line === 'center' ? rails.handrail : { ...rails.handrail, edge: true }) : null;
   const grind = grindSpec && grinds ? planGrind(grindSpec, mechanics, style, landed, fall, handrail) : null;
   const stairs = terrain && !grind ? planStairs(style, landed, terrain) : null;
+  const over = stairs && setInfo(set).obstacles ? (obstacle && hasObstacle(set, obstacle) ? obstacle : 'stairs') : null;
   return {
     spec,
     grind,
-    rail: rails && line ? { line, z: rails.z[line] } : null,
+    rail: ledge && line ? { line, z: ledge.z, x: ledge.x, yaw: ledge.yaw } : rails && line ? { line, z: rails.z[line] } : null,
     stairs,
+    obstacle: over,
     mechanics,
     style,
     landed,
@@ -117,7 +131,7 @@ function frameAt(stage: StagePlan, t: number, rate: number, headPose?: HeadPose 
   const { spec, grind: plan, mechanics, style, landed, fall, shankProgress } = stage;
   const clock = Math.max(0, Math.min(t, stage.end));
   const f = computeFrame(clock, spec, landed, fall, shankProgress, style);
-  const grind = plan ? solveGrindRig(t, plan, mechanics, style) : null;
+  const grind = plan ? solveGrindRig(t, plan, mechanics, style, grownBy(stage.skater)) : null;
   const solved = clearFeet(onTheGround(grind ? grind.rig : solveRig(f, spec, mechanics, style, landed ? 'landed' : fall)));
   const rig = posed(solved, stage.skater, headPose);
   const falling = grind ? grind.falling : !landed && f.motion.flight >= 1;
