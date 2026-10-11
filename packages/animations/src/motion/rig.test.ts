@@ -385,6 +385,70 @@ describe('Rider body physics', () => {
   }, 30_000);
 });
 
+const dist = (a: V3, b: V3) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+
+describe('How each stance is carried', () => {
+  const style = resolveSkateStyle({ popHeight: 1, rotationSpeed: 1, flickStrength: 1 });
+  const robot = robotWith(1);
+  /** Degrees, level, between a direction and the way the rider rolls along x (`travel` ±1). */
+  const offTravel = (d: V3, travel: number) => (Math.atan2(Math.abs(d.z), d.x * travel) * 180) / Math.PI;
+  /** Degrees, level, a direction is turned off the board's nose. */
+  const offNose = (rig: Rig, d: V3) => {
+    const nose = rig.board.dir({ x: 1, y: 0, z: 0 });
+    return (Math.abs(Math.atan2(d.x * nose.z - d.z * nose.x, d.x * nose.x + d.z * nose.z)) * 180) / Math.PI;
+  };
+  const cruising = (stance: Stance, rider: RiderStance) =>
+    solveRig(computeFrame(0.1, specFor(trickOf('Ollie', stance)), true, 'slam', 0.65, style), specFor(trickOf('Ollie', stance)), resolveRiderMechanics(rider, stance), style, 'landed');
+
+  it('looks the way the board is rolling, rolling in and riding away: over the back shoulder in fakie, and after a 180', () => {
+    const off: string[] = [];
+    for (const base of BASES) {
+      for (const stance of STANCES) {
+        for (const rider of RIDERS) {
+          const stage = stageOf(robot, trickOf(base, stance), true, 'slam', rider);
+          for (const [when, t] of [['rolling in', 0.2], ['riding away', stage.end]] as const) {
+            const look = offTravel(stageFrame(stage, t, 1).rig.head.fwd, stage.spec.dir);
+            if (look > 40) off.push(`${base} ${stance} ${rider} ${when}: ${look.toFixed(0)}°`);
+          }
+        }
+      }
+    }
+    expect(off).toEqual([]);
+  });
+
+  it('closes the shoulders toward the tail rolling fakie', () => {
+    for (const rider of RIDERS) {
+      const natural = cruising('regular', rider);
+      const fakie = cruising('fakie', rider);
+      // Past square to the board, toward the tail.
+      expect(offNose(fakie, fakie.torso.fwd)).toBeGreaterThan(95);
+      expect(offNose(fakie, fakie.torso.fwd) - offNose(natural, natural.torso.fwd)).toBeGreaterThan(50);
+    }
+  });
+
+  it('carries switch on the other foot squarer, head turned harder ahead and arms guarded, standing exactly as that footedness does', () => {
+    for (const [rider, other] of [['regular', 'goofy'], ['goofy', 'regular']] as const) {
+      const sw = cruising('switch', rider);
+      const natural = cruising('regular', other);
+      // The board, feet and legs are the other footedness's own.
+      for (let i = 0; i < 2; i++) {
+        for (const key of ['hip', 'knee', 'ankle'] as const) {
+          expect(dist(sw.legs[i][key], natural.legs[i][key]), `${rider} ${key}`).toBeLessThan(1e-6);
+        }
+      }
+      // The shoulders open less toward the nose…
+      const chest = (rig: Rig) => offNose(rig, rig.torso.fwd);
+      expect(chest(sw) - chest(natural)).toBeGreaterThan(15);
+      // …so the head turns further round off them to see ahead…
+      const neck = (rig: Rig) => chest(rig) - offNose(rig, rig.head.fwd);
+      expect(neck(sw) - neck(natural)).toBeGreaterThan(25);
+      // …and the arms are held out from the body.
+      const reach = (rig: Rig) => rig.arms.reduce((sum, arm) => sum + Math.abs(dot3(sub3(arm.hand, rig.torso.origin), rig.torso.side)), 0);
+      expect(reach(sw) - reach(natural)).toBeGreaterThan(3);
+    }
+  });
+});
+
 describe('Wheels', () => {
   const robot = robotWith(1);
   const at = (trick: Trick, t: number, landed = true, fall: FallVariant = 'slam') => {

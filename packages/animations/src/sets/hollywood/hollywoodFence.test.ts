@@ -101,8 +101,8 @@ describe('Hollywood 16: over the fence', () => {
         const { rig } = frame;
         for (const p of [rig.board.center, ...rig.arms.flatMap((a) => [a.shoulder, a.elbow, a.hand]), ...rig.legs.flatMap((l) => [l.hip, l.knee, l.ankle])]) {
           const q = inSet(frame, p);
-          // The closest is a hand, on a nollie bigspin heelflip, ~1.2 ft off.
-          expect(Math.min(away(q, post), away(q, pipe)) / F, `${base}/${stance}/${rider} at ${t.toFixed(2)}`).toBeGreaterThan(0.9);
+          // The closest is the leading hand rolling fakie, the shoulders turned down the run, ~0.85 ft off.
+          expect(Math.min(away(q, post), away(q, pipe)) / F, `${base}/${stance}/${rider} at ${t.toFixed(2)}`).toBeGreaterThan(0.75);
         }
       }
     }

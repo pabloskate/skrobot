@@ -10,6 +10,41 @@ export const STANCE_BODY_YAW = 40;
 /** Degrees the head stays toward travel relative to the torso yaw. */
 export const HEAD_LOOK_FORWARD = 16;
 
+/**
+ * How the shoulders and head sit by the way the rider rolls (degrees off the
+ * nose toward toeside; the hips keep STANCE_BODY_YAW whatever the stance).
+ *
+ * - Natural stance, nose first: the chest open toward the nose, the head a
+ *   little further round, looking ahead.
+ * - Rolling tail first (fakie, or away from a 180): the shoulders close
+ *   toward the tail, a little past square, and the head looks over the back
+ *   shoulder the way the board is rolling, at what's coming.
+ * - Switch: the shoulders open less than the natural stance's, staying
+ *   squarer to the board, and the head turns harder over the leading
+ *   shoulder to see ahead. That stiff, guarded carriage (with SWITCH_ARMS) is
+ *   what gives switch away.
+ */
+const NATURAL_TURN = { chest: STANCE_BODY_YAW, head: STANCE_BODY_YAW - HEAD_LOOK_FORWARD } as const;
+const TAIL_FIRST_TURN = { chest: 112, head: 156 } as const;
+const SWITCH_TURN = { chest: 64, head: 12 } as const;
+
+export interface UpperBodyTurn {
+  chest: number;
+  head: number;
+}
+
+/** The upper body's turn riding switch or not, `tailFirst` (0 → 1) of the way round to rolling tail first. */
+export function upperBodyTurn(switchStance: boolean, tailFirst: number): UpperBodyTurn {
+  const ahead = switchStance ? SWITCH_TURN : NATURAL_TURN;
+  return {
+    chest: ahead.chest + (TAIL_FIRST_TURN.chest - ahead.chest) * tailFirst,
+    head: ahead.head + (TAIL_FIRST_TURN.head - ahead.head) * tailFirst,
+  };
+}
+
+/** Riding switch, the arms are held out from the body with the elbows up (deg, on the ground). */
+export const SWITCH_ARMS = { out: 16, elbow: 16 } as const;
+
 // New body placements (skeleton-local, hip at origin, y down).
 export const HIP_Z = 5;
 /** Shoe centers sit this far toeside of the deck's centerline: the shoe is

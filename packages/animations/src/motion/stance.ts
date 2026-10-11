@@ -50,7 +50,9 @@ const opposite = (side: BodySide): BodySide => side === 'left' ? 'right' : 'left
  * - fakie reverses travel only;
  * - nollie moves the pop to the nose only;
  * - switch rides the rider's opposite footedness: anatomy and toeside flip,
- *   but the body is not turned around (renderers add the awkwardness).
+ *   but the body is not turned around. The rig carries it less surely:
+ *   squarer shoulders, the head turned harder ahead, guarded arms
+ *   (skeleton.ts upperBodyTurn, SWITCH_ARMS).
  */
 export function resolveRiderMechanics(
   riderStance: RiderStance,
@@ -105,6 +107,18 @@ export function orientTrickRotation(
     yawDeg: -mechanics.orientationSign * yawDeg,
     bodyYawDeg: mechanics.bodyYawDegrees - mechanics.orientationSign * rotation.bodyYawDeg,
   };
+}
+
+/**
+ * 0 → 1: how far round from rolling nose first to rolling tail first the
+ * rider is. `from` is how they rolled in (1 for fakie); a half turn of the
+ * body (`turn` degrees, `spun` of them so far) carries them over as it goes,
+ * and a whole turn brings them back round to how they rolled in.
+ */
+export function tailFirst(from: number, turn: number, spun: number): number {
+  if (Math.round(Math.abs(turn) / 180) % 2 === 0) return from;
+  const p = Math.min(1, Math.max(0, spun / turn));
+  return from + (1 - 2 * from) * p;
 }
 
 /**

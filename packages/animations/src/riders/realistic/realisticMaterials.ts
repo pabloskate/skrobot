@@ -478,7 +478,7 @@ export function outfitMaterial(albedo: Texture, normal: Texture, ao: Texture, lo
     uAlbedo: { value: albedo }, uNormal: { value: normal }, uAO: { value: ao },
     uTee: { value: new Color(look.tee) }, uDenimDark: { value: new Color(look.denimDark) }, uDenimLight: { value: new Color(look.denimLight) },
     ...knees,
-  }, shadow, 244, { defines: { OUTER_LAYER: '1.2' } });
+  }, shadow, 244, { defines: { OUTER_LAYER: '1.2' }, side: DoubleSide });
 }
 
 export interface ShoeLook {

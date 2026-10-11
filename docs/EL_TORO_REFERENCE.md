@@ -31,9 +31,10 @@ The right-hand structure has a low, broad roof, exposed projecting beams, a
 dark soffit and square tan masonry columns. It belongs above the planted bank,
 with open views between the supports rather than another solid building.
 
-The spot has one fixed downhill direction. Fakie turns the rider and board as a
-rigid pose so the rider travels backward down that same flight; choosing a stance
-never mirrors the building, rails, landscape or camera.
+The spot has one fixed downhill direction. Fakie turns the board and the rider's
+feet round so the rider rolls tail first down that same flight, the shoulders and
+head turned back over the back shoulder to the stairs; choosing a stance never
+mirrors the building, rails, landscape or camera.
 
 The final floor correction removes the artificial square paving grid from the
 landings and covered walkway. Continuous concrete keeps subtle mottling and
@@ -128,7 +129,8 @@ moments for each rider stance.
 - [ ] Confirm twenty risers, a 9.5-foot drop and a twenty-foot run, the center rail
   bisects the stairs, and the rider stays on the left flight.
 - [ ] Play regular and fakie approaches through takeoff, flight, landing and
-  roll-away; verify the same downhill layout and camera, with fakie facing backward.
+  roll-away; verify the same downhill layout and camera, with fakie rolling tail
+  first and looking down the stairs.
 - [ ] Compare regular and goofy rider stances in the playground Contact sheet
   for the affected trick family, including the robot and realistic riders.
 - [ ] Inspect cameras looking from the run-up and from the landing, plus the

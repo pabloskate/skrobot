@@ -1,5 +1,5 @@
 import type { SkateStyle } from '../types';
-import type { RiderMechanics } from './stance';
+import { tailFirst, type RiderMechanics } from './stance';
 import { FALL_T, FLIP_T, GROUND, ROLL_IN, X0, computeFrame, specFor } from './trick';
 import { deckTopY } from '../board/board';
 import { LEG_RADII, capsuleIntersectsBoard } from '../board/boardCollision';
@@ -51,7 +51,6 @@ import {
   ARM_LOAD,
   ARM_RIDE,
   FOREARM,
-  HEAD_LOOK_FORWARD,
   HEAD_STEADY,
   HIP_BACK,
   HIP_CENTER,
@@ -69,6 +68,7 @@ import {
   SHOULDER,
   SQUAT_FLOOR,
   STANCE_BODY_YAW,
+  SWITCH_ARMS,
   THIGH,
   SHIN,
   TOE_REACH,
@@ -79,6 +79,7 @@ import {
   moveFrame,
   softFloor,
   solveLeg,
+  upperBodyTurn,
   type ArmPose,
   type ArmRig,
   type BoardRig,
@@ -150,6 +151,19 @@ function exitSetup(t: number, off: number): number {
   return smoothstep((t - off + EXIT_SETUP_LEAD) / SETUP_RAMP) * (1 - smoothstep((t - off) / 0.35));
 }
 
+/**
+ * 0 → 1: how far round to rolling tail first the rider is (stance.ts
+ * tailFirst), through the spin onto the bar and then the one off it. The
+ * rider's own spin is the heading less the approach's angle; the one off
+ * starts with its wind-up on the bar.
+ */
+function rolling(g: GrindFrame, plan: GrindPlan): number {
+  const from = plan.spec.dir === -1 ? 1 : 0;
+  const spun = g.heading - g.approach;
+  if (g.t < plan.off - (plan.spinOut?.lead ?? 0)) return tailFirst(from, plan.heading, spun);
+  return tailFirst(tailFirst(from, plan.heading, plan.heading), plan.endHeading - plan.heading, spun - plan.heading);
+}
+
 function bodyOn(g: GrindFrame, plan: GrindPlan, mechanics: RiderMechanics): Rig {
   const toeDir = mechanics.orientationSign;
   // The feet stand on the board's attitude; a deck flipping under them is
@@ -164,6 +178,10 @@ function bodyOn(g: GrindFrame, plan: GrindPlan, mechanics: RiderMechanics): Rig 
   const flickReach = trick ? DECK_HALF_WIDTH + 5 + 4 * trick.style.flickStrength : 0;
   const restingBodyYaw = -STANCE_BODY_YAW * toeDir;
   const bodyYawDeg = g.pose.yaw + restingBodyYaw;
+  // The shoulders and head sit the way the board is rolling, as on flatground
+  // (rig.ts): a spin onto the bar or off it carries them round with it.
+  const rest = upperBodyTurn(plan.spec.stance === 'switch', rolling(g, plan));
+  const chestYaw = -rest.chest * toeDir;
   // The board's own turn into the lock, past the rider's spin: the shoulders
   // and head hold back from this, not from a 180 the whole body made.
   const turn = g.pose.yaw - g.heading;
@@ -221,7 +239,7 @@ function bodyOn(g: GrindFrame, plan: GrindPlan, mechanics: RiderMechanics): Rig 
   const leanX = -toeDir * (LEAN_REST + LEAN_SQUAT * squat);
   const spinWay = Math.sign(plan.lock.yaw - plan.heading);
   const windUp = plan.spec.slide ? (g.t < plan.lockAt ? -spinWay : spinWay) * PRE_WIND * g.load : 0;
-  const torsoRelYaw = -turn * TWIST_HOLD + (1 - TWIST_HOLD) * g.lead + windUp;
+  const torsoRelYaw = chestYaw - restingBodyYaw - turn * TWIST_HOLD + (1 - TWIST_HOLD) * g.lead + windUp;
   // Down a handrail, the whole upper body leans with the hips.
   const tip = (d: V3) => (g.lean ? rotZ(d, g.lean) : d);
   const upperDir = (d: V3, relYaw: number) => tip(rotY(rotX(rotY(d, restingBodyYaw + relYaw), leanX), g.pose.yaw));
@@ -255,6 +273,7 @@ function bodyOn(g: GrindFrame, plan: GrindPlan, mechanics: RiderMechanics): Rig 
   // ----- Arms: out for balance on the bar, tipping against the sway -----
   const press = squat * g.press;
   const awkward = plan.spec.stance === 'switch' || plan.spec.stance === 'fakie' ? 1 : 0;
+  const guarded = plan.spec.stance === 'switch' ? (1 - g.air) * (1 - g.grind) : 0;
   const arm = (side: 'left' | 'right'): ArmRig => {
     const front = mechanics.frontArm === side;
     const role = front ? 'front' : 'back';
@@ -264,9 +283,9 @@ function bodyOn(g: GrindFrame, plan: GrindPlan, mechanics: RiderMechanics): Rig 
     pose = mixPose(pose, ARM_AIR[role], g.air);
     pose = mixPose(pose, ARM_LAND[role], press);
     pose = {
-      out: pose.out + (front ? 1 : -1) * SWAY_ARMS * g.sway + awkward * 10 * g.air,
+      out: pose.out + (front ? 1 : -1) * SWAY_ARMS * g.sway + awkward * 10 * g.air + SWITCH_ARMS.out * guarded,
       swing: pose.swing,
-      elbow: pose.elbow + awkward * 8 * g.air,
+      elbow: pose.elbow + awkward * 8 * g.air + SWITCH_ARMS.elbow * guarded,
     };
     const [upper, fore] = armDirs(pose, sideZ);
     const shoulder: V3 = { x: SHOULDER.x, y: SHOULDER.y, z: sideZ * SHOULDER.z };
@@ -276,8 +295,7 @@ function bodyOn(g: GrindFrame, plan: GrindPlan, mechanics: RiderMechanics): Rig 
   };
 
   // ----- Head: looks down the bar, and down at it -----
-  const restingHeadYaw = -(STANCE_BODY_YAW - HEAD_LOOK_FORWARD) * toeDir;
-  const headYawDeg = g.heading + turn * (1 - HEAD_HOLD) + restingHeadYaw;
+  const headYawDeg = g.heading + turn * (1 - HEAD_HOLD) - rest.head * toeDir;
   const headRelYaw = headYawDeg - g.pose.yaw - restingBodyYaw;
   // Down a handrail the eyes go further down it, to the landing.
   const railLook = plan.handrail ? RAIL_LOOK * Math.abs(plan.handrail.tilt) : 0;

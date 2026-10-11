@@ -147,7 +147,7 @@ describe('El Toro', () => {
     }
   });
 
-  it('keeps the same downhill travel while fakie faces backwards, in either rider stance', () => {
+  it('keeps the same downhill travel while fakie rolls tail first, looking down the stairs, in either rider stance', () => {
     for (const rider of RIDERS) {
       const regular = plan('Kickflip', { rider });
       const fakie = plan('Kickflip', { rider, stance: 'fakie' });
@@ -163,8 +163,9 @@ describe('El Toro', () => {
       const backwards = stageFrame(fakie, 0.4, 1).rig;
       expect(forwards.board.dir({ x: 1, y: 0, z: 0 }).x).toBeGreaterThan(0.99);
       expect(backwards.board.dir({ x: 1, y: 0, z: 0 }).x).toBeLessThan(-0.99);
+      // The board faces back up the run, but the rider looks over the back shoulder at the stairs.
       expect(forwards.head.fwd.x).toBeGreaterThan(0);
-      expect(backwards.head.fwd.x).toBeLessThan(0);
+      expect(backwards.head.fwd.x).toBeGreaterThan(0);
       expect(backwards.toeDir).toBe(-forwards.toeDir);
     }
   });

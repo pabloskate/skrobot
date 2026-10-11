@@ -1,6 +1,7 @@
 import {
   STANCE_BODY_YAW,
-  HEAD_LOOK_FORWARD,
+  SWITCH_ARMS,
+  upperBodyTurn,
   HIP_Z,
   SHOE_TOESIDE,
   ANKLE_LIFT,
@@ -49,7 +50,7 @@ import {
   armDirs,
 } from './skeleton';
 import type { SkateStyle } from '../types';
-import { flickExtension, orientTrickRotation, type RiderMechanics } from './stance';
+import { flickExtension, orientTrickRotation, tailFirst, type RiderMechanics } from './stance';
 import {
   FLIP_T,
   FOOT_Y,
@@ -98,9 +99,6 @@ import { kickY } from '../board/deck';
  *   turning end over end through the legs.
  */
 
-/** Fraction of a frontside half spin the shoulders take: a frontside chest is already open, so they take the short way round. */
-const TORSO_SPIN_FOLLOW = 0.55;
-const HEAD_SPIN_FOLLOW = 0.25;
 /** Fall rotation pivots near the feet, like the 2D body transform. */
 const BODY_PIVOT_Y = FOOT_Y - 2;
 /** Past the far rail, per unit of flick strength, the flicked shoe ends up. */
@@ -562,18 +560,18 @@ function poseRig(
   const oriented = orientTrickRotation(mechanics, spin);
   const toeDir = mechanics.orientationSign;
   const restingBodyYaw = -STANCE_BODY_YAW * toeDir;
-  const restingHeadYaw = -(STANCE_BODY_YAW - HEAD_LOOK_FORWARD) * toeDir;
   const bodyYawDeg = oriented.bodyYawDeg + restingBodyYaw;
-  const halfSpin = spec.bodyYaw % 360 !== 0;
-  const backside = spec.bodySpinDir === 1;
-  const torsoFollow = !halfSpin || backside ? 1 : TORSO_SPIN_FOLLOW;
-  const headFollow = !halfSpin || backside ? 1 : HEAD_SPIN_FOLLOW;
-  // Blend the head's look-forward out as the body folds in a fall, so the
-  // head stays on the neck.
+  // The shoulders and head sit the way the board is rolling: over the back
+  // shoulder rolling fakie, squarer riding switch. A half spin carries them
+  // round from the way the rider rolled in to the way they roll away, so an
+  // open 180 keeps the eyes on the landing and a blind one comes round to it.
+  const rolling = tailFirst(spec.dir === -1 ? 1 : 0, spec.bodyYaw, Math.abs(spin.bodyYawDeg));
+  const turn = upperBodyTurn(spec.stance === 'switch', rolling);
+  const chestYaw = -turn.chest * toeDir;
+  // Blend the head's look out as the body folds in a fall, so the head stays
+  // on the neck.
   const uprightP = clamp01(1 - Math.abs(f.body.rot) / 55);
-  const headYawDeg = oriented.bodyYawDeg * headFollow
-    + restingHeadYaw * uprightP
-    + restingBodyYaw * (1 - uprightP);
+  const headYawDeg = oriented.bodyYawDeg - turn.head * toeDir * uprightP + chestYaw * (1 - uprightP);
 
   const flipDeg = oriented.flipDeg;
   const spinP = f.motion.rotation;
@@ -804,7 +802,7 @@ function poseRig(
   const spinWay = spec.counterShuv ? 0 : Math.sign(orientTrickRotation(mechanics, {
     flipDeg: 0, yawDeg: 0, bodyYawDeg: (spec.bodySpinDir || 1) * spec.bodyYaw,
   }).bodyYawDeg);
-  const torsoRelYaw = oriented.bodyYawDeg * (torsoFollow - 1) - spinWay * PRE_WIND * hip.load;
+  const torsoRelYaw = chestYaw - restingBodyYaw - spinWay * PRE_WIND * hip.load;
   const torsoPoint = (p: V3) => add3(anchor, upperDir(fallTurn(p), torsoRelYaw));
   const torsoDir = (d: V3) => upperDir(rotZ(d, f.body.rot), torsoRelYaw);
   const bodyPoint = (p: V3) => add3(anchor, rotY(fallTurn(p), bodyYawDeg));
@@ -836,6 +834,7 @@ function poseRig(
   const sinceTd = hip.sinceTouchdown;
   const press = sinceTd >= 0 ? squat * (1 - smoothstep(sinceTd / 0.6)) : 0;
   const awkward = spec.stance === 'switch' || spec.stance === 'fakie' ? 1 : 0;
+  const guarded = spec.stance === 'switch' ? 1 - hip.air : 0;
   const arm = (side: 'left' | 'right'): ArmRig => {
     const front = mechanics.frontArm === side;
     const role = front ? 'front' : 'back';
@@ -845,7 +844,11 @@ function poseRig(
     pose = mixPose(pose, ARM_AIR[role], hip.air);
     pose = mixPose(pose, ARM_LAND[role], press);
     pose = mixPose(pose, ARM_BRACE[role], impact);
-    pose = { out: pose.out + awkward * 10 * hip.air, swing: pose.swing + sway, elbow: pose.elbow + awkward * 8 * hip.air };
+    pose = {
+      out: pose.out + awkward * 10 * hip.air + SWITCH_ARMS.out * guarded,
+      swing: pose.swing + sway,
+      elbow: pose.elbow + awkward * 8 * hip.air + SWITCH_ARMS.elbow * guarded,
+    };
     const [upper, fore] = armDirs(pose, sideZ as 1 | -1);
     const shoulderL: V3 = { x: SHOULDER.x, y: SHOULDER.y, z: sideZ * SHOULDER.z };
     // Legacy swing for falls.
