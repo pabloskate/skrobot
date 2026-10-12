@@ -41,6 +41,8 @@ export interface StageScene {
   obstacle: Obstacle;
   /** Who skates: the robot, the realistic human, or the alien. */
   skater: Skater;
+  /** A flatground trick missed instead of landed: caught wrong and kicked out. Absent lands it. */
+  fall?: 'kickout' | null;
 }
 
 interface Props {
@@ -194,8 +196,9 @@ export default function StageViewport({ scene, playhead, rate, onCamera, onZoom,
           <TrickScene3D
             robot={scene.robot}
             trick={scene.trick}
-            landed
+            landed={!scene.fall}
             knewIt
+            fallVariant={scene.fall ?? undefined}
             riderStance={scene.rider}
             fixedTime={playhead.time}
             playbackRate={playhead.playing ? rate : 0.05}

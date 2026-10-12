@@ -53,6 +53,8 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
   const camera = sceneCamera(state);
   const tripod = sceneTripod(state);
   const timeline = timelineFor(state, RIDER.skateStyle);
+  // A flatground or gap trick can be kicked out; a grind lands.
+  const fall = state.mode === 'flatground' ? state.fall : null;
   const steps = trickSteps(state);
   const preset = typeof state.camera === 'string' ? cameraPreset(state.camera) : null;
   const search = searchFromState(state);
@@ -115,7 +117,7 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
       <div className="explorer-layout">
         <div className="explorer-stage-col">
           <ExplorerStage
-            key={`${trick.id}:${state.rider}:${state.obstacle}`}
+            key={`${trick.id}:${state.rider}:${state.obstacle}:${fall ?? 'landed'}`}
             robot={RIDER}
             trick={trick}
             rider={state.rider}
@@ -127,6 +129,7 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
             rail={state.rail}
             obstacle={state.obstacle}
             skater={state.skater}
+            fall={fall}
             cameraLabel={cameraLabel(state)}
             customCamera={preset == null}
             rate={rate}

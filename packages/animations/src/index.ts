@@ -17,6 +17,8 @@ export {
   FLIP_T,
   LAND_T,
   FALL_T,
+  KICK_OUT_T,
+  KICK_OUT_DROP_T,
   HOLD,
   specFor,
   computeFrame,

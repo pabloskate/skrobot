@@ -33,6 +33,12 @@ const MODES: ReadonlyArray<{ id: ExplorerMode; label: string }> = [
 
 const END_LABELS: Record<PopEnd, string> = { tail: 'Off the tail', nose: 'Off the nose' };
 
+/** How a flatground or gap trick ends: ridden away, or caught wrong and kicked out. */
+const OUTCOMES: ReadonlyArray<{ fall: ExplorerState['fall']; label: string }> = [
+  { fall: null, label: 'Land' },
+  { fall: 'kickout', label: 'Kick out' },
+];
+
 const capitalize = (s: string) => `${s[0].toUpperCase()}${s.slice(1)}`;
 
 /** Why a grind allows the trick-out ends it does. */
@@ -158,6 +164,28 @@ export default function TrickBuilder({ state, onChange }: Props) {
       </div>
 
       {state.mode === 'flatground' && <StanceField state={state} set={set} />}
+
+      {state.mode === 'flatground' && (
+        <div className="explorer-field explorer-field-inline">
+          <span className="explorer-field-label" id="explorer-outcome-label">
+            Outcome <small>{state.fall === 'kickout' ? 'caught wrong, kicked away' : 'ridden away'}</small>
+          </span>
+          <div className="explorer-segmented explorer-segmented-compact" role="radiogroup" aria-labelledby="explorer-outcome-label">
+            {OUTCOMES.map((option) => (
+              <button
+                key={option.label}
+                type="button"
+                role="radio"
+                aria-checked={state.fall === option.fall}
+                className={state.fall === option.fall ? 'active' : ''}
+                onClick={() => set({ fall: option.fall })}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="explorer-field explorer-field-inline explorer-skater-field">
         <span className="explorer-field-label" id="explorer-skater-label">

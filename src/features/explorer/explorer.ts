@@ -3,6 +3,8 @@ import {
   FLIP_T,
   FOOT,
   GRIND_BASES,
+  KICK_OUT_DROP_T,
+  KICK_OUT_T,
   LAND_T,
   ROLL_IN,
   SCENE_ORBIT_BOUNDS,
@@ -95,6 +97,8 @@ export interface ExplorerState {
   obstacle: Obstacle;
   /** Who skates it: the robot, the realistic human, or the alien. */
   skater: Skater;
+  /** A flatground or gap trick can be missed instead: caught wrong and kicked out. Null lands it. */
+  fall: 'kickout' | null;
 }
 
 export const STANCES: readonly Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
@@ -215,6 +219,7 @@ export const DEFAULT_STATE: Readonly<ExplorerState> = Object.freeze({
   rail: 'center',
   obstacle: 'stairs',
   skater: 'robot',
+  fall: null,
 });
 
 /** Move to another spot; gap-only spots open the saved gap trick, and an obstacle the new spot lacks goes back to its stairs. */
@@ -361,30 +366,31 @@ export interface Timeline {
 
 /** The moments worth jumping to, and how long the trick runs (seconds). */
 export function timelineFor(state: ExplorerState, style: SkateStyle | undefined): Timeline {
+  const kickOut = state.mode === 'flatground' && state.fall === 'kickout';
   if (state.mode === 'flatground' && setInfo(state.set).terrain) {
     // Down the stairs the flight is the drop's: longer the lower the robot pops.
     const stairs = setTimeline(state.set, style, true, state.obstacle)!;
     return {
-      duration: stairs.end,
+      duration: kickOut ? stairs.land + KICK_OUT_DROP_T : stairs.end,
       phases: [
         { label: 'Set up', time: 0 },
         { label: 'Pop', time: stairs.pop + 0.06 },
         { label: 'Peak', time: stairs.peak },
-        { label: 'Catch', time: stairs.catch },
-        { label: 'Land', time: stairs.land },
+        { label: kickOut ? 'Kick out' : 'Catch', time: stairs.catch },
+        { label: kickOut ? 'Down' : 'Land', time: stairs.land },
       ],
     };
   }
   if (state.mode === 'flatground') {
     const land = ROLL_IN + FLIP_T;
     return {
-      duration: land + LAND_T,
+      duration: land + (kickOut ? KICK_OUT_T : LAND_T),
       phases: [
         { label: 'Set up', time: 0 },
         { label: 'Pop', time: ROLL_IN + FLIP_T * 0.1 },
         { label: 'Peak', time: ROLL_IN + FLIP_T * 0.5 },
-        { label: 'Catch', time: ROLL_IN + FLIP_T * 0.88 },
-        { label: 'Land', time: land },
+        { label: kickOut ? 'Kick out' : 'Catch', time: ROLL_IN + FLIP_T * 0.88 },
+        { label: kickOut ? 'Run out' : 'Land', time: land },
       ],
     };
   }
@@ -578,6 +584,8 @@ export function stateFromSearch(search: string): ExplorerState {
     rail: params.get('rail') === 'side' && setInfo(set).rails?.sideGrinds !== false ? 'side' : DEFAULT_STATE.rail,
     obstacle: setInfo(set).obstacles?.find((o) => o.id === params.get('obstacle'))?.id ?? DEFAULT_STATE.obstacle,
     skater: SKATERS.find((option) => option.id === params.get('skater'))?.id ?? DEFAULT_STATE.skater,
+    // Only a flatground or gap trick kicks out.
+    fall: params.get('fall') === 'kickout' && params.has('trick') ? 'kickout' : null,
   };
   const grind = fromSlug(GRIND_CHOICES, params.get('grind'));
   if (!grind) {
@@ -633,5 +641,6 @@ export function searchFromState(state: ExplorerState): string {
   if (state.rail !== DEFAULT_STATE.rail) params.set('rail', state.rail);
   if (picksObstacle(state) && state.obstacle !== DEFAULT_STATE.obstacle) params.set('obstacle', state.obstacle);
   if (state.skater !== DEFAULT_STATE.skater) params.set('skater', state.skater);
+  if (state.mode === 'flatground' && state.fall) params.set('fall', state.fall);
   return `?${params.toString()}`;
 }

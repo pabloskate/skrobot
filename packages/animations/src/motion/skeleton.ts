@@ -181,6 +181,12 @@ export interface Rig {
   headYawDeg: number;
   /** Hip height above the deck center. */
   hipOverDeck: number;
+  /**
+   * 0 → 1: the body is off the board and posed for itself, at the size it's
+   * drawn (a fall: motion/fall/). A person's solver wears its arms and trunk
+   * as posed instead of as a rider's (riders/realistic/skaterPose.ts).
+   */
+  free?: number;
 }
 
 export function frameOf(origin: V3, dir: (d: V3) => V3): Frame3 {

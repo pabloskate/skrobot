@@ -33,7 +33,8 @@ export const RISER = STAIR_DROP / STAIR_STEPS;
 export const TREAD = STAIR_RUN / (STAIR_STEPS - 1);
 
 /** 32 ft/s², so the drop takes the time a real one does at this scale. */
-const GRAVITY = 32.2 * FOOT;
+export const DROP_GRAVITY = 32.2 * FOOT;
+const GRAVITY = DROP_GRAVITY;
 /** How far the deck rises over the top landing off a neutral pop. */
 const POP_RISE = 2 * FOOT;
 /**

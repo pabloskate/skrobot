@@ -538,6 +538,8 @@ export class SkaterSolver {
   /** Pose every bone from the rig. */
   solve(rig: Rig, options: SolveOptions = {}): SkeletonPose {
     const { expression = 'focus', ground = 0, dt = 0, time = 0, gaze = null } = options;
+    // A body off its board, posed for itself (a fall), is worn as posed: no rider's crouch, no rider's arms.
+    const free = Math.max(0, Math.min(1, rig.free ?? 0));
     const bones = this.rest.bones;
     for (let i = 0; i < bones.length; i++) {
       this.delta[i].identity();
@@ -590,7 +592,7 @@ export class SkaterSolver {
     if (leanTo.lengthSq() > 1e-6 && upright > 0) {
       leanTo.normalize();
       const want = CROUCH_LEAN * Math.max(0, bend - CROUCH_FROM) * (CROUCH_AIR + (1 - CROUCH_AIR) * support);
-      const extra = Math.max(0, want - rigLean) * upright;
+      const extra = Math.max(0, want - rigLean) * upright * (1 - free);
       if (extra > 0) {
         const fold = new Quaternion().setFromAxisAngle(new Vector3().crossVectors(UP, leanTo).normalize(), extra * DEG);
         torsoUp.applyQuaternion(fold);
@@ -614,9 +616,14 @@ export class SkaterSolver {
     const chest = deltaFrom(this.restFwd, UP, chestFwd, torsoUp);
     this.spine.forEach((b, k) => drive(b, pelvis.clone().slerp(chest, (k + 1) / this.spine.length)));
 
-    // Neck and head share the head's turn off the chest.
+    // Neck and head share the head's turn off the chest: bending along the neck, or, a body posed for itself, from its
+    // base as the rig's does (motion/fall/body.ts), so the skull is where the fall kept it off the ground.
     const head = deltaFrom(this.restFwd, UP, headFwd, headUp);
-    this.neck.forEach((b, k) => drive(b, chest.clone().slerp(head, (k + 1) / (this.neck.length + 1))));
+    const neckShare = (k: number) => {
+      const along = (k + 1) / (this.neck.length + 1);
+      return along + (1 - along) * free;
+    };
+    this.neck.forEach((b, k) => drive(b, chest.clone().slerp(head, neckShare(k))));
     drive(this.headBone, head);
 
     // Hips between the rig's, pulled toward the feet if a leg can't reach its foot
@@ -668,8 +675,9 @@ export class SkaterSolver {
       const headPitch = this.look.step(1, Math.max(-HEAD_DOWN, Math.min(HEAD_UP, pitch * HEAD_SHARE.pitch)), dt, HEAD_OMEGA);
       const facing = ahead.clone().applyAxisAngle(level, headYaw * DEG);
       facing.applyAxisAngle(new Vector3().crossVectors(level, facing).normalize(), -headPitch * DEG);
-      head.copy(deltaFrom(this.restFwd, UP, facing, level));
-      this.neck.forEach((b, k) => drive(b, chest.clone().slerp(head, (k + 1) / (this.neck.length + 1))));
+      // A body posed for itself holds its head as posed (tucked and turned off a shoulder going over in a roll); the eyes still look.
+      head.copy(deltaFrom(this.restFwd, UP, facing, level).slerp(head, free));
+      this.neck.forEach((b, k) => drive(b, chest.clone().slerp(head, neckShare(k))));
       drive(this.headBone, head);
     }
 
@@ -724,9 +732,13 @@ export class SkaterSolver {
       hinge.addScaledVector(upperH, -hinge.dot(upperH)).normalize();
       const foreH = upperH.clone().multiplyScalar(Math.cos(elbow)).addScaledVector(hinge, Math.sin(elbow))
         .addScaledVector(outward, ARM_CARRY * (1 - smoothstep(elbow / (30 * DEG)))).normalize();
+      if (free > 0) {
+        upperH.lerp(rigUpper, free).normalize();
+        foreH.lerp(rigFore, free).normalize();
+      }
       human[s] = { upper: upperH, fore: foreH, out };
       // Collarbones rise as an arm does.
-      const raise = smoothstep((out - 0.6) / 0.9);
+      const raise = smoothstep((out + (outR - out) * free - 0.6) / 0.9);
       const axis = new Vector3().crossVectors(outward, torsoUp).normalize();
       drive(this.arms[s].clavicle, new Quaternion().setFromAxisAngle(axis, 16 * DEG * raise).multiply(chest));
     }

@@ -6,6 +6,8 @@ import { clearFeet } from '../board/footContact';
 import { rad, rotY, smoothstep, type V3 } from '../math';
 import { grindLane, handrailHeight, railTrack, type GrindPlan } from '../motion/grind';
 import { kneeBetween, solveGrindRig } from '../motion/grindRig';
+import { offLineRig } from '../motion/fall/kickOut';
+import type { Quat } from '../motion/fall/rotation';
 import { solveRig } from '../motion/rig';
 import { LAND_OMEGA, LAND_ZETA, SQUAT_FLOOR, moveFrame, type Frame3, type LegRig, type Rig } from '../motion/skeleton';
 import { GROUND, X0, computeFrame } from '../motion/trick';
@@ -71,7 +73,7 @@ function reverseHeading(rig: Rig): Rig {
 }
 
 /** The whole rider and board, moved by a world-space offset. */
-function shiftRig(rig: Rig, by: V3): Rig {
+export function shiftRig(rig: Rig, by: V3): Rig {
   const move = (p: V3): V3 => ({ x: p.x + by.x, y: p.y + by.y, z: p.z + by.z });
   return {
     ...rig,
@@ -227,15 +229,45 @@ function shadowLevel(rig: Rig, u: number, dir: 1 | -1, ground: (u: number, z: nu
   return shadowGround({ x: (hips.x + rig.board.center.x) / 2, y: (hips.y + rig.board.center.y) / 2, z: (hips.z + rig.board.center.z) / 2 }, u, dir, ground, across);
 }
 
+/** A gap trick's rider and board at a moment, as its frame shows them, and where down the route they are. */
+export interface StairRig {
+  rig: Rig;
+  /** The flatground frame it's solved from, and the stairs' clock (held at the attempt's end). */
+  f: ReturnType<typeof computeFrame>;
+  clock: number;
+  /** Where along the route the rider is, the street rolled by it, and the route's heading. */
+  route: ReturnType<typeof stairTrack>;
+  /** How far down (over the top landing) the rider is carried. */
+  drop: number;
+  /** The rider on the board before the bank and the carry. */
+  solved: Rig;
+  /** Whether the attempt is ridden away (a kick-out's attempt is, up to its takeover). */
+  landed: boolean;
+  /** The landed wheels' turn at a distance rolled, board-local. */
+  wheel: (travelled: number) => number;
+  /** The route at another moment. */
+  track: (time: number) => ReturnType<typeof stairTrack>;
+}
+
 /**
- * One frame of a gap trick down a spot's stairs, over its fence, or onto
- * its bank. The trick and the rider are solved exactly as on flat ground, on
- * the stairs' stretched clock (stairClock), turned together for a backwards
- * approach and onto the route's heading, then carried down the drop
- * together; the street rolls at the route's speed.
+ * The rider and board of a gap trick at clock `t`. The trick and the rider
+ * are solved exactly as on flat ground, on the stairs' stretched clock
+ * (stairClock), turned together for a backwards approach and onto the
+ * route's heading, then carried down the drop together; the street rolls at
+ * the route's speed. `offLine` changes the
+ * solved rider on the board before it's turned and carried down (a kick-out
+ * turns its board off its line and lifts the feet off it), and `landed` plays
+ * the attempt as ridden away whatever the stage says.
  */
-export function stairFrame(stage: StagePlan, stairs: StairPlan, t: number, rate: number, headPose?: HeadPose | null): StageFrame {
-  const { spec, mechanics, style, landed, fall, shankProgress } = stage;
+export function stairRig(
+  stage: StagePlan,
+  stairs: StairPlan,
+  t: number,
+  headPose?: HeadPose | null,
+  offLine?: (rig: Rig) => Rig,
+  landed = stage.landed,
+): StairRig {
+  const { spec, mechanics, style, fall, shankProgress } = stage;
   const clock = Math.max(0, Math.min(t, stage.end));
   const at = (time: number) => computeFrame(stairClock(stairs, time), spec, landed, fall, shankProgress, style);
   const f = at(clock);
@@ -262,7 +294,7 @@ export function stairFrame(stage: StagePlan, stairs: StairPlan, t: number, rate:
   const downhill = heading ? reverseHeading(flat) : flat;
   // Down a roll-in the rider is pitched onto the ramp after (bankRig): on the board, it's flat ground.
   const rolling = stairs.dropIn != null && clock <= stairs.pop;
-  const solved = clearFeet(onTheGround(downhill, stairs.terrain.slope || rolling ? undefined : stepUnder));
+  const solved = clearFeet(onTheGround(offLine ? offLine(downhill) : downhill, stairs.terrain.slope || rolling ? undefined : stepUnder));
   const absorbed = absorbDrop(solved, stairs, clock, style.popHeight);
   const banked = bankRig(posed(absorbed, stage.skater, headPose), stairs, clock, u, route.yaw);
   const carried = shiftRig(banked, { x: 0, y: -drop, z: 0 });
@@ -271,14 +303,42 @@ export function stairFrame(stage: StagePlan, stairs: StairPlan, t: number, rate:
   // its knees again with robot bone lengths after humanRig has sized them.
   const clearance = stairs.terrain.slope ? groundLift(carried, p => ASPHALT - ground(u + p.x - X0, route.z + p.z)) : 0;
   const rig = clearance > 0 ? shiftRig(carried, { x: 0, y: -clearance, z: 0 }) : carried;
-  const falling = !landed && f.motion.flight >= 1;
-  const headHeight = GROUND - solved.head.origin.y;
-  const lift = craneDownhill((time) => stairDeckHeight(stairs, time), clock, (time) => rideHeight(stairs, Math.max(0, time))) - (falling ? fallSink(headHeight) : 0);
-
   const touchdownTravel = track(stairs.land).travel;
   // Wheel angles are board-local: turning the entire rider must not reverse
   // the backwards roll inside that frame, including after a 180-degree trick.
-  const roll = (d: number) => wheelRoll(d, touchdownTravel, spec.dir, rig.board.yawDeg + route.yaw - heading);
+  const wheel = (d: number) => wheelRoll(d, touchdownTravel, spec.dir, rig.board.yawDeg + route.yaw - heading);
+  return { rig, f, clock, route, drop, solved, landed, wheel, track };
+}
+
+/** The level (over the top landing) a frame's shadows fall at, `u` down the route and `across` it. */
+export const stairShadowLevel = (rig: Rig, stairs: StairPlan, u: number, across: number) =>
+  shadowLevel(rig, u, stairs.dir, (x, z) => terrainSurface(stairs.terrain, x, z), across);
+
+/**
+ * The crane's height going downhill: up with part of the pop, then down the
+ * slope a little ahead of the board (`deckHeight`, over the top landing),
+ * riding a roll-in at the board's height.
+ */
+export const stairCrane = (stairs: StairPlan, t: number, deckHeight: (t: number) => number = (time) => stairDeckHeight(stairs, time)) =>
+  craneDownhill(deckHeight, t, (time) => rideHeight(stairs, Math.max(0, time)));
+
+/**
+ * One frame of a gap trick down a spot's stairs, over its fence, or onto
+ * its bank (stairRig). Given an `error`, it's a kick-out's attempt up to its takeover:
+ * ridden as landed, with the board turned off its line by the error.
+ */
+export function stairFrame(stage: StagePlan, stairs: StairPlan, t: number, rate: number, headPose?: HeadPose | null, error?: Quat): StageFrame {
+  const { spec } = stage;
+  const offLine = error ? (rig: Rig) => offLineRig(rig, error) : undefined;
+  const { rig, f, clock, route, drop, solved, landed, wheel, track } = stairRig(stage, stairs, t, headPose, offLine, stage.landed || error != null);
+  const u = route.x;
+  const dir = stairs.dir;
+  const ground = (x: number, z: number) => terrainSurface(stairs.terrain, x, z);
+  const falling = !landed && f.motion.flight >= 1;
+  const headHeight = GROUND - solved.head.origin.y;
+  const lift = stairCrane(stairs, clock) - (falling ? fallSink(headHeight) : 0);
+
+  const roll = wheel;
   const angle = roll(route.travel);
 
   // Dust off the lip at the pop and off the bottom at touchdown, left behind where it was kicked up.
