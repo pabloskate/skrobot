@@ -106,6 +106,8 @@ export interface RunOutSample {
   velocity: V3;
   /** The legs' push (acceleration less gravity, up). */
   load: number;
+  /** The height the legs hold the hips at over the ground then (running, lower the faster; standing, up): below it, they're taking a landing. */
+  hold: number;
 }
 
 export interface RunOut {
@@ -247,6 +249,10 @@ export function runOut(setup: RunOutSetup): RunOut {
   };
   const holding = (s: State) => down(s.t).filter((f) => holds(s, f));
 
+  /** The height the legs hold the hips at over the ground, going at `speed` at `t`: running, lower the faster; stopped, stood up. */
+  const holdAt = (t: number, speed: number) =>
+    stopped < t ? standHeight : runHeight + (standHeight - runHeight) * (1 - Math.min(1, speed / Math.sqrt(g * leg)));
+
   /** One step of the dynamics with the feet down then. */
   const advance = (s: State, extra: (t: number) => V3): State => {
     const feet = holding(s);
@@ -258,7 +264,7 @@ export function runOut(setup: RunOutSetup): RunOut {
       const speed = Math.hypot(s.v.x, s.v.z);
       // Never aimed past where the legs reach: the spring slows the hips before the knees lock.
       const reachable = Math.min(...feet.map((f) => ceiling(s, f))) - SOFT_KNEES * leg;
-      const target = Math.min(reachable, stopped < s.t ? standHeight : runHeight + (standHeight - runHeight) * (1 - Math.min(1, speed / Math.sqrt(g * leg))));
+      const target = Math.min(reachable, holdAt(s.t, speed));
       // Up (h grows), the legs' spring; they push only, never pull the body down faster than it falls.
       const hv = -s.v.y;
       // Coming down, the knees take the fall over what's left above the deepest they'll bend to, at an even rate.
@@ -549,7 +555,7 @@ export function runOut(setup: RunOutSetup): RunOut {
     s = advance(s, shove);
     if (i % 2 === 0) {
       const acc = scale3(sub3(s.v, before.v), 1 / dt);
-      samples.push({ hips: before.p, velocity: before.v, load: g - acc.y });
+      samples.push({ hips: before.p, velocity: before.v, load: g - acc.y, hold: holdAt(before.t, Math.hypot(before.v.x, before.v.z)) });
     }
     if (still === Infinity && stopped < s.t && Math.hypot(s.v.x, s.v.y, s.v.z) < 3) still = s.t;
   }
@@ -558,7 +564,8 @@ export function runOut(setup: RunOutSetup): RunOut {
   for (const { t: at, by } of landings) {
     for (let i = 0; i < samples.length; i++) {
       const t = setup.start + i * 2 * dt;
-      if (t <= at - span || t >= at) continue;
+      // (A sample at the landing already has the hips where it put them.)
+      if (t <= at - span || t >= at - dt / 2) continue;
       const k = (t - (at - span)) / span;
       const sample = samples[i];
       samples[i] = {
@@ -572,8 +579,8 @@ export function runOut(setup: RunOutSetup): RunOut {
 }
 
 /** A planted shoe's sole, as its four corners on the ground (x, z): heel to toe, and its width. */
-const SOLE = { heel: -7, toe: 8, half: 3.5 } as const;
-function soleCorners(f: Footfall): V3[] {
+export const SOLE = { heel: -7, toe: 8, half: 3.5 } as const;
+export function soleCorners(f: Footfall): V3[] {
   const r = rightOf(f.heading);
   const out: V3[] = [];
   for (const along of [SOLE.heel, SOLE.toe]) for (const side of [-SOLE.half, SOLE.half]) out.push(add3(add3(f.at, scale3(f.heading, along)), scale3(r, side)));
@@ -581,7 +588,7 @@ function soleCorners(f: Footfall): V3[] {
 }
 
 /** The point nearest `p` (level) inside the convex hull of `pts`. */
-function within(p: V3, pts: V3[]): V3 {
+export function within(p: V3, pts: V3[]): V3 {
   // Gift-wrap the hull in (x, z), then clamp to it.
   const hull: V3[] = [];
   let start = pts.reduce((a, b) => (b.x < a.x || (b.x === a.x && b.z < a.z) ? b : a));
@@ -658,5 +665,6 @@ export function runOutAt(run: RunOut, t: number): RunOutSample {
     hips: add3(a.hips, scale3(sub3(b.hips, a.hips), k)),
     velocity: add3(a.velocity, scale3(sub3(b.velocity, a.velocity), k)),
     load: a.load + (b.load - a.load) * k,
+    hold: a.hold + (b.hold - a.hold) * k,
   };
 }

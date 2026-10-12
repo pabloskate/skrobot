@@ -17,13 +17,18 @@ import { rightOf, turnLevel } from './runOut';
  * what's left of the speed to run off.
  *
  * Through the roll the body is a shape that changes as it goes round (the
- * posture, keyed by how far round the pelvis has pitched) and rolls on
- * whatever part of it is lowest: it pivots about the leading point it rests
- * on, falls with gravity's torque about it, and flies when nothing is under
- * it. A hand or foot that meets the ground stays where it met it until the
- * body has gone past it. The shape is the drawn body's: its chest and head
- * as rounded boxes and its limbs as capsules, so the back that rolls is the
- * back that's drawn.
+ * posture, keyed by how far round the pelvis has pitched) and rests on
+ * whatever part of it is lowest. On its feet it pivots about the leading
+ * point it rests on and falls with gravity's torque about it; it flies when
+ * nothing is under it. On its body, tucked, it's round: the ground pushes up
+ * through its middle, so the speed it came down with carries it on, the
+ * ground's grip only turning that into spin until it rolls (and rolling
+ * takes a little more), and up over its feet the leg to a foot ahead brakes
+ * it as a step would: the faster it lands, the further it goes. A hand or
+ * foot that meets the ground stays where it met it until the body has gone
+ * past it. The shape is the drawn body's: its chest and head as rounded
+ * boxes and its limbs as capsules, so the back that rolls is the back that's
+ * drawn.
  *
  * Positions are the physics' (y down). Angles in degrees unless named.
  */
@@ -63,21 +68,35 @@ const ROLL_END = 352;
 /** Pelvis pitches the lean and turn off the line unwind over, coming up: off the back, and before the feet are down. */
 const SQUARE_FROM = 235;
 const SQUARE_BY = 305;
-/** The roll never turns slower than this (rad/s): a tucked rider keeps going over. */
+/** The roll never turns slower than this (rad/s): a tucked rider keeps going over; nor faster than a tight tuck can. */
 const LEAST_RATE = 6;
-const MOST_RATE = 16;
+const MOST_RATE = 18;
 /**
- * Coming up over the feet it turns at what its speed gives about them (the
- * speed into the ground is lost), the legs driving it on: never slower than
- * this, so it gets up, nor faster, so it doesn't spring up off them.
+ * Coming up over the feet, the legs drive it round them (the speed into the
+ * ground is lost): never slower than this, so it gets up, nor faster, so they
+ * don't spring it up off them. Any faster is its own speed along carrying it
+ * up over them.
  */
 const RISE_RATE = { least: 2.5, most: 5 } as const;
 /**
- * How hard (in gravities) the body skids to a stop on what it's come down onto, when it's going faster along than the roll
- * round it carries: a hard slam, over a few hundredths, not dead in a step.
+ * Coming up over the feet, the most (in √(gravity · leg)) the legs stand the body up at, how high the hips come up to (in
+ * legs, over the ankles: a crouch over the feet), and how high they're let carry on up to on their own (a runner's
+ * height, not a hop).
  */
-const SKID_BRAKE = 12;
-/** Friction rolling round (rad/s² and per second). */
+const RISE_UP = 1.6;
+const RISE_TO = 0.45;
+const RISE_TOP = 0.85;
+/**
+ * The ground's grip on a body rolling over it (sliding friction, body and clothes on concrete): the most of its speed along
+ * the ground it can turn into spin, or spin into speed, or take as it skids, as a share of how hard the body's pressed onto
+ * it (coming down onto it, the speed it comes down with; rolling, its weight).
+ */
+const GRIP = 0.6;
+/** How long (seconds) the ground's push on a body coming down onto it takes to come on: a shoulder and back give. */
+const IMPACT_T = 0.02;
+/** How hard (in gravities) rolling over its body slows it: it isn't quite round, and gives. */
+const ROLL_DRAG = 0.3;
+/** Friction turning over the feet (rad/s² and per second). */
 const DRAG = 8;
 const DAMPING = 1.5;
 /** The legs' drive (rad/s²): pushing off into the dive, and up out of the roll over the feet. */
@@ -749,15 +768,24 @@ export function rollOut(setup: RollSetup): Roll {
   let omega = rateIn(rateAbout(v, contact), false);
   let flying = false;
   let comV = v;
-  /** How fast it's skidding along over the ground, on top of rolling round what it rests on. */
-  let skid = 0;
+  /**
+   * Its speed along the ground rolling on its body (null: on its feet, or in the air). Tucked, it's round: it rolls about
+   * the ground under its middle, and the ground's push goes up through that, so only the ground's grip takes the speed it
+   * goes along with, turning it into spin (or spin into speed) until it rolls, and rolling takes a little more.
+   */
+  let carry: number | null = null;
+  /** How much of its speed into the ground, coming down onto its body, the ground's still to take. */
+  let impact = 0;
+  /** Where it was coming up off its back onto its feet from: how far round, and the hips' height. */
+  let comingUp: { theta: number; hips: number } | null = null;
   let handsAt = Infinity;
   let end = Infinity;
   /** How far the lowest part that can carry the body is off the ground. */
   let clearance = 0;
   for (; step < 4 * HZ; step++) {
-    const turnBy = (omega * dt * 180) / Math.PI;
+    let turnBy = (omega * dt * 180) / Math.PI;
     let target: V3;
+    const upOver = !flying && carry != null && (planted(0) || planted(1));
     if (flying) {
       // Hands down take the fall: the arms give, lowering the body onto whatever comes down next, gently.
       let fall = g;
@@ -766,15 +794,37 @@ export function rollOut(setup: RollSetup): Roll {
       }
       comV = add3(comV, { x: 0, y: fall * dt, z: 0 });
       target = add3(com, scale3(comV, dt));
+    } else if (upOver) {
+      // Up over its feet: carried on over them at its speed along (or as the legs turn it up over them), the legs standing
+      // the hips up into a crouch by the time it's over them (the knees take what a stiff leg would vault it up by), and the
+      // body coming upright as they do.
+      const r = sub3(com, contact);
+      const hipsUp = ground(p.x, p.z) - p.y;
+      if (!comingUp) {
+        // The roll's spin is its speed along now: the legs start turning it up over the feet from slow.
+        comingUp = { theta, hips: hipsUp };
+        omega = RISE_RATE.least;
+      }
+      const along = Math.max(carry ?? 0, omega * Math.max(1, -r.y));
+      const need = ankleHeight + RISE_TO * leg - hipsUp;
+      const behind = -dot3(r, travel);
+      const most = RISE_UP * Math.sqrt(g * leg);
+      // (Easing into the crouch, no harder than gravity slows them: the legs stop pushing, they don't pull.)
+      const up = need <= 0 ? 0 : Math.min(most, Math.sqrt(2 * g * need), behind > 1 ? (need * along) / behind : most);
+      target = add3(com, add3(scale3(travel, along * dt), scale3(UP, up * dt)));
+      const upright = clamp01((hipsUp + up * dt - comingUp.hips) / Math.max(1, ankleHeight + RISE_TO * leg - comingUp.hips));
+      turnBy = Math.max(0, Math.min((MOST_RATE * dt * 180) / Math.PI, comingUp.theta + (ROLL_END - comingUp.theta) * upright - theta));
     } else {
-      target = add3(contact, turn(sub3(com, contact), axis, turnBy));
+      const pivot = carry == null ? contact : { x: com.x, y: ground(com.x, com.z), z: com.z };
+      target = add3(pivot, turn(sub3(com, pivot), axis, turnBy));
       // Diving, the legs drive the body off the feet, out of the squat.
       if (theta < FEET_OFF && (planted(0) || planted(1))) target = add3(target, scale3(norm3(sub3(target, contact)), EXTEND * dt));
-      // Skidding, what it rests on slides along with it.
-      const slid = scale3(travel, skid * dt);
-      target = add3(target, slid);
-      contact = add3(contact, slid);
-      skid = Math.max(0, skid - SKID_BRAKE * g * dt);
+      // On its body, what of its speed the roll can't carry (turning as fast as it can) it skids on, what it rests on with it.
+      if (carry != null) {
+        const slid = scale3(travel, Math.max(0, carry - omega * (pivot.y - com.y)) * dt);
+        target = add3(target, slid);
+        contact = add3(contact, slid);
+      }
     }
     theta += turnBy;
     t += dt;
@@ -783,6 +833,11 @@ export function rollOut(setup: RollSetup): Roll {
     let hips = add3(p, sub3(target, com));
     let next = shapeAt(body, line, theta, hips, holds, board, shape.clearing);
     hips = add3(hips, sub3(target, next.com));
+    if (upOver) {
+      // Coming up, the legs ease off as the hips near the crouch they come up into: no faster than carries them up to it.
+      const room = Math.max(0, ankleHeight + RISE_TOP * leg - (ground(p.x, p.z) - p.y));
+      hips = { ...hips, y: Math.max(hips.y, p.y - Math.sqrt(2 * g * room) * dt) };
+    }
     next = shapeAt(body, line, theta, hips, holds, board, shape.clearing);
     all = touches(next.rig, body, ground);
     // What carries the body: not the hands, nor a limb held where it is (it moves only partly with the body).
@@ -815,29 +870,48 @@ export function rollOut(setup: RollSetup): Roll {
     } else if (!flying && !footDown && lowest.gap > SNAP) {
       flying = true;
       comV = stepV;
-      skid = 0;
     } else if (!flying) {
       comV = stepV;
     }
     com = next.com;
     p = hips;
     shape = next;
-    // Onto another part, it turns about that keeping how much it was turning about it (the ground pushes through it): its
-    // own spin, and its speed round it; the speed toward it is taken, and what's along that turning round it can't carry
-    // it skids off (on its body: a foot down holds).
+    const rising = footDown && theta >= FEET_BACK;
+    if (!flying && (!footDown || rising)) {
+      if (carry == null) carry = dot3(comV, travel);
+      if (!footDown) {
+        // On its body, the ground's grip turns its speed along into spin about its middle (or spin into speed) until it
+        // rolls, keeping how much it was turning about the ground under it: no more at once than GRIP of how hard it's
+        // pressed down. (Turning only as fast as the tuck keeps it going over, it has no spin to spare for speed.)
+        const R = Math.max(1, ground(com.x, com.z) - com.y);
+        const spin = Math.max(1, gyration(next.rig, com, axis));
+        if (landed) impact = Math.max(0, comV.y);
+        const press = impact * (1 - Math.exp(-dt / IMPACT_T)) + g * dt;
+        impact *= Math.exp(-dt / IMPACT_T);
+        const spare = (Math.max(0, omega - LEAST_RATE) * spin) / R;
+        const take = Math.max(-GRIP * press, -spare, Math.min(GRIP * press, ((carry - omega * R) * spin) / (spin + R * R)));
+        carry -= take;
+        omega = rateIn(omega + (take * R) / spin, false);
+        carry = Math.max(0, carry - ROLL_DRAG * g * dt);
+      } else {
+        // Up over its feet, the leg to a foot ahead of it brakes it as a step does (an inverted pendulum: the knees give, so
+        // the speed goes into the ground, not up); the legs drive it up over them when that's all it has.
+        carry = Math.max(0, carry - ((g * dot3(sub3(contact, com), travel)) / Math.max(1, contact.y - com.y)) * dt);
+      }
+    } else {
+      carry = null;
+    }
+    // Diving off its feet, onto another part it turns about that keeping how much it was turning about it (the ground pushes
+    // through it): its own spin, and its speed round it; the speed toward it is taken. (On its body, and coming up over its
+    // feet, its speed along is the carry's.)
     const nextContact = pivotOf(all);
-    if (!flying && nextContact && (landed || Math.hypot(nextContact.x - contact.x, nextContact.y - contact.y, nextContact.z - contact.z) > 1)) {
+    if (!flying && footDown && !rising && nextContact && (landed || Math.hypot(nextContact.x - contact.x, nextContact.y - contact.y, nextContact.z - contact.z) > 1)) {
       const part = restOf(all)?.part;
       const r = sub3(com, nextContact);
       const reach = dot3(r, r) - dot3(r, axis) ** 2;
       const spin = gyration(next.rig, com, axis);
-      const rolling = sub3(comV, scale3(travel, skid));
-      const kept = (spin * omega + reach * rateAbout(rolling, nextContact)) / Math.max(1, spin + reach);
+      const kept = (spin * omega + reach * rateAbout(comV, nextContact)) / Math.max(1, spin + reach);
       omega = rateIn(kept, theta >= FEET_BACK && part != null && footOf(part) != null);
-      if (!footDown) {
-        const carried = scale3(cross3(axis, sub3(r, scale3(axis, dot3(r, axis)))), omega);
-        skid += Math.max(0, dot3(rolling, travel) - dot3(carried, travel));
-      }
     }
     if (landed) comV = stepV;
     contact = nextContact ?? contact;
@@ -886,8 +960,8 @@ export function rollOut(setup: RollSetup): Roll {
       break;
     }
 
-    // Gravity's torque about what it rests on, the legs' drive, and friction.
-    if (!flying) {
+    // On its feet: gravity's torque about what it rests on, the legs' drive, and friction.
+    if (!flying && (carry == null || planted(0) || planted(1))) {
       const r = sub3(com, contact);
       const perp = sub3(r, scale3(axis, dot3(r, axis)));
       const inertia = dot3(perp, perp) + gyration(next.rig, com, axis);

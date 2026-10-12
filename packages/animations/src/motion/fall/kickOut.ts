@@ -12,6 +12,7 @@ import { boardAt, boardMotionAt, boardRigOf, boardSimulation, simulateBoard, typ
 import { IDENTITY, frameFrom, qaxis, qbasis, qconj, qexp, qframe, qlog, qmul, qnorm, qrot, qslerp, type Quat } from './rotation';
 import { rollAt, rollOut, rollsOut, type Roll } from './rollOut';
 import { REACH, rightOf, runOut, runOutAt, turnLevel, type Footfall, type RunOut } from './runOut';
+import { stepOut } from './stepOut';
 
 /**
  * The kick-out: the trick comes round wrong, the rider's front foot finds
@@ -29,7 +30,8 @@ import { REACH, rightOf, runOut, runOutAt, turnLevel, type Footfall, type RunOut
  * falls freely until the feet meet the ground, then brakes over its own
  * steps (runOut.ts), turning to face the way it's going. Down too hard or
  * too fast for that (off a drop), they take it on both feet and roll over a
- * shoulder (rollOut.ts), and run off what's left from their feet coming up.
+ * shoulder (rollOut.ts), and step out of what's left from their feet coming up
+ * (stepOut.ts): a few braking steps and they're stood.
  *
  * Positions are the street's (the stage's x plus its scroll); the stage
  * shifts them back by its own scroll, which from the takeover follows the
@@ -128,6 +130,8 @@ interface Blend {
   at: number;
   offset: V3[];
   rate: V3[];
+  /** Seconds the offsets take to give way (they're gone in about four of these). */
+  over: number;
 }
 
 export interface KickOutPlan {
@@ -179,9 +183,9 @@ function hermite3(p0: V3, v0: V3, p1: V3, v1: V3, span: number, s: number): V3 {
   return add3(add3(scale3(p0, h00), scale3(v0, h10 * span)), add3(scale3(p1, h01), scale3(v1, h11 * span)));
 }
 
-/** Inertialization: an offset `o` moving at `ov` at the takeover, gone with zero speed a few BLEND_Ts later. */
-const decay = (o: number, ov: number, tau: number) => (o + (ov + o / BLEND_T) * tau) * Math.exp(-tau / BLEND_T);
-const decay3 = (o: V3, ov: V3, tau: number): V3 => ({ x: decay(o.x, ov.x, tau), y: decay(o.y, ov.y, tau), z: decay(o.z, ov.z, tau) });
+/** Inertialization: an offset `o` moving at `ov` at the takeover, gone with zero speed a few `over`s (BLEND_Ts) later. */
+const decay = (o: number, ov: number, tau: number, over = BLEND_T) => (o + (ov + o / over) * tau) * Math.exp(-tau / over);
+const decay3 = (o: V3, ov: V3, tau: number, over = BLEND_T): V3 => ({ x: decay(o.x, ov.x, tau, over), y: decay(o.y, ov.y, tau, over), z: decay(o.z, ov.z, tau, over) });
 
 const boardQuat = (board: BoardRig): Quat => qbasis(board.dir({ x: 1, y: 0, z: 0 }), board.dir({ x: 0, y: 1, z: 0 }), board.dir({ x: 0, y: 0, z: 1 }));
 
@@ -612,8 +616,9 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
   // ----- The roll, and up out of it -----
   const roll = rollFrom(run);
   plan.roll = roll;
-  // Into it from the pose the rider came down in.
-  plan.rollIn = blendAt(roll.start, (t) => onFeetAt(plan, runPhase(plan), t, false).pose, (t) => rollAt(roll, t).pose);
+  // Into it from the pose the rider came down in, given way by the time the hands take the weight: a fast roll comes down
+  // onto them, and onto the shoulder after, sooner.
+  plan.rollIn = blendAt(roll.start, (t) => onFeetAt(plan, runPhase(plan), t, false).pose, (t) => rollAt(roll, t).pose, Math.min(BLEND_T, (roll.hands - roll.start) / 4));
   // Up on both feet, square to the way they rolled, running off what speed is left.
   const up = (t: number) => rollAt(roll, t).pose;
   const end = up(roll.end);
@@ -624,7 +629,7 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
   };
   const rolledOn = () => roll.travel;
   plan.after = {
-    run: runOut({
+    run: stepOut({
       body,
       gravity,
       ground,
@@ -673,7 +678,7 @@ function offsets(from: BodyPose, to: BodyPose): V3[] {
 }
 
 /** Going from one motion (`from`, up to `at`) into another (`to`, from `at`): the offsets between them then, and how fast each was changing on its own side. */
-function blendAt(at: number, from: (t: number) => BodyPose, to: (t: number) => BodyPose): Blend {
+function blendAt(at: number, from: (t: number) => BodyPose, to: (t: number) => BodyPose, over = BLEND_T): Blend {
   const h = 1 / 240;
   // The one motion as it came up to `at` (a step it takes right there is the other's to make), the other as it leaves.
   const before = at - 1e-6;
@@ -682,14 +687,14 @@ function blendAt(at: number, from: (t: number) => BodyPose, to: (t: number) => B
   const offset = offsets(a, b);
   const fromSide = offsets(from(before - h), b);
   const toSide = offsets(a, to(at + h));
-  return { at, offset, rate: offset.map((o, i) => scale3(add3(sub3(o, fromSide[i]), sub3(toSide[i], o)), 1 / h)) };
+  return { at, offset, rate: offset.map((o, i) => scale3(add3(sub3(o, fromSide[i]), sub3(toSide[i], o)), 1 / h)), over };
 }
 
 /** A pose with a blend's offsets, dying away, put back on. */
 function blended(pose: BodyPose, blend: Blend | null, t: number): BodyPose {
   const tau = blend ? t - blend.at : -1;
-  if (!blend || tau < 0 || tau > 10 * BLEND_T) return pose;
-  const o = blend.offset.map((x, i) => decay3(x, blend.rate[i], tau));
+  if (!blend || tau < 0 || tau > 10 * blend.over) return pose;
+  const o = blend.offset.map((x, i) => decay3(x, blend.rate[i], tau, blend.over));
   return {
     ...pose,
     pelvis: qnorm(qmul(qexp(o[0]), pose.pelvis)),
@@ -878,7 +883,9 @@ function shoeAt(plan: KickOutPlan, run: RunOut, i: 0 | 1, t: number): ShoePose {
   const s = (t - last.off) / (next.on - last.off);
   const k = minJerk(s);
   const leg = plan.setup.body.thigh + plan.setup.body.shin;
-  const liftAt = (u: number, v: number) => leg * (0.1 + 0.08 * Math.min(1, v / 300)) * Math.sin(Math.PI * Math.min(1, u * 1.15)) ** 1.3;
+  // A quick step swings low: it's lifted no higher than it has time for.
+  const quick = Math.min(1, (next.on - last.off) / (0.5 * Math.sqrt(leg / plan.setup.gravity)));
+  const liftAt = (u: number, v: number) => leg * (0.1 + 0.08 * Math.min(1, v / 300)) * quick * Math.sin(Math.PI * Math.min(1, u * 1.15)) ** 1.3;
   const speed = (u: number) => {
     const v = runOutAt(run, last.off + u * (next.on - last.off)).velocity;
     return Math.hypot(v.x, v.z);
@@ -1188,14 +1195,41 @@ export function kickOutAt(plan: KickOutPlan, t: number): KickOutFrame {
   return onFeetAt(plan, after, t);
 }
 
-/** Keeps every foot within its leg's reach. */
+/** The most a heel comes up off the ground (degrees, onto the ball of the foot) to keep a foot within its leg's reach. */
+const HEEL_UP_MOST = 40;
+
+/**
+ * Keeps every foot within its leg's reach: the heel comes up off the ground first, onto the ball of the foot (as a foot
+ * the body's gone on past does), and only past that does the foot come along.
+ */
 function inReach(shoes: [ShoePose, ShoePose], hips: V3, pelvis: Quat, body: BodyDims): [ShoePose, ShoePose] {
   return shoes.map((shoe, i) => {
     const hip = add3(hips, scale3(qrot(pelvis, { x: 0, y: 0, z: 1 }), (i === 0 ? -1 : 1) * body.hipHalf));
-    const d = sub3(ankleOf(shoe), hip);
-    const len = Math.hypot(d.x, d.y, d.z);
     const most = (body.thigh + body.shin) * 0.995;
-    return len > most ? { ...shoe, at: sub3(shoe.at, scale3(d, (len - most) / len)) } : shoe;
+    const reachOf = (s: ShoePose) => Math.hypot(ankleOf(s).x - hip.x, ankleOf(s).y - hip.y, ankleOf(s).z - hip.z);
+    if (reachOf(shoe) <= most) return shoe;
+    const side = qrot(shoe.q, { x: 0, y: 0, z: 1 });
+    const ball = add3(shoe.at, qrot(shoe.q, { x: BALL * body.scale, y: SHOE_HALF_HEIGHT, z: 0 }));
+    const heelUp = (deg: number): ShoePose => {
+      const turn = qaxis(side, (deg * Math.PI) / 180);
+      return { at: add3(ball, qrot(turn, sub3(shoe.at, ball))), q: qnorm(qmul(turn, shoe.q)) };
+    };
+    let lifted = shoe;
+    if (reachOf(heelUp(HEEL_UP_MOST)) < reachOf(shoe)) {
+      let lo = 0;
+      let hi = HEEL_UP_MOST;
+      if (reachOf(heelUp(hi)) <= most) {
+        for (let n = 0; n < 16; n++) {
+          const mid = (lo + hi) / 2;
+          if (reachOf(heelUp(mid)) <= most) hi = mid;
+          else lo = mid;
+        }
+      }
+      lifted = heelUp(hi);
+    }
+    const d = sub3(ankleOf(lifted), hip);
+    const len = Math.hypot(d.x, d.y, d.z);
+    return len > most ? { ...lifted, at: sub3(lifted.at, scale3(d, (len - most) / len)) } : lifted;
   }) as [ShoePose, ShoePose];
 }
 
@@ -1237,7 +1271,6 @@ function onFeetAt(plan: KickOutPlan, phase: FeetPhase, t: number, turnKnees = tr
   const firstDown = phase.down;
   const g = setup.gravity;
   const height = setup.ground(hips.x, hips.z) - hips.y;
-  const standHeight = 8.5 + 0.965 * leg;
 
   // ----- Pelvis, torso, head -----
   const tip = (fwd: V3, up: V3, deg: number) => {
@@ -1259,16 +1292,18 @@ function onFeetAt(plan: KickOutPlan, phase: FeetPhase, t: number, turnKnees = tr
   /** How far forward the trunk leans (degrees) at clock `s`. */
   const trunkLeanAt = (s: number) => {
     const at = runOutAt(run, s);
-    // Landing folds it over the knees as they bend.
-    const crouch = clamp01((standHeight - (groundUnder(s) - at.hips.y)) / (0.5 * leg));
-    // Braking leans it back: the body's deceleration along its way over about a stride (the lean that keeps it over its
-    // feet, held through the steps rather than jerked by each one, and taken up just before the first foot plants).
+    // Landing folds it over the knees as they bend, below where they hold the hips running (or standing): up out of a crouch,
+    // it straightens as they come up.
+    const crouch = clamp01((at.hold - (groundUnder(s) - at.hips.y)) / (0.5 * leg));
+    // Braking leans it back, and falling forward (the steps not yet out ahead of it) leans it on: the body's acceleration
+    // along its way over about a stride (the lean that keeps it over its feet, held through the steps rather than jerked by
+    // each one, and taken up just before the first foot plants).
     const back = Math.max(from, s - BRAKE_SPAN);
     const accel = dot3(sub3(runOutAt(run, s + BRAKE_SPAN).velocity, runOutAt(run, back).velocity), phase.travel) / (s + BRAKE_SPAN - back);
-    const brakeLean = (Math.atan2(Math.max(0, -accel), g) * 0.75 * 180) / Math.PI;
+    const pitch = (Math.atan2(accel, g) * 0.75 * 180) / Math.PI;
     // The kick throws it back a little (the leg going forward).
     const kickBack = 9 * Math.sin(Math.PI * clamp01((s - plan.contact) / (firstDown - plan.contact)));
-    return 6 + 34 * crouch - brakeLean - kickBack;
+    return 6 + 34 * crouch + pitch - kickBack;
   };
   const pelvisAt = (s: number) => {
     const a = tip(phase.facing(s), UP, trunkLeanAt(s) * 0.45);
@@ -1353,7 +1388,8 @@ function onFeetAt(plan: KickOutPlan, phase: FeetPhase, t: number, turnKnees = tr
   };
   const watchBoard = 1 - smoothstep((t - release - 0.1) / 0.16);
   const watchBack = smoothstep((t - run.stopped - 0.15) / 0.4);
-  const ahead2 = groundAhead(1.6 * leg);
+  // Running, the eyes go further ahead, the faster.
+  const ahead2 = groundAhead((1.6 + 1.4 * Math.min(1, speed / Math.sqrt(g * leg))) * leg);
   const headPos = add3(hips, scale3(qrot(torso, { x: 0, y: -1, z: 0 }), body.neck + 10 * body.scale));
   const torsoUp = qrot(torso, { x: 0, y: -1, z: 0 });
   const torsoFwd = qrot(torso, { x: 1, y: 0, z: 0 });
