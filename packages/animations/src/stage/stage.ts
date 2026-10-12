@@ -4,15 +4,17 @@ import { ASPHALT } from '../camera/view';
 import { clearFeet } from '../board/footContact';
 import { wheelRoll } from '../board/board';
 import { barSpan, grindCameraLift, grindCameraTrack, grindStreetDist, planGrind, travel, type GrindPlan } from '../motion/grind';
+import type { KickOutPlan } from '../motion/fall/kickOut';
 import { solveGrindRig } from '../motion/grindRig';
 import { solveRig } from '../motion/rig';
 import { resolveRiderMechanics, type RiderMechanics } from '../motion/stance';
-import { FALL_T, FLIP_T, GROUND, LAND_T, ROLL_IN, X0, computeFrame, specFor, type FallVariant, type Spec } from '../motion/trick';
+import { FALL_T, FLIP_T, GROUND, KICK_OUT_DROP_T, KICK_OUT_T, LAND_T, ROLL_IN, X0, computeFrame, specFor, type FallVariant, type Spec } from '../motion/trick';
 import type { Skater } from '../riders/skaters';
 import { barShadowParts } from '../sets/bar';
 import { planStairs, type StairPlan } from '../sets/elToro/stairs';
 import { hasObstacle, ledgeFor, setGrindSpec, setInfo, setTerrain, sideRailFor, type Obstacle, type RailChoice, type RailLine, type StageSet } from '../sets/sets';
 import { railFrame, stairFrame } from './downhill';
+import { attemptRig, isKickOut, kickOutFrame, kickOutPlan } from './kickOutFrame';
 import { gazeAt } from './gaze';
 import {
   expressionAt,
@@ -81,7 +83,7 @@ export function planStage(
     obstacle?: Obstacle;
   },
 ): StagePlan {
-  const { landed, riderStance, style, fall, shankProgress, skater = 'robot', set = 'plaza', rail: choice = 'center', obstacle } = options;
+  const { landed, riderStance, style, shankProgress, skater = 'robot', set = 'plaza', rail: choice = 'center', obstacle } = options;
   const spec = specFor(trick);
   const grindSpec = setGrindSpec(set, trick);
   const mechanics = resolveRiderMechanics(riderStance, spec.stance);
@@ -94,8 +96,12 @@ export function planStage(
     : grindSpec && rails ? (choice === 'side' && rails.sideGrinds !== false ? sideRailFor(grindSpec, mechanics) : 'center') : null;
   // A side rail stands at the edge of the stairs, with nothing past it to fall onto.
   const handrail = ledge ? ledge.handrail : rails && line ? (line === 'center' ? rails.handrail : { ...rails.handrail, edge: true }) : null;
+  // Off a grind the rider bails instead of kicking out.
+  const fall = options.fall === 'kickout' && grindSpec && grinds ? 'bail' : options.fall;
   const grind = grindSpec && grinds ? planGrind(grindSpec, mechanics, style, landed, fall, handrail) : null;
-  const stairs = terrain && !grind ? planStairs(style, landed, terrain) : null;
+  // A kick-out down a drop flies the landed attempt's arc up to its takeover.
+  const kickOut = !landed && fall === 'kickout';
+  const stairs = terrain && !grind ? planStairs(style, landed || kickOut, terrain) : null;
   const over = stairs && setInfo(set).obstacles ? (obstacle && hasObstacle(set, obstacle) ? obstacle : 'stairs') : null;
   return {
     spec,
@@ -108,7 +114,7 @@ export function planStage(
     landed,
     fall,
     shankProgress,
-    end: grind?.end ?? stairs?.end ?? ROLL_IN + FLIP_T + (landed ? LAND_T : FALL_T),
+    end: grind?.end ?? (stairs ? (kickOut ? stairs.land + KICK_OUT_DROP_T : stairs.end) : ROLL_IN + FLIP_T + (landed ? LAND_T : kickOut ? KICK_OUT_T : FALL_T)),
     skater,
   };
 }
@@ -121,18 +127,30 @@ export function stageFrame(stage: StagePlan, t: number, rate: number, headPose?:
   const frame = frameAt(stage, t, rate, headPose);
   // Where the rider is looking (stage/gaze.ts): the obstacle, then the board, then the way ahead.
   // A presentation head move (a lead-in) is choreographed instead, and wins.
-  if (headPose) return frame;
+  // A kick-out looks where it's going itself once the rider's their own.
+  if (headPose || frame.gaze) return frame;
   return { ...frame, gaze: gazeAt(stage, frame, (at) => frameAt(stage, at, 1)) };
 }
 
 function frameAt(stage: StagePlan, t: number, rate: number, headPose?: HeadPose | null): StageFrame {
-  if (stage.stairs) return stairFrame(stage, stage.stairs, t, rate, headPose);
+  // A kick-out is the landed attempt with its board off line up to the takeover, and its own from there.
+  const kickOut = isKickOut(stage) ? kickOutPlan(stage) : null;
+  if (kickOut && t >= kickOut.takeover) return kickOutFrame(stage, t, rate, (at) => attemptAt(stage, kickOut, at, rate, headPose));
+  return attemptAt(stage, kickOut, t, rate, headPose);
+}
+
+/** The attempt's frame: a kick-out's (`kickOut`) is ridden as landed with its board off line. */
+function attemptAt(stage: StagePlan, kickOut: KickOutPlan | null, t: number, rate: number, headPose?: HeadPose | null): StageFrame {
+  if (stage.stairs) return stairFrame(stage, stage.stairs, t, rate, headPose, kickOut?.error(Math.max(0, Math.min(t, stage.end))));
   if (stage.grind?.handrail) return railFrame(stage, stage.grind, t, rate, headPose);
-  const { spec, grind: plan, mechanics, style, landed, fall, shankProgress } = stage;
+  const { spec, grind: plan, mechanics, style, fall, shankProgress } = stage;
+  const landed = stage.landed || kickOut != null;
   const clock = Math.max(0, Math.min(t, stage.end));
   const f = computeFrame(clock, spec, landed, fall, shankProgress, style);
   const grind = plan ? solveGrindRig(t, plan, mechanics, style, grownBy(stage.skater)) : null;
-  const solved = clearFeet(onTheGround(grind ? grind.rig : solveRig(f, spec, mechanics, style, landed ? 'landed' : fall)));
+  const solved = kickOut
+    ? attemptRig(stage, clock, kickOut.error(clock))
+    : clearFeet(onTheGround(grind ? grind.rig : solveRig(f, spec, mechanics, style, landed ? 'landed' : fall)));
   const rig = posed(solved, stage.skater, headPose);
   const falling = grind ? grind.falling : !landed && f.motion.flight >= 1;
   // A presentation head move never shifts the camera or the attempt's motion.

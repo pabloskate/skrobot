@@ -233,6 +233,10 @@ const LAND_T = 0.95 * SPEED_SCALE;
 // like a second, slower animation system. A touch longer than LAND_T for the
 // slide-out, but no longer the old 1.7s crawl.
 const FALL_T = 1.28 * SPEED_SCALE;
+/** Seconds from the trick's touchdown a kick-out runs (stage/kickOutFrame.ts): the steps, the stop, and a look back at the board. */
+const KICK_OUT_T = 2.1;
+/** Down a drop: the roll, up, the steps, and the look back. */
+const KICK_OUT_DROP_T = 3;
 const HOLD = 0.35 * SPEED_SCALE; // freeze on the final frame before onDone
 const STREET_DASH_PERIOD = 210;
 const STREET_DASH_SECONDS = 0.7 * SPEED_SCALE;
@@ -246,18 +250,29 @@ const rad = (d: number) => (d * Math.PI) / 180;
 /** Signed yaw squash: passes through a thin edge instead of vanishing. */
 const signedSquash = (c: number) => (Math.abs(c) < 0.01 ? 0.15 : Math.sign(c) * (0.15 + 0.85 * Math.abs(c)));
 
-export type FallVariant = 'slam' | 'bail' | 'shank';
+/**
+ * How a missed trick goes. The kick-out (motion/fall/kickOut.ts) is the
+ * rider catching the board wrong, shoving it away and running it out on
+ * their feet, or rolling out of a hard or fast landing; it's staged on flat
+ * ground and down a set's drops alike, and a grind bails instead
+ * (stage/stage.ts).
+ */
+export type FallVariant = 'slam' | 'bail' | 'shank' | 'kickout';
 
 export const FALL_VARIANT_OPTIONS: ReadonlyArray<{ id: FallVariant; label: string }> = [
   { id: 'slam', label: 'Slam' },
   { id: 'bail', label: 'Bail' },
   { id: 'shank', label: 'Shank' },
+  { id: 'kickout', label: 'Kick out' },
 ];
+
+/** The falls a missed attempt picks from at random: the kick-out isn't in the game's pool yet. */
+const RANDOM_FALLS: readonly FallVariant[] = ['slam', 'bail', 'shank'];
 
 const randomFallVariant = () => {
   // Full pool for every miss — shank (under-rotate) is allowed even when the
   // bot knew the trick. Not knowing it still forces shank via forcedFall.
-  return FALL_VARIANT_OPTIONS[Math.floor(Math.random() * FALL_VARIANT_OPTIONS.length)].id;
+  return RANDOM_FALLS[Math.floor(Math.random() * RANDOM_FALLS.length)];
 };
 /** How far a shanked trick gets before it dies — shared by flip and body spin. */
 const SHANK_PROGRESS_MIN = 0.35;
@@ -1030,6 +1045,7 @@ function computeFrame(
 
 export {
   specFor,
+  boardGlued,
   boardYawDeg,
   computeFrame,
   catchFraction,
@@ -1049,6 +1065,8 @@ export {
   FLIP_T,
   LAND_T,
   FALL_T,
+  KICK_OUT_T,
+  KICK_OUT_DROP_T,
   HOLD,
   STREET_DASH_PERIOD,
   STREET_DASH_SECONDS,

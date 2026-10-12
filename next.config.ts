@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
   // establish its development WebSocket when the page is not opened as localhost.
   allowedDevOrigins: [
     '127.0.0.1',
+    '100.74.88.58',
     '100.79.108.61',
     'pablos-13-inch-macbook-air.tail5cae3f.ts.net',
   ],
