@@ -19,7 +19,7 @@ Live API) for playing with earbuds at the skatepark.
 
 | Command | What it does |
 |---|---|
-| `npm run dev` | Next dev server (Cloudflare bindings emulated via `initOpenNextCloudflareForDev`) |
+| `npm run dev` | Next dev server on the Mac mini's Tailscale IP (Cloudflare bindings emulated via `initOpenNextCloudflareForDev`) |
 | `npm run build` | `next build` — typecheck + production build (catches type errors, not logic bugs) |
 | `npm test` | Vitest unit tests — the behavioral check for the rules engine, RPS, trick resolver, and animation motion |
 | `npm run test:changed` | Only the tests your uncommitted changes reach |
@@ -33,7 +33,7 @@ Live API) for playing with earbuds at the skatepark.
 | `npm run mobile:ios` | Start the Expo native shell on iOS simulator/device |
 | `npm run mobile:android` | Start the Expo native shell on Android emulator/device |
 | `npm run native:parity-status` | Report whether required native device validation evidence is still pending |
-| `npm run preview` | Build the real Cloudflare worker and serve it locally with wrangler |
+| `npm run preview` | Build the real Cloudflare worker and serve it on the Tailscale IP with wrangler |
 | `npm run deploy` | Build + deploy to Cloudflare |
 | `npm run cf-typegen` | Generate Wrangler binding types to `/private/tmp` for comparison with `cloudflare-env.d.ts` |
 
@@ -163,12 +163,45 @@ the exact graph test in `src/architecture.test.ts`.
 - After `next build`/`next dev`, Next may rewrite `tsconfig.json` includes — that's
   expected, don't fight it.
 
+## Hosting previews on the Mac mini
+
+- This repository runs on a **Mac mini used as a server**. The user reviews it
+  from other devices through Tailscale. Its address is **`100.74.88.58`**.
+  A link to `localhost` or `127.0.0.1` points at the device opening the link,
+  so it is not a usable handoff URL for this project.
+- Use the npm hosting commands: `dev`, `start`, and Cloudflare `preview` at the
+  root, and `dev`/`preview` in `skrobot-animations`. They bind to the Tailscale
+  address by default. For another machine, set `SKROBOT_PREVIEW_HOST` in the
+  command's environment; for example, `SKROBOT_PREVIEW_HOST=127.0.0.1 npm run dev`
+  explicitly selects a local-only server.
+- The main web preview is **`http://100.74.88.58:3000`**. A separate worktree
+  must use its own free port, such as `npm run dev -- --port 3107`, and share
+  the actual route, for example **`http://100.74.88.58:3107/dream-tricks`**.
+  Reuse an existing server only after verifying that it serves the intended
+  worktree. Never stop another thread's server to free a port.
+- For static prototype/evidence files, bind the server too:
+  `python3 -m http.server 3108 --bind 100.74.88.58 --directory /absolute/path/to/files`.
+  Share `http://100.74.88.58:3108/<file>`, not a loopback URL or a local file path.
+- Before handing over a hosted result, verify its Tailscale URL with a real GET
+  (for example, `curl --fail --silent --output /dev/null http://100.74.88.58:3107/dream-tricks`)
+  and open it in the collaborative browser. Confirm that the displayed build
+  is the intended one and that the server is still running. The user's viewing
+  device must be connected to the same tailnet.
+- **Leave a delivered prototype running for review.** Use a persistent terminal
+  or managed server session. Include the live URL, port and worktree in the
+  handoff. If validation temporarily stops your server, restart it and verify
+  the URL before delivery. Stop it when the user requests cleanup or it has
+  been superseded. Temporary verification-only servers can be stopped after
+  their checks. If you cannot keep a server alive, say so explicitly; do not
+  present its URL as a live preview.
+
 ## Preview tools (t3-code_preview_*)
 
-- The web dev server runs on port **3000**. Open it with
-  `preview_navigate({"target": {"kind": "environment-port", "port": 3000}})` —
-  `port` is a literal **number**, never `{}` or a string. To sidestep the union
-  entirely, pass `url: "http://localhost:3000"` instead.
+- Prefer an explicit Tailscale URL, such as
+  `preview_navigate({"url": "http://100.74.88.58:3000"})`, or the worktree's own
+  port. If using `target: {kind: "environment-port", port: 3000}`, `port` must
+  be a literal **number**, never `{}` or a string. If that target resolves to
+  loopback and fails, navigate to the explicit Tailscale URL instead.
 - Optional params (`url`, `tabId`, etc.) must be **omitted**, never `null`.
 - If a call fails argument validation, **change the argument** — never retry the
   same payload.

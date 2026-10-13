@@ -8,9 +8,9 @@
     "apps/mobile"
   ],
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --hostname \"${SKROBOT_PREVIEW_HOST:-100.74.88.58}\"",
     "build": "next build",
-    "start": "next start",
+    "start": "next start --hostname \"${SKROBOT_PREVIEW_HOST:-100.74.88.58}\"",
     "lint": "eslint .",
     "typecheck:web": "tsc --noEmit --incremental false",
     "test": "vitest run",
@@ -27,7 +27,7 @@
     "tips:thumbs": "node scripts/fetch-ig-thumbs.mjs",
     "simulate:robot-elo": "node scripts/simulate-robot-elo.mjs",
     "test:watch": "vitest",
-    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview --ip \"${SKROBOT_PREVIEW_HOST:-100.74.88.58}\"",
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "db:migrate:local": "wrangler d1 migrations apply skrobot --local",
     "db:migrate:remote": "wrangler d1 migrations apply skrobot --remote",

@@ -12,7 +12,8 @@ is not complete until every target has real results and
    npm run dev
    ```
 
-2. Confirm the web app loads at `http://localhost:3000`.
+2. Confirm the web app loads at `http://100.74.88.58:3000` with the viewing device
+   connected to the same tailnet. Root hosting commands bind to this IP by default.
 3. Confirm the native shell code is healthy:
 
    ```sh
@@ -26,10 +27,12 @@ is not complete until every target has real results and
 1. Run:
 
    ```sh
-   npm run mobile:ios
+   EXPO_PUBLIC_SKROBOT_WEB_URL=http://100.74.88.58:3000 npm run mobile:ios
    ```
 
-2. Use the default shell URL: `http://localhost:3000`.
+2. Confirm the shell uses `http://100.74.88.58:3000`. To test its default
+   `http://localhost:3000` URL instead, start the root server explicitly with
+   `SKROBOT_PREVIEW_HOST=0.0.0.0 npm run dev` and omit the Expo URL override.
 3. Complete the iOS Simulator row in `docs/native/DEVICE_VALIDATION_LOG.md`.
 
 ### Android Emulator
@@ -37,10 +40,12 @@ is not complete until every target has real results and
 1. Run:
 
    ```sh
-   npm run mobile:android
+   EXPO_PUBLIC_SKROBOT_WEB_URL=http://100.74.88.58:3000 npm run mobile:android
    ```
 
-2. Use the default shell URL: `http://10.0.2.2:3000`.
+2. Confirm the shell uses `http://100.74.88.58:3000`. To test its default
+   `http://10.0.2.2:3000` URL instead, start the root server explicitly with
+   `SKROBOT_PREVIEW_HOST=0.0.0.0 npm run dev` and omit the Expo URL override.
 3. Complete the Android Emulator row in `docs/native/DEVICE_VALIDATION_LOG.md`.
 
 ## Physical Devices

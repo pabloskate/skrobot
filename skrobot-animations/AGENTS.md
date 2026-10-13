@@ -13,6 +13,12 @@ npm run dev
 npm run typecheck
 ```
 
+The hosting rules in the root `AGENTS.md` apply here too. `dev` and `preview`
+bind to the Mac mini's Tailscale address (`100.74.88.58`), and fail if their port
+is occupied. Pick a separate port with `npm run dev -- --port 3108` when needed,
+share the verified Tailscale URL, and leave a delivered playground running for
+review. `SKROBOT_PREVIEW_HOST` overrides the address on another machine.
+
 From the repo root:
 
 ```sh

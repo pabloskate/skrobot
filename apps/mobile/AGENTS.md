@@ -37,12 +37,16 @@ The shell defaults to `http://localhost:3000` on iOS simulator and
 `http://10.0.2.2:3000` on Android emulator. Expo web must remain redirect-only;
 it must not render an alternate Skate Robot UI.
 
-Set `EXPO_PUBLIC_SKROBOT_WEB_URL` when running on a physical device, where
-neither `localhost` nor Android emulator loopback is the host Mac:
+The root web server now binds to the Mac mini's Tailscale IP by default. Set
+`EXPO_PUBLIC_SKROBOT_WEB_URL` for previews from that server, including simulators:
 
 ```sh
-EXPO_PUBLIC_SKROBOT_WEB_URL=http://YOUR_LAN_IP:3000 npm run ios
+EXPO_PUBLIC_SKROBOT_WEB_URL=http://100.74.88.58:3000 npm run ios
 ```
+
+The device must be connected to the same tailnet. To use the shell's loopback
+defaults for local simulator testing instead, explicitly start the root web
+server with `SKROBOT_PREVIEW_HOST=0.0.0.0 npm run dev`.
 
 ## Rules
 

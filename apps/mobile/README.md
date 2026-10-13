@@ -55,7 +55,7 @@ npm run dev
 Then start Expo:
 
 ```sh
-npm run mobile:start
+EXPO_PUBLIC_SKROBOT_WEB_URL=http://100.74.88.58:3000 npm run mobile:start
 ```
 
 Do not run a mobile web app from this workspace. Web development uses the root
@@ -63,13 +63,16 @@ Next app (`npm run dev`); this workspace exists for the native shell.
 
 The default web URL is `http://localhost:3000` on iOS simulator and
 `http://10.0.2.2:3000` on Android emulator. Expo web is redirect-only; it does
-not host a Skate Robot UI. For a physical phone, pass a reachable host URL:
+not host a Skate Robot UI. The root web server binds to the Mac mini's Tailscale
+IP, so override those defaults for devices on the same tailnet:
 
 ```sh
-EXPO_PUBLIC_SKROBOT_WEB_URL=http://YOUR_LAN_IP:3000 npm run mobile:start
+EXPO_PUBLIC_SKROBOT_WEB_URL=http://100.74.88.58:3000 npm run mobile:start
 ```
 
-Use `http://10.0.2.2:3000` for Android emulator when overriding manually.
+For local simulator testing using the shell's loopback defaults, start the root
+server with `SKROBOT_PREVIEW_HOST=0.0.0.0 npm run dev`. Use
+`http://10.0.2.2:3000` for Android emulator when overriding manually.
 
 ## Native Builds
 
