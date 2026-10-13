@@ -6072,6 +6072,17 @@ main:has(.rps-arena) > .screen {
   padding-inline: 12px;
 }
 
+/* The outcome's options shrink to fit a narrow card, wrapping a label onto two lines rather than cutting it off. */
+.explorer-outcome-field .explorer-segmented {
+  max-width: 100%;
+}
+
+.explorer-outcome-field .explorer-segmented button {
+  flex: 0 1 auto;
+  min-width: 0;
+  line-height: 1.15;
+}
+
 .explorer-field-label {
   color: var(--ink);
   font-size: 13px;
@@ -6781,6 +6792,17 @@ main:has(.rps-arena) > .screen {
 .dream-trick .explorer-field-label small {
   display: block;
   margin-left: 0;
+}
+
+/* Beside its options where they fit, above them where they don't. */
+.dream-trick .explorer-outcome-field {
+  display: flex;
+  gap: 8px 12px;
+}
+
+.dream-trick .explorer-outcome-field .explorer-field-label {
+  flex: 1 1 100px;
+  min-width: 0;
 }
 
 .dream-trick .explorer-tier h3 {
