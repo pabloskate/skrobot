@@ -6,6 +6,7 @@ import { STAGE_SETS, setTerrain } from '../../sets/sets';
 import { resolveSkateStyle } from '../style';
 import { sweep } from '../../testing';
 import type { V3 } from '../../math';
+import type { RiderStance } from '../../types';
 import { PERSON_SCALE, moveFrame } from '../skeleton';
 import { hipsAt, kickOutAt, type KickOutPlan } from './kickOut';
 import { LIMB_RADII, SOLE_GRACE, poseOf } from './body';
@@ -49,7 +50,9 @@ interface Case {
   skater: 'robot' | 'realistic';
   set: string;
   obstacle: string;
-  stance: 'regular' | 'fakie';
+  stance: 'regular' | 'fakie' | 'nollie';
+  /** The rider's stance; regular unless the case says. */
+  rider?: RiderStance;
 }
 
 interface Planned {
@@ -73,13 +76,22 @@ function cases(): Case[] {
   }));
 }
 
+/**
+ * Nollies, which pop off the leading nose and so take off further back than a tail pop (stairs.ts): off Sunset's roof
+ * and down El Toro, by both skaters, regular and goofy.
+ */
+function nollieCases(): Case[] {
+  return (['sunset-car-wash', 'el-toro'] as const).flatMap((set) => (['robot', 'realistic'] as const).flatMap((skater) =>
+    (['regular', 'goofy'] as const).map((rider): Case => ({ label: `${skater} ${set}:stairs nollie ${rider}`, skater, set, obstacle: 'stairs', stance: 'nollie', rider }))));
+}
+
 /** A case's stage and kick-out, planned the first time it's asked for. */
 const planned = new Map<Case, Planned>();
 function planOf(c: Case): Planned {
   let known = planned.get(c);
   if (!known) {
     const stage = planStage({ id: 'Kickflip', name: 'Kickflip', base: 'Kickflip', stance: c.stance }, {
-      landed: false, riderStance: 'regular', style, fall: 'kickout', shankProgress: 0.6, skater: c.skater, set: c.set as never, obstacle: c.obstacle as never,
+      landed: false, riderStance: c.rider ?? 'regular', style, fall: 'kickout', shankProgress: 0.6, skater: c.skater, set: c.set as never, obstacle: c.obstacle as never,
     });
     known = { stage, plan: kickOutPlan(stage) };
     planned.set(c, known);
@@ -252,7 +264,7 @@ const measuresOf = (c: Case) => measured.get(c) ?? measured.set(c, measure(planO
 
 describe('kick-out', () => {
   const all = cases();
-  const played = sweep(all, 4);
+  const played = [...sweep(all, 4), ...sweep(nollieCases(), 2)];
 
   for (const c of played) {
     describe(c.label, () => {

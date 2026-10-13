@@ -110,7 +110,7 @@ export function planStage(
   const railBail = jumpsOff && grind ? planRailBail(grind, options.railBail ?? 'forward') : null;
   // A kick-out down a drop flies the landed attempt's arc up to its takeover.
   const kickOut = !landed && fall === 'kickout' && !grind;
-  const stairs = terrain && !grind ? planStairs(style, landed || kickOut, terrain) : null;
+  const stairs = terrain && !grind ? planStairs(style, landed || kickOut, terrain, spec.stance) : null;
   const over = stairs && setInfo(set).obstacles ? (obstacle && hasObstacle(set, obstacle) ? obstacle : 'stairs') : null;
   return {
     spec,

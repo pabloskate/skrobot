@@ -411,7 +411,7 @@ export function timelineFor(state: ExplorerState, style: SkateStyle | undefined)
   if (state.mode === 'flatground') {
     // Down a drop the flight is the drop's; on flat ground the robot's own pop sets it.
     const drop = setInfo(state.set).terrain !== null;
-    const tl = drop ? setTimeline(state.set, style, true, state.obstacle) : flatTimeline(style, !kickOut, kickOut);
+    const tl = drop ? setTimeline(state.set, style, true, state.obstacle, state.stance) : flatTimeline(style, !kickOut, kickOut);
     return {
       duration: kickOut && drop ? tl.land + KICK_OUT_DROP_T : tl.end,
       phases: [

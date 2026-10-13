@@ -98,16 +98,20 @@ describe('El Toro environment geometry', () => {
     }
   });
 
-  it('keeps exactly the same scene and position when the rider changes stance', () => {
+  it('keeps exactly the same scene when the rider changes stance, placed under the rider', () => {
     const { set, shadow, builds, update } = scene();
     try {
       const parts = meshes(builds[0]);
       const position = builds[0].position.clone();
       for (const stance of ['regular', 'fakie', 'switch', 'nollie'] as Stance[]) {
-        update(stance);
+        const frame = update(stance);
         expect(set.group.children.filter((child) => child instanceof Group)).toEqual(builds);
         expect(meshes(builds[0])).toEqual(parts);
-        expect(builds[0].position.equals(position)).toBe(true);
+        // A nollie takes off further back (stairs.ts), so only its run along the stairs differs.
+        expect(builds[0].position.x).toBeCloseTo(-frame.scroll, 9);
+        expect(builds[0].position.y).toBe(position.y);
+        expect(builds[0].position.z).toBe(position.z);
+        if (stance !== 'nollie') expect(builds[0].position.equals(position)).toBe(true);
         expect(builds[0].visible).toBe(true);
       }
     } finally {
