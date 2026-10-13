@@ -34,11 +34,14 @@ export interface BoxSpec {
 /**
  * A rounded box: the box shrunk by its corner radius, swollen back out by a
  * ball. A taper narrows the forward and side extents toward the base.
+ * `rings` slices the straight sides between the top and bottom corners into
+ * that many bands, so the box can bend or twist up its height.
  */
-export function roundedBoxGeometry(spec: BoxSpec, segments = 5): BufferGeometry {
+export function roundedBoxGeometry(spec: BoxSpec, segments = 5, rings = 1): BufferGeometry {
   const r = Math.min(spec.r, spec.f, spec.u, spec.s);
   const geometry = new RoundedBoxGeometry(2 * spec.f, 2 * spec.u, 2 * spec.s, segments, r);
   geometry.deleteAttribute('uv');
+  if (rings > 1 && spec.u > r) sliceSides(geometry, spec.u - r, rings);
   const taper = spec.taper ?? 1;
   if (taper !== 1) {
     const pos = geometry.getAttribute('position') as BufferAttribute;
@@ -57,6 +60,56 @@ export function roundedBoxGeometry(spec: BoxSpec, segments = 5): BufferGeometry 
     pos.needsUpdate = true;
   }
   return geometry;
+}
+
+/**
+ * Cuts every triangle of a (non-indexed) rounded box that spans its straight
+ * sides, from y = −h to h, into `rings` bands. A spanning triangle has one
+ * corner on one edge ring and two on the other; each band is the strip
+ * between two cuts across it, wound as the triangle was.
+ */
+function sliceSides(geometry: BufferGeometry, h: number, rings: number) {
+  const pos = geometry.getAttribute('position') as BufferAttribute;
+  const nor = geometry.getAttribute('normal') as BufferAttribute;
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const get = (attr: BufferAttribute, i: number): Vec3 => [attr.getX(i), attr.getY(i), attr.getZ(i)];
+  const lerp = (a: Vec3, b: Vec3, t: number): Vec3 => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  const unit = (v: Vec3): Vec3 => {
+    const l = Math.hypot(v[0], v[1], v[2]) || 1;
+    return [v[0] / l, v[1] / l, v[2] / l];
+  };
+  const push = (p: Vec3, n: Vec3) => {
+    positions.push(...p);
+    normals.push(...unit(n));
+  };
+  const top = (y: number) => y > h - 1e-6;
+  for (let t = 0; t < pos.count; t += 3) {
+    const ids = [t, t + 1, t + 2];
+    const ys = ids.map((i) => pos.getY(i));
+    const spans = Math.min(...ys) < -h + 1e-6 && Math.max(...ys) > h - 1e-6;
+    if (!spans) {
+      for (const i of ids) push(get(pos, i), get(nor, i));
+      continue;
+    }
+    // The lone corner, then the other two in the triangle's winding order.
+    const tops = ys.map(top);
+    const lone = tops.findIndex((k) => tops.filter((o) => o === k).length === 1);
+    const [l, p, q] = [0, 1, 2].map((k) => ids[(lone + k) % 3]);
+    const at = (i: number, k: number, attr: BufferAttribute) => lerp(get(attr, i), get(attr, l), k / rings);
+    for (let k = 0; k < rings; k++) {
+      const band = [[p, k], [p, k + 1], [q, k], [q, k + 1]] as const;
+      const [p0, p1, q0, q1] = band.map(([i, kk]) => [at(i, kk, pos), at(i, kk, nor)] as const);
+      // The last band closes on the lone corner: one triangle.
+      for (const [a, b, c] of k + 1 < rings ? [[p1, p0, q0], [p1, q0, q1]] : [[p1, p0, q0]]) {
+        push(a[0], a[1]);
+        push(b[0], b[1]);
+        push(c[0], c[1]);
+      }
+    }
+  }
+  geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('normal', new Float32BufferAttribute(normals, 3));
 }
 
 /** A convex solid: the hull of `corners`, each swollen into a ball of radius `r`. */

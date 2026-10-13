@@ -1,13 +1,13 @@
-import { Group, Mesh, SphereGeometry, type BufferGeometry, type ShaderMaterial } from 'three';
+import { Group, Mesh, SphereGeometry, type BufferAttribute, type BufferGeometry, type ShaderMaterial } from 'three';
 import { PALETTE } from '../../camera/camera';
-import { mixHex, smoothstep, sub3, norm3, dot3, type V3 } from '../../math';
+import { mixHex, rad, smoothstep, sub3, norm3, dot3, type V3 } from '../../math';
 import type { Expression, RobotLook } from '../look';
 import { shiftFrame, type Rig } from '../../motion/skeleton';
 import { Capsule, frontDecalGeometry, roundedBoxGeometry, type BoxSpec } from '../../three/geometry';
 import { faceMaterial, inkInfo, INK_ROBOT, toonMaterial } from '../../three/materials';
 import { shoeGeometries } from '../shoe3d';
 import { toThree, type StageView } from '../../camera/view';
-import { placeFrame } from '../placement';
+import { hipsFrame, placeFrame } from '../placement';
 
 /**
  * The robot skater: a chunky toy with a box head and visor screen (its face
@@ -23,6 +23,10 @@ const TORSO_FRAME_U = 25;
 const TORSO_BASE_RAISE = 8;
 /** Rounded and barely wedge-shaped, so the chest reads as a pebble of shell, not a crate. */
 const TORSO: BoxSpec = { f: 11, u: TORSO_FRAME_U - TORSO_BASE_RAISE / 2, s: 15.5, r: 10.5, taper: 0.8 };
+/** Bands up the chest's straight sides, for the twist from the hips to the shoulders. */
+const TORSO_RINGS = 8;
+/** The most the chest twists off the hips (deg): fakie slides turn the shoulders well past square. */
+const TWIST_MAX = 135;
 /** Limb widths, root → joint → tip: sturdy and only gently tapered, so they read as a toy's limbs, not sticks. */
 const ARM_W = [10, 8.8, 8] as const;
 const LEG_W = [13, 10.4, 8.6] as const;
@@ -82,6 +86,9 @@ const avg = (a: V3, b: V3): V3 => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: 
 export class Robot3D {
   readonly group = new Group();
   private readonly torso: Mesh;
+  /** The torso's untwisted vertices and normals, and the twist (rad) it's drawn with. */
+  private readonly torsoRest: { pos: Float32Array; nor: Float32Array };
+  private twist = 0;
   private readonly head: Mesh;
   private readonly face: Mesh;
   private readonly neck: Limb;
@@ -98,7 +105,9 @@ export class Robot3D {
       return g;
     };
 
-    this.torso = staticMesh(geometry(roundedBoxGeometry(TORSO)), toonMaterial(look.body));
+    this.torso = staticMesh(geometry(roundedBoxGeometry(TORSO, 5, TORSO_RINGS)), toonMaterial(look.body));
+    const torsoAttr = (name: string) => (this.torso.geometry.getAttribute(name) as BufferAttribute).array as Float32Array;
+    this.torsoRest = { pos: torsoAttr('position').slice(), nor: torsoAttr('normal').slice() };
     this.head = staticMesh(geometry(roundedBoxGeometry(HEAD)), toonMaterial(look.body));
     const face = faceMaterial(look.body, look.accent);
     this.face = staticMesh(geometry(frontDecalGeometry(HEAD, 14.6, -10.6, 9.6, 0.15)), face);
@@ -179,6 +188,7 @@ export class Robot3D {
   update(rig: Rig, expression: Expression, view: StageView) {
     const { cam } = view;
     placeFrame(this.torso, shiftFrame(rig.torso, 0, TORSO_BASE_RAISE / 2, 0));
+    this.twistTorso(rig);
     placeFrame(this.head, rig.head);
     this.neck.set(rig.torso.at(0, TORSO_FRAME_U - 4, 0), rig.head.at(-1, -HEAD.u + 1, 0), NECK_W);
 
@@ -242,6 +252,44 @@ export class Robot3D {
     }
     prioritize([this.torso.material as ShaderMaterial], ROBOT_PRIORITY.torso);
     prioritize(this.headMaterials, ROBOT_PRIORITY.head);
+  }
+
+  /**
+   * The chest is posed on the shoulders' turn, the legs on the hips'. Riding
+   * fakie the shoulders turn round toward the tail while the hips stay put,
+   * and a rigid chest turned with them would set the hip joints at its front
+   * and back, a thigh coming out of its belly. So its bottom turns back to
+   * square over the hips, twisting up its straight sides to the shoulders.
+   */
+  private twistTorso(rig: Rig) {
+    const hips = hipsFrame(rig).side;
+    const twist = Math.max(-rad(TWIST_MAX), Math.min(rad(TWIST_MAX),
+      Math.atan2(dot3(hips, rig.torso.fwd), dot3(hips, rig.torso.side))));
+    if (twist === this.twist) return;
+    this.twist = twist;
+    const { pos: restPos, nor: restNor } = this.torsoRest;
+    const geometry = this.torso.geometry;
+    const posAttr = geometry.getAttribute('position') as BufferAttribute;
+    const norAttr = geometry.getAttribute('normal') as BufferAttribute;
+    const pos = posAttr.array as Float32Array;
+    const nor = norAttr.array as Float32Array;
+    const straight = TORSO.u - TORSO.r;
+    for (let i = 0; i < pos.length; i += 3) {
+      const y = restPos[i + 1];
+      // All the hips' turn below the straight sides, none above them.
+      const a = twist * (1 - smoothstep((y + straight) / (2 * straight)));
+      const c = Math.cos(a);
+      const s = Math.sin(a);
+      for (const [rest, out] of [[restPos, pos], [restNor, nor]] as const) {
+        const x = rest[i];
+        const z = rest[i + 2];
+        out[i] = x * c + z * s;
+        out[i + 1] = rest[i + 1];
+        out[i + 2] = z * c - x * s;
+      }
+    }
+    posAttr.needsUpdate = true;
+    norAttr.needsUpdate = true;
   }
 
   dispose() {
