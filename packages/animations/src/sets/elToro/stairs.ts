@@ -1,10 +1,10 @@
-import { FALL_T, FLIP_T, JUMP, LAND_T, ROLL_IN } from '../../motion/trick';
+import { FALL_T, LAND_T, ROLL_IN, flightTime, type AttemptTimeline } from '../../motion/trick';
 import { resolveSkateStyle } from '../../motion/style';
 import type { SkateStyle } from '../../types';
 import type { Handrail } from '../../motion/grind';
 import { rad, smoothstep } from '../../math';
 import { WHEEL_X } from '../../board/board';
-import { FOOT } from '../../units';
+import { FOOT, GRAVITY } from '../../units';
 import { SET_FOOT } from '../setScale';
 
 /**
@@ -35,10 +35,11 @@ export const STAIR_RUN = 20 * SET_FOOT;
 export const RISER = STAIR_DROP / STAIR_STEPS;
 export const TREAD = STAIR_RUN / (STAIR_STEPS - 1);
 
-/** 32 ft/s², so the drop takes the time a real one does. */
-export const DROP_GRAVITY = 32.2 * FOOT;
-const GRAVITY = DROP_GRAVITY;
-/** How far the deck rises over the top landing off a neutral pop. */
+/**
+ * How far the deck rises over the top landing off a neutral pop: rolling in
+ * fast at a gap, a skater pops it harder than on flatground, the board about
+ * two feet over the lip.
+ */
 const POP_RISE = 2 * FOOT;
 /**
  * Seconds of the run-up shown before the flatground roll-in (its crouch and
@@ -67,6 +68,8 @@ export interface StairPlan {
   land: number;
   /** Seconds in the air. */
   flight: number;
+  /** Seconds the flatground trick's own flight lasts on its clock (flightTime): the drop stretches it over `flight`. */
+  clockFlight: number;
   /** Clock time the attempt ends at. */
   end: number;
   /** World units a second along the route (down the stairs, or a held line's angle): the approach, the flight, and the ride away. */
@@ -207,6 +210,7 @@ export function planStairs(style: Pick<SkateStyle, 'popHeight'>, landed: boolean
     pop,
     land,
     flight,
+    clockFlight: flightTime(style),
     end: land + (landed ? LAND_T : FALL_T),
     speed,
     velocity,
@@ -304,8 +308,8 @@ export function rideGrade(plan: StairPlan, t: number): number {
  */
 export function stairClock(plan: StairPlan, t: number): number {
   if (t <= plan.pop) return t - (plan.pop - ROLL_IN);
-  if (t < plan.land) return ROLL_IN + ((t - plan.pop) * FLIP_T) / plan.flight;
-  return t - plan.land + ROLL_IN + FLIP_T;
+  if (t < plan.land) return ROLL_IN + ((t - plan.pop) * plan.clockFlight) / plan.flight;
+  return t - plan.land + ROLL_IN + plan.clockFlight;
 }
 
 /** A rollout sample's value at clock time `t` after touchdown. */
@@ -338,7 +342,7 @@ export function routeHeight(plan: StairPlan, x: number): number {
 export function stairDeckHeight(plan: StairPlan, t: number): number {
   if (t <= plan.pop) return 0;
   if (t >= plan.land && plan.rolloutLift) return alongRollout(plan.rolloutLift, plan, t);
-  if (t >= plan.land) return plan.terrain.ground(stairDistance(plan, t, ROLL_IN + FLIP_T + t - plan.land));
+  if (t >= plan.land) return plan.terrain.ground(stairDistance(plan, t, ROLL_IN + plan.clockFlight + t - plan.land));
   const u = t - plan.pop;
   return plan.rise * u - (GRAVITY * u * u) / 2;
 }
@@ -346,24 +350,25 @@ export function stairDeckHeight(plan: StairPlan, t: number): number {
 /**
  * How far over its own flatground arc the deck is at a stair clock time:
  * board and rider are carried by this, so the trick's flatground pop arc
- * (over the flatground clock) becomes the drop down the stairs.
+ * (over the flatground clock, peaking `rise` up: trick.ts boardRise) becomes
+ * the drop down the stairs.
  */
-export function stairLift(plan: StairPlan, t: number, popHeight: number, distance?: number): number {
+export function stairLift(plan: StairPlan, t: number, rise: number, distance?: number): number {
   if (t <= plan.pop) return rideHeight(plan, t);
   if (t >= plan.land) return distance === undefined || plan.rolloutLift ? stairDeckHeight(plan, t) : plan.terrain.ground(distance);
   const p = (t - plan.pop) / plan.flight;
-  return stairDeckHeight(plan, t) - 4 * JUMP * popHeight * p * (1 - p);
+  return stairDeckHeight(plan, t) - 4 * rise * p * (1 - p);
 }
 
 /**
  * How much faster (world units a second) the deck comes down at touchdown
- * than its flatground arc does on the stretched clock: the extra impact the
- * drop puts through the legs.
+ * than its flatground arc (peaking `rise` up) does on the stretched clock:
+ * the extra impact the drop puts through the legs.
  */
-export function landingImpact(plan: StairPlan, popHeight: number): number {
+export function landingImpact(plan: StairPlan, rise: number): number {
   const slope = -(plan.terrain.slope?.(plan.terrain.run + plan.terrain.landPast) ?? 0);
   const normalSpeed = (GRAVITY * plan.flight - plan.rise - plan.velocity.x * slope) / Math.hypot(1, slope);
-  return Math.max(0, normalSpeed - (4 * JUMP * popHeight) / plan.flight);
+  return Math.max(0, normalSpeed - (4 * rise) / plan.flight);
 }
 
 /** Drops at or under this land without a jolt; one this high lands the hardest. */
@@ -416,7 +421,7 @@ export function stairSpeed(plan: StairPlan, t: number): number {
 }
 
 /** World units rolled since touchdown, at the flatground clock's `streetDist`. */
-const rolledAway = (plan: StairPlan, streetDist: number) => plan.speed * (streetDist - (ROLL_IN + FLIP_T));
+const rolledAway = (plan: StairPlan, streetDist: number) => plan.speed * (streetDist - (ROLL_IN + plan.clockFlight));
 
 /** The route's heading at touchdown (degrees from +x toward +z): downhill, or a held entry's. */
 export const landingYaw = (terrain: DropTerrain) => (terrain.entry?.hold ? terrain.entry.yaw : 0);
@@ -531,15 +536,8 @@ export const EL_TORO_RAIL: Handrail = {
   speed: 13 * SET_FOOT,
 };
 
-export interface StairTimeline {
-  pop: number;
-  /** The top of the arc. */
-  peak: number;
-  /** Where the flatground trick is caught, on the stretched clock. */
-  catch: number;
-  land: number;
-  end: number;
-}
+/** A drop's moments; the catch is where the flatground trick is caught, on the stretched clock. */
+export type StairTimeline = AttemptTimeline;
 
 /** The moments of a trick down a drop (stage units), for a robot's style (its pop sets the hang time). */
 export function stairTimeline(style: SkateStyle | undefined, landed: boolean, terrain: DropTerrain): StairTimeline {

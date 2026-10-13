@@ -312,7 +312,8 @@ describe('Rider body physics', () => {
         for (const outcome of ['landed', 'shank'] as const) {
           let prev: V3 | null = null;
           const end = ROLL_IN + FLIP_T + (outcome === 'landed' ? LAND_T : 0);
-          for (let t = ROLL_IN + 0.05; t < end; t += 1 / 120) {
+          // (Steps of a share of the flight: a quicker pop turns the board quicker.)
+          for (let t = ROLL_IN + 0.05; t < end; t += FLIP_T / 120) {
             const now = nose(rigAt('Ghetto Bird', stance, rider, outcome, t));
             if (prev) expect(dist(now, prev), `${label} ${outcome} t=${t.toFixed(3)}`).toBeLessThan(0.15);
             prev = now;

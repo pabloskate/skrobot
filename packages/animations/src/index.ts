@@ -15,19 +15,22 @@ export {
   TRICK_BASES,
   ROLL_IN,
   FLIP_T,
+  flightTime,
+  popRise,
   LAND_T,
   FALL_T,
   KICK_OUT_T,
   KICK_OUT_DROP_T,
   HOLD,
+  flatTimeline,
   specFor,
   computeFrame,
   knee,
   clampFootReach,
   GROUND,
   X0,
-  JUMP,
   FOOT_Y,
+  type AttemptTimeline,
   type FallVariant,
   type Frame,
   type Spec,
@@ -46,8 +49,8 @@ export {
 } from './camera/camera';
 /** The sets (spots) a trick can be staged at, and what each changes: stairs and other obstacles, handrails, tripods. */
 export { STAGE_SETS, hasObstacle, railLineFor, setGrindSpec, setHandrail, setInfo, setTerrain, setTimeline, type Obstacle, type RailChoice, type RailLine, type SetInfo, type SetObstacle, type SetRails, type StageSet } from './sets/sets';
-/** The stage's yardstick (the 31-inch deck), and the moments of a trick down a drop. */
-export { FOOT, INCH } from './units';
+/** The stage's yardstick (the 31-inch deck) and gravity, and the moments of a trick down a drop. */
+export { FOOT, GRAVITY, INCH } from './units';
 export { stairTimeline, type StairTimeline } from './sets/elToro/stairs';
 /** Who rides: the robot, the realistic human, or the alien. */
 export { SKATERS, skaterInfo, type Skater, type SkaterInfo } from './riders/skaters';

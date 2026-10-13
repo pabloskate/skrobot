@@ -1,5 +1,5 @@
 import { smoothstep, type V3 } from '../math';
-import { FLIP_T, ROLL_IN } from '../motion/trick';
+import { ROLL_IN, flightTime } from '../motion/trick';
 import { WHEEL_BOTTOM } from '../board/board';
 import type { StageFrame, StagePlan } from './stage';
 
@@ -62,7 +62,7 @@ function momentsOf(stage: StagePlan, frameAt: (t: number) => StageFrame): Moment
   if (known) return known;
   const { grind, stairs } = stage;
   const pop = grind?.pop ?? stairs?.pop ?? ROLL_IN;
-  const land = grind?.land ?? stairs?.land ?? ROLL_IN + FLIP_T;
+  const land = grind?.land ?? stairs?.land ?? ROLL_IN + flightTime(stage.style);
   const lock = grind?.lockAt ?? null;
   const off = grind?.off ?? null;
   const boardAt = (t: number) => {

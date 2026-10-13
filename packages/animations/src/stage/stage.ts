@@ -8,7 +8,7 @@ import type { KickOutPlan } from '../motion/fall/kickOut';
 import { solveGrindRig } from '../motion/grindRig';
 import { solveRig } from '../motion/rig';
 import { resolveRiderMechanics, type RiderMechanics } from '../motion/stance';
-import { FALL_T, FLIP_T, GROUND, KICK_OUT_DROP_T, KICK_OUT_T, LAND_T, ROLL_IN, X0, computeFrame, specFor, type FallVariant, type Spec } from '../motion/trick';
+import { FALL_T, GROUND, KICK_OUT_DROP_T, KICK_OUT_T, LAND_T, ROLL_IN, X0, computeFrame, flightTime, specFor, type FallVariant, type Spec } from '../motion/trick';
 import type { Skater } from '../riders/skaters';
 import { barShadowParts } from '../sets/bar';
 import { planStairs, type StairPlan } from '../sets/elToro/stairs';
@@ -26,6 +26,7 @@ import {
   onTheGround,
   posed,
   riderShadows,
+  SHADOW_HIPS,
   type StageFrame,
 } from './frameParts';
 
@@ -114,7 +115,7 @@ export function planStage(
     landed,
     fall,
     shankProgress,
-    end: grind?.end ?? (stairs ? (kickOut ? stairs.land + KICK_OUT_DROP_T : stairs.end) : ROLL_IN + FLIP_T + (landed ? LAND_T : kickOut ? KICK_OUT_T : FALL_T)),
+    end: grind?.end ?? (stairs ? (kickOut ? stairs.land + KICK_OUT_DROP_T : stairs.end) : ROLL_IN + flightTime(style) + (landed ? LAND_T : kickOut ? KICK_OUT_T : FALL_T)),
     skater,
   };
 }
@@ -172,7 +173,7 @@ function attemptAt(stage: StagePlan, kickOut: KickOutPlan | null, t: number, rat
       : computeFrame(shutterT, spec, landed, fall, shankProgress, style).streetDist;
   const roll = (dist: number) => plan
     ? wheelRoll(travel(dist), Infinity, spec.dir, 0)
-    : wheelRoll(travel(dist), travel(ROLL_IN + FLIP_T), spec.dir, rig.board.yawDeg);
+    : wheelRoll(travel(dist), travel(ROLL_IN + flightTime(style)), spec.dir, rig.board.yawDeg);
   const angle = roll(streetDist);
 
   // Pop and touchdown dust.
@@ -184,7 +185,7 @@ function attemptAt(stage: StagePlan, kickOut: KickOutPlan | null, t: number, rat
     ]
     : [
       ...kickedUp(f.t, ROLL_IN, X0 + (spec.nollie ? 32 : -32), 0.8),
-      ...kickedUp(f.t, ROLL_IN + FLIP_T, f.board.x, landed ? 1 : 0.8),
+      ...kickedUp(f.t, ROLL_IN + flightTime(style), f.board.x, landed ? 1 : 0.8),
     ];
 
   // The bar's posts stand on the asphalt, below the ground line the bar is laid out from.
@@ -198,11 +199,11 @@ function attemptAt(stage: StagePlan, kickOut: KickOutPlan | null, t: number, rat
     span,
     stairs: null,
     wheels: { angle, sweep: angle - roll(shutterDist) },
-    expression: headPose?.expression ?? (plan ? grindExpression(t, plan) : expressionAt(f.t, landed)),
+    expression: headPose?.expression ?? (plan ? grindExpression(t, plan) : expressionAt(f.t, landed, flightTime(style))),
     dust,
     shadows: riderShadows(rig, {
       board: Math.max(0, GROUND - (grind ? rig.board.center.y : f.board.y)),
-      body: Math.max(0, GROUND - (grind ? hips.y : f.body.y) - 60),
+      body: Math.max(0, GROUND - (grind ? hips.y : f.body.y) - SHADOW_HIPS),
     }, undefined, barShadows),
   };
 }

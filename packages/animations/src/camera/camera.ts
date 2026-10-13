@@ -1,4 +1,4 @@
-import { GROUND, JUMP, X0 } from '../motion/trick';
+import { GROUND, X0, popRise } from '../motion/trick';
 import { clamp01, mixHex, norm3, rad, smoothstep, type P2, type V3 } from '../math';
 import { FOOT } from '../units';
 
@@ -294,7 +294,7 @@ const RIDING_HEAD_HEIGHT = 122;
  */
 export function cameraLift(flight: number, popHeight: number, headHeight: number, falling: boolean): number {
   const inFlight = flight > 0 && flight < 1;
-  const rise = inFlight ? FOLLOW_POP * JUMP * popHeight * Math.sin(Math.PI * flight) ** 2 : 0;
+  const rise = inFlight ? FOLLOW_POP * popRise({ popHeight }) * Math.sin(Math.PI * flight) ** 2 : 0;
   return rise - (falling ? fallSink(headHeight) : 0);
 }
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { planStage, stageFrame, type StageFrame } from './stage';
 import { DEFAULT_SKATE_STYLE } from '../motion/style';
+import { ROLL_IN, flightTime } from '../motion/trick';
 import { SETUP_LOOK } from './gaze';
 import type { V3 } from '../math';
 
@@ -15,7 +16,7 @@ const pinned = (frame: StageFrame, p: V3) => ({ x: p.x + frame.scroll, z: p.z + 
 describe('where the rider looks', () => {
   it('flat ground: ahead while rolling in, on the board from the setup to touchdown, then ahead again', () => {
     const stage = plan('Kickflip');
-    const pop = 0.5 * 1.12;
+    const pop = ROLL_IN;
     const early = stageFrame(stage, 0.05, 1);
     expect(early.gaze!.y).toBeGreaterThan(early.rig.board.center.y); // on the ground, below the deck
     expect(distance(early.gaze!, early.rig.board.center)).toBeGreaterThan(250);
@@ -30,7 +31,9 @@ describe('where the rider looks', () => {
   it('a grind: the bar where the trucks will lock is watched rolling in, and stays put in the scenery', () => {
     const stage = plan('Backside 50-50 Grind');
     const grind = stage.grind!;
-    const spots = [0, 0.1, 0.2].map((t) => { const f = stageFrame(stage, t, 1); return pinned(f, f.gaze!); });
+    // Before the setup look starts blending in (half its 0.12 s shift early).
+    const rolling = grind.pop - SETUP_LOOK - 0.06;
+    const spots = [0, rolling / 2, rolling].map((t) => { const f = stageFrame(stage, t, 1); return pinned(f, f.gaze!); });
     for (const s of spots) expect(Math.abs(s.x - spots[0].x)).toBeLessThan(1e-6);
     // It is where the board will be at lock-in.
     const locked = stageFrame(stage, grind.lockAt, 1);
@@ -73,7 +76,7 @@ describe('contact shadows', () => {
       // Four wheels, darker than the board's cast shadow; and a softer one under the deck.
       expect(rolling.filter((c) => c.dark > 2).length, set).toBe(4);
       expect(rolling.length, set).toBe(5);
-      const air = stage.stairs ? (stage.stairs.pop + stage.stairs.land) / 2 : 0.56 + 0.4;
+      const air = stage.stairs ? (stage.stairs.pop + stage.stairs.land) / 2 : ROLL_IN + flightTime(stage.style) / 2;
       expect(stageFrame(stage, air, 1).shadows.contact!.length, set).toBe(0);
     }
   });

@@ -2,10 +2,6 @@ import { lazy, Suspense, useMemo, useState } from 'react';
 import {
   DEFAULT_SKATE_STYLE,
   FALL_VARIANT_OPTIONS,
-  ROLL_IN,
-  FLIP_T,
-  LAND_T,
-  FALL_T,
   RobotAvatar,
   SKATERS,
   SKATE_STYLE_BOUNDS,
@@ -296,18 +292,10 @@ export default function App() {
       : null,
     [currentTrick, discipline, fallVariant, landed, selectedRiderStance, skateStyle, stageSet],
   );
-  // Every landmark's timeline follows its own drop and landing geometry.
-  const stairs = discipline === 'flatground' ? setTimeline(stageSet, skateStyle, landed !== false) : null;
-  const duration = grind?.end ?? stairs?.end ?? ROLL_IN + FLIP_T + (landed === false ? FALL_T : LAND_T);
-  const phases = stairs
-    ? [
-      { label: 'Setup', time: 0 },
-      { label: 'Pop', time: stairs.pop },
-      { label: 'Peak', time: stairs.peak },
-      { label: 'Catch', time: stairs.catch },
-      { label: landed === false ? 'Bail' : 'Roll away', time: duration },
-    ]
-    : grind
+  // Every landmark's timeline follows its own drop and landing geometry; flat ground, the robot's own pop.
+  const attempt = setTimeline(discipline === 'flatground' ? stageSet : 'plaza', skateStyle, landed !== false);
+  const duration = grind?.end ?? attempt.end;
+  const phases = grind
     ? [
       { label: 'Setup', time: 0 },
       { label: 'Pop', time: grind.pop },
@@ -327,9 +315,9 @@ export default function App() {
     ]
     : [
       { label: 'Setup', time: 0 },
-      { label: 'Pop', time: ROLL_IN + FLIP_T * 0.1 },
-      { label: 'Peak', time: ROLL_IN + FLIP_T * 0.5 },
-      { label: 'Catch', time: ROLL_IN + FLIP_T * 0.88 },
+      { label: 'Pop', time: attempt.pop },
+      { label: 'Peak', time: attempt.peak },
+      { label: 'Catch', time: attempt.catch },
       { label: landed === false ? 'Bail' : 'Roll away', time: duration },
     ];
 

@@ -1,16 +1,14 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
-  FALL_T,
   FALL_VARIANT_OPTIONS,
-  FLIP_T,
-  LAND_T,
-  ROLL_IN,
   SKATERS,
+  flatTimeline,
   grindTimelineFor,
   type FallVariant,
   type GrindTimeline,
   type RiderStance,
   type Robot,
+  type SkateStyle,
   type Skater,
   type Stance,
   type Trick,
@@ -47,15 +45,16 @@ interface Phase {
   t: number;
 }
 
-function phasesFor(landed: boolean): Phase[] {
-  const tail = landed ? LAND_T : FALL_T;
+/** Flatground frames follow the robot's own pop: a lower pop is a shorter hop. */
+function phasesFor(style: SkateStyle | undefined, landed: boolean): Phase[] {
+  const tl = flatTimeline(style, landed);
   return [
-    { label: 'wind-up', t: ROLL_IN * 0.45 },
-    { label: 'pop', t: ROLL_IN + FLIP_T * 0.1 },
-    { label: 'peak', t: ROLL_IN + FLIP_T * 0.5 },
-    { label: 'catch', t: ROLL_IN + FLIP_T * 0.88 },
-    { label: landed ? 'touch down' : 'falling', t: ROLL_IN + FLIP_T + tail * 0.35 },
-    { label: landed ? 'ride away' : 'settled', t: ROLL_IN + FLIP_T + tail },
+    { label: 'wind-up', t: tl.pop * 0.45 },
+    { label: 'pop', t: tl.pop + (tl.land - tl.pop) * 0.1 },
+    { label: 'peak', t: tl.peak },
+    { label: 'catch', t: tl.catch },
+    { label: landed ? 'touch down' : 'falling', t: tl.land + (tl.end - tl.land) * 0.35 },
+    { label: landed ? 'ride away' : 'settled', t: tl.end },
   ];
 }
 
@@ -215,7 +214,7 @@ export default function ContactSheet() {
   const robot = ROBOTS.find((r) => r.id === robotId) ?? ROBOTS[0];
   const landed = outcome === 'landed';
   const fallVariant: FallVariant = landed ? 'slam' : outcome;
-  const phases = useMemo(() => phasesFor(landed), [landed]);
+  const phases = useMemo(() => phasesFor(robot.skateStyle, landed), [robot.skateStyle, landed]);
 
   const grinds = discipline === 'grinds';
   const tricks = useMemo(() => {

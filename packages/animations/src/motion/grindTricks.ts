@@ -1,6 +1,6 @@
 import type { SkateStyle, Stance } from '../types';
 import { flickExtension, orientTrickRotation, type RiderMechanics } from './stance';
-import { FLIP_T, ROLL_IN, catchFraction, computeFrame, specFor, type Frame, type Spec } from './trick';
+import { ROLL_IN, catchFraction, computeFrame, flightTime, specFor, type Frame, type Spec } from './trick';
 import { solveRig } from './rig';
 import type { Rig } from './skeleton';
 import { smoothstep } from '../math';
@@ -134,12 +134,12 @@ const CATCH_BY = 0.85;
 export const hopRate = (hop: HopPlan, hopT: number, toTouchdown = false) =>
   Math.max(
     1,
-    (catchFraction(hop.style) * FLIP_T) / (CATCH_BY * hopT),
-    toTouchdown && hop.trick.spec.bodyYaw ? FLIP_T / hopT : 0,
+    (catchFraction(hop.style) * flightTime(hop.style)) / (CATCH_BY * hopT),
+    toTouchdown && hop.trick.spec.bodyYaw ? flightTime(hop.style) / hopT : 0,
   );
 
-/** The flatground clock `tau` seconds after the pop, held at touchdown once the trick is done. */
-export const hopClock = (tau: number, rate: number) => ROLL_IN + Math.min(FLIP_T, Math.max(0, tau) * rate);
+/** The flatground clock (for `style`'s pop) `tau` seconds after the pop, held at touchdown once the trick is done. */
+export const hopClock = (style: Pick<SkateStyle, 'popHeight'>, tau: number, rate: number) => ROLL_IN + Math.min(flightTime(style), Math.max(0, tau) * rate);
 
 /**
  * How far into a shank a shank catches, which the shared physics asks for
@@ -241,7 +241,7 @@ export function hopFrame(hop: HopPlan, t: number, onRail: number | null = null):
   const flat = computeFrame(t, hop.trick.spec, true, 'slam', SHANK_AT, hop.style);
   const f = onRail != null ? landingOnRail(flat, hop.trick.spec, onRail) : flat;
   const turned = orientTrickRotation(hop.mechanics, f.spin3d);
-  const done = t >= ROLL_IN + FLIP_T;
+  const done = t >= ROLL_IN + flightTime(hop.style);
   const rotation = f.motion.rotation;
   // The rider's spin is the heading; the deck's turn past it is the spin.
   const yaw = turned.yawDeg - turned.bodyYawDeg;
@@ -263,13 +263,13 @@ export function hopFrame(hop: HopPlan, t: number, onRail: number | null = null):
 }
 
 /** Where the deck rests once the trick is done. */
-export const settledSpin = (hop: HopPlan): TrickSpin => hopFrame(hop, ROLL_IN + FLIP_T).spin;
+export const settledSpin = (hop: HopPlan): TrickSpin => hopFrame(hop, ROLL_IN + flightTime(hop.style)).spin;
 
 /** How far round the rider ends up (deg, signed): 0, ±180, or ±360. */
-export const settledHeading = (hop: HopPlan): number => hopFrame(hop, ROLL_IN + FLIP_T).heading;
+export const settledHeading = (hop: HopPlan): number => hopFrame(hop, ROLL_IN + flightTime(hop.style)).heading;
 
 /** Seconds after the pop the trick is half way round, for scrubbers and contact sheets. */
-export const hopMid = (hop: HopPlan, rate: number) => (0.5 * catchFraction(hop.style) * FLIP_T) / rate;
+export const hopMid = (hop: HopPlan, rate: number) => (0.5 * catchFraction(hop.style) * flightTime(hop.style)) / rate;
 
 /**
  * The deck turned by `first`, then by `then`, both about the rider's axes.

@@ -5,9 +5,10 @@ import { WHEEL_BOTTOM, WHEEL_HALF_W, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z, boardSh
 import { BOTTOM_LOCAL, TOP_LOCAL } from '../board/deck';
 import { clamp01, easeOutCubic, hull, type V3 } from '../math';
 import type { GrindPlan } from '../motion/grind';
-import { kneeBetween } from '../motion/grindRig';
+import { kneeBetween } from '../motion/dynamics';
 import { PERSON_SCALE, moveFrame, tiltHead, type LegRig, type Rig } from '../motion/skeleton';
-import { FLIP_T, JUMP, ROLL_IN } from '../motion/trick';
+import { ROLL_IN } from '../motion/trick';
+import { FOOT } from '../units';
 import { humanRig } from '../riders/human/humanRig';
 import type { Expression } from '../riders/look';
 import { skaterInfo, type Skater } from '../riders/skaters';
@@ -85,9 +86,9 @@ export function grindExpression(t: number, plan: GrindPlan): Expression {
   return t > plan.land + 0.14 ? 'happy' : 'focus';
 }
 
-/** The rider's face through a flatground trick. */
-export function expressionAt(t: number, landed: boolean): Expression {
-  const touchdown = ROLL_IN + FLIP_T;
+/** The rider's face through a flatground trick of `flight` seconds in the air. */
+export function expressionAt(t: number, landed: boolean, flight: number): Expression {
+  const touchdown = ROLL_IN + flight;
   if (t < ROLL_IN) return 'open';
   if (t < touchdown) return 'focus';
   if (landed) return t > touchdown + 0.14 ? 'happy' : 'focus';
@@ -227,8 +228,13 @@ export function posed(rig: Rig, skater: Skater, headPose?: HeadPose | null, grou
   return skaterInfo(skater).person ? humanRig(tilted, ground) : tilted;
 }
 
-/** Shadows soften and fade as what casts them rises: to 45% at a full pop's height. */
-const heightFade = (height: number) => 1 - 0.55 * clamp01(height / JUMP);
+/** The body's shadow fades with the hips' height over the ground past this (world units), a little under where they ride. */
+export const SHADOW_HIPS = 60;
+
+/** Height (world units) at which a shadow has faded all it will. */
+const SHADOW_FADE_HEIGHT = 4.5 * FOOT;
+/** Shadows soften and fade as what casts them rises: to 45% four and a half feet up. */
+const heightFade = (height: number) => 1 - 0.55 * clamp01(height / SHADOW_FADE_HEIGHT);
 
 /**
  * The board's and the rider's cast shadows, faded by how high each is over

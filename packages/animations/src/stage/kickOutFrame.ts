@@ -10,8 +10,9 @@ import { IDENTITY, type Quat } from '../motion/fall/rotation';
 import { travel } from '../motion/grind';
 import { solveRig } from '../motion/rig';
 import { SHOE_HALF_HEIGHT, type Rig } from '../motion/skeleton';
-import { FLIP_T, GROUND, JUMP, ROLL_IN, X0, boardGlued, catchFraction, computeFrame } from '../motion/trick';
-import { DROP_GRAVITY, stairDeckHeight, terrainSurface, type StairPlan } from '../sets/elToro/stairs';
+import { GROUND, ROLL_IN, X0, boardGlued, catchFraction, computeFrame, flightTime } from '../motion/trick';
+import { stairDeckHeight, terrainSurface, type StairPlan } from '../sets/elToro/stairs';
+import { GRAVITY } from '../units';
 import { shiftRig, stairCrane, stairRig, stairShadowLevel } from './downhill';
 import { kickedUp, onTheGround, posed, riderShadows, type StageFrame } from './frameParts';
 import type { StagePlan } from './stage';
@@ -41,7 +42,7 @@ const landedScroll = (stage: StagePlan, t: number) =>
 
 /** How far the landed attempt's wheels have turned at clock `t`. */
 const landedWheel = (stage: StagePlan, t: number) =>
-  wheelRoll(travel(computeFrame(t, stage.spec, true, stage.fall, stage.shankProgress, stage.style).streetDist), travel(ROLL_IN + FLIP_T), stage.spec.dir, 0);
+  wheelRoll(travel(computeFrame(t, stage.spec, true, stage.fall, stage.shankProgress, stage.style).streetDist), travel(ROLL_IN + flightTime(stage.style)), stage.spec.dir, 0);
 
 /** About how thick the limbs and body are round a joint (world units, a robot's), for how far off the ground the body is. */
 const JOINT_RADIUS = 6;
@@ -113,10 +114,10 @@ function flatSetup(stage: StagePlan): KickOutSetup {
     wheel: (t) => landedWheel(stage, t),
     pop: ROLL_IN,
     glued: boardGlued(spec),
-    gravity: (8 * JUMP * style.popHeight) / FLIP_T ** 2,
+    gravity: GRAVITY,
     ground: () => ASPHALT,
-    catchAt: ROLL_IN + catchFraction(style) * FLIP_T,
-    touchdown: ROLL_IN + FLIP_T,
+    catchAt: ROLL_IN + catchFraction(style) * flightTime(style),
+    touchdown: ROLL_IN + flightTime(style),
     end: stage.end,
   };
 }
@@ -144,7 +145,7 @@ function spotSetup(stage: StagePlan, stairs: StairPlan): KickOutSetup {
     },
     pop: stairs.pop,
     glued: boardGlued(spec),
-    gravity: DROP_GRAVITY,
+    gravity: GRAVITY,
     ground: (x, z) => ASPHALT - terrainSurface(stairs.terrain, x - X0, z),
     catchAt: stairs.pop + catchFraction(style) * stairs.flight,
     touchdown: stairs.land,
@@ -244,7 +245,7 @@ function ownFrame(stage: StagePlan, t: number, rate: number): StageFrame {
   };
   if (!stairs) {
     // The crane rides the pop as the landed attempt does.
-    const lift = cameraLift((clock - ROLL_IN) / FLIP_T, stage.style.popHeight, headHeight, false) - sink;
+    const lift = cameraLift((clock - ROLL_IN) / flightTime(stage.style), stage.style.popHeight, headHeight, false) - sink;
     return {
       ...frame,
       lift,

@@ -17,6 +17,11 @@ export const smoothstep = (p: number) => {
   const c = clamp01(p);
   return c * c * (3 - 2 * c);
 };
+/** As smoothstep, but setting off and arriving without a jolt too: no acceleration at either end. */
+export const smootherstep = (p: number) => {
+  const c = clamp01(p);
+  return c * c * c * (10 - 15 * c + 6 * c * c);
+};
 export const easeOutCubic = (p: number) => 1 - Math.pow(1 - clamp01(p), 3);
 
 export const add3 = (a: V3, b: V3): V3 => ({ x: a.x + b.x, y: a.y + b.y, z: a.z + b.z });

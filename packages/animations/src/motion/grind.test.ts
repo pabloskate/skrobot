@@ -4,11 +4,12 @@ import { GROUND } from './trick';
 import { resolveSkateStyle } from './style';
 import { EL_TORO_RAIL } from '../sets/elToro/stairs';
 import { stageFrame } from '../stage/stage';
-import { GRAVITY, barSpan, carve, grindFrame, grindStreetDist, travel, type GrindPlan } from './grind';
+import { barSpan, carve, grindFrame, grindStreetDist, travel, type GrindPlan } from './grind';
 import { BAR_HALF, BAR_TOP_Y, BAR_Z, GRIND_BASES, grindSpecFor, type GrindSide } from './grindDefinitions';
 import { solveGrindRig } from './grindRig';
 import { rotY } from '../math';
 import { PERSON_SCALE } from './skeleton';
+import { GRAVITY } from '../units';
 import {
   COMBO_DIMS,
   FALLS,

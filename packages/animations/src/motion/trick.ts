@@ -1,5 +1,5 @@
 import type { SkateStyle, Trick } from '../types';
-import { DEFAULT_SKATE_STYLE } from './style';
+import { DEFAULT_SKATE_STYLE, resolveSkateStyle } from './style';
 
 /**
  * The trick's own motion: what the board, the feet on it, and the body's
@@ -203,7 +203,6 @@ const W = 500;
 const H = 340;
 const GROUND = 272;
 const X0 = 250;
-const JUMP = 165; // pop height; a bigger pop buys the spin more hang time
 const LIFT = 65; // hip height above the board
 const FOOT_Y = 65; // feet below the hip
 const THIGH = 35;
@@ -215,29 +214,74 @@ const SWITCH_ARM_SPREAD = 0.28;
 // Extra sky above the viewBox so the taller pop doesn't clip the skater's head.
 const SKY_PAD = 64;
 
-// Global speed trim: stretch every animation phase by this factor so pops,
-// spins, and falls read a touch slower than baseline (physics-wise: lower effective gravity
-// + lower angular velocity, preserving the relative shape of each motion).
+/** Pop height (world units, at popHeight 1): a bigger pop buys the spin more hang time. */
+const JUMP = 165;
+/**
+ * The knee tuck at mid-flight: how much further the board comes up toward
+ * the hips. Glued tricks pull the board all the way up; flips and shuvs
+ * tuck less.
+ */
+const TUCK_GLUED = 17;
+const TUCK_FREE = 12;
+
+/**
+ * Global speed trim: every phase is stretched by this so pops, spins and
+ * falls read a touch slower than baseline (a lower effective gravity and
+ * angular speed, keeping each motion's shape).
+ */
 const SPEED_SCALE = 1.12;
 const ROLL_IN = 0.5 * SPEED_SCALE;
-// Flight time obeys projectile motion: under constant gravity the air time
-// scales with sqrt(height), so FLIP_T is derived from JUMP rather than tuned
-// independently. Raising JUMP therefore slows every spin by the same physical
-// law (more hang time = the 360 has longer to come around). Baseline: a 130px
-// pop flew for 0.75s.
+/**
+ * The flight: a 130-unit pop flew for 0.75 s, and air time goes as the root
+ * of the height. Every style flies the same flight; its popHeight sets how
+ * high the board goes in it.
+ */
 const FLIP_T = 0.75 * Math.sqrt(JUMP / 130) * SPEED_SCALE;
+
+/** How high (world units) a style's pop lifts the board. */
+const popRise = (style: Readonly<Pick<SkateStyle, 'popHeight'>>) => JUMP * style.popHeight;
+/** Seconds a style's pop is in the air (FLIP_T for every style). */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const flightTime = (_style?: Readonly<Pick<SkateStyle, 'popHeight'>>) => FLIP_T;
+/** A trick's knee tuck at mid-flight. */
+const popTuck = (spec: Spec) => (boardGlued(spec) ? TUCK_GLUED : TUCK_FREE);
+/** How high the board's pop arc peaks over the ground. */
+const boardRise = (_spec: Spec, style: Readonly<Pick<SkateStyle, 'popHeight'>>) => popRise(style);
+
 /** Share of the flight by which a robot's rotation is caught: 0.85 at neutral speed, never after touchdown. */
 const catchFraction = (style: Readonly<SkateStyle>) => Math.min(1, 0.85 / style.rotationSpeed);
 const LAND_T = 0.95 * SPEED_SCALE;
 // Falls share the landing's "impact → settle" budget so a miss doesn't feel
 // like a second, slower animation system. A touch longer than LAND_T for the
-// slide-out, but no longer the old 1.7s crawl.
+// slide-out.
 const FALL_T = 1.28 * SPEED_SCALE;
 /** Seconds from the trick's touchdown a kick-out runs (stage/kickOutFrame.ts): the steps, the stop, and a look back at the board. */
 const KICK_OUT_T = 2.1;
 /** Down a drop: the roll, up, the steps, and the look back. */
 const KICK_OUT_DROP_T = 3;
 const HOLD = 0.35 * SPEED_SCALE; // freeze on the final frame before onDone
+
+/** The moments of an attempt (seconds): the pop, the top of the hop, the catch, touchdown, and the end. */
+export interface AttemptTimeline {
+  pop: number;
+  peak: number;
+  catch: number;
+  land: number;
+  end: number;
+}
+
+/** A flatground trick's moments for a robot's style (its pop sets the hang time); a kick-out runs on past touchdown. */
+export function flatTimeline(style: Readonly<SkateStyle> | undefined, landed = true, kickOut = false): AttemptTimeline {
+  const flight = flightTime(resolveSkateStyle(style));
+  const land = ROLL_IN + flight;
+  return {
+    pop: ROLL_IN,
+    peak: ROLL_IN + flight / 2,
+    catch: ROLL_IN + flight * 0.88,
+    land,
+    end: land + (landed ? LAND_T : kickOut ? KICK_OUT_T : FALL_T),
+  };
+}
 const STREET_DASH_PERIOD = 210;
 const STREET_DASH_SECONDS = 0.7 * SPEED_SCALE;
 
@@ -542,7 +586,8 @@ function computeFrame(
   let shuvDeg = 0;
   let forwardPitchDeg = 0;
   let bodyYawDeg = 0;
-  const flightProgress = (t - ROLL_IN) / FLIP_T;
+  const flipT = flightTime(skateStyle);
+  const flightProgress = (t - ROLL_IN) / flipT;
   let rotationProgress = 0;
 
   const popAngle = spec.nollie ? 60 : -60;
@@ -587,8 +632,8 @@ function computeFrame(
     if (spec.bodySpinDir && spec.bodyYaw && !spec.counterShuv) {
       bodyX += spec.bodySpinDir * spec.dir * 8 * crouchRatio;
     }
-  } else if (t < ROLL_IN + FLIP_T) {
-    const p = (t - ROLL_IN) / FLIP_T;
+  } else if (t < ROLL_IN + flipT) {
+    const p = (t - ROLL_IN) / flipT;
     
     // The "Catch": finish board rotation early so it holds flat before
     // landing. Robot style only stretches this normalized clock; the actual
@@ -622,7 +667,7 @@ function computeFrame(
     const shankBodyScale = shankScale;
     const shankRollScale = shankScale;
     
-    boardY = GROUND - 4 * JUMP * skateStyle.popHeight * p * (1 - p);
+    boardY = GROUND - 4 * boardRise(spec, skateStyle) * p * (1 - p);
     // Lateral drift mid-spin: the board arcs toward the toes (frontside, -1)
     // or heels (backside, +1) so the spin reads with a direction. The drift
     // peaks at the rotation apex and returns to center for the catch.
@@ -811,7 +856,7 @@ function computeFrame(
     const stanceLoad = spec.stance === 'nollie' ? 1.2 : 1;
     const landingCompression = (12 + (complexity * 6)) * stanceLoad;
     
-    const p = clamp01((t - ROLL_IN - FLIP_T) / LAND_T);
+    const p = clamp01((t - ROLL_IN - flipT) / LAND_T);
     // Seed from the flight-end tuck (~30) so the knees stay bent through the
     // catch instead of snapping straight then re-bending (jitter).
     const FLIGHT_END_OFFSET = 30;
@@ -852,7 +897,7 @@ function computeFrame(
     // doesn't teleport limbs or arms into a separate ragdoll sim. Fakie
     // mirrors via spec.dir on the body group below.
     falling = true;
-    const u = t - ROLL_IN - FLIP_T;
+    const u = t - ROLL_IN - flipT;
 
     // Flight-end hip offset (~30) matches the landed branch's FLIGHT_END_OFFSET
     // so a miss starts at the same height a catch would.
@@ -1012,8 +1057,8 @@ function computeFrame(
   // so the ground doesn't keep racing after the skater has already stopped.
   let streetDist = t;
   if (falling) {
-    const u = t - ROLL_IN - FLIP_T;
-    const FULL_SPEED_TIME = ROLL_IN + FLIP_T;
+    const u = t - ROLL_IN - flipT;
+    const FULL_SPEED_TIME = ROLL_IN + flipT;
     const decayK =
       fall === 'slam' ? 2.4
         : fall === 'bail' ? 1.3
@@ -1061,6 +1106,10 @@ export {
   FOOT_Y,
   LIFT,
   JUMP,
+  popRise,
+  flightTime,
+  popTuck,
+  boardRise,
   ROLL_IN,
   FLIP_T,
   LAND_T,

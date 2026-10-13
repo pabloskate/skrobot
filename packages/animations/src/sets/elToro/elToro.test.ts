@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Group } from 'three';
-import { FLIP_T, LAND_T, ROLL_IN, TRICK_BASES } from '../../motion/trick';
+import { LAND_T, ROLL_IN, TRICK_BASES, flightTime } from '../../motion/trick';
 import { WHEEL_BOTTOM, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z } from '../../board/board';
 import { DEFAULT_SCENE_CAMERA } from '../../camera/camera';
 import { BOTTOM_LOCAL, TOP_LOCAL } from '../../board/deck';
@@ -148,9 +148,10 @@ describe('El Toro', () => {
             }
           }
           // The flight is the drop's: longer than flatground's, so the trick turns a little slower.
-          expect(stairs.stairs!.flight).toBeGreaterThan(FLIP_T);
+          const flatFlight = flightTime(flat.style);
+          expect(stairs.stairs!.flight).toBeGreaterThan(flatFlight);
           // …and it starts further back, rolling up the run-up first.
-          expect(stairs.end - flat.end).toBeCloseTo(stairs.stairs!.pop - ROLL_IN + stairs.stairs!.flight - FLIP_T, 6);
+          expect(stairs.end - flat.end).toBeCloseTo(stairs.stairs!.pop - ROLL_IN + stairs.stairs!.flight - flatFlight, 6);
         }
       }
     }

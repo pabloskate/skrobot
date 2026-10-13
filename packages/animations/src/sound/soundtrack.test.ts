@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FLIP_T, ROLL_IN, type FallVariant } from '../motion/trick';
+import { ROLL_IN, flightTime, type FallVariant } from '../motion/trick';
 import { resolveSkateStyle } from '../motion/style';
 import type { Robot, Trick } from '../types';
 import { GRIND_BASES } from '../motion/grindDefinitions';
@@ -43,7 +43,7 @@ describe('soundtrackFor', () => {
   it('pops at the roll-in and lands at touchdown on flat ground, rolling only with the wheels down', () => {
     const stage = plan('Kickflip');
     const track = soundtrackFor(stage);
-    const touchdown = ROLL_IN + FLIP_T;
+    const touchdown = ROLL_IN + flightTime(stage.style);
     expect(track.cues).toEqual([{ kind: 'pop', at: ROLL_IN }, { kind: 'land', at: touchdown, weight: 1 }]);
     for (const { t, v } of sample(stage, track.roll)) expect(v).toBe(t >= ROLL_IN && t < touchdown ? 0 : 1);
     for (const { v } of sample(stage, track.grind)) expect(v).toBe(0);
@@ -54,7 +54,7 @@ describe('soundtrackFor', () => {
       const stage = plan('Kickflip', { landed: false, fall });
       const track = soundtrackFor(stage);
       expect(kinds(track)).toEqual(['pop', 'crash']);
-      const touchdown = ROLL_IN + FLIP_T;
+      const touchdown = ROLL_IN + flightTime(stage.style);
       const after = sample(stage, track.roll).filter(({ t }) => t >= touchdown);
       expect(after[0].v).toBeLessThan(1);
       for (let i = 1; i < after.length; i++) expect(after[i].v).toBeLessThanOrEqual(after[i - 1].v);
@@ -148,7 +148,7 @@ describe('soundtrackFor', () => {
   it('slows a riderless board to a stop', () => {
     const stage = plan('Kickflip', { landed: false });
     const track = soundtrackFor(stage);
-    const after = sample(stage, track.speed).filter(({ t }) => t >= ROLL_IN + FLIP_T);
+    const after = sample(stage, track.speed).filter(({ t }) => t >= ROLL_IN + flightTime(stage.style));
     for (let i = 1; i < after.length; i++) expect(after[i].v).toBeLessThanOrEqual(after[i - 1].v);
     expect(after[after.length - 1].v).toBeLessThan(0.1);
   });

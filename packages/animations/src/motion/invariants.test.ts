@@ -5,7 +5,8 @@ import {
   specFor,
   GROUND,
   X0,
-  JUMP,
+  boardRise,
+  flightTime,
   ROLL_IN,
   FLIP_T,
   LAND_T,
@@ -350,29 +351,29 @@ describe('computeFrame', () => {
     }
   });
 
-  it('board leaves the ground at the pop, peaks at JUMP mid-flight, and returns for the catch', () => {
+  it('board leaves the ground at the pop, peaks at its rise mid-flight, and returns for the catch', () => {
     for (const base of BASES) {
       const spec = specFor(trick(base, 'regular'));
       expect(computeFrame(ROLL_IN, spec, true, 'slam').board.y).toBeCloseTo(GROUND, 5);
-      expect(computeFrame(ROLL_IN + FLIP_T / 2, spec, true, 'slam').board.y).toBeCloseTo(GROUND - JUMP, 5);
+      expect(computeFrame(ROLL_IN + FLIP_T / 2, spec, true, 'slam').board.y).toBeCloseTo(GROUND - boardRise(spec, DEFAULT_SKATE_STYLE), 5);
       expect(computeFrame(ROLL_IN + FLIP_T, spec, true, 'slam').board.y).toBeCloseTo(GROUND, 5);
       expect(computeFrame(endTime(true), spec, true, 'slam').board.y).toBeCloseTo(GROUND, 5);
     }
   });
 
-  it('pop style changes only the height of the shared flight arc', () => {
+  it('a bigger pop flies higher in the same flight', () => {
     const spec = specFor(trick('Ollie', 'regular'));
     const low = style({ popHeight: SKATE_STYLE_BOUNDS.popHeight.min });
     const high = style({ popHeight: SKATE_STYLE_BOUNDS.popHeight.max });
-    const apex = ROLL_IN + FLIP_T / 2;
-    const lowFrame = computeFrame(apex, spec, true, 'slam', 0.65, low);
-    const highFrame = computeFrame(apex, spec, true, 'slam', 0.65, high);
+    const lowFrame = computeFrame(ROLL_IN + flightTime(low) / 2, spec, true, 'slam', 0.65, low);
+    const highFrame = computeFrame(ROLL_IN + flightTime(high) / 2, spec, true, 'slam', 0.65, high);
 
-    expect(lowFrame.board.y).toBeCloseTo(GROUND - JUMP * low.popHeight, 5);
-    expect(highFrame.board.y).toBeCloseTo(GROUND - JUMP * high.popHeight, 5);
+    expect(lowFrame.board.y).toBeCloseTo(GROUND - boardRise(spec, low), 5);
+    expect(highFrame.board.y).toBeCloseTo(GROUND - boardRise(spec, high), 5);
     expect(highFrame.board.y).toBeLessThan(lowFrame.board.y);
+    expect(flightTime(high)).toBe(flightTime(low));
     expect(computeFrame(ROLL_IN, spec, true, 'slam', 0.65, high).board.y).toBe(GROUND);
-    expect(computeFrame(ROLL_IN + FLIP_T, spec, true, 'slam', 0.65, high).board.y).toBe(GROUND);
+    expect(computeFrame(ROLL_IN + flightTime(high), spec, true, 'slam', 0.65, high).board.y).toBe(GROUND);
   });
 
   it('rotation style makes the catch earlier while preserving the exact final trick', () => {
@@ -391,7 +392,7 @@ describe('computeFrame', () => {
     expect(computeFrame(end, spec, true, 'slam', 0.65, slow).spin3d.flipDeg).toBeCloseTo(360, 5);
     expect(computeFrame(end, spec, true, 'slam', 0.65, fast).spin3d.flipDeg).toBeCloseTo(360, 5);
 
-    const justBeforeTouchdown = ROLL_IN + FLIP_T - 1e-6;
+    const justBeforeTouchdown = ROLL_IN + FLIP_T * (1 - 1e-6);
     expect(computeFrame(justBeforeTouchdown, spec, true, 'slam', 0.65, slow).spin3d.flipDeg)
       .toBeCloseTo(360, 3);
   });

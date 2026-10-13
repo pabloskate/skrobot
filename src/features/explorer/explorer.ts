@@ -1,12 +1,8 @@
 import {
   DEFAULT_SCENE_CAMERA,
-  FLIP_T,
   FOOT,
   GRIND_BASES,
   KICK_OUT_DROP_T,
-  KICK_OUT_T,
-  LAND_T,
-  ROLL_IN,
   SCENE_ORBIT_BOUNDS,
   SCENE_ZOOM,
   STAGE_SETS,
@@ -27,6 +23,7 @@ import {
   joinGrindExit,
   specFor,
   setTimeline,
+  flatTimeline,
   wrapOrbitYaw,
   type Obstacle,
   type PopEnd,
@@ -367,35 +364,23 @@ export interface Timeline {
 /** The moments worth jumping to, and how long the trick runs (seconds). */
 export function timelineFor(state: ExplorerState, style: SkateStyle | undefined): Timeline {
   const kickOut = state.mode === 'flatground' && state.fall === 'kickout';
-  if (state.mode === 'flatground' && setInfo(state.set).terrain) {
-    // Down the stairs the flight is the drop's: longer the lower the robot pops.
-    const stairs = setTimeline(state.set, style, true, state.obstacle)!;
-    return {
-      duration: kickOut ? stairs.land + KICK_OUT_DROP_T : stairs.end,
-      phases: [
-        { label: 'Set up', time: 0 },
-        { label: 'Pop', time: stairs.pop + 0.06 },
-        { label: 'Peak', time: stairs.peak },
-        { label: kickOut ? 'Kick out' : 'Catch', time: stairs.catch },
-        { label: kickOut ? 'Down' : 'Land', time: stairs.land },
-      ],
-    };
-  }
   if (state.mode === 'flatground') {
-    const land = ROLL_IN + FLIP_T;
+    // Down a drop the flight is the drop's; on flat ground the robot's own pop sets it.
+    const drop = setInfo(state.set).terrain !== null;
+    const tl = drop ? setTimeline(state.set, style, true, state.obstacle) : flatTimeline(style, !kickOut, kickOut);
     return {
-      duration: land + (kickOut ? KICK_OUT_T : LAND_T),
+      duration: kickOut && drop ? tl.land + KICK_OUT_DROP_T : tl.end,
       phases: [
         { label: 'Set up', time: 0 },
-        { label: 'Pop', time: ROLL_IN + FLIP_T * 0.1 },
-        { label: 'Peak', time: ROLL_IN + FLIP_T * 0.5 },
-        { label: kickOut ? 'Kick out' : 'Catch', time: ROLL_IN + FLIP_T * 0.88 },
-        { label: kickOut ? 'Run out' : 'Land', time: land },
+        { label: 'Pop', time: tl.pop + 0.06 },
+        { label: 'Peak', time: tl.peak },
+        { label: kickOut ? 'Kick out' : 'Catch', time: tl.catch },
+        { label: kickOut ? (drop ? 'Down' : 'Run out') : 'Land', time: tl.land },
       ],
     };
   }
   const grind = grindTimelineFor(stageTrick(state), state.rider, style, true, 'slam', setHandrail(state.set, stageTrick(state), state.rider, state.rail));
-  if (!grind) return { phases: [{ label: 'Set up', time: 0 }], duration: ROLL_IN + FLIP_T + LAND_T };
+  if (!grind) return { phases: [{ label: 'Set up', time: 0 }], duration: flatTimeline(style).end };
   return {
     duration: grind.end,
     phases: [

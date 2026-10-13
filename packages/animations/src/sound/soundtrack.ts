@@ -1,5 +1,5 @@
 import { grindSpeed, travel } from '../motion/grind';
-import { FLIP_T, ROLL_IN } from '../motion/trick';
+import { ROLL_IN, flightTime } from '../motion/trick';
 import { stairSpeed } from '../sets/elToro/stairs';
 import type { StagePlan } from '../stage/stage';
 
@@ -103,7 +103,7 @@ export function soundtrackFor(stage: StagePlan): Soundtrack {
     };
   }
   const pop = stairs?.pop ?? ROLL_IN;
-  const down = stairs?.land ?? ROLL_IN + FLIP_T;
+  const down = stairs?.land ?? ROLL_IN + flightTime(stage.style);
   const weight = stairs ? STAIRS_LANDING : 1;
   return {
     cues: [

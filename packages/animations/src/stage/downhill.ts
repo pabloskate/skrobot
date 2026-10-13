@@ -5,12 +5,13 @@ import { wheelRoll } from '../board/board';
 import { clearFeet } from '../board/footContact';
 import { rad, rotY, smoothstep, type V3 } from '../math';
 import { grindLane, handrailHeight, railTrack, type GrindPlan } from '../motion/grind';
-import { kneeBetween, solveGrindRig } from '../motion/grindRig';
+import { solveGrindRig } from '../motion/grindRig';
+import { carriedRig, kneeBetween, landingSpring, mapUpper, shiftRig } from '../motion/dynamics';
 import { offLineRig } from '../motion/fall/kickOut';
 import type { Quat } from '../motion/fall/rotation';
 import { solveRig } from '../motion/rig';
-import { LAND_OMEGA, LAND_ZETA, SQUAT_FLOOR, moveFrame, type Frame3, type LegRig, type Rig } from '../motion/skeleton';
-import { GROUND, X0, computeFrame } from '../motion/trick';
+import { LAND_OMEGA, SQUAT_FLOOR, moveFrame, type LegRig, type Rig } from '../motion/skeleton';
+import { GROUND, X0, boardRise, computeFrame, flightTime } from '../motion/trick';
 import { bankRig } from './bank';
 import {
   landingImpact,
@@ -23,7 +24,7 @@ import {
   stairLift,
   type StairPlan,
 } from '../sets/elToro/stairs';
-import { dustPuffs, expressionAt, grindExpression, groundLift, grownBy, hipsOf, onTheGround, posed, riderShadows, DUST_T, type Puff, type StageFrame } from './frameParts';
+import { dustPuffs, expressionAt, grindExpression, groundLift, grownBy, hipsOf, onTheGround, posed, riderShadows, DUST_T, SHADOW_HIPS, type Puff, type StageFrame } from './frameParts';
 import type { StagePlan } from './stage';
 
 /**
@@ -43,28 +44,10 @@ import type { StagePlan } from './stage';
  * normals, attached geometry and shadows all see the same world-space rig.
  */
 function reverseHeading(rig: Rig): Rig {
-  const point = (p: V3): V3 => ({ x: 2 * X0 - p.x, y: p.y, z: -p.z });
-  const direction = (d: V3): V3 => ({ x: -d.x, y: d.y, z: -d.z });
-  const frame = (f: Frame3): Frame3 => ({
-    origin: point(f.origin),
-    fwd: direction(f.fwd),
-    up: direction(f.up),
-    side: direction(f.side),
-    at: (forward, up, side) => point(f.at(forward, up, side)),
-  });
+  const turned = carriedRig(rig, (p) => ({ x: 2 * X0 - p.x, y: p.y, z: -p.z }), (d) => ({ x: -d.x, y: d.y, z: -d.z }));
   return {
-    ...rig,
-    board: {
-      ...rig.board,
-      center: point(rig.board.center),
-      point: (local) => point(rig.board.point(local)),
-      dir: (local) => direction(rig.board.dir(local)),
-      yawDeg: rig.board.yawDeg + 180,
-    },
-    legs: rig.legs.map((l) => ({ ...l, hip: point(l.hip), knee: point(l.knee), ankle: point(l.ankle), shoe: frame(l.shoe) })) as Rig['legs'],
-    arms: rig.arms.map((a) => ({ ...a, shoulder: point(a.shoulder), elbow: point(a.elbow), hand: point(a.hand) })) as Rig['arms'],
-    torso: frame(rig.torso),
-    head: frame(rig.head),
+    ...turned,
+    board: { ...turned.board, yawDeg: rig.board.yawDeg + 180 },
     toeDir: rig.toeDir === 1 ? -1 : 1,
     flickZ: -rig.flickZ,
     bodyYawDeg: rig.bodyYawDeg + 180,
@@ -72,40 +55,23 @@ function reverseHeading(rig: Rig): Rig {
   };
 }
 
-/** The whole rider and board, moved by a world-space offset. */
-export function shiftRig(rig: Rig, by: V3): Rig {
-  const move = (p: V3): V3 => ({ x: p.x + by.x, y: p.y + by.y, z: p.z + by.z });
-  return {
-    ...rig,
-    board: { ...rig.board, center: move(rig.board.center), point: (local) => move(rig.board.point(local)) },
-    legs: rig.legs.map((l) => ({ ...l, hip: move(l.hip), knee: move(l.knee), ankle: move(l.ankle), shoe: moveFrame(l.shoe, by) })) as [LegRig, LegRig],
-    arms: rig.arms.map((a) => ({ ...a, shoulder: move(a.shoulder), elbow: move(a.elbow), hand: move(a.hand) })) as Rig['arms'],
-    torso: moveFrame(rig.torso, by),
-    head: moveFrame(rig.head, by),
-  };
-}
+/** The whole rider and board moved by a world-space offset (dynamics.ts), as the kick-out's frames ask for it here. */
+export { shiftRig };
 
 /**
  * The whole rider and board turned `yaw` degrees (off +x toward +z) about
  * the upright through (X0, 0): a ledge's frame laid onto the set's.
  */
-function turnRig(rig: Rig, yaw: number): Rig {
+function turnOnto(rig: Rig, yaw: number): Rig {
   const direction = (d: V3): V3 => rotY(d, -yaw);
   const point = (p: V3): V3 => {
     const d = direction({ x: p.x - X0, y: p.y, z: p.z });
     return { x: d.x + X0, y: d.y, z: d.z };
   };
-  const frame = (f: Frame3): Frame3 => ({
-    origin: point(f.origin), fwd: direction(f.fwd), up: direction(f.up), side: direction(f.side),
-    at: (forward, up, side) => point(f.at(forward, up, side)),
-  });
+  const turned = carriedRig(rig, point, direction);
   return {
-    ...rig,
-    board: { ...rig.board, center: point(rig.board.center), point: (local) => point(rig.board.point(local)), dir: (local) => direction(rig.board.dir(local)), yawDeg: rig.board.yawDeg - yaw },
-    legs: rig.legs.map((l) => ({ ...l, hip: point(l.hip), knee: point(l.knee), ankle: point(l.ankle), shoe: frame(l.shoe) })) as Rig['legs'],
-    arms: rig.arms.map((a) => ({ ...a, shoulder: point(a.shoulder), elbow: point(a.elbow), hand: point(a.hand) })) as Rig['arms'],
-    torso: frame(rig.torso),
-    head: frame(rig.head),
+    ...turned,
+    board: { ...turned.board, yawDeg: rig.board.yawDeg - yaw },
     bodyYawDeg: rig.bodyYawDeg - yaw,
     headYawDeg: rig.headYawDeg - yaw,
   };
@@ -138,28 +104,25 @@ function landingLoad(jolt: number, u: number): number {
  * slowed by how hard the drop lands, never past the deepest squat the legs
  * allow.
  */
-function absorbDrop(rig: Rig, stairs: StairPlan, t: number, popHeight: number): Rig {
+function absorbDrop(rig: Rig, stairs: StairPlan, t: number, rise: number): Rig {
   const u = t - stairs.land;
   if (u <= 0) return rig;
   const omega = LAND_OMEGA * (1 - HOLD_DOWN * landingJolt(stairs));
-  const wd = omega * Math.sqrt(1 - LAND_ZETA * LAND_ZETA);
-  const spring = (impact: number, since: number) => since <= 0 ? 0 : (impact / wd) * Math.exp(-LAND_ZETA * omega * since) * Math.sin(wd * since);
+  // Each hit kicks the hips down at its speed from where they ride, and the slowed landing spring brings them back.
+  const spring = (impact: number, since: number) => since <= 0 ? 0 : landingSpring(0, impact, 0, since, omega);
   // Rolling off a raised edge on the way down is a little landing of its own.
-  const sink = stairs.ledges.reduce((sum, ledge) => sum + spring(ledge.impact, t - ledge.t), spring(landingImpact(stairs, popHeight), u));
+  const sink = stairs.ledges.reduce((sum, ledge) => sum + spring(ledge.impact, t - ledge.t), spring(landingImpact(stairs, rise), u));
   const room = Math.max(0, rig.hipOverDeck - SQUAT_FLOOR - 1);
   const e = sink > 0 && room > 0 ? room * Math.tanh(sink / room) : 0;
   if (e < 1e-3) return rig;
   const by = { x: 0, y: e, z: 0 };
   const down = (p: V3): V3 => ({ x: p.x, y: p.y + e, z: p.z });
   return {
-    ...rig,
+    ...mapUpper(rig, down, (f) => moveFrame(f, by)),
     legs: rig.legs.map((l) => {
       const hip = down(l.hip);
       return { ...l, hip, knee: kneeBetween(hip, l.ankle, down(l.knee)) };
     }) as [LegRig, LegRig],
-    arms: rig.arms.map((a) => ({ ...a, shoulder: down(a.shoulder), elbow: down(a.elbow), hand: down(a.hand) })) as Rig['arms'],
-    torso: moveFrame(rig.torso, by),
-    head: moveFrame(rig.head, by),
     hipOverDeck: rig.hipOverDeck - e,
   };
 }
@@ -281,7 +244,8 @@ export function stairRig(
   // carry (a low pop off the lip rises slower than its flatground arc, and
   // would otherwise sink the tail into the top landing).
   const ground = (x: number, z: number) => terrainSurface(stairs.terrain, x, z);
-  const drop = stairLift(stairs, clock, style.popHeight, u);
+  const rise = boardRise(spec, style);
+  const drop = stairLift(stairs, clock, rise, u);
   // The rider is solved facing +x and turned onto the route's heading after
   // (bankRig): look for each point's step where the turn will put it.
   const cos = Math.cos(rad(route.yaw)), sin = Math.sin(rad(route.yaw));
@@ -295,7 +259,7 @@ export function stairRig(
   // Down a roll-in the rider is pitched onto the ramp after (bankRig): on the board, it's flat ground.
   const rolling = stairs.dropIn != null && clock <= stairs.pop;
   const solved = clearFeet(onTheGround(offLine ? offLine(downhill) : downhill, stairs.terrain.slope || rolling ? undefined : stepUnder));
-  const absorbed = absorbDrop(solved, stairs, clock, style.popHeight);
+  const absorbed = absorbDrop(solved, stairs, clock, rise);
   const banked = bankRig(posed(absorbed, stage.skater, headPose), stairs, clock, u, route.yaw);
   const carried = shiftRig(banked, { x: 0, y: -drop, z: 0 });
   // Feet already cleared the grip before the rigid bank transform. Resolve
@@ -366,11 +330,11 @@ export function stairFrame(stage: StagePlan, stairs: StairPlan, t: number, rate:
     span: null,
     stairs: { dir, shadowY, across: route.z, ...(stage.obstacle ? { obstacle: stage.obstacle } : null) },
     wheels: { angle, sweep: angle - roll(track(t - rate / 60).travel) },
-    expression: headPose?.expression ?? expressionAt(f.t, landed),
+    expression: headPose?.expression ?? expressionAt(f.t, landed, flightTime(stage.style)),
     dust,
     shadows: riderShadows(rig, {
       board: Math.max(0, stairDeckHeight(stairs, clock) - shadowY),
-      body: Math.max(0, GROUND - f.body.y + drop - 60 - shadowY),
+      body: Math.max(0, GROUND - f.body.y + drop - SHADOW_HIPS - shadowY),
     }, ASPHALT - shadowY),
   };
 }
@@ -435,7 +399,7 @@ export function railFrame(stage: StagePlan, plan: GrindPlan, t: number, rate: nu
     dust: placed?.dust ?? dust,
     shadows: riderShadows(shown, {
       board: Math.max(0, GROUND - shown.board.center.y - shadowY),
-      body: Math.max(0, GROUND - shownHips.y - 60 - shadowY),
+      body: Math.max(0, GROUND - shownHips.y - SHADOW_HIPS - shadowY),
     }, ASPHALT - shadowY),
   };
 }
@@ -475,7 +439,7 @@ function onLedge(
     return { x: d.x + X0, y: d.y, z: d.z };
   };
   return {
-    rig: turnRig(shiftRig(rig, { x: 0, y: 0, z: -across }), yaw),
+    rig: turnOnto(shiftRig(rig, { x: 0, y: 0, z: -across }), yaw),
     dust: dust.map((puff) => ({ ...puff, center: place(puff.center) })),
     x: (placement.x ?? 0) + u * c - across * s,
     z: placement.z + u * s + across * c,

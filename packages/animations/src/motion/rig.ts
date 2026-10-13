@@ -6,6 +6,7 @@ import {
   SHOE_TOESIDE,
   ANKLE_LIFT,
   TOE_REACH,
+  FOOT_OVER_SOLE,
   SHOE_HALF_HEIGHT,
   SHOE_HALF_LENGTH,
   DECK_HALF_WIDTH,
@@ -52,9 +53,11 @@ import type { SkateStyle } from '../types';
 import { CROUCH_HOLD, extendTime, extending, flightLegs, flightSpeeds, rideAway } from './dynamics';
 import { flickExtension, orientTrickRotation, tailFirst, type RiderMechanics } from './stance';
 import {
-  FLIP_T,
   FOOT_Y,
-  JUMP,
+  boardGlued,
+  boardRise,
+  flightTime,
+  popTuck,
   LIFT,
   ROLL_IN,
   boardYawDeg,
@@ -102,15 +105,10 @@ import { kickY } from '../board/deck';
 /** Fall rotation pivots near the feet, like the 2D body transform. */
 const BODY_PIVOT_Y = FOOT_Y - 2;
 /** Past the far rail, per unit of flick strength, the flicked shoe ends up. */
-const FLICK_STYLE_REACH = 4;
+export const FLICK_STYLE_REACH = 4;
 /** A kickflip drags the toe diagonally off the corner, so the flicking shoe
  *  turns toward its end of the board as it goes out. */
 const FLICK_TOE_TURN = 34;
-/** How far the arc sinks below a straight line at mid-flight: the knee tuck.
- *  Glued tricks pull the board all the way up; flips and shuvs tuck less,
- *  and the arc still gives way wherever the feet ride higher (hipState). */
-const TUCK_GLUED = 17;
-const TUCK_FREE = 12;
 /** Shortest hip-to-ankle distance the tuck may reach. */
 const LEG_CLEAR = 29;
 /** Flight fraction where the feet start settling onto their touchdown spots. */
@@ -213,15 +211,16 @@ interface FlightArc {
   squat: number;
 }
 
-const glued = (spec: Spec) => !spec.flips && !spec.roll && spec.yaw === spec.bodyYaw;
-
 function flightArc(spec: Spec): FlightArc {
   const complexity = spec.flips * 0.5 + (spec.yaw / 180) * 0.3 + (spec.roll ? 0.5 : 0);
   const load = (22 + complexity * 8) * (spec.stance === 'nollie' ? 1.4 : 1);
   return {
     pop: POP_HEIGHT,
     touchdown: TOUCHDOWN_HEIGHT,
-    tuck: glued(spec) ? TUCK_GLUED : TUCK_FREE,
+    // How far the arc sinks below a straight line at mid-flight: the trick's
+    // knee tuck (trick.ts popTuck). It still gives way wherever the feet ride
+    // higher (hipState).
+    tuck: popTuck(spec),
     squat: Math.max(SQUAT_FLOOR + 5, RIDE_HEIGHT - load * 0.9),
   };
 }
@@ -256,7 +255,8 @@ function hipState(f: Frame, spec: Spec, style: SkateStyle, clearance: number, ju
   // Hip height = deck height + hips over the deck. Both are parabolas in the
   // flight clock (the deck's is the physics' pop arc), so the hips fly a true
   // ballistic arc; these are its vertical speeds at takeoff and touchdown.
-  const { takeoff: takeoffSpeed, touchdown: touchdownSpeed } = flightSpeeds(4 * JUMP * style.popHeight, arc.pop, arc.touchdown, arc.tuck, FLIP_T);
+  const flight = flightTime(style);
+  const { takeoff: takeoffSpeed, touchdown: touchdownSpeed } = flightSpeeds(4 * boardRise(spec, style), arc.pop, arc.touchdown, arc.tuck, flight);
 
   if (tau < 0) {
     // Load, then explode: the extension is timed so the hips leave the
@@ -275,8 +275,8 @@ function hipState(f: Frame, spec: Spec, style: SkateStyle, clearance: number, ju
     return { ...extending(arc.squat, arc.pop, takeoffSpeed, extendT, (t - bottomT) / extendT), air: 0, sinceTouchdown: -1 };
   }
 
-  if (tau < FLIP_T) {
-    const s = tau / FLIP_T;
+  if (tau < flight) {
+    const s = tau / flight;
     return {
       overDeck: smoothMax(flightLegs(arc.pop, arc.touchdown, arc.tuck, s) + jumpUp, clearance, 6),
       load: 0,
@@ -287,7 +287,7 @@ function hipState(f: Frame, spec: Spec, style: SkateStyle, clearance: number, ju
 
   // Touchdown: a damped spring from the arriving height and speed back up to
   // the cruising stance.
-  const u = tau - FLIP_T;
+  const u = tau - flight;
   return { ...rideAway(t, u, arc.touchdown, touchdownSpeed), load: 0, sinceTouchdown: u };
 }
 
@@ -329,7 +329,7 @@ export function solveRig(
   // A fall comes down onto the board however it lies: the feet don't wait
   // for it, and the hips meet the ground where the fall physics has them.
   const down = outcome === 'landed' ? 1 : 1 - smoothstep((f.motion.flight - FALL_TUCK_FROM) / (1 - FALL_TUCK_FROM));
-  const [a, b] = tuckAt(track, f.t, TUCK_LEAD, TUCK_LAG);
+  const [a, b] = tuckAt(track, f.t);
   const tuck: Tuck = nose ? [a * down, b * down] : [b * down, a * down];
   // A foot the board picks up high takes the hips up with it: the rider
   // jumps higher rather than folding the leg flat. The body moves slower
@@ -363,13 +363,15 @@ const TUCK_TRACKS = new Map<string, TuckTrack>();
  * moment is posed again with the tuck it actually gets, and wherever the
  * shoe is still in the board, or the leg is, that foot lifts further. Extra
  * lift for a leg that never comes clear is dropped: it would only look
- * worse. A foot that isn't `free` is left where it is.
+ * worse. A foot that isn't `free` is left where it is, and one may stand
+ * `allowed[i][k]` into the board at times[k] (a sole resting on a kick).
  */
 export function measureTuck(
   times: number[],
   pose: (k: number, tuck: Tuck) => Rig,
   free: (leg: LegRig) => boolean = () => true,
   within?: TuckTrack['within'],
+  allowed?: [number[], number[]],
 ): TuckTrack {
   const track: TuckTrack = { times, need: [times.map(() => 0), times.map(() => 0)], within };
   const legExtra = times.map(() => [0, 0]);
@@ -380,12 +382,13 @@ export function measureTuck(
     const changed = times.map(() => false);
     times.forEach((t, k) => {
       if (!check[k]) return;
-      const tuck = tuckAt(track, t, TUCK_LEAD, TUCK_LAG);
+      const tuck = tuckAt(track, t);
       const rig = pose(k, tuck);
       rig.legs.forEach((leg, i) => {
         if (!free(leg)) return;
-        const left = soleClearance(rig.board, leg.shoe, leg.shoe.up);
-        legStuck[k][i] = left <= TUCK_SLACK && legInBoard(rig.board, leg);
+        const rests = allowed?.[i][k] ?? 0;
+        const left = soleClearance(rig.board, leg.shoe, leg.shoe.up) - rests;
+        legStuck[k][i] = left <= TUCK_SLACK && !rests && legInBoard(rig.board, leg);
         const more = left > TUCK_SLACK ? left + TUCK_MARGIN : legStuck[k][i] && legExtra[k][i] < LEG_LIFT ? LEG_STEP : 0;
         if (!more) return;
         if (left <= TUCK_SLACK) legExtra[k][i] += more;
@@ -405,19 +408,18 @@ export function measureTuck(
  * board is posed around it (wrapBoard), so it clears it by construction.
  */
 function tuckTrack(spec: Spec, mechanics: RiderMechanics, style: SkateStyle, outcome: Outcome): TuckTrack {
-  // Regular and goofy are mirror images, a slam or bail flies the same
-  // flight as a landing, and the pop's height lifts board and rider alike:
-  // one track serves them all, kept by foot role (nose, tail) rather than
-  // by anatomical side.
+  // Regular and goofy are mirror images, and a slam or bail flies the same
+  // flight as a landing: one track serves them all, kept by foot role (nose,
+  // tail) rather than by anatomical side.
   const roles = { pop: mechanics.popFoot === mechanics.noseFoot, flick: mechanics.flickFoot === mechanics.noseFoot };
-  const key = JSON.stringify([spec, roles, style.rotationSpeed, style.flickStrength, outcome === 'shank']);
+  const key = JSON.stringify([spec, roles, style.popHeight, style.rotationSpeed, style.flickStrength, outcome === 'shank']);
   const known = TUCK_TRACKS.get(key);
   if (known) return known;
   const landed = outcome === 'landed';
   const times: number[] = [];
   const frames: Frame[] = [];
   for (let k = 0; k <= TUCK_SAMPLES; k++) {
-    const t = ROLL_IN + (FLIP_T * k) / TUCK_SAMPLES;
+    const t = ROLL_IN + (flightTime(style) * k) / TUCK_SAMPLES;
     times.push(t);
     frames.push(computeFrame(t, spec, landed, landed ? 'slam' : outcome, 0.65, style));
   }
@@ -435,7 +437,7 @@ function tuckTrack(spec: Spec, mechanics: RiderMechanics, style: SkateStyle, out
 
 /** How far the board lifts each foot (left, right) at clock time `t`. */
 export function boardTuck(spec: Spec, mechanics: RiderMechanics, style: SkateStyle, outcome: Outcome, t: number): Tuck {
-  const [nose, tail] = tuckAt(tuckTrack(spec, mechanics, style, outcome), t, TUCK_LEAD, TUCK_LAG);
+  const [nose, tail] = tuckAt(tuckTrack(spec, mechanics, style, outcome), t);
   return mechanics.noseFoot === 'left' ? [nose, tail] : [tail, nose];
 }
 
@@ -553,7 +555,8 @@ function poseRig(
   const flight = f.motion.flight;
   const airborne = flight >= 0 && flight < 1;
   const boardPitch = popPitch(f, spec);
-  const pitchDeg = boardPitch + (spec.forwardFlip ? Math.sin(spinP * Math.PI) * 42 : 0);
+  // A forward flip's nose dips through the middle of the flip, once the pop's own pitch has let go.
+  const pitchDeg = boardPitch + (spec.forwardFlip ? Math.sin(spinP * Math.PI) ** 2 * 42 : 0);
   const yawDeg = oriented.yawDeg;
   // The board's own shuv: all of its turn, but for a counter shuv's.
   const shuvDeg = spin.shuvDeg === undefined
@@ -607,7 +610,7 @@ function poseRig(
   // Ollies and late shuvits: the physics carries the feet with the deck,
   // turned by its pitch about a point GLUED_PIVOT over the board's middle.
   // Set them flat for the easing below, then turn them back.
-  const carried = (glued(spec) || (spec.late && !spec.flips)) && airborne;
+  const carried = (boardGlued(spec) || (spec.late && !spec.flips)) && airborne;
   const glue: Pt = { x: deckMid.x, y: deckMid.y - GLUED_PIVOT };
   if (carried) {
     footR = turnPt(footR, glue, -f.board.rot);
@@ -629,7 +632,7 @@ function poseRig(
   }
   const catchK = airborne ? smoothstep((flight - CATCH_START) / (1 - CATCH_START)) : 0;
   if (catchK > 0) {
-    const touch = computeFrame(ROLL_IN + FLIP_T + 1e-4, spec, landed, landed ? 'slam' : outcome, 0.65, skateStyle);
+    const touch = computeFrame(ROLL_IN + flightTime(skateStyle) + 1e-4, spec, landed, landed ? 'slam' : outcome, 0.65, skateStyle);
     footR = toward(footR, touch, touch.footR, catchK);
     footL = toward(footL, touch, touch.footL, catchK);
   }
@@ -689,7 +692,7 @@ function poseRig(
     // The ankle sits over the heel end, so the shoe reaches forward from it.
     const shoeCenter = add3(ankle, rotX(sub3({
       x: foot.x + toeAt(rake).x * TOE_REACH,
-      y: foot.y + 2 - SHOE_HALF_HEIGHT,
+      y: foot.y + FOOT_OVER_SOLE - SHOE_HALF_HEIGHT,
       z: laneZ + toeAt(rake).z * TOE_REACH,
     }, ankle), dip));
     const placed = frameOf(fromBoard(shoeCenter), (d) => sub3(

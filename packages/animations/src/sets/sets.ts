@@ -2,6 +2,7 @@ import type { TripodId } from '../camera/camera';
 import { approachFar, type Handrail } from '../motion/grind';
 import { grindSpecFor, type GrindSpec } from '../motion/grindDefinitions';
 import { resolveRiderMechanics, type RiderMechanics } from '../motion/stance';
+import { flatTimeline, type AttemptTimeline } from '../motion/trick';
 import type { RiderStance, SkateStyle, Trick } from '../types';
 import { CENTER_Z, FAR_RAIL_Z, HILL_RAIL_Z } from './elToro/elToroLayout';
 import { EL_TORO_RAIL, EL_TORO_TERRAIN, SET_FOOT, stairTimeline, type DropTerrain } from './elToro/stairs';
@@ -206,10 +207,10 @@ export function setTerrain(set: StageSet, obstacle: Obstacle = 'stairs'): DropTe
   return info.obstacles?.find((o) => o.id === obstacle)?.terrain ?? info.terrain;
 }
 
-/** Timings derived from the very same geometry used by the stage and renderer. */
-export function setTimeline(set: StageSet, style: SkateStyle | undefined, landed = true, obstacle: Obstacle = 'stairs') {
+/** A trick's moments at a set, from the very same geometry the stage and renderer use: down its drop, or on flat ground. */
+export function setTimeline(set: StageSet, style: SkateStyle | undefined, landed = true, obstacle: Obstacle = 'stairs'): AttemptTimeline {
   const terrain = setTerrain(set, obstacle);
-  return terrain ? stairTimeline(style, landed, terrain) : null;
+  return terrain ? stairTimeline(style, landed, terrain) : flatTimeline(style, landed);
 }
 
 /**

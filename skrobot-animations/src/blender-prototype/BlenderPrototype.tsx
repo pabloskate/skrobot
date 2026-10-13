@@ -10,12 +10,9 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import {
   FALL_VARIANT_OPTIONS,
-  FLIP_T,
-  FALL_T,
   HOLD,
-  LAND_T,
-  ROLL_IN,
   computeFrame,
+  flatTimeline,
   specFor,
   type FallVariant,
   type RiderStance,
@@ -433,8 +430,8 @@ export default function BlenderPrototype() {
     shankProgress: number;
   } | null>(null);
   const animationTimeRef = useRef(0);
-  const endTimeRef = useRef(ROLL_IN + FLIP_T + LAND_T);
-  const clipDurationRef = useRef(ROLL_IN + FLIP_T + LAND_T + HOLD);
+  const endTimeRef = useRef(flatTimeline(undefined).end);
+  const clipDurationRef = useRef(flatTimeline(undefined).end + HOLD);
   const selectionRef = useRef({
     spec: specFor({ id: 'kickflip-regular', name: 'Kickflip', base: 'Kickflip', stance: 'regular' as Stance }),
     landed: true,
@@ -467,7 +464,8 @@ export default function BlenderPrototype() {
     () => (currentTrick ? specFor(currentTrick) : specFor({ id: 'ollie', name: 'Ollie', base: 'Ollie', stance: 'regular' })),
     [currentTrick],
   );
-  const endTime = ROLL_IN + FLIP_T + (landed ? LAND_T : FALL_T);
+  // Posed with the neutral style, so the neutral pop's timeline.
+  const endTime = flatTimeline(undefined, landed).end;
   const clipDuration = endTime + HOLD;
 
   useEffect(() => {

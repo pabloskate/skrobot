@@ -8,11 +8,12 @@ import type { RiderStance, SkateStyle, Stance } from '../types';
 import { HANGER_BOTTOM, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z } from '../board/board';
 import { deckBottomY } from '../board/deck';
 import { DEFAULT_SCENE_CAMERA, fallSink, makeCamera } from '../camera/camera';
-import { GRAVITY, barSpan, grindCameraLift, grindCameraTrack, planGrind, type GrindFrame, type GrindPlan, type Handrail } from './grind';
+import { barSpan, grindCameraLift, grindCameraTrack, planGrind, type GrindFrame, type GrindPlan, type Handrail } from './grind';
 import { BAR_HALF, BAR_TOP_Y, BAR_Z, GRIND_BASES, exitEndsFor, grindSpecFor, joinGrindBase, joinGrindExit, type GrindSide, type PopEnd } from './grindDefinitions';
 import { solveGrindRig, type GrindRig } from './grindRig';
 import { add3, dot3, scale3, sub3, type V3 } from '../math';
 import { DECK_HALF_WIDTH, type Rig } from './skeleton';
+import { GRAVITY } from '../units';
 
 /**
  * Scaffolding the grind suites (grind*.test.ts) share: the combos they sweep,
