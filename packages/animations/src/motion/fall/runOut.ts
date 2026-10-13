@@ -1,6 +1,9 @@
-import { add3, dot3, norm3, scale3, sub3, type V3 } from '../../math';
-import { ANKLE_IN_SHOE, type BodyDims } from './body';
-import { SHOE_HALF_LENGTH } from '../skeleton';
+import { add3, dot3, scale3, sub3, type V3 } from '../../math';
+import { ANKLE_HEIGHT, ANKLE_IN_SHOE, type BodyDims } from './body';
+import {
+  REACH, STEP_WIDTH, TOE_OUT, besideStop, clearOfEdges, footfallAt, heelToToe, level, rightOf, soleCorners, turnLevel, within,
+  type Footfall,
+} from './footing';
 
 /**
  * Running it out: a rider down off the board on their own feet at the
@@ -33,8 +36,6 @@ const RUN_HEIGHT = 0.85;
 const STAND_HEIGHT = 0.965;
 /** The deepest the hips go, as a share of the leg. */
 const SQUAT = 0.46;
-/** Furthest the legs reach to a planted foot: the knee never locks. */
-export const REACH = 0.965;
 /** The legs' spring up and down standing: natural frequency (per √(gravity / leg)) and damping. */
 const SPRING = 2.3;
 const DAMPING = 0.72;
@@ -61,16 +62,6 @@ const STRIDE_REACH = 0.85;
 const STEP_AHEAD = { min: 0.08, max: 0.65 } as const;
 /** A landing's knees bend no deeper than this (share of the leg) above the squat: the fall is taken over that much. */
 const ABSORB_MARGIN = 0.1;
-/** Feet land this far either side of the hips' line (in hip widths). */
-const STEP_WIDTH = 1.25;
-/** Toes turn out from the way the hips face (degrees). */
-const TOE_OUT = 8;
-/**
- * How far (world units, a robot's) the ground under a shoe may bend off one even slope, heel to toe or side to side, before
- * it's an edge (a ledge's, a stair's nose) the foot comes down clear of; and the sole's half width, for it.
- */
-const EDGE_BEND = 2;
-const SOLE_HALF_WIDTH = 5;
 /** The legs hold the hips this far (in legs) short of their reach: the knees stay soft. */
 const SOFT_KNEES = 0.02;
 /**
@@ -85,18 +76,6 @@ const CLOSE_SWING = 0.6;
 const LAND_EASE = 0.5;
 /** Below about this speed (in √(gravity · leg)) the way the steps go eases from the body's to the run's: still, it has none. */
 const COURSE_EASE = 0.1;
-
-export interface Footfall {
-  foot: 0 | 1;
-  on: number;
-  /** When it lifts again (Infinity: it stays). */
-  off: number;
-  /** The shoe's middle, flat on the ground, and the way its toe points (level). */
-  at: V3;
-  heading: V3;
-  /** The last braking step, and the one that comes alongside it. */
-  kind: 'step' | 'capture' | 'close';
-}
 
 export interface RunOutSample {
   hips: V3;
@@ -146,45 +125,22 @@ interface State {
   v: V3;
 }
 
-const UP: V3 = { x: 0, y: -1, z: 0 };
-const level = (v: V3): V3 => norm3({ x: v.x, y: 0, z: v.z });
-
 export function runOut(setup: RunOutSetup): RunOut {
   const { body, gravity: g, ground, until } = setup;
   const leg = body.thigh + body.shin;
-  const ankleHeight = ANKLE_IN_SHOE.u + 4;
   const pendulum = Math.sqrt(leg / g);
   const omegaV = SPRING / pendulum;
   const dt = 1 / HZ;
   const footfalls: Footfall[] = [];
   const travel = level(setup.velocity);
-  const standHeight = ankleHeight + STAND_HEIGHT * leg;
-  const runHeight = ankleHeight + RUN_HEIGHT * leg;
-  const lowest = ankleHeight + SQUAT * leg;
+  const standHeight = ANKLE_HEIGHT + STAND_HEIGHT * leg;
+  const runHeight = ANKLE_HEIGHT + RUN_HEIGHT * leg;
+  const lowest = ANKLE_HEIGHT + SQUAT * leg;
   const reach = REACH * leg;
   const shove = setup.shove ?? (() => ({ x: 0, y: 0, z: 0 }));
   let stopped = Infinity;
 
   const down = (t: number) => footfalls.filter((f) => f.on <= t && t < f.off);
-  // A foot doesn't come down across an edge: where the ground under its shoe bends off one even slope, it goes on past the
-  // edge (or back short of it, where that's nearer).
-  const shoeHalf = SHOE_HALF_LENGTH * body.scale;
-  const astride = (ankle: V3, heading: V3) => {
-    const mid = add3(ankle, scale3(heading, -ANKLE_IN_SHOE.f));
-    const at = (way: V3, d: number) => ground(mid.x + way.x * d, mid.z + way.z * d);
-    const bend = (way: V3, d: number) => Math.abs(at(way, d) + at(way, -d) - 2 * at(way, 0));
-    return Math.max(bend(heading, shoeHalf), bend(rightOf(heading), SOLE_HALF_WIDTH * body.scale)) > EDGE_BEND * body.scale;
-  };
-  const clearOfEdges = (ankle: V3, heading: V3, way: V3): V3 => {
-    if (!astride(ankle, heading)) return ankle;
-    for (let d = 2 * body.scale; d <= 2 * shoeHalf; d += 2 * body.scale) {
-      for (const sign of [1, -1]) {
-        const moved = add3(ankle, scale3(way, sign * d));
-        if (!astride(moved, heading)) return moved;
-      }
-    }
-    return ankle;
-  };
   /** Where the leg holds a planted foot, its reach measured to: over the ankle, level with the shoe's middle. */
   const heldAt = (f: Footfall): V3 => add3(f.at, scale3(f.heading, ANKLE_IN_SHOE.f));
   /** Recording the run: where a landing foot pulled the hips down to its reach, and how far. */
@@ -290,8 +246,7 @@ export function runOut(setup: RunOutSetup): RunOut {
         const f = feet[0];
         if (f.kind === 'step') {
           // Braking, the weight's on the heel while the foot's ahead, and rolls toward the ball as the body comes over it.
-          const over = dot3(sub3(s.p, f.at), f.heading);
-          zmp = add3(f.at, scale3(f.heading, Math.max(SOLE.heel * 0.9, Math.min(SOLE.toe * 0.6, over))));
+          zmp = heelToToe(f, s.p);
         } else {
           zmp = balance(f.at, [f]);
         }
@@ -310,7 +265,7 @@ export function runOut(setup: RunOutSetup): RunOut {
       }
       const off = sub3(s.p, zmp);
       // Along the leg from the soles: on a slope or a stair the foot is higher or lower than the ground under the hips.
-      const sole = zmp.y + ankleHeight - ANKLE_IN_SHOE.u;
+      const sole = zmp.y + ANKLE_HEIGHT - ANKLE_IN_SHOE.u;
       const lever = push / Math.max(1, sole - s.p.y);
       a = { x: off.x * lever, y: -ah, z: off.z * lever };
     }
@@ -366,14 +321,14 @@ export function runOut(setup: RunOutSetup): RunOut {
     const heading = turnLevel(facing, side * TOE_OUT);
     // The hips as the step's taken: the leg down bends them to their running height over the ground it stands on, if they're higher.
     const support = footfalls.filter((f) => f.foot !== foot && f.on <= on).pop();
-    const standOn = support ? support.at.y + ankleHeight - ANKLE_IN_SHOE.u : ground(s.p.x, s.p.z);
+    const standOn = support ? support.at.y + ANKLE_HEIGHT - ANKLE_IN_SHOE.u : ground(s.p.x, s.p.z);
     // Stopping, they bend as low as the step out to the capture point needs (no deeper than a squat).
     const capture = stop ? want + (STEP_WIDTH - 1) * body.hipHalf : 0;
-    const lunge = stop ? Math.min(standOn - lowest, standOn - (ankleHeight - ANKLE_IN_SHOE.u) - Math.sqrt(Math.max(0, (reach * 0.97) ** 2 - capture * capture))) : -Infinity;
+    const lunge = stop ? Math.min(standOn - lowest, standOn - (ANKLE_HEIGHT - ANKLE_IN_SHOE.u) - Math.sqrt(Math.max(0, (reach * 0.97) ** 2 - capture * capture))) : -Infinity;
     const taking: State = { ...s, p: { ...s.p, y: Math.max(s.p.y, standOn - runHeight, lunge) } };
-    // The leg's reach down to the ground where it comes down (the planted ankle sits ankleHeight up), found from under the
+    // The leg's reach down to the ground where it comes down (the planted ankle sits ANKLE_HEIGHT up), found from under the
     // hips: whether there's ground in reach at all, as the step's taken; and how far ahead it goes, from where they are.
-    const dropFrom = (at: V3, y: number) => Math.max(lowest - ankleHeight, ground(at.x, at.z) - ankleHeight - y);
+    const dropFrom = (at: V3, y: number) => Math.max(lowest - ANKLE_HEIGHT, ground(at.x, at.z) - ANKLE_HEIGHT - y);
     // (The stride's reach is the legs' hold on a planted foot: to its shoe's middle, under the ankle.)
     const strideFrom = (at: V3) => dropFrom(at, taking.p.y) + ANKLE_IN_SHOE.u;
     let drop = dropFrom(s.p, taking.p.y);
@@ -394,12 +349,10 @@ export function runOut(setup: RunOutSetup): RunOut {
       drop = dropFrom(flat, taking.p.y);
       stride = strideFrom(flat);
     }
-    flat = clearOfEdges(flat, heading, way);
+    flat = clearOfEdges(ground, body.scale, flat, heading, way);
     drop = dropFrom(flat, taking.p.y);
     if (drop > reach * 0.97) return null;
-    const ankleAt = { ...flat, y: ground(flat.x, flat.z) - ankleHeight };
-    const at = add3(add3(ankleAt, scale3(heading, -ANKLE_IN_SHOE.f)), scale3(UP, -ANKLE_IN_SHOE.u));
-    const fall: Footfall = { foot, on, off: Infinity, at, heading, kind: stop && want <= most ? 'capture' : 'step' };
+    const fall = footfallAt(ground, foot, flat, heading, on, stop && want <= most ? 'capture' : 'step');
     return heightOf(taking) > ceiling(taking, fall) ? null : fall;
   };
 
@@ -417,10 +370,8 @@ export function runOut(setup: RunOutSetup): RunOut {
     const flat = add3(at0.p, scale3(way, ahead));
     // Out to its side of the body; how far ahead is the body's, whatever way the hips face.
     const hipSide = scale3(rightOf(setup.facing(on)), (foot === 0 ? -1 : 1) * body.hipHalf);
-    const spot = clearOfEdges(add3(flat, scale3(rightOf(way), dot3(hipSide, rightOf(way)))), heading, way);
-    const ankleAt = { ...spot, y: ground(spot.x, spot.z) - ankleHeight };
-    const at = add3(add3(ankleAt, scale3(heading, -ANKLE_IN_SHOE.f)), scale3(UP, -ANKLE_IN_SHOE.u));
-    return { fall: { foot, on, off: Infinity, at, heading, kind: 'step' }, at0 };
+    const spot = clearOfEdges(ground, body.scale, add3(flat, scale3(rightOf(way), dot3(hipSide, rightOf(way)))), heading, way);
+    return { fall: footfallAt(ground, foot, spot, heading, on, 'step'), at0 };
   };
   /** Whether a foot coming down reaches the ground then: the hips are no higher over it than the leg reaches. */
   const reaches = (l: { fall: Footfall; at0: State }) => heightOf(l.at0) <= ceiling(l.at0, l.fall);
@@ -429,7 +380,7 @@ export function runOut(setup: RunOutSetup): RunOut {
   // The first foot comes down as soon as it reaches the ground, a little ahead of the hips.
   const { first } = setup;
   const firstFall = (on: number) => landing(s, first.foot, on, first.heading, first.brake);
-  let firstOn = landingTime(setup, s, ground, g, leg, ankleHeight);
+  let firstOn = landingTime(setup, s, ground, g, leg);
   let down1 = firstFall(firstOn);
   // Reaching ahead, the foot is further off the hips than straight under them: it meets the ground once they've come down
   // that much further (taken any sooner, the leg would have to stretch past its length to stand on it).
@@ -495,14 +446,10 @@ export function runOut(setup: RunOutSetup): RunOut {
         }
         stance.off = Math.max(stance.off, lifts);
       }
-      const side = other === 0 ? -1 : 1;
-      const facing = setup.facing(closeOn);
       const then = simulate(simulate(planFrom, fall.on + DOUBLE_SUPPORT * pendulum), closeOn);
       const capture = add3(then.p, scale3(then.v, 1 / Math.sqrt(g / Math.max(lowest, heightOf(then)))));
-      const shift = Math.max(-0.3 * leg, Math.min(0.3 * leg, dot3(sub3(capture, fall.at), travel)));
-      const spot = add3(add3(fall.at, scale3(rightOf(facing), side * 2 * STEP_WIDTH * body.hipHalf)), scale3(travel, shift));
-      const heading = turnLevel(facing, side * TOE_OUT);
-      footfalls.push({ foot: other, on: closeOn, off: Infinity, at: spot, heading, kind: 'close' });
+      const { at, heading } = besideStop(fall.at, capture, other, setup.facing(closeOn), travel, body);
+      footfalls.push({ foot: other, on: closeOn, off: Infinity, at, heading, kind: 'close' });
       stopped = closeOn + DOUBLE_SUPPORT * pendulum;
       break;
     }
@@ -545,68 +492,9 @@ export function runOut(setup: RunOutSetup): RunOut {
   return { start: setup.start, dt: 2 * dt, samples, footfalls, stopped, still };
 }
 
-/** A planted shoe's sole, as its four corners on the ground (x, z): heel to toe, and its width. */
-export const SOLE = { heel: -7, toe: 8, half: 3.5 } as const;
-export function soleCorners(f: Footfall): V3[] {
-  const r = rightOf(f.heading);
-  const out: V3[] = [];
-  for (const along of [SOLE.heel, SOLE.toe]) for (const side of [-SOLE.half, SOLE.half]) out.push(add3(add3(f.at, scale3(f.heading, along)), scale3(r, side)));
-  return out;
-}
-
-/** The point nearest `p` (level) inside the convex hull of `pts`. */
-export function within(p: V3, pts: V3[]): V3 {
-  // Gift-wrap the hull in (x, z), then clamp to it.
-  const hull: V3[] = [];
-  let start = pts.reduce((a, b) => (b.x < a.x || (b.x === a.x && b.z < a.z) ? b : a));
-  let at = start;
-  for (let guard = 0; guard < pts.length + 1; guard++) {
-    hull.push(at);
-    let next = pts[0] === at ? pts[1] : pts[0];
-    for (const q of pts) {
-      const cross = (next.x - at.x) * (q.z - at.z) - (next.z - at.z) * (q.x - at.x);
-      if (q !== at && cross < 0) next = q;
-    }
-    at = next;
-    if (at === start) break;
-  }
-  start = hull[0];
-  // Inside if on the same side of every edge.
-  const n = hull.length;
-  let inside = true;
-  for (let i = 0; i < n; i++) {
-    const a = hull[i];
-    const b = hull[(i + 1) % n];
-    if ((b.x - a.x) * (p.z - a.z) - (b.z - a.z) * (p.x - a.x) < 0) inside = false;
-  }
-  if (inside) return p;
-  let best = start;
-  let bestD = Infinity;
-  for (let i = 0; i < n; i++) {
-    const a = hull[i];
-    const b = hull[(i + 1) % n];
-    const ab = { x: b.x - a.x, z: b.z - a.z };
-    const k = Math.max(0, Math.min(1, ((p.x - a.x) * ab.x + (p.z - a.z) * ab.z) / Math.max(1e-9, ab.x * ab.x + ab.z * ab.z)));
-    const q = { x: a.x + ab.x * k, y: p.y, z: a.z + ab.z * k };
-    const d = (q.x - p.x) ** 2 + (q.z - p.z) ** 2;
-    if (d < bestD) { bestD = d; best = q; }
-  }
-  return best;
-}
-
-/** The level way right of facing `fwd` (physics frames: side = up × fwd). */
-export const rightOf = (fwd: V3): V3 => norm3({ x: -fwd.z, y: 0, z: fwd.x });
-
-/** A level direction turned `deg` about up (toward its right for positive). */
-export function turnLevel(dir: V3, deg: number): V3 {
-  const r = rightOf(dir);
-  const a = (deg * Math.PI) / 180;
-  return norm3(add3(scale3(level(dir), Math.cos(a)), scale3(r, Math.sin(a))));
-}
-
 /** When the first foot, reaching down ahead of the falling hips, meets the ground: not before `earliest`. */
-function landingTime(setup: RunOutSetup, from: State, ground: (x: number, z: number) => number, g: number, leg: number, ankleHeight: number): number {
-  const height = ankleHeight + REACH * leg * 0.98;
+function landingTime(setup: RunOutSetup, from: State, ground: (x: number, z: number) => number, g: number, leg: number): number {
+  const height = ANKLE_HEIGHT + REACH * leg * 0.98;
   let { p, v } = from;
   let t = from.t;
   const dt = 1 / 1000;

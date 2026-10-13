@@ -1,4 +1,5 @@
 import { add3, cross3, dot3, norm3, scale3, sub3, type V3 } from '../../math';
+import { LEG_RADII } from '../../board/boardCollision';
 import { HUMAN_FOREARM, HUMAN_HEAD, HUMAN_SCALE, HUMAN_SHIN, HUMAN_THIGH, HUMAN_UPPER_ARM } from '../../riders/human/humanProportions';
 import { HUMAN_SHOULDER, HUMAN_SHOULDER_DROP } from '../../riders/human/humanRig';
 import { skaterInfo, type Skater } from '../../riders/skaters';
@@ -7,6 +8,7 @@ import {
   FOREARM,
   HIP_Z,
   SHIN,
+  SHOE_HALF_HEIGHT,
   SHOULDER,
   THIGH,
   TOE_REACH,
@@ -87,6 +89,20 @@ export const bodyDims = (skater: Skater): BodyDims => (skaterInfo(skater).person
 
 /** Shoe center → ankle, in the shoe's frame (rig.ts puts the ankle over the heel end, ANKLE_LIFT less the sole). */
 export const ANKLE_IN_SHOE = { f: -TOE_REACH, u: ANKLE_LIFT - 2 } as const;
+/** The ankle's height over the ground under a flat shoe: up from the shoe's middle, which is its half height off the sole. */
+export const ANKLE_HEIGHT = ANKLE_IN_SHOE.u + SHOE_HALF_HEIGHT;
+/** A planted sole, a robot's (world units): where the weight can be on it, heel to toe and either side of its middle. */
+export const SOLE = { heel: -7, toe: 8, half: 3.5 } as const;
+/** How far either side of its middle a sole lies on the ground, for the slope and the edges under it (world units, a robot's). */
+export const SOLE_HALF_WIDTH = 5;
+/** How far (world units) a sole may sit into a board's grip: soles rest on it, and are rounded. */
+export const SOLE_GRACE = 1.5;
+
+/**
+ * How thick (radii, world units, a robot's: robot3d.ts's widths halved) each part is, for keeping the board and the
+ * ground out of it: the legs' as the board's collisions have them, the arms', and the trunk's and head's.
+ */
+export const LIMB_RADII = { ...LEG_RADII, upperArm: 5, forearm: 4.4, hand: 5.8, trunk: 13, head: 15 } as const;
 
 /** A shoe: its center and its turn (fwd to the toe, up out of the sole). */
 export interface ShoePose {
@@ -198,7 +214,7 @@ export function poseOf(rig: Rig): BodyPose {
  * Share of the body's mass in each part (Dempster's, as Winter tabulates
  * them), and how far down each limb bone its own center sits.
  */
-const MASS = { head: 0.081, trunk: 0.497, upperArm: 0.028, foreHand: 0.022, thigh: 0.1, shank: 0.0465, foot: 0.0145 } as const;
+export const MASS = { head: 0.081, trunk: 0.497, upperArm: 0.028, foreHand: 0.022, thigh: 0.1, shank: 0.0465, foot: 0.0145 } as const;
 const LIMB_CENTER = { upperArm: 0.436, foreHand: 0.682, thigh: 0.433, shank: 0.433 } as const;
 
 /** The body's center of mass in a rig. */

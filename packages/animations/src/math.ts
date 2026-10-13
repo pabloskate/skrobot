@@ -38,6 +38,16 @@ export const norm3 = (v: V3): V3 => {
   return { x: v.x / m, y: v.y / m, z: v.z / m };
 };
 
+/** Bisection for where `ok` starts to hold over [lo, hi] (from there on up): `steps` halvings, and the bracket they leave. */
+export function bisect(lo: number, hi: number, steps: number, ok: (x: number) => boolean): { lo: number; hi: number } {
+  for (let i = 0; i < steps; i++) {
+    const mid = (lo + hi) / 2;
+    if (ok(mid)) hi = mid;
+    else lo = mid;
+  }
+  return { lo, hi };
+}
+
 // Same rotation conventions as the physics renderers: world y is DOWN.
 export const rotX = (p: V3, deg: number): V3 => {
   const c = Math.cos(rad(deg));

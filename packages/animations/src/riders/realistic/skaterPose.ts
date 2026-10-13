@@ -1,6 +1,6 @@
 import { Matrix4, Quaternion, Vector3 } from 'three';
 import { SHOE_HALF_HEIGHT, type Rig } from '../../motion/skeleton';
-import { MODEL_SCALE } from '../human/humanProportions';
+import { KNEE_FORWARD, MODEL_SCALE } from '../human/humanProportions';
 import { dirToThree, toThree } from '../../camera/view';
 import { smoothstep } from '../../math';
 import type { Expression } from '../look';
@@ -361,8 +361,6 @@ const PELVIS_SHARE = 0.62;
 const HIPS_BACK = 0.4;
 /** The most a leg straightens, as a share of its length (about 25° of knee bend). */
 const SOFT_KNEE = 0.975;
-/** How much the knee turns from the rig's toward the way the hips face (a tuck brings the knees up in front of the chest). */
-const KNEE_FORWARD = 0.75;
 /** How much a knee turns toward its own foot (negative: a touch in, over the board, as a skater's knees ride). */
 const KNEE_SPLAY = -0.12;
 /**

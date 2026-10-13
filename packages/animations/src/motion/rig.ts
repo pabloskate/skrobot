@@ -19,8 +19,6 @@ import {
   KNEE_AIM_FRONT,
   KNEE_AIM_BACK,
   HIP_CENTER,
-  LAND_OMEGA,
-  LAND_ZETA,
   CROUCH_START,
   PRE_WIND,
   LEAN_REST,
@@ -31,6 +29,9 @@ import {
   LEAN_IMPACT,
   HIP_BACK_IMPACT,
   LOOK_DOWN_IMPACT,
+  HEAD_OFF_NECK,
+  NECK_TOP,
+  TORSO_ORIGIN,
   type LegRig,
   type ArmRig,
   type Frame3,
@@ -38,8 +39,6 @@ import {
   frameOf,
   moveFrame,
   solveLeg,
-  softFloor,
-  hermite,
   cruiseBob,
   ARM_RIDE,
   ARM_LOAD,
@@ -50,6 +49,7 @@ import {
   armDirs,
 } from './skeleton';
 import type { SkateStyle } from '../types';
+import { CROUCH_HOLD, extendTime, extending, flightLegs, flightSpeeds, rideAway } from './dynamics';
 import { flickExtension, orientTrickRotation, tailFirst, type RiderMechanics } from './stance';
 import {
   FLIP_T,
@@ -232,10 +232,6 @@ function smoothMax(a: number, b: number, k: number): number {
   return Math.max(a, b) + (h * h * k) / 4;
 }
 
-/** Hip height over the deck through the flight (s = 0 → 1). */
-const flightLegs = (arc: FlightArc, s: number) =>
-  arc.pop + (arc.touchdown - arc.pop) * s - 4 * arc.tuck * s * (1 - s);
-
 interface HipState {
   /** Hip height over the deck center. */
   overDeck: number;
@@ -260,18 +256,15 @@ function hipState(f: Frame, spec: Spec, style: SkateStyle, clearance: number, ju
   // Hip height = deck height + hips over the deck. Both are parabolas in the
   // flight clock (the deck's is the physics' pop arc), so the hips fly a true
   // ballistic arc; these are its vertical speeds at takeoff and touchdown.
-  const popRise = 4 * JUMP * style.popHeight;
-  const takeoffSpeed = (popRise + (arc.touchdown - arc.pop) - 4 * arc.tuck) / FLIP_T;
-  const touchdownSpeed = (-popRise + (arc.touchdown - arc.pop) + 4 * arc.tuck) / FLIP_T;
+  const { takeoff: takeoffSpeed, touchdown: touchdownSpeed } = flightSpeeds(4 * JUMP * style.popHeight, arc.pop, arc.touchdown, arc.tuck, FLIP_T);
 
   if (tau < 0) {
     // Load, then explode: the extension is timed so the hips leave the
     // crouch at rest and reach the pop moving at the takeoff speed.
-    const rise = arc.pop - arc.squat;
-    const extendT = Math.min(0.14, Math.max(0.06, (2.5 * rise) / takeoffSpeed));
+    const extendT = extendTime(arc.pop - arc.squat, takeoffSpeed);
     const bottomT = ROLL_IN - extendT;
     if (t < bottomT) {
-      const c = smoothstep((t - CROUCH_START) / (bottomT - 0.02 - CROUCH_START));
+      const c = smoothstep((t - CROUCH_START) / (bottomT - CROUCH_HOLD - CROUCH_START));
       return {
         overDeck: RIDE_HEIGHT + cruiseBob(t) * (1 - c) + (arc.squat - RIDE_HEIGHT) * c,
         load: c,
@@ -279,19 +272,13 @@ function hipState(f: Frame, spec: Spec, style: SkateStyle, clearance: number, ju
         sinceTouchdown: -1,
       };
     }
-    const s = (t - bottomT) / extendT;
-    return {
-      overDeck: hermite(arc.squat, arc.pop, 0, takeoffSpeed * extendT, s),
-      load: 1 - smoothstep(s),
-      air: 0,
-      sinceTouchdown: -1,
-    };
+    return { ...extending(arc.squat, arc.pop, takeoffSpeed, extendT, (t - bottomT) / extendT), air: 0, sinceTouchdown: -1 };
   }
 
   if (tau < FLIP_T) {
     const s = tau / FLIP_T;
     return {
-      overDeck: smoothMax(flightLegs(arc, s) + jumpUp, clearance, 6),
+      overDeck: smoothMax(flightLegs(arc.pop, arc.touchdown, arc.tuck, s) + jumpUp, clearance, 6),
       load: 0,
       air: smoothstep(tau / 0.16),
       sinceTouchdown: -1,
@@ -301,19 +288,7 @@ function hipState(f: Frame, spec: Spec, style: SkateStyle, clearance: number, ju
   // Touchdown: a damped spring from the arriving height and speed back up to
   // the cruising stance.
   const u = tau - FLIP_T;
-  const w = LAND_OMEGA;
-  const zeta = LAND_ZETA;
-  const wd = w * Math.sqrt(1 - zeta * zeta);
-  const a = arc.touchdown - RIDE_HEIGHT;
-  const b = (touchdownSpeed + zeta * w * a) / wd;
-  const spring = RIDE_HEIGHT + Math.exp(-zeta * w * u) * (a * Math.cos(wd * u) + b * Math.sin(wd * u));
-  const settle = smoothstep(u / 0.5);
-  return {
-    overDeck: softFloor(spring, SQUAT_FLOOR) + cruiseBob(t) * settle,
-    load: 0,
-    air: 1 - smoothstep(u / 0.4),
-    sinceTouchdown: u,
-  };
+  return { ...rideAway(t, u, arc.touchdown, touchdownSpeed), load: 0, sinceTouchdown: u };
 }
 
 /** Soft cap: `x` unchanged up to `knee`, easing in toward `max` past it. */
@@ -875,14 +850,14 @@ function poseRig(
   const headRelYaw = headYawDeg - oriented.bodyYawDeg - restingBodyYaw;
   const headDir = (d: V3) =>
     rotY(rotX(rotY(rotZ(rotZ(d, lookDown * posture), f.body.rot), restingBodyYaw + headRelYaw), headLean), oriented.bodyYawDeg);
-  const neckTop = torsoPoint({ x: 0, y: -60, z: 0 });
-  const headOrigin = add3(neckTop, headDir({ x: 4, y: 0, z: 0 }));
+  const neckTop = torsoPoint(NECK_TOP);
+  const headOrigin = add3(neckTop, headDir(HEAD_OFF_NECK));
 
   return {
     board: { center: boardPoint({ x: 0, y: 0, z: 0 }), point: boardPoint, dir: boardDir, flipDeg, yawDeg, pitchDeg },
     legs: [leg(plans[0]), leg(plans[1])],
     arms: [arm('left'), arm('right')],
-    torso: frameOf(torsoPoint({ x: 1, y: -14, z: 0 }), torsoDir),
+    torso: frameOf(torsoPoint(TORSO_ORIGIN), torsoDir),
     head: frameOf(headOrigin, headDir),
     toeDir,
     flickZ,

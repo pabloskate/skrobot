@@ -1,11 +1,11 @@
 import { HANGER_BOTTOM, TRUCK, WHEEL_HALF_W, WHEEL_INNER, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z } from './board';
 import { THICKNESS, TIP_X, kickY } from './deck';
 import { add3, cross3, dot3, norm3, scale3, sub3, type V3 } from '../math';
-import { SHOE_HALF_HEIGHT, SHOE_HALF_LENGTH, type BoardRig, type Frame3, type LegRig } from '../motion/skeleton';
+import { LEG_RADII, SHOE_HALF_HEIGHT, SHOE_HALF_LENGTH, type BoardRig, type Frame3, type LegRig } from '../motion/skeleton';
 import { BOARD_WIDTH_SCALE, boardHalfWidth } from './boardDimensions';
 
-/** Match Robot3D's tapered limb capsules, including their round end caps. */
-export const LEG_RADII = { hip: 6.5, knee: 5.2, ankle: 4.3 } as const;
+/** Robot3D's tapered limb capsules, round end caps and all (skeleton.ts). */
+export { LEG_RADII };
 
 interface Bounds { min: V3; max: V3 }
 interface Convex { center: V3; support(direction: V3): V3 }

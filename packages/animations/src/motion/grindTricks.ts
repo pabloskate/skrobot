@@ -1,6 +1,8 @@
 import type { SkateStyle, Stance } from '../types';
 import { flickExtension, orientTrickRotation, type RiderMechanics } from './stance';
 import { FLIP_T, ROLL_IN, catchFraction, computeFrame, specFor, type Frame, type Spec } from './trick';
+import { solveRig } from './rig';
+import type { Rig } from './skeleton';
 import { smoothstep } from '../math';
 
 /**
@@ -139,6 +141,26 @@ export const hopRate = (hop: HopPlan, hopT: number, toTouchdown = false) =>
 /** The flatground clock `tau` seconds after the pop, held at touchdown once the trick is done. */
 export const hopClock = (tau: number, rate: number) => ROLL_IN + Math.min(FLIP_T, Math.max(0, tau) * rate);
 
+/**
+ * How far into a shank a shank catches, which the shared physics asks for
+ * every frame: a hop is landed, so it never shanks; a grind's slip that ends
+ * in one falls as the stage's attempts do by default.
+ */
+export const SHANK_AT = 0.65;
+
+/** The trick a plain grind hops on with: an ollie, in the grind's stance. */
+export const ollieSpec = (stance: Stance) => specFor({ id: 'ollie', name: 'Ollie', base: 'Ollie', stance });
+
+/**
+ * The trick a hop plays (`spec`) on flatground, at its clock `t` (hopClock),
+ * its body spin `spun` (0 → 1, railSpinShare) round onto the rail: the
+ * physics, and the flatground rider on it.
+ */
+export function flatHop(spec: Spec, t: number, spun: number, mechanics: RiderMechanics, style: SkateStyle): { f: Frame; rig: Rig } {
+  const f = landingOnRail(computeFrame(t, spec, true, 'slam', SHANK_AT, style), spec, spun);
+  return { f, rig: solveRig(f, spec, mechanics, style, 'landed') };
+}
+
 export interface HopFrame {
   /** The flatground physics at this moment of the trick. */
   flat: Frame;
@@ -216,7 +238,7 @@ export function landingOnRail(f: Frame, spec: Spec, spun: number): Frame {
  *  finished rotation. `onRail`: the hop lands it on the bar, its body spin
  *  this far round (landingOnRail). */
 export function hopFrame(hop: HopPlan, t: number, onRail: number | null = null): HopFrame {
-  const flat = computeFrame(t, hop.trick.spec, true, 'slam', 0.65, hop.style);
+  const flat = computeFrame(t, hop.trick.spec, true, 'slam', SHANK_AT, hop.style);
   const f = onRail != null ? landingOnRail(flat, hop.trick.spec, onRail) : flat;
   const turned = orientTrickRotation(hop.mechanics, f.spin3d);
   const done = t >= ROLL_IN + FLIP_T;

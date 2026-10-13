@@ -1,4 +1,4 @@
-import { add3, clamp01, cross3, dot3, norm3, scale3, smoothstep, sub3, type V3 } from '../../math';
+import { add3, bisect, clamp01, cross3, dot3, norm3, scale3, smoothstep, sub3, type V3 } from '../../math';
 import type { Expression } from '../../riders/look';
 import type { SkateStyle } from '../../types';
 import { SHOE_HALF_HEIGHT, SHOE_HALF_LENGTH, armDirs, moveFrame, type ArmPose, type BoardRig, type LegRig, type Rig } from '../skeleton';
@@ -6,13 +6,16 @@ import { TIP_X, deckBottomY, deckTopY } from '../../board/deck';
 import { FOOT } from '../../units';
 import { BOARD_WIDTH_SCALE } from '../../board/boardDimensions';
 import { DECK_HALF_WIDTH } from '../skeleton';
-import { ANKLE_IN_SHOE, ankleOf, poseOf, rigOf, twoBone, type BodyDims, type BodyPose, type ShoePose } from './body';
-import { LEG_RADII, capsuleIntersectsBoard, legBoardCollision, shoeIntersectsBoard } from '../../board/boardCollision';
+import {
+  ANKLE_IN_SHOE, LIMB_RADII, SOLE_GRACE, SOLE_HALF_WIDTH, ankleOf, poseOf, rigOf, twoBone, type BodyDims, type BodyPose, type ShoePose,
+} from './body';
+import { capsuleIntersectsBoard, legBoardCollision, shoeIntersectsBoard } from '../../board/boardCollision';
 import { kneeBetween } from '../grindRig';
 import { boardAt, boardMotionAt, boardRigOf, boardSimulation, simulateBoard, type BoardMotion, type BoardTrack } from './boardBody';
 import { IDENTITY, frameFrom, qaxis, qbasis, qconj, qexp, qframe, qlog, qmul, qnorm, qrot, qslerp, type Quat } from './rotation';
 import { rollAt, rollOut, rollsOut, type Roll } from './rollOut';
-import { REACH, rightOf, runOut, runOutAt, turnLevel, type Footfall, type RunOut } from './runOut';
+import { UP, level, rightOf, turnLevel, type Footfall } from './footing';
+import { runOut, runOutAt, type RunOut } from './runOut';
 import { stepOut } from './stepOut';
 
 /**
@@ -59,13 +62,13 @@ const FALLBACK_PUSHES = [1, 0.875, 0.75, 0.625].map((share) => share * PUSH.most
 const PUSH_DIR = { out: 1, along: 0.35, back: -0.8, down: 0.45 } as const;
 /** How far (world units, a robot's) the board keeps off the legs that come down by it. */
 const CLEARANCE = 3;
+/** A shoe, as the board's kept off it: a capsule this far either way of its middle along it, as round as the shoe is high. */
+const SHOE_CAPSULE = { half: 9, r: SHOE_HALF_HEIGHT } as const;
 /** How long before a foot comes down the board must be out of its way. */
 const CLEAR_BEFORE = 0.04;
 /** The gap (world units, a robot's) the board keeps off the legs as they're drawn, coming down and running on; and how long the kicking foot takes to come off it. */
 const LEG_GAP = 1;
 const KICK_LETS_GO = 0.02;
-/** How far (world units) a sole may sit into the grip: soles rest on it, and are rounded. */
-const SOLE_GRACE = 1.5;
 /** How many boards the rider weighs. */
 const RIDER_MASS = 20;
 /** How far off its catch the board is when the foot meets it (degrees). */
@@ -169,8 +172,6 @@ export interface KickOutPlan {
   after: FeetPhase | null;
 }
 
-const UP: V3 = { x: 0, y: -1, z: 0 };
-const level = (v: V3): V3 => norm3({ x: v.x, y: 0, z: v.z });
 const minJerk = (x: number) => {
   const s = clamp01(x);
   return s * s * s * (10 + s * (-15 + 6 * s));
@@ -226,14 +227,7 @@ export function offLineRig(rig: Rig, error: Quat): Rig {
       return c.shoe || c.shin;
     };
     if (!hits(0)) return leg;
-    let lo = 0;
-    let hi = MOST_LIFT;
-    for (let i = 0; i < 14; i++) {
-      const mid = (lo + hi) / 2;
-      if (hits(mid)) lo = mid;
-      else hi = mid;
-    }
-    return raised(leg, hi);
+    return raised(leg, bisect(0, MOST_LIFT, 14, (by) => !hits(by)).hi);
   }) as Rig['legs'];
   return { ...rig, board, legs };
 }
@@ -265,9 +259,9 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
   // How far from the hips the body reaches: down a leg to the shoe's end, out an arm, or up to the top of the head.
   const k0 = body.scale;
   const reach = Math.max(
-    leg + (SHOE_HALF_LENGTH + LEG_RADII.hip) * k0,
-    body.torso.u + Math.hypot(body.shoulder.f, body.shoulder.u, body.shoulder.s) + body.upperArm + body.forearm + 5.8 * k0,
-    body.torso.u + body.neck + Math.hypot(body.head.f, body.head.u) + 15 * k0,
+    leg + (SHOE_HALF_LENGTH + LIMB_RADII.hip) * k0,
+    body.torso.u + Math.hypot(body.shoulder.f, body.shoulder.u, body.shoulder.s) + body.upperArm + body.forearm + LIMB_RADII.hand * k0,
+    body.torso.u + body.neck + Math.hypot(body.head.f, body.head.u) + LIMB_RADII.head * k0,
   );
   const takeover = setup.catchAt - TAKEOVER_LEAD;
   const contact = setup.catchAt - CONTACT_LEAD;
@@ -307,13 +301,7 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
   if (!setup.glued) {
     // Find the share of its turn the board loses (or gains) that leaves it MISS_DEG off its catch when the foot meets it.
     const target = (MISS_DEG * Math.PI) / 180;
-    let lo = 0;
-    let hi = 0.6;
-    for (let i = 0; i < 24; i++) {
-      const mid = (lo + hi) / 2;
-      if (angleOff(boardMotion(setup, missBy(mid), takeover)) < target) lo = mid;
-      else hi = mid;
-    }
+    const { lo, hi } = bisect(0, 0.6, 24, (k) => !(angleOff(boardMotion(setup, missBy(k), takeover)) < target));
     lost = (lo + hi) / 2;
   }
   const error = setup.glued ? () => IDENTITY : missBy(lost);
@@ -444,16 +432,18 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
 
   // As hard a push as clears the board from under every foot coming down by it: the leg over a planted foot, shoe to knee.
   const clears = (track: BoardTrack, falls: Footfall[]) => {
-    const r = LEG_RADII;
+    const r = LIMB_RADII;
     const k = body.scale;
     for (const f of falls) {
       if (f.on > track.start + (track.poses.length - 1) * track.dt) break;
       const ankle = add3(f.at, scale3(UP, ANKLE_IN_SHOE.u));
       const knee = add3(ankle, scale3(UP, 0.55 * leg));
+      const heel = add3(f.at, scale3(f.heading, -SHOE_CAPSULE.half * k));
+      const toe = add3(f.at, scale3(f.heading, SHOE_CAPSULE.half * k));
       for (let t = f.on - CLEAR_BEFORE; t <= Math.min(f.off, f.on + 0.3); t += 1 / 120) {
         const b = boardRigOf(boardAt(track, t));
         if (capsuleIntersectsBoard(b, ankle, knee, r.ankle * k, r.knee * k, CLEARANCE * k)) return false;
-        if (capsuleIntersectsBoard(b, add3(f.at, scale3(f.heading, -9 * k)), add3(f.at, scale3(f.heading, 9 * k)), 4 * k, 4 * k, CLEARANCE * k)) return false;
+        if (capsuleIntersectsBoard(b, heel, toe, SHOE_CAPSULE.r * k, SHOE_CAPSULE.r * k, CLEARANCE * k)) return false;
       }
     }
     return true;
@@ -496,8 +486,9 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
     const k = body.scale;
     const hit = (a: V3, c: V3, ra: number, rc: number) => capsuleIntersectsBoard(b, a, c, ra * k, rc * k, gap * k);
     const neck = scale3(add3(rig.arms[0].shoulder, rig.arms[1].shoulder), 0.5);
-    return rig.arms.some((a) => hit(a.shoulder, a.elbow, 5, 4.4) || hit(a.elbow, a.hand, 4.4, 5.8))
-      || hit(scale3(add3(rig.legs[0].hip, rig.legs[1].hip), 0.5), neck, 13, 13) || hit(rig.head.origin, rig.head.origin, 15, 15);
+    const { upperArm, forearm, hand, trunk, head } = LIMB_RADII;
+    return rig.arms.some((a) => hit(a.shoulder, a.elbow, upperArm, forearm) || hit(a.elbow, a.hand, forearm, hand))
+      || hit(scale3(add3(rig.legs[0].hip, rig.legs[1].hip), 0.5), neck, trunk, trunk) || hit(rig.head.origin, rig.head.origin, head, head);
   };
   // Rolling, the board keeps out of the whole body going over: limbs, trunk and head, from the touchdown till it's up. Counted
   // in frames it's in it (a sixtieth of a second each), up to `enough`.
@@ -509,8 +500,8 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
       const b = boardRigOf(boardAt(track, t));
       const rig = rigOf(rollAt(roll, t).pose, body, b, 1, 1);
       const hit = (a: V3, c: V3, ra: number, rc: number) => capsuleIntersectsBoard(b, a, c, ra * k, rc * k, CLEARANCE * k);
-      if (rig.legs.some((l) => hit(l.hip, l.knee, LEG_RADII.hip, LEG_RADII.knee) || hit(l.knee, l.ankle, LEG_RADII.knee, LEG_RADII.ankle)
-          || hit(l.shoe.at(-9 * k, 0, 0), l.shoe.at(9 * k, 0, 0), 4, 4))
+      if (rig.legs.some((l) => hit(l.hip, l.knee, LIMB_RADII.hip, LIMB_RADII.knee) || hit(l.knee, l.ankle, LIMB_RADII.knee, LIMB_RADII.ankle)
+          || hit(l.shoe.at(-SHOE_CAPSULE.half * k, 0, 0), l.shoe.at(SHOE_CAPSULE.half * k, 0, 0), SHOE_CAPSULE.r, SHOE_CAPSULE.r))
         || upperHit(rig, b, CLEARANCE)) hits++;
     }
     return hits;
@@ -541,8 +532,8 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
       for (let i = 0; i < 2; i++) {
         const l = legs[i];
         const kicking = i === kick && t < release + KICK_LETS_GO;
-        if (capsuleIntersectsBoard(b, l.hip, l.knee, LEG_RADII.hip * k, LEG_RADII.knee * k, LEG_GAP * k)
-          || (!kicking && (capsuleIntersectsBoard(b, l.knee, l.ankle, LEG_RADII.knee * k, LEG_RADII.ankle * k, LEG_GAP * k)
+        if (capsuleIntersectsBoard(b, l.hip, l.knee, LIMB_RADII.hip * k, LIMB_RADII.knee * k, LEG_GAP * k)
+          || (!kicking && (capsuleIntersectsBoard(b, l.knee, l.ankle, LIMB_RADII.knee * k, LIMB_RADII.ankle * k, LEG_GAP * k)
             || shoeIntersectsBoard(b, moveFrame(l.shoe, scale3(UP, SOLE_GRACE)))))) hits++;
       }
       if (upperHit(rig, b, LEG_GAP)) hits++;
@@ -750,8 +741,6 @@ export function hipsAt(plan: KickOutPlan, t: number): { hips: V3; velocity: V3 }
 
 // ----- Posing -----
 
-/** How far a shoe's sole lies from side to side either way of its middle (world units, a robot's). */
-const SOLE_HALF_WIDTH = 5;
 /** The steepest a planted sole lies along the ground (as a slope's rise over its run). */
 const STEEPEST_REST = 0.7;
 /** How a shoe planted at each footfall lies, the way its side points, and where it is. */
@@ -853,14 +842,8 @@ function onDeck(plan: KickOutPlan, t: number): ShoePose {
   const board = boardRigOf(b);
   const inDeck = (by: number) => shoeIntersectsBoard(board, frameFrom(add3(at, scale3(UP, by + SOLE_GRACE)), plan.kickShoe));
   if (!inDeck(0)) return { at, q: plan.kickShoe };
-  let lo = 0;
-  let hi = DECK_CARRY * plan.setup.body.scale;
-  for (let i = 0; i < 14; i++) {
-    const mid = (lo + hi) / 2;
-    if (inDeck(mid)) lo = mid;
-    else hi = mid;
-  }
-  return { at: add3(at, scale3(UP, hi)), q: plan.kickShoe };
+  const by = bisect(0, DECK_CARRY * plan.setup.body.scale, 14, (up) => !inDeck(up)).hi;
+  return { at: add3(at, scale3(UP, by)), q: plan.kickShoe };
 }
 
 /** Where the kicking foot meets the board and how it's coming down onto it, and where it leaves it and how it's going. */
@@ -1016,7 +999,7 @@ const liftShape = (u: number, up: number, down: number) =>
 
 /** Whether a leg's shin or shoe is in the board as the plan checks it (a sole may sit a little into the grip), short of `gap`. */
 function legInBoard(leg: LegRig, board: BoardRig, k: number, gap: number): boolean {
-  return capsuleIntersectsBoard(board, leg.knee, leg.ankle, LEG_RADII.knee * k, LEG_RADII.ankle * k, (LEG_GAP + gap) * k)
+  return capsuleIntersectsBoard(board, leg.knee, leg.ankle, LIMB_RADII.knee * k, LIMB_RADII.ankle * k, (LEG_GAP + gap) * k)
     || shoeIntersectsBoard(board, moveFrame(leg.shoe, scale3(UP, SOLE_GRACE)), gap * k);
 }
 
@@ -1070,7 +1053,7 @@ function kneeTurnedOut(leg: LegRig, out: V3, by: number): LegRig {
 
 /** The least turn out (radians) that keeps a knee its radius over the ground, or as far as it turns. */
 function kneeTurnNeeded(leg: LegRig, out: V3, ground: (x: number, z: number) => number, k: number): number {
-  const r = LEG_RADII.knee * k;
+  const r = LIMB_RADII.knee * k;
   if (ground(leg.knee.x, leg.knee.z) - leg.knee.y > r + KNEE_CLEAR * k) return 0;
   const over = (by: number) => {
     const { knee } = kneeTurnedOut(leg, out, by);
@@ -1078,14 +1061,7 @@ function kneeTurnNeeded(leg: LegRig, out: V3, ground: (x: number, z: number) => 
   };
   if (over(0) >= 0) return 0;
   if (over(KNEE_TURN_MOST) < 0) return KNEE_TURN_MOST;
-  let lo = 0;
-  let hi = KNEE_TURN_MOST;
-  for (let i = 0; i < 14; i++) {
-    const mid = (lo + hi) / 2;
-    if (over(mid) >= 0) hi = mid;
-    else lo = mid;
-  }
-  return hi;
+  return bisect(0, KNEE_TURN_MOST, 14, (by) => over(by) >= 0).hi;
 }
 
 /**
@@ -1181,14 +1157,7 @@ function liftsOf(plan: KickOutPlan): [Lift | null, Lift | null] {
       const { rig, board } = onFeetAt(plan, phase, from + u * (to - from), false);
       const leg = rig.legs[i];
       if (!legInBoard(leg, board, k, OVER_GAP) || legInBoard(raisedLeg(leg, MOST_OVER * k, body), board, k, OVER_GAP)) continue;
-      let lo = 0;
-      let hi = MOST_OVER * k;
-      for (let n = 0; n < 12; n++) {
-        const mid = (lo + hi) / 2;
-        if (legInBoard(raisedLeg(leg, mid, body), board, k, OVER_GAP)) lo = mid;
-        else hi = mid;
-      }
-      need.push({ u, by: hi });
+      need.push({ u, by: bisect(0, MOST_OVER * k, 12, (by) => !legInBoard(raisedLeg(leg, by, body), board, k, OVER_GAP)).hi });
     }
     if (!need.length) return null;
     // The least lift over all of it no faster than a tuck, up and down when that's least; or where none's slow enough, the
@@ -1265,16 +1234,8 @@ function inReach(shoes: [ShoePose, ShoePose], hips: V3, pelvis: Quat, body: Body
     };
     let lifted = shoe;
     if (reachOf(heelUp(HEEL_UP_MOST)) < reachOf(shoe)) {
-      let lo = 0;
-      let hi = HEEL_UP_MOST;
-      if (reachOf(heelUp(hi)) <= most) {
-        for (let n = 0; n < 16; n++) {
-          const mid = (lo + hi) / 2;
-          if (reachOf(heelUp(mid)) <= most) hi = mid;
-          else lo = mid;
-        }
-      }
-      lifted = heelUp(hi);
+      const fits = (deg: number) => reachOf(heelUp(deg)) <= most;
+      lifted = heelUp(fits(HEEL_UP_MOST) ? bisect(0, HEEL_UP_MOST, 16, fits).hi : HEEL_UP_MOST);
     }
     const d = sub3(ankleOf(lifted), hip);
     const len = Math.hypot(d.x, d.y, d.z);
@@ -1510,5 +1471,3 @@ function onFeetAt(plan: KickOutPlan, phase: FeetPhase, t: number, turnKnees = tr
   const expression: Expression = t < plan.contact ? 'focus' : t < run.stopped + 0.3 ? 'wince' : 'open';
   return { rig, board, wheel: boardPose.wheel, gaze, expression, bodyHeight: height, pose };
 }
-
-export { REACH };

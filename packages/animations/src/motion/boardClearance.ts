@@ -2,7 +2,7 @@ import { HANGER_BOTTOM, WHEEL_HALF_W, WHEEL_INNER, WHEEL_R, WHEEL_X, WHEEL_Y, WH
 import { THICKNESS, TIP_X, halfWidth, kickY } from '../board/deck';
 import { BOARD_WIDTH_SCALE } from '../board/boardDimensions';
 import { add3, dot3, scale3, sub3, type V3 } from '../math';
-import { SHOE_HALF_HEIGHT, SHOE_HALF_LENGTH, SHOE_HALF_WIDTH, type BoardRig, type Frame3, type LegRig } from './skeleton';
+import { LEG_RADII, SHOE_HALF_HEIGHT, SHOE_HALF_LENGTH, SHOE_HALF_WIDTH, type BoardRig, type Frame3, type LegRig } from './skeleton';
 
 /**
  * The board as the feet meet it: how far a shoe has to move to stand clear
@@ -21,9 +21,8 @@ export const WIDEST_BOARD = BOARD_WIDTH_SCALE;
  *  the board is sampled every couple of units, and soles are rounded. */
 const FOOTPRINT_PAD = 0.6;
 
-/** The legs' round thickness at the hip, knee, and ankle, as Robot3D draws
- *  them (board/boardCollision.ts LEG_RADII). */
-export const LIMB_RADII = { hip: 6.5, knee: 5.2, ankle: 4.3 } as const;
+/** The legs' round thickness at the hip, knee, and ankle (skeleton.ts LEG_RADII). */
+export const LIMB_RADII = LEG_RADII;
 
 /** Board-local surface samples (x nose, y down, z across), in small clusters:
  *  a few deck stations, a truck, a wheel's rim. */

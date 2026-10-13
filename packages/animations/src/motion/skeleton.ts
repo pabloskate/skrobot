@@ -65,6 +65,13 @@ export const DECK_HALF_WIDTH = 8.6;
 export const SHOULDER = { x: 2, y: -32, z: 17 } as const;
 export const UPPER_ARM = 13;
 export const FOREARM = 12;
+/** Torso-local (hips at the origin, y down): the torso frame's origin, and the top of the neck. */
+export const TORSO_ORIGIN = { x: 1, y: -14, z: 0 } as const;
+export const NECK_TOP = { x: 0, y: -60, z: 0 } as const;
+/** The head frame's origin off the top of the neck, along the head's own axes. */
+export const HEAD_OFF_NECK = { x: 4, y: 0, z: 0 } as const;
+/** The legs' round thickness at the hip, knee, and ankle, as Robot3D draws them. */
+export const LEG_RADII = { hip: 6.5, knee: 5.2, ankle: 4.3 } as const;
 
 // ----- Body physics -----
 

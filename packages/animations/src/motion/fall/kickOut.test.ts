@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { capsuleIntersectsBoard, legBoardCollision, LEG_RADII } from '../../board/boardCollision';
+import { capsuleIntersectsBoard, legBoardCollision } from '../../board/boardCollision';
 import { kickOutPlan } from '../../stage/kickOutFrame';
 import { planStage, stageFrame, type StagePlan } from '../../stage/stage';
 import { STAGE_SETS, setTerrain } from '../../sets/sets';
@@ -8,9 +8,9 @@ import { sweep } from '../../testing';
 import type { V3 } from '../../math';
 import { PERSON_SCALE, moveFrame } from '../skeleton';
 import { hipsAt, kickOutAt, type KickOutPlan } from './kickOut';
-import { poseOf } from './body';
+import { LIMB_RADII, SOLE_GRACE, poseOf } from './body';
 import { qconj, qlog, qmul, type Quat } from './rotation';
-import type { Footfall } from './runOut';
+import type { Footfall } from './footing';
 
 /**
  * The kick-out, everywhere it can happen: caught wrong, the rider pushes the
@@ -29,12 +29,6 @@ import type { Footfall } from './runOut';
  */
 
 const H = 1 / 120;
-/** A sole may sit this far (world units) into the grip: soles rest on it, and are rounded. */
-const SOLE_GRACE = 1.5;
-/** The arms', trunk's and head's thickness (robot units), as the roll keeps them off the ground and the board. */
-const ARM = { upper: 5, fore: 4.4, hand: 5.8 } as const;
-const TRUNK = 13;
-const HEAD = 15;
 /**
  * The most a limb's step off the hips may change from one 120th of a second to the next (robot units). A hard swing makes
  * a few, a foot slapping down or a fast run's knee drive up to about 22 (the robot running off a bank as fast as a grown-up
@@ -201,15 +195,16 @@ function measure({ stage, plan }: Planned): Measures {
       const kicking = i === plan.kick && t <= plan.release + 0.02;
       if (((c.shoe || c.shin) && !kicking) || c.thigh) m.through.push(`${at}:${i}${c.shoe && !kicking ? 's' : ''}${c.shin && !kicking ? 'S' : ''}${c.thigh ? 'T' : ''}`);
     });
-    for (const a of rig.arms) for (const p of [a.elbow, mid(a.elbow, a.hand)]) m.elbowsLow = Math.min(m.elbowsLow, above(p) / k - ARM.fore);
+    for (const a of rig.arms) for (const p of [a.elbow, mid(a.elbow, a.hand)]) m.elbowsLow = Math.min(m.elbowsLow, above(p) / k - LIMB_RADII.forearm);
     // The board against the rest of the body.
+    const { upperArm, forearm, hand, trunk, head } = LIMB_RADII;
     const hit = (from: V3, to: V3, r0: number, r1: number) => capsuleIntersectsBoard(rig.board, from as never, to as never, r0 * k, r1 * k, 0);
     const neck = mid(rig.arms[0].shoulder, rig.arms[1].shoulder);
     const parts = [
-      ...rig.arms.map((a, i) => (hit(a.shoulder, a.elbow, ARM.upper, ARM.fore) || hit(a.elbow, a.hand, ARM.fore, ARM.hand) ? `arm${i}` : '')),
-      hit(hips, neck, TRUNK, TRUNK) ? 'trunk' : '',
-      hit(rig.head.origin, rig.head.origin, HEAD, HEAD) ? 'head' : '',
-      ...rig.legs.map((l, i) => (hit(l.hip, l.knee, LEG_RADII.hip, LEG_RADII.knee) ? `thigh${i}` : '')),
+      ...rig.arms.map((a, i) => (hit(a.shoulder, a.elbow, upperArm, forearm) || hit(a.elbow, a.hand, forearm, hand) ? `arm${i}` : '')),
+      hit(hips, neck, trunk, trunk) ? 'trunk' : '',
+      hit(rig.head.origin, rig.head.origin, head, head) ? 'head' : '',
+      ...rig.legs.map((l, i) => (hit(l.hip, l.knee, LIMB_RADII.hip, LIMB_RADII.knee) ? `thigh${i}` : '')),
     ].filter(Boolean);
     if (parts.length) m.inBody.push(`${at}:${parts.join('+')}`);
     m.hipsLow = Math.min(m.hipsLow, above(pose.hips));

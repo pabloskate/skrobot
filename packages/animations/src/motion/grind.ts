@@ -11,39 +11,26 @@ import {
   STREET_DASH_PERIOD,
   STREET_DASH_SECONDS,
   X0,
-  computeFrame,
-  specFor,
   type FallVariant,
 } from './trick';
 import { HANGER_BOTTOM, WHEEL_BOTTOM, WHEEL_HALF_W, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z } from '../board/board';
 import { BOTTOM_LOCAL, TIP_X } from '../board/deck';
 import { BOARD_WIDTH_SCALE } from '../board/boardDimensions';
-import { POP_RISE, solveRig } from './rig';
+import { POP_RISE } from './rig';
 import { FOLLOW_POP } from '../camera/camera';
-import {
-  CROUCH_START,
-  DECK_HALF_WIDTH,
-  LAND_OMEGA,
-  LAND_ZETA,
-  PERSON_SCALE,
-  POP_HEIGHT,
-  SHIN,
-  THIGH,
-  RIDE_HEIGHT,
-  SQUAT_FLOOR,
-  TOUCHDOWN_HEIGHT,
-  cruiseBob,
-  hermite,
-  softFloor,
-} from './skeleton';
+import { CROUCH_START, DECK_HALF_WIDTH, POP_HEIGHT, RIDE_HEIGHT, TOUCHDOWN_HEIGHT, cruiseBob } from './skeleton';
+import { CROUCH_HOLD, EXTEND_MAX, extendTime, extending, flightLegs, flightSpeeds, landingSpring, rideAway } from './dynamics';
+import { reachShift, grownFrom } from '../riders/human/humanRig';
+import { HUMAN_SHIN, HUMAN_THIGH, KNEE_FORWARD } from '../riders/human/humanProportions';
 import { add3, clamp01, dot3, easeOutCubic, norm3, rotX, rotY, rotZ, scale3, smoothstep, sub3, type V3 } from '../math';
 import {
   NO_SPIN,
+  flatHop,
   hopClock,
   hopFrame,
   hopMid,
   hopRate,
-  landingOnRail,
+  ollieSpec,
   poppingOff,
   railSpinFor,
   railSpinShare,
@@ -421,14 +408,15 @@ const RAIL_BESIDE = 15;
 /**
  * The rider's legs keep off it too, the biggest who rides (a person: the
  * robot's legs grown PERSON_SCALE over the same feet), as thick as a person's
- * legs in jeans: thigh and shin radii. The robot, smaller, clears it by more.
+ * legs in jeans: thigh and shin radii, set by hand off the pant legs as drawn
+ * (riders/human/humanProportions.ts thighRadius and shinRadius: about the
+ * thigh's at the knee, and the shin's half way down). The robot, smaller,
+ * clears it by more.
  */
 const LEG_THIGH = 9.6;
 const LEG_SHIN = 7.8;
 /** Air left between a leg and the rail going past it: the jeans don't brush it, whoever's in them. */
 const LEG_AIR = 4;
-/** How far a person's knees turn from the rig's toward the way they face: over the toes (riders/realistic/skaterPose.ts KNEE_FORWARD). */
-const KNEE_TOWARD_TOES = 0.75;
 /** Points along each bone, hip to knee and knee to ankle, checked against the rail. */
 const LEG_POINTS = [0, 0.25, 0.5, 0.75, 1] as const;
 /** The steepest line (degrees off the rail's) the solver lets an angled-in deck's reach assume. */
@@ -619,41 +607,41 @@ function ledgeDepth(center: V3, pose: BoardPose, rail: Handrail, far: 1 | -1, s:
   return worst;
 }
 
+/** How deep (world units) a point is in the flat bar: negative, clear of it. */
+const inBar = (q: V3) => Math.min(q.y - BAR_TOP_Y, BAR_TOP_Y + 2 * BAR_HALF - q.y, BAR_HALF - Math.abs(q.z - BAR_Z));
+/** How far (world units) a point hangs under the bar's top off to its side. */
+const besideBar = (q: V3) => Math.min(q.y - BAR_TOP_Y, Math.abs(q.z - BAR_Z) - BAR_HALF);
+/** The most `measure` gives over board-local `points`, the board's center at `center` in `pose`. */
+const deepest = (points: readonly V3[], center: V3, pose: BoardPose, measure: (q: V3) => number) => {
+  const dir = poseDir(pose);
+  return Math.max(...points.map((p) => measure(add3(center, dir(p)))));
+};
+
 /**
- * Popping off a ledge, the snap off the lock (`popOut`, pitch) stops where
- * whatever it drives down meets the ledge's top, as a tail strikes it: no
- * further than the board stays out of it.
+ * The snap off the lock (`popOut`, pitch), seated at `seat`, stopped where
+ * whatever it drives down first meets what it pops off, as a tail strikes
+ * it: no further than `depth` keeps the board out of it.
  */
-function ledgePopOut(lock: BoardPose, popOut: number, spec: GrindSpec, rail: Handrail, far: 1 | -1): number {
-  if (!rail.ledge) return popOut;
-  const s = (rail.start + rail.end) / 2;
-  const seat = onRail(lock, spec.contact, rail, lock.fall ?? 0, spec.dir, s);
+function snapUntil(lock: BoardPose, popOut: number, spec: GrindSpec, seat: V3, depth: (center: V3, pose: BoardPose) => number): number {
   for (let k = 20; k > 0; k--) {
     const extra = ((popOut - lock.pitch) * k) / 20;
     const snap = snapped(seat, lock, extra, spec.pivot);
-    if (ledgeDepth(snap.center, snap.pose, rail, far, s, spec.dir) <= LEDGE_TOUCH) return lock.pitch + extra;
+    if (depth(snap.center, snap.pose) <= LEDGE_TOUCH) return lock.pitch + extra;
   }
   return lock.pitch;
 }
 
-/**
- * Popping off the flat bar, the snap off the lock likewise stops where the
- * end it drives down meets the bar's top (a crook's nose, pinched over it),
- * as a tail strikes it.
- */
+/** Popping off a ledge, the snap stops at the ledge's top. */
+function ledgePopOut(lock: BoardPose, popOut: number, spec: GrindSpec, rail: Handrail, far: 1 | -1): number {
+  if (!rail.ledge) return popOut;
+  const s = (rail.start + rail.end) / 2;
+  const seat = onRail(lock, spec.contact, rail, lock.fall ?? 0, spec.dir, s);
+  return snapUntil(lock, popOut, spec, seat, (center, pose) => ledgeDepth(center, pose, rail, far, s, spec.dir));
+}
+
+/** Popping off the flat bar, it stops at the bar's top, the board as drawn (a crook's nose, pinched over it). */
 function barPopOut(lock: BoardPose, popOut: number, spec: GrindSpec): number {
-  const seat = onBar(lock, spec.contact);
-  for (let k = 20; k > 0; k--) {
-    const extra = ((popOut - lock.pitch) * k) / 20;
-    const snap = snapped(seat, lock, extra, spec.pivot);
-    const dir = poseDir(snap.pose);
-    const depth = Math.max(...DRAWN_POINTS.map((p) => {
-      const q = add3(snap.center, dir(p));
-      return Math.min(q.y - BAR_TOP_Y, BAR_TOP_Y + 2 * BAR_HALF - q.y, BAR_HALF - Math.abs(q.z - BAR_Z));
-    }));
-    if (depth <= LEDGE_TOUCH) return lock.pitch + extra;
-  }
-  return lock.pitch;
+  return snapUntil(lock, popOut, spec, onBar(lock, spec.contact), (center, pose) => deepest(DRAWN_POINTS, center, pose, inBar));
 }
 
 /**
@@ -1325,9 +1313,7 @@ function boardReach(entry: HopPlan | null, entryRate: number, spin: RailSpin | n
 
 /** Hip height over the board at the pop of the flatground trick (an ollie for a plain grind) the hop rides. */
 function popHipFor(entry: HopPlan | null, spec: GrindSpec, mechanics: RiderMechanics, style: SkateStyle): number {
-  const hopSpec = entry?.trick.spec ?? specFor({ id: 'ollie', name: 'Ollie', base: 'Ollie', stance: spec.stance });
-  const f = landingOnRail(computeFrame(hopClock(0, 1), hopSpec, true, 'slam', 0.65, style), hopSpec, 1);
-  const rig = solveRig(f, hopSpec, mechanics, style, 'landed');
+  const { f, rig } = flatHop(entry?.trick.spec ?? ollieSpec(spec.stance), hopClock(0, 1), 1, mechanics, style);
   return f.board.y - (rig.legs[0].hip.y + rig.legs[1].hip.y) / 2;
 }
 
@@ -1359,7 +1345,7 @@ function legReach(
   far: 1 | -1,
   beside: (tau: number, along: number) => { y: number; radius: number } | null,
 ) {
-  const hopSpec = entry?.trick.spec ?? specFor({ id: 'ollie', name: 'Ollie', base: 'Ollie', stance: spec.stance });
+  const hopSpec = entry?.trick.spec ?? ollieSpec(spec.stance);
   const v0 = Math.sqrt(2 * g * apex);
   // The legs at each moment asked about, off the board's center (physics axes; the board's height
   // added when it's asked): the angle turns them, the rail's height doesn't depend on it.
@@ -1367,26 +1353,18 @@ function legReach(
   const legsAt = (tau: number) => {
     const cached = known.get(tau);
     if (cached) return cached;
-    const f = landingOnRail(computeFrame(hopClock(tau, rate), hopSpec, true, 'slam', 0.65, style), hopSpec, spunIn(spin, tau));
-    const rig = solveRig(f, hopSpec, mechanics, style, 'landed');
+    const { f, rig } = flatHop(hopSpec, hopClock(tau, rate), spunIn(spin, tau), mechanics, style);
     const points: { p: V3; radius: number }[] = [];
     // A person on this rig, as riders/human/humanRig.ts grows them: hips up from between the
     // ankles, pulled in toward the feet where a leg can't reach its ankle.
     const at = (p: V3): V3 => ({ x: p.x - f.board.x, y: p.y - f.board.y, z: p.z });
     const [l0, l1] = rig.legs;
     const feet = scale3(add3(at(l0.ankle), at(l1.ankle)), 0.5);
-    const a = THIGH * PERSON_SCALE, b = SHIN * PERSON_SCALE;
-    let shift: V3 = { x: 0, y: 0, z: 0 };
-    for (let pass = 0; pass < 2; pass++) {
-      for (const leg of rig.legs) {
-        const d = sub3(at(leg.ankle), add3(add3(feet, scale3(sub3(at(leg.hip), feet), PERSON_SCALE)), shift));
-        const len = Math.hypot(d.x, d.y, d.z);
-        if (len > (a + b) * 0.995) shift = add3(shift, scale3(d, (len - (a + b) * 0.995) / len));
-      }
-    }
+    const a = HUMAN_THIGH, b = HUMAN_SHIN;
+    const shift = reachShift(rig.legs.map((leg) => ({ hip: at(leg.hip), ankle: at(leg.ankle) })), feet);
     for (const leg of rig.legs) {
       const ankle = at(leg.ankle);
-      const hip = add3(add3(feet, scale3(sub3(at(leg.hip), feet), PERSON_SCALE)), shift);
+      const hip = add3(grownFrom(feet, at(leg.hip)), shift);
       const down = norm3(sub3(ankle, hip));
       const offAxis = (v: V3) => sub3(v, scale3(down, dot3(v, down)));
       const d = Math.min(a + b - 1e-3, Math.hypot(ankle.x - hip.x, ankle.y - hip.y, ankle.z - hip.z));
@@ -1394,7 +1372,7 @@ function legReach(
       const out = Math.sqrt(Math.max(0, a * a - along * along));
       // The knee bent the rig's way, and turned toward the toes as the realistic skater wears it: both kept clear.
       const bent = norm3(offAxis(sub3(at(leg.knee), at(leg.hip))));
-      const toes = norm3(add3(scale3(bent, 1 - KNEE_TOWARD_TOES), scale3(norm3(offAxis(rig.torso.fwd)), KNEE_TOWARD_TOES)));
+      const toes = norm3(add3(scale3(bent, 1 - KNEE_FORWARD), scale3(norm3(offAxis(rig.torso.fwd)), KNEE_FORWARD)));
       for (const pole of [bent, toes]) {
         const knee = add3(add3(hip, scale3(down, along)), scale3(pole, out));
         for (const k of LEG_POINTS) {
@@ -1498,22 +1476,12 @@ const crossedOver = (crossing: readonly Crossing[], left: number, climb: number,
 
 /** How far (world units) the board hangs under the bar's top off to its side, seated on it in `pose`. */
 function hangBeside(pose: BoardPose, bearing: Bearing): number {
-  const at = onBar(pose, bearing);
-  const dir = poseDir(pose);
-  return Math.max(...LEDGE_POINTS.map((p) => {
-    const q = add3(at, dir(p));
-    return Math.min(q.y - BAR_TOP_Y, Math.abs(q.z - BAR_Z) - BAR_HALF);
-  }));
+  return deepest(LEDGE_POINTS, onBar(pose, bearing), pose, besideBar);
 }
 
 /** How deep (world units) the board's wheels or deck sit in the bar, seated on it in `pose`. */
 function barDepth(pose: BoardPose, bearing: Bearing): number {
-  const at = onBar(pose, bearing);
-  const dir = poseDir(pose);
-  return Math.max(...LEDGE_POINTS.map((p) => {
-    const q = add3(at, dir(p));
-    return Math.min(q.y - BAR_TOP_Y, BAR_TOP_Y + 2 * BAR_HALF - q.y, BAR_HALF - Math.abs(q.z - BAR_Z));
-  }));
+  return deepest(LEDGE_POINTS, onBar(pose, bearing), pose, inBar);
 }
 
 /**
@@ -1525,20 +1493,6 @@ function finishing(plan: GrindPlan, time: number): number {
   return finishT ? plan.spinLeft * (1 - clamp01((time - plan.lockAt) / finishT)) ** 2 : 0;
 }
 
-/** Damped spring from `from` (moving at `speed`) back to `rest`, `u` seconds on. */
-function spring(from: number, speed: number, rest: number, u: number): number {
-  const w = LAND_OMEGA;
-  const z = LAND_ZETA;
-  const wd = w * Math.sqrt(1 - z * z);
-  const a = from - rest;
-  const b = (speed + z * w * a) / wd;
-  return rest + Math.exp(-z * w * u) * (a * Math.cos(wd * u) + b * Math.sin(wd * u));
-}
-
-/** Hip height over the deck through a hop (s = 0 → 1): extend, tuck, reach down. */
-const hopLegs = (tuck: number, s: number, from = POP_HEIGHT) =>
-  from + (TOUCHDOWN_HEIGHT - from) * s - 4 * tuck * s * (1 - s);
-
 const mix = (a: number, b: number, k: number) => a + (b - a) * k;
 const mixFeet = (a: readonly [number, number], b: readonly [number, number], k: number): [number, number] =>
   [mix(a[0], b[0], k), mix(a[1], b[1], k)];
@@ -1549,14 +1503,13 @@ const mixFeet = (a: readonly [number, number], b: readonly [number, number], k: 
  * rest and reach POP_HEIGHT at `at` moving at `takeoff`.
  */
 function loadAndPop(t: number, at: number, from: number, squat: number, takeoff: number, crouch: number) {
-  const extendT = Math.min(0.14, Math.max(0.06, (2.5 * (POP_HEIGHT - squat)) / Math.max(1, takeoff)));
+  const extendT = extendTime(POP_HEIGHT - squat, Math.max(1, takeoff));
   const bottom = at - extendT;
   if (t < bottom) {
-    const c = smoothstep((t - (bottom - crouch)) / (crouch - 0.02));
+    const c = smoothstep((t - (bottom - crouch)) / (crouch - CROUCH_HOLD));
     return { overDeck: from + (squat - from) * c, load: c };
   }
-  const s = (t - bottom) / extendT;
-  return { overDeck: hermite(squat, POP_HEIGHT, 0, takeoff * extendT, s), load: 1 - smoothstep(s) };
+  return extending(squat, POP_HEIGHT, takeoff, extendT, (t - bottom) / extendT);
 }
 
 /** The grind as ridden out: every phase from roll-in to ride away. */
@@ -1568,15 +1521,13 @@ export function grindFrame(time: number, plan: GrindPlan): GrindFrame {
   // Hip speeds (over the deck, up positive) where the board leaves or meets
   // something: the hips carry their world speed across, the board's doesn't.
   const tuckOn = plan.entry ? TUCK_TRICK : TUCK_ON;
-  const upLegs0 = (TOUCHDOWN_HEIGHT - plan.popHip - 4 * tuckOn) / plan.upT;
-  const upLegs1 = (TOUCHDOWN_HEIGHT - plan.popHip + 4 * tuckOn) / plan.upT;
-  const offLegs0 = (TOUCHDOWN_HEIGHT - POP_HEIGHT - 4 * TUCK_OFF) / plan.offT;
-  const offLegs1 = (TOUCHDOWN_HEIGHT - POP_HEIGHT + 4 * TUCK_OFF) / plan.offT;
-  const onTakeoff = v0 + upLegs0;
+  const upLegs = flightSpeeds(0, plan.popHip, TOUCHDOWN_HEIGHT, tuckOn, plan.upT);
+  const offLegs = flightSpeeds(0, POP_HEIGHT, TOUCHDOWN_HEIGHT, TUCK_OFF, plan.offT);
+  const onTakeoff = v0 + upLegs.takeoff;
   // A handrail goes on falling under the board after the lock, so the legs take less of the landing on it.
-  const onArrive = v0 - plan.boardG * plan.upT + upLegs1 + (ride ? ride.rail.slope * ride.speed : 0);
-  const offTakeoff = v1 + offLegs0;
-  const offArrive = plan.offLaunch - GRAVITY * plan.offT + offLegs1;
+  const onArrive = v0 - plan.boardG * plan.upT + upLegs.touchdown + (ride ? ride.rail.slope * ride.speed : 0);
+  const offTakeoff = v1 + offLegs.takeoff;
+  const offArrive = plan.offLaunch - GRAVITY * plan.offT + offLegs.touchdown;
   const popFeet = spec.popNose ? NOSE_POP_FEET : TAIL_POP_FEET;
   const exitFeet: [number, number] = spec.exitNose
     ? [POP_FOOT_X, spec.feet[1]]
@@ -1603,7 +1554,7 @@ export function grindFrame(time: number, plan: GrindPlan): GrindFrame {
   };
 
   if (t < plan.pop) {
-    const legs = loadAndPop(t, plan.pop, RIDE_HEIGHT + cruiseBob(t), ENTRY_SQUAT, onTakeoff, plan.pop - CROUCH_START - 0.14);
+    const legs = loadAndPop(t, plan.pop, RIDE_HEIGHT + cruiseBob(t), ENTRY_SQUAT, onTakeoff, plan.pop - CROUCH_START - EXTEND_MAX);
     // Rolling in, the rider carves onto the angled line and settles on it for the pop, board
     // and body pointed the way they're going.
     const { across, share } = carve(t, plan.pop, plan.carveTight);
@@ -1724,7 +1675,7 @@ export function grindFrame(time: number, plan: GrindPlan): GrindFrame {
       tailFoot,
       // The hips fly gravity's arc whatever the board does under them (boardGravity): the legs
       // take up its tuck, a trick's feet coming up off it, and settling it into the lock.
-      overDeck: ref.y - (GROUND - (v0 * tau - 0.5 * plan.boardG * tau * tau) - hopLegs(tuckOn, s, plan.popHip)),
+      overDeck: ref.y - (GROUND - (v0 * tau - 0.5 * plan.boardG * tau * tau) - flightLegs(plan.popHip, TOUCHDOWN_HEIGHT, tuckOn, s)),
       air: smoothstep(tau / 0.16),
       rail: smoothstep(s),
     };
@@ -1754,8 +1705,8 @@ export function grindFrame(time: number, plan: GrindPlan): GrindFrame {
     const ref = ride ? onRail(held, spec.contact, ride.rail, ride.tilt, spec.dir, railTrack(plan, t)) : onBar(held, spec.contact);
     const snap = smoothstep((t - (plan.off - SNAP)) / SNAP);
     const board = snapped(ref, held, (plan.popOut - held.pitch) * snap, spec.pivot);
-    const legsHeld = spring(TOUCHDOWN_HEIGHT, onArrive, GRIND_HEIGHT, u) + Math.sin(u * 9) * 0.8 * settle;
-    const crouchStart = plan.off - 0.14 - EXIT_CROUCH;
+    const legsHeld = landingSpring(TOUCHDOWN_HEIGHT, onArrive, GRIND_HEIGHT, u) + Math.sin(u * 9) * 0.8 * settle;
+    const crouchStart = plan.off - EXTEND_MAX - EXIT_CROUCH;
     const legs = loadAndPop(t, plan.off, legsHeld, EXIT_SQUAT, offTakeoff, EXIT_CROUCH);
     const exit = smoothstep((t - crouchStart) / (EXIT_CROUCH - 0.04));
     const [noseFoot, tailFoot] = mixFeet(spec.feet, exitFeet, exit);
@@ -1817,7 +1768,7 @@ export function grindFrame(time: number, plan: GrindPlan): GrindFrame {
       noseFoot,
       tailFoot,
       // As on the hop on, the hips ride up with feet that have left the deck.
-      overDeck: hopLegs(TUCK_OFF, s) + (trick && plan.exit ? TRICK_HIP_LIFT * trick.offDeck * plan.exit.trick.feetLift : 0),
+      overDeck: flightLegs(POP_HEIGHT, TOUCHDOWN_HEIGHT, TUCK_OFF, s) + (trick && plan.exit ? TRICK_HIP_LIFT * trick.offDeck * plan.exit.trick.feetLift : 0),
       air: smoothstep(tau / 0.12),
       grind: 1 - smoothstep(tau / 0.15),
       rail: 1 - smoothstep(s),
@@ -1825,7 +1776,6 @@ export function grindFrame(time: number, plan: GrindPlan): GrindFrame {
   }
 
   const u = t - plan.land;
-  const settle = smoothstep(u / 0.5);
   const center = { x: X0, y: plan.landY, z: plan.lockCenter.z };
   return {
     ...base,
@@ -1837,8 +1787,7 @@ export function grindFrame(time: number, plan: GrindPlan): GrindFrame {
     pose: { ...flat, yaw: plan.endHeading },
     noseFoot: RIDE_FEET[0],
     tailFoot: RIDE_FEET[1],
-    overDeck: softFloor(spring(TOUCHDOWN_HEIGHT, offArrive, RIDE_HEIGHT, u), SQUAT_FLOOR) + cruiseBob(t) * settle,
-    air: 1 - smoothstep(u / 0.4),
+    ...rideAway(t, u, TOUCHDOWN_HEIGHT, offArrive),
     press: 1 - smoothstep(u / 0.6),
   };
 }

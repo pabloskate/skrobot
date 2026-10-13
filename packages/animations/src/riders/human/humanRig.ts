@@ -120,6 +120,31 @@ function overGround(from: V3, dir: V3, length: number, floor: number, ground: nu
   return { x: dir.x * k, y, z: dir.z * k };
 }
 
+/** Of a person's straight leg, the most that reaches before their hips are pulled in toward the feet. */
+export const PERSON_REACH = 0.995;
+
+/** `p` grown `scale` times out from `from`: a person's (HUMAN_SCALE) unless told otherwise. */
+export const grownFrom = (from: V3, p: V3, scale = HUMAN_SCALE): V3 => add3(from, scale3(sub3(p, from), scale));
+
+/**
+ * Hips grown HUMAN_SCALE out from `from`, over the same ankles, come in
+ * toward the feet together, as far as either of a person's legs (HUMAN_THIGH,
+ * HUMAN_SHIN) needs to reach its ankle (PERSON_REACH): how far they come in.
+ */
+export function reachShift(legs: ReadonlyArray<{ hip: V3; ankle: V3 }>, from: V3): V3 {
+  let shift: V3 = { x: 0, y: 0, z: 0 };
+  const reach = (HUMAN_THIGH + HUMAN_SHIN) * PERSON_REACH;
+  for (let pass = 0; pass < 2; pass++) {
+    for (const leg of legs) {
+      const hip = add3(grownFrom(from, leg.hip), shift);
+      const d = sub3(leg.ankle, hip);
+      const len = Math.hypot(d.x, d.y, d.z);
+      if (len > reach) shift = add3(shift, scale3(d, (len - reach) / len));
+    }
+  }
+  return shift;
+}
+
 /** A frame moved to a new origin, its axes unchanged. */
 const frameAt = (frame: Frame3, origin: V3): Frame3 => ({
   ...frame,
@@ -134,20 +159,9 @@ const frameAt = (frame: Frame3, origin: V3): Frame3 => ({
  */
 export function humanRig(rig: Rig, ground = ASPHALT): Rig {
   const from = growFrom(rig, ground);
-  const grow = (p: V3): V3 => add3(from, scale3(sub3(p, from), HUMAN_SCALE));
-
   // Hips up, scaled; then pulled in toward the feet if either leg can't reach its ankle.
-  let shift: V3 = { x: 0, y: 0, z: 0 };
-  const reach = (HUMAN_THIGH + HUMAN_SHIN) * 0.995;
-  for (let pass = 0; pass < 2; pass++) {
-    for (const leg of rig.legs) {
-      const hip = add3(grow(leg.hip), shift);
-      const d = sub3(leg.ankle, hip);
-      const len = Math.hypot(d.x, d.y, d.z);
-      if (len > reach) shift = add3(shift, scale3(d, (len - reach) / len));
-    }
-  }
-  const place = (p: V3) => add3(grow(p), shift);
+  const shift = reachShift(rig.legs, from);
+  const place = (p: V3) => add3(grownFrom(from, p), shift);
 
   const legs = rig.legs.map((leg): LegRig => {
     const hip = place(leg.hip);

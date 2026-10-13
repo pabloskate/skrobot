@@ -1,8 +1,10 @@
-import { add3, clamp01, cross3, dot3, lerp3, norm3, scale3, smoothstep, sub3, type V3 } from '../../math';
+import { add3, bisect, clamp01, cross3, dot3, lerp3, norm3, scale3, smoothstep, sub3, type V3 } from '../../math';
 import { SHOE_HALF_HEIGHT, SHOE_HALF_LENGTH, SHOE_HALF_WIDTH, type BoardRig, type Rig } from '../skeleton';
-import { ANKLE_IN_SHOE, ankleOf, centerOfMass, rigOf, twoBone, type BodyDims, type BodyPose, type ShoePose } from './body';
+import {
+  ANKLE_HEIGHT, ANKLE_IN_SHOE, LIMB_RADII, MASS, ankleOf, centerOfMass, rigOf, twoBone, type BodyDims, type BodyPose, type ShoePose,
+} from './body';
+import { STEP_WIDTH, UP, level, rightOf, turnLevel } from './footing';
 import { frameFrom, qframe, qrot, qslerp } from './rotation';
-import { rightOf, turnLevel } from './runOut';
 import { MODEL_SCALE } from '../../riders/human/humanProportions';
 
 /**
@@ -129,16 +131,11 @@ const legLiftAt = (theta: number) => 1 - smoothstep((theta - LEG_DOWN_FROM) / (F
 const LET_GO_T = 0.12;
 /** Seconds a foot coming down mid-roll takes to settle flat where it met the ground. */
 const SETTLE_T = 0.06;
-/** Feet land this far either side of the hips' line (in hip widths). */
-const STEP_WIDTH = 1.25;
 /** The most the arms brake the body's fall (in gravities), and how fast they let it down at the least (world units a second). */
 const ARM_BRAKE = 2.5;
 const LOWER = 60;
 /** Coming down slower than this (world units a second), the knees have taken the drop. */
 const ABSORBED = 8;
-
-const UP: V3 = { x: 0, y: -1, z: 0 };
-const level = (v: V3): V3 => norm3({ x: v.x, y: 0, z: v.z });
 
 /** `v` turned `deg` about the unit axis `k` (right-handed about it in the physics' coordinates). */
 function turn(v: V3, k: V3, deg: number): V3 {
@@ -227,8 +224,6 @@ const ROBOT_HEAD = { half: [14, 15, 18] as const, r: 8.5 };
  * it sits, and big enough for the neck's give either side.
  */
 const PERSON_SKULL = { f: -4 * MODEL_SCALE, u: -7 * MODEL_SCALE, r: 12.5 * MODEL_SCALE } as const;
-/** Limb radii (robot's: robot3d.ts's widths halved): upper arm, forearm, hand, thigh at the hip, knee, ankle. */
-const LIMB = { upperArm: 5, forearm: 4.4, hand: 5.8, hip: 6.5, knee: 5.2, ankle: 4.3 } as const;
 
 type Part = 'chest' | 'head' | 'arm0' | 'arm1' | 'hand0' | 'hand1' | 'leg0' | 'leg1' | 'foot0' | 'foot1';
 
@@ -258,14 +253,14 @@ function touches(rig: Rig, body: BodyDims, ground: (x: number, z: number) => num
   else point(head.at(PERSON_SKULL.f, PERSON_SKULL.u, 0), PERSON_SKULL.r, 'head');
   // The shoulders and hips are the trunk's: they go where it does, whatever a hand or foot is held to.
   rig.arms.forEach((arm, i) => {
-    point(arm.shoulder, LIMB.upperArm * k, 'chest');
-    point(arm.elbow, LIMB.forearm * k, i === 0 ? 'arm0' : 'arm1');
-    point(arm.hand, LIMB.hand * k, i === 0 ? 'hand0' : 'hand1');
+    point(arm.shoulder, LIMB_RADII.upperArm * k, 'chest');
+    point(arm.elbow, LIMB_RADII.forearm * k, i === 0 ? 'arm0' : 'arm1');
+    point(arm.hand, LIMB_RADII.hand * k, i === 0 ? 'hand0' : 'hand1');
   });
   rig.legs.forEach((leg, i) => {
-    point(leg.hip, LIMB.hip * k, 'chest');
-    point(leg.knee, LIMB.knee * k, i === 0 ? 'leg0' : 'leg1');
-    point(leg.ankle, LIMB.ankle * k, i === 0 ? 'leg0' : 'leg1');
+    point(leg.hip, LIMB_RADII.hip * k, 'chest');
+    point(leg.knee, LIMB_RADII.knee * k, i === 0 ? 'leg0' : 'leg1');
+    point(leg.ankle, LIMB_RADII.ankle * k, i === 0 ? 'leg0' : 'leg1');
     for (const a of [-1, 1]) for (const c of [-1, 1]) {
       point(leg.shoe.at(a * SHOE_HALF_LENGTH, -SHOE_HALF_HEIGHT, c * SHOE_HALF_WIDTH), 0, i === 0 ? 'foot0' : 'foot1');
     }
@@ -341,6 +336,9 @@ const ELBOW_RATE = 3600;
 /** `want`, as near as a turn from `was` gets in a step at `rate` (all of it, with nothing to go from). */
 const toward = (was: number | undefined, want: number, rate = CLEARING_RATE) =>
   was === undefined ? want : was + Math.max(-rate / HZ, Math.min(rate / HZ, want - was));
+/** The least turn up to `most` that `clears` a part (found to `steps` halvings), or all of `most` where even that doesn't. */
+const leastClearing = (most: number, steps: number, clears: (deg: number) => boolean) =>
+  (clears(most) ? bisect(0, most, steps, clears).hi : most);
 
 /** The body posed `theta` round the roll, the hips at `hips`; its parts kept off the ground turning on from `was`, the step before's. */
 function shapeAt(body: BodyDims, line: RollLine, theta: number, hips: V3, holds: Holds, board: BoardRig, was: Clearing | null): Shape {
@@ -386,19 +384,7 @@ function shapeAt(body: BodyDims, line: RollLine, theta: number, hips: V3, holds:
     k = norm3(k);
     const most = Math.min(HEAD_LIFT, (Math.acos(Math.max(-1, Math.min(1, dot3(Uh, UP)))) * 180) / Math.PI);
     const lifted = (deg: number) => headGap(turn(Fh, k, deg), turn(Uh, k, deg));
-    let want = 0;
-    if (headGap(Fh, Uh) < clear) {
-      let lo = 0;
-      let hi = most;
-      if (lifted(hi) >= clear) {
-        for (let i = 0; i < 10; i++) {
-          const mid = (lo + hi) / 2;
-          if (lifted(mid) >= clear) hi = mid;
-          else lo = mid;
-        }
-      }
-      want = hi;
-    }
+    const want = headGap(Fh, Uh) < clear ? leastClearing(most, 10, (deg) => lifted(deg) >= clear) : 0;
     clearing.head = Math.max(0, Math.min(most, toward(was?.head, want)));
     Fh = turn(Fh, k, clearing.head);
     Uh = turn(Uh, k, clearing.head);
@@ -444,19 +430,8 @@ function shapeAt(body: BodyDims, line: RollLine, theta: number, hips: V3, holds:
       const leg = swung(deg);
       return legGap(body, line.ground, hip, leg.shoe, leg.pole);
     };
-    let want = 0;
-    if (most > 0 && loose > 0 && gapOf(0) < LEG_CLEAR * body.scale) {
-      let lo = 0;
-      let hi = most;
-      if (gapOf(hi) >= LEG_CLEAR * body.scale) {
-        for (let n = 0; n < 12; n++) {
-          const mid = (lo + hi) / 2;
-          if (gapOf(mid) >= LEG_CLEAR * body.scale) hi = mid;
-          else lo = mid;
-        }
-      }
-      want = hi;
-    }
+    const want = most > 0 && loose > 0 && gapOf(0) < LEG_CLEAR * body.scale
+      ? leastClearing(most, 12, (deg) => gapOf(deg) >= LEG_CLEAR * body.scale) : 0;
     clearing.legs[i] = Math.max(0, Math.min(most, toward(was?.legs[i], want)));
     if (clearing.legs[i] > 0 && loose > 0) {
       const leg = swung(clearing.legs[i] * loose);
@@ -491,19 +466,8 @@ function shapeAt(body: BodyDims, line: RollLine, theta: number, hips: V3, holds:
         const about = norm3(lift);
         const most = (Math.acos(Math.max(-1, Math.min(1, dot3(norm3(d), UP)))) * 180) / Math.PI;
         const handAt = (deg: number) => add3(shoulder, turn(d, about, deg));
-        let want = 0;
-        if (holds.handsFree[i] && gap(hand, LIMB.hand * k) < ARM_CLEAR * body.scale) {
-          let lo = 0;
-          let hi = most;
-          if (gap(handAt(hi), LIMB.hand * k) >= ARM_CLEAR * body.scale) {
-            for (let n = 0; n < 12; n++) {
-              const mid = (lo + hi) / 2;
-              if (gap(handAt(mid), LIMB.hand * k) >= ARM_CLEAR * body.scale) hi = mid;
-              else lo = mid;
-            }
-          }
-          want = hi;
-        }
+        const want = holds.handsFree[i] && gap(hand, LIMB_RADII.hand * k) < ARM_CLEAR * body.scale
+          ? leastClearing(most, 12, (deg) => gap(handAt(deg), LIMB_RADII.hand * k) >= ARM_CLEAR * body.scale) : 0;
         clearing.hands[i] = Math.max(0, Math.min(most, toward(was?.hands[i], want)));
         hand = handAt(clearing.hands[i]);
         pole = turn(pole, about, clearing.hands[i]);
@@ -535,7 +499,7 @@ function shapeAt(body: BodyDims, line: RollLine, theta: number, hips: V3, holds:
       const upward = offLine(UP);
       const tilt = Math.hypot(upward.x, upward.y, upward.z);
       const turned = (deg: number) => add3(centre, turn(out, limb, deg));
-      const elbowGap = (e: V3) => gap(e, LIMB.forearm * k);
+      const elbowGap = (e: V3) => gap(e, LIMB_RADII.forearm * k);
       const turnedWas = was?.elbows[i] ?? 0;
       let want = 0;
       if (tilt > 1e-3 && dot3(out, out) > 1e-6 && elbowGap(elbow) < ARM_CLEAR * body.scale) {
@@ -543,16 +507,8 @@ function shapeAt(body: BodyDims, line: RollLine, theta: number, hips: V3, holds:
         const sign = Math.abs(turnedWas) > 1 ? Math.sign(turnedWas) : dot3(cross3(limb, out), up) >= 0 ? 1 : -1;
         const toUp = (Math.atan2(dot3(limb, cross3(out, up)), dot3(out, up)) * 180) / Math.PI;
         const rises = Math.min(ELBOW_TURN_MOST, sign > 0 ? (toUp >= 0 ? toUp : toUp + 360) : toUp <= 0 ? -toUp : 360 - toUp);
-        let lo = 0;
-        let hi = rises;
-        if (elbowGap(turned(sign * hi)) >= ARM_CLEAR * body.scale) {
-          for (let n = 0; n < 14; n++) {
-            const mid = (lo + hi) / 2;
-            if (elbowGap(turned(sign * mid)) >= ARM_CLEAR * body.scale) hi = mid;
-            else lo = mid;
-          }
-        }
-        want = sign * hi * smoothstep(tilt / ELBOW_TILT);
+        const clears = (deg: number) => elbowGap(turned(sign * deg)) >= ARM_CLEAR * body.scale;
+        want = sign * leastClearing(rises, 14, clears) * smoothstep(tilt / ELBOW_TILT);
       }
       clearing.elbows[i] = Math.max(-ELBOW_TURN_MOST, Math.min(ELBOW_TURN_MOST, toward(was?.elbows[i], want, ELBOW_RATE)));
       elbow = turned(clearing.elbows[i]);
@@ -576,7 +532,7 @@ const KNEE_RATE = 2 * CLEARING_RATE;
  */
 function kneeSplay(body: BodyDims, ground: (x: number, z: number) => number, hip: V3, shoe: ShoePose, pole: V3, out: V3) {
   const ankle = ankleOf(shoe);
-  const radius = LIMB.knee * body.scale;
+  const radius = LIMB_RADII.knee * body.scale;
   const axis = norm3(sub3(ankle, hip));
   const across = cross3(axis, pole);
   const side = dot3(across, out) >= 0 ? 1 : -1;
@@ -589,19 +545,7 @@ function kneeSplay(body: BodyDims, ground: (x: number, z: number) => number, hip
     const knee = twoBone(hip, ankle, body.thigh, body.shin, swung(deg));
     return ground(knee.x, knee.z) - knee.y - radius >= 0;
   };
-  let want = 0;
-  if (!clears(0)) {
-    let lo = 0;
-    let hi = KNEE_OUT_MOST;
-    if (clears(hi)) {
-      for (let n = 0; n < 12; n++) {
-        const mid = (lo + hi) / 2;
-        if (clears(mid)) hi = mid;
-        else lo = mid;
-      }
-    }
-    want = hi;
-  }
+  const want = clears(0) ? 0 : leastClearing(KNEE_OUT_MOST, 12, clears);
   return { want, swung };
 }
 
@@ -611,7 +555,7 @@ function legGap(body: BodyDims, ground: (x: number, z: number) => number, hip: V
   const ankle = ankleOf(shoe);
   const knee = twoBone(hip, ankle, body.thigh, body.shin, pole);
   const gap = (p: V3, r: number) => ground(p.x, p.z) - p.y - r;
-  let low = Math.min(gap(knee, LIMB.knee * k), gap(ankle, LIMB.ankle * k));
+  let low = Math.min(gap(knee, LIMB_RADII.knee * k), gap(ankle, LIMB_RADII.ankle * k));
   const sole = frameFrom(shoe.at, shoe.q);
   for (const a of [-1, 1]) for (const c of [-1, 1]) low = Math.min(low, gap(sole.at(a * SHOE_HALF_LENGTH, -SHOE_HALF_HEIGHT, c * SHOE_HALF_WIDTH), 0));
   return low;
@@ -619,7 +563,6 @@ function legGap(body: BodyDims, ground: (x: number, z: number) => number, hip: V
 
 /** The square of the body's radius of gyration about an axis through its center of mass (point masses at each part's middle, limbs as rods). */
 function gyration(rig: Rig, com: V3, axis: V3): number {
-  const MASS = { head: 0.081, trunk: 0.497, upperArm: 0.028, foreHand: 0.022, thigh: 0.1, shank: 0.0465, foot: 0.0145 };
   let sum = 0;
   const at = (p: V3, m: number, length = 0) => {
     const d = sub3(p, com);
@@ -745,7 +688,6 @@ export function rollOut(setup: RollSetup): Roll {
   const planted = (i: 0 | 1) => feet[i] != null && feet[i]!.off === Infinity;
 
   // ----- The landing -----
-  const ankleHeight = ANKLE_IN_SHOE.u + 4;
   const second: 0 | 1 = setup.first.foot === 0 ? 1 : 0;
   const firstShoe: ShoePose = { at: setup.first.at, q: qframe(setup.first.heading, UP) };
   // The other foot comes down beside the first, out to its own side, pointing the same way.
@@ -775,7 +717,7 @@ export function rollOut(setup: RollSetup): Roll {
   let t = setup.start;
   let p = setup.hips;
   let v = setup.velocity;
-  const low = ankleHeight + ROLL_SQUAT * leg;
+  const low = ANKLE_HEIGHT + ROLL_SQUAT * leg;
   const h0 = ground(p.x, p.z) - p.y;
   let shape = shapeAt(body, line, theta, p, holdsAt(t), board, null);
   for (; step < HZ / 2; step++) {
@@ -853,13 +795,13 @@ export function rollOut(setup: RollSetup): Roll {
         omega = RISE_RATE.least;
       }
       const along = Math.max(carry ?? 0, omega * Math.max(1, -r.y));
-      const need = ankleHeight + RISE_TO * leg - hipsUp;
+      const need = ANKLE_HEIGHT + RISE_TO * leg - hipsUp;
       const behind = -dot3(r, travel);
       const most = RISE_UP * Math.sqrt(g * leg);
       // (Easing into the crouch, no harder than gravity slows them: the legs stop pushing, they don't pull.)
       const up = need <= 0 ? 0 : Math.min(most, Math.sqrt(2 * g * need), behind > 1 ? (need * along) / behind : most);
       target = add3(com, add3(scale3(travel, along * dt), scale3(UP, up * dt)));
-      const upright = clamp01((hipsUp + up * dt - comingUp.hips) / Math.max(1, ankleHeight + RISE_TO * leg - comingUp.hips));
+      const upright = clamp01((hipsUp + up * dt - comingUp.hips) / Math.max(1, ANKLE_HEIGHT + RISE_TO * leg - comingUp.hips));
       turnBy = Math.max(0, Math.min((MOST_RATE * dt * 180) / Math.PI, comingUp.theta + (ROLL_END - comingUp.theta) * upright - theta));
     } else {
       const pivot = carry == null ? contact : { x: com.x, y: ground(com.x, com.z), z: com.z };
@@ -882,7 +824,7 @@ export function rollOut(setup: RollSetup): Roll {
     hips = add3(hips, sub3(target, next.com));
     if (upOver) {
       // Coming up, the legs ease off as the hips near the crouch they come up into: no faster than carries them up to it.
-      const room = Math.max(0, ankleHeight + RISE_TOP * leg - (ground(p.x, p.z) - p.y));
+      const room = Math.max(0, ANKLE_HEIGHT + RISE_TOP * leg - (ground(p.x, p.z) - p.y));
       hips = { ...hips, y: Math.max(hips.y, p.y - Math.sqrt(2 * g * room) * dt) };
     }
     next = shapeAt(body, line, theta, hips, holds, board, shape.clearing);
@@ -969,7 +911,7 @@ export function rollOut(setup: RollSetup): Roll {
       const arm = next.rig.arms[i];
       const handGap = all.find((x) => x.part === (i === 0 ? 'hand0' : 'hand1'))!.gap;
       if (!hands[i] && !handUsed[i] && theta < HANDS_OFF && handGap <= TOUCH) {
-        hands[i] = { at: { ...arm.hand, y: ground(arm.hand.x, arm.hand.z) - LIMB.hand * body.scale }, off: Infinity };
+        hands[i] = { at: { ...arm.hand, y: ground(arm.hand.x, arm.hand.z) - LIMB_RADII.hand * body.scale }, off: Infinity };
         handUsed[i] = true;
         handsAt = Math.min(handsAt, t);
         hits.push({ t, at: { ...arm.hand, y: ground(arm.hand.x, arm.hand.z) }, strength: 0.35 });
@@ -993,7 +935,7 @@ export function rollOut(setup: RollSetup): Roll {
           const fwd = level(qrot(next.pose.shoes[i].q, { x: 1, y: 0, z: 0 }));
           const ankle = ankleOf(next.pose.shoes[i]);
           const q = qframe(dot3(fwd, travel) > 0.2 ? fwd : travel, UP);
-          const flat = { x: ankle.x, y: ground(ankle.x, ankle.z) - ankleHeight, z: ankle.z };
+          const flat = { x: ankle.x, y: ground(ankle.x, ankle.z) - ANKLE_HEIGHT, z: ankle.z };
           const at = sub3(sub3(flat, qrot(q, { x: ANKLE_IN_SHOE.f, y: 0, z: 0 })), qrot(q, { x: 0, y: -ANKLE_IN_SHOE.u, z: 0 }));
           feet[i] = { at: { at, q }, on: t, off: Infinity };
           hits.push({ t, at: { ...flat, y: ground(flat.x, flat.z) }, strength: 0.3 });

@@ -25,6 +25,8 @@ export const MODEL_SCALE = (HUMAN_THIGH + HUMAN_SHIN) / MODEL_LEGS;
 /** Shoulder joint to elbow, and elbow to wrist, as modelled. */
 export const HUMAN_UPPER_ARM = 19;
 export const HUMAN_FOREARM = 17;
+/** How far a person's knees turn from the rig's toward the way their hips face: over the toes (a tuck brings them up in front of the chest). */
+export const KNEE_FORWARD = 0.75;
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
