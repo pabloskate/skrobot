@@ -10,7 +10,7 @@
 
 ## Geometry decisions
 
-The world uses 29 units per foot, matching El Toro and the rider scale. The first launch lip is `x=0, y=0`; positive x travels down the gap, and looking up the blocks from the street +z is on the left. Photographs fix the handedness: the side stairs and the gym are on the left, the slope on the right.
+The world uses 29 units per foot (`SET_FOOT`), matching El Toro; the stage scales it onto the riders' units with `SET_SCALE`. The first launch lip is `x=0, y=0`; positive x travels down the gap, and looking up the blocks from the street +z is on the left. Photographs fix the handedness: the side stairs and the gym are on the left, the slope on the right.
 
 **The four curbs.** 51 inches fall over 198 inches lip to lip, as three 15-inch blocks and the short 6-inch street curb at the bottom (the photographs show the bottom curb at well under half the others; individual heights were not surveyed). Treads are equal, 5.5 feet, dark weathered asphalt between white painted faces with worn caps. The side stairs beside their square ends come down in flights of three steps per block, one step at the street curb, with galvanized rails along both sides.
 

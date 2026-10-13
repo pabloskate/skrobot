@@ -2,7 +2,7 @@ import { Bake, NO_INK, type Ink, type Paint } from '../../three/bake';
 import { INK_PROP } from '../../three/materials';
 import { lambert, tone } from '../../camera/camera';
 import type { Vec3 } from '../../camera/view';
-import { FOOT as F } from '../elToro/stairs';
+import { SET_FOOT as F } from '../elToro/stairs';
 import { hash2 } from '../setKit';
 import type { CarPlacement, StreetPropPlacements } from '../props/streetProps';
 import { sunsetLettering, sunsetPalm } from './sunsetDetails';

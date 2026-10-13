@@ -11,7 +11,7 @@
 
 ## Layout and fidelity
 
-The scale is **29 world units per foot**, shared with El Toro and the riders. The takeoff lip is `x=0, y=0`; positive x travels downhill. The orange convention-centre building occupies **positive z** and the high pale retaining wall **negative z**. Looking up from the landing, the building is on the left. Rider stance never mirrors the architecture.
+The scale is **29 set units per foot** (`SET_FOOT`), shared with El Toro; the stage scales it onto the riders' units with `SET_SCALE`. The takeoff lip is `x=0, y=0`; positive x travels downhill. The orange convention-centre building occupies **positive z** and the high pale retaining wall **negative z**. Looking up from the landing, the building is on the left. Rider stance never mirrors the architecture.
 
 There are **25 separate risers and 24 intervening treads**. Equal heights and spacing are a modeling assumption: each riser is 0.5904 feet / 17.995392 cm, each tread is 0.8870833 feet / 27.0383 cm. A long, level paved courtyard leads to the drop, and the lower courtyard remains flat through the rollout. There is **no centre handrail and no pair of freestanding stair rails**. The lone stair handrail hugs the terracotta wall on brackets, and is not exposed as a grind route.
 

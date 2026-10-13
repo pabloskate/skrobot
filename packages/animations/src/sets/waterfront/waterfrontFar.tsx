@@ -6,6 +6,7 @@ import { BLEED_L, BLEED_R, BLEED_Y, band, num, type FarLayer } from '../setKit';
 import { BAY, panorama, type PanoramaTile } from './waterfrontPanorama';
 import { WATER_Z } from './waterfrontLayout';
 import { ASPHALT } from '../../camera/view';
+import { SET_SCALE } from '../setScale';
 
 /**
  * The waterfront's far panorama: the afterglow sky, the bay, the city,
@@ -124,7 +125,7 @@ function farLayers(cam: Camera, scroll: number, view: ViewBox, idBase: string): 
   const hy = cam.horizonY;
   const viewTop = view.y;
   // The bay's gradient reaches its near color at the sea wall, on the 3D set's asphalt.
-  const waterNear = cam.project({ x: X0, y: ASPHALT, z: WATER_Z });
+  const waterNear = cam.project({ x: X0, y: ASPHALT, z: WATER_Z * SET_SCALE });
   const waterSpan = Math.max(20, waterNear.y - hy);
   const stop = (y: number) => `${(clamp01((y - hy) / waterSpan) * 100).toFixed(1)}%`;
   const wide = { x: BLEED_L, width: BLEED_R - BLEED_L };

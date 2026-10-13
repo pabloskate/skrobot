@@ -3,15 +3,15 @@ import { DoubleSide, Mesh, MeshBasicMaterial, Raycaster, Vector3 } from 'three';
 import { Bake } from '../../three/bake';
 import { buildWallenbergBlocks, buildWallenbergGeometry } from './wallenbergGeometry';
 import {
-  FOOT, WALLENBERG_DROP, WALLENBERG_END_Z, WALLENBERG_CORNER_R, WALLENBERG_FLIGHTS, WALLENBERG_RISERS, WALLENBERG_RUN, WALLENBERG_SIDE_STAIRS_Z0,
+  SET_FOOT, WALLENBERG_DROP, WALLENBERG_END_Z, WALLENBERG_CORNER_R, WALLENBERG_FLIGHTS, WALLENBERG_RISERS, WALLENBERG_RUN, WALLENBERG_SIDE_STAIRS_Z0,
   WALLENBERG_STEPS, WALLENBERG_TREAD, sideStairHeight, wallenbergGround, wallenbergLevel, wallenbergSurface,
 } from './wallenbergLayout';
 
 describe('Wallenberg landmark geometry', () => {
   it('reproduces the measured 51-inch drop and 198-inch run: three 15-inch blocks and the short street curb', () => {
-    expect(WALLENBERG_DROP / FOOT * 12).toBe(51);
-    expect(WALLENBERG_RUN / FOOT * 12).toBe(198);
-    expect(WALLENBERG_RISERS.map((rise) => rise / FOOT * 12)).toEqual([15, 15, 15, 6]);
+    expect(WALLENBERG_DROP / SET_FOOT * 12).toBe(51);
+    expect(WALLENBERG_RUN / SET_FOOT * 12).toBe(198);
+    expect(WALLENBERG_RISERS.map((rise) => rise / SET_FOOT * 12)).toEqual([15, 15, 15, 6]);
     expect(wallenbergLevel(WALLENBERG_STEPS)).toBe(-WALLENBERG_DROP);
     const ground = new Bake();
     buildWallenbergBlocks(ground, new Bake());
@@ -33,7 +33,7 @@ describe('Wallenberg landmark geometry', () => {
         // Square to the line from the side stairs: the top two to where they round their ends, the lower two on out of sight.
         expect(Math.max(...zs)).toBeCloseTo(WALLENBERG_SIDE_STAIRS_Z0, 5);
         if (i < WALLENBERG_END_Z.length) expect(Math.min(...zs)).toBeCloseTo(WALLENBERG_END_Z[i] + WALLENBERG_CORNER_R[i], 5);
-        else expect(Math.min(...zs)).toBeLessThan(-100 * FOOT);
+        else expect(Math.min(...zs)).toBeLessThan(-100 * SET_FOOT);
         expect(wallenbergGround(x + 0.1)).toBeCloseTo(Math.min(...ys), 5);
         expect(wallenbergGround(x - 0.1)).toBeCloseTo(i === 0 ? 0 : Math.max(...ys), 5);
       });
@@ -48,10 +48,10 @@ describe('Wallenberg landmark geometry', () => {
     for (let i = 0; i < WALLENBERG_STEPS; i++) {
       const x = i * WALLENBERG_TREAD;
       const heights = new Set<number>();
-      for (let u = x - 0.5 * FOOT; u < x + 4 * FOOT; u += 0.25 * FOOT) heights.add(Math.round(sideStairHeight(u) * 1000));
+      for (let u = x - 0.5 * SET_FOOT; u < x + 4 * SET_FOOT; u += 0.25 * SET_FOOT) heights.add(Math.round(sideStairHeight(u) * 1000));
       // The landing above, a height per step, and the landing below.
       expect(heights.size, `flight ${i}`).toBe(WALLENBERG_FLIGHTS[i] + 1);
-      expect(sideStairHeight(x + 4 * FOOT)).toBeCloseTo(wallenbergLevel(i + 1), 6);
+      expect(sideStairHeight(x + 4 * SET_FOOT)).toBeCloseTo(wallenbergLevel(i + 1), 6);
     }
   });
 
@@ -75,14 +75,14 @@ describe('Wallenberg landmark geometry', () => {
         [-28.2, -7.1, 'slope behind the ledge'],
         [-25.3, -40.4, 'slope, far side'],
         [25.3, 0.4, 'street landing'],
-        [WALLENBERG_RUN / FOOT + 0.7, 4.1, 'gutter'],
+        [WALLENBERG_RUN / SET_FOOT + 0.7, 4.1, 'gutter'],
         [0.4, 25.2, 'top of the side stairs'],
         [6.1, 25.3, 'side stairs landing'],
         [8.2, 33.4, 'planted bank'],
       ];
       for (const [fx, fz, name] of samples) {
-        const [x, z] = [fx * FOOT, fz * FOOT];
-        const ray = new Raycaster(new Vector3(x, 40 * FOOT, z), new Vector3(0, -1, 0), 0, 80 * FOOT);
+        const [x, z] = [fx * SET_FOOT, fz * SET_FOOT];
+        const ray = new Raycaster(new Vector3(x, 40 * SET_FOOT, z), new Vector3(0, -1, 0), 0, 80 * SET_FOOT);
         const hits = ray.intersectObject(mesh).map(hit => hit.point.y);
         expect(hits.length, name).toBeGreaterThan(0);
         // The surface seen from above is the stage's (the roll-in's plywood over it by its thickness).

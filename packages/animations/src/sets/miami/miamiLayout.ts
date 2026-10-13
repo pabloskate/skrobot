@@ -1,5 +1,5 @@
 import type { Handrail } from '../../motion/grind';
-import { FOOT, type DropTerrain } from '../elToro/stairs';
+import { SET_FOOT, type DropTerrain } from '../elToro/stairs';
 
 /**
  * The Miami triangle gap: the Challenger Memorial in Bayfront Park, on
@@ -17,8 +17,8 @@ import { FOOT, type DropTerrain } from '../elToro/stairs';
  * line, −z is left (south-east, toward the park's south drive) and +z right
  * (north-west, toward Biscayne Boulevard).
  */
-export const MIAMI_FOOT = FOOT;
-const F = FOOT;
+export const MIAMI_FOOT = SET_FOOT;
+const F = SET_FOOT;
 const TAN30 = Math.tan(Math.PI / 6);
 const COS30 = Math.cos(Math.PI / 6);
 

@@ -3,6 +3,7 @@ import { SHOE_HALF_HEIGHT, SHOE_HALF_LENGTH, SHOE_HALF_WIDTH, type BoardRig, typ
 import { ANKLE_IN_SHOE, ankleOf, centerOfMass, rigOf, twoBone, type BodyDims, type BodyPose, type ShoePose } from './body';
 import { frameFrom, qframe, qrot, qslerp } from './rotation';
 import { rightOf, turnLevel } from './runOut';
+import { MODEL_SCALE } from '../../riders/human/humanProportions';
 
 /**
  * Rolling it out: a rider who comes down off a drop (or off the board at
@@ -112,14 +113,15 @@ const SNAP = 3;
  * to keep it there (degrees). A person keeps it well clear, as a skater who rolls is taught to; the robot's head is as
  * wide as its shoulders, and grazes by.
  */
-const HEAD_CLEAR = { robot: 2, person: 8 } as const;
+const HEAD_CLEAR = { robot: 2, person: 8 * MODEL_SCALE } as const;
 const HEAD_LIFT = 80;
 /**
- * How far off the ground (world units) a leg that's let go of it is kept, and the most it's swung back at the hip to keep
- * it there (degrees); coming up over the feet, it's let back down onto the ground (by roll angle, 1 → 0).
+ * How far off the ground (world units, a robot's: a person's are their size's) a leg that's let go of it is kept, and the
+ * most it's swung back at the hip to keep it there (degrees); coming up over the feet, it's let back down onto the
+ * ground (by roll angle, 1 → 0).
  */
-const LEG_CLEAR = 1.5;
-const ARM_CLEAR = 1.5;
+const LEG_CLEAR = 2.5;
+const ARM_CLEAR = 2;
 const LEG_LIFT = 90;
 const LEG_DOWN_FROM = 215;
 const legLiftAt = (theta: number) => 1 - smoothstep((theta - LEG_DOWN_FROM) / (FEET_BACK - LEG_DOWN_FROM));
@@ -220,10 +222,11 @@ function postureAt(theta: number): Posture {
 const CHEST = { half: [11, 21, 15.5] as const, r: 10.5, raise: 4 };
 const ROBOT_HEAD = { half: [14, 15, 18] as const, r: 8.5 };
 /**
- * A person's skull, as a ball (world units, a person's): where the drawn skeleton (riders/realistic) has it off the head
- * frame's origin, a little back and down it, as far along (fwd, up) as it sits, and big enough for the neck's give either side.
+ * A person's skull, as a ball (measured on the model as built, grown to the person by MODEL_SCALE): where the drawn
+ * skeleton (riders/realistic) has it off the head frame's origin, a little back and down it, as far along (fwd, up) as
+ * it sits, and big enough for the neck's give either side.
  */
-const PERSON_SKULL = { f: -4, u: -7, r: 12.5 } as const;
+const PERSON_SKULL = { f: -4 * MODEL_SCALE, u: -7 * MODEL_SCALE, r: 12.5 * MODEL_SCALE } as const;
 /** Limb radii (robot's: robot3d.ts's widths halved): upper arm, forearm, hand, thigh at the hip, knee, ankle. */
 const LIMB = { upperArm: 5, forearm: 4.4, hand: 5.8, hip: 6.5, knee: 5.2, ankle: 4.3 } as const;
 
@@ -318,6 +321,8 @@ interface Shape {
 interface Clearing {
   head: number;
   legs: [number, number];
+  /** How far each knee is swung out round its leg's line (degrees): planted, a knee bent toward the ground splays out. */
+  knees: [number, number];
   hands: [number, number];
   elbows: [number, number];
   /** Where each elbow was bent off its shoulder before it was turned, in the chest's frame (forward, up, right). */
@@ -339,7 +344,7 @@ const toward = (was: number | undefined, want: number, rate = CLEARING_RATE) =>
 
 /** The body posed `theta` round the roll, the hips at `hips`; its parts kept off the ground turning on from `was`, the step before's. */
 function shapeAt(body: BodyDims, line: RollLine, theta: number, hips: V3, holds: Holds, board: BoardRig, was: Clearing | null): Shape {
-  const clearing: Clearing = { head: 0, legs: [0, 0], hands: [0, 0], elbows: [0, 0], elbowsAt: [null, null] };
+  const clearing: Clearing = { head: 0, legs: [0, 0], knees: [0, 0], hands: [0, 0], elbows: [0, 0], elbowsAt: [null, null] };
   const p = postureAt(theta);
   const { travel, axis, side } = line;
   // The pelvis: facing off the line, leaning over, and pitched forward about the line's axis.
@@ -440,13 +445,13 @@ function shapeAt(body: BodyDims, line: RollLine, theta: number, hips: V3, holds:
       return legGap(body, line.ground, hip, leg.shoe, leg.pole);
     };
     let want = 0;
-    if (most > 0 && loose > 0 && gapOf(0) < LEG_CLEAR) {
+    if (most > 0 && loose > 0 && gapOf(0) < LEG_CLEAR * body.scale) {
       let lo = 0;
       let hi = most;
-      if (gapOf(hi) >= LEG_CLEAR) {
+      if (gapOf(hi) >= LEG_CLEAR * body.scale) {
         for (let n = 0; n < 12; n++) {
           const mid = (lo + hi) / 2;
-          if (gapOf(mid) >= LEG_CLEAR) hi = mid;
+          if (gapOf(mid) >= LEG_CLEAR * body.scale) hi = mid;
           else lo = mid;
         }
       }
@@ -459,7 +464,9 @@ function shapeAt(body: BodyDims, line: RollLine, theta: number, hips: V3, holds:
       pole = leg.pole;
     }
     shoes[i] = shoe;
-    knees[i] = pole;
+    const splay = kneeSplay(body, line.ground, hip, shoe, pole, scale3(S, s));
+    clearing.knees[i] = Math.max(0, Math.min(KNEE_OUT_MOST, toward(was?.knees[i], splay.want, KNEE_RATE)));
+    knees[i] = splay.swung(clearing.knees[i]);
   }
 
   // Arms: each hand where the posture reaches it, or toward where it's held; the elbow bent out and back.
@@ -485,13 +492,13 @@ function shapeAt(body: BodyDims, line: RollLine, theta: number, hips: V3, holds:
         const most = (Math.acos(Math.max(-1, Math.min(1, dot3(norm3(d), UP)))) * 180) / Math.PI;
         const handAt = (deg: number) => add3(shoulder, turn(d, about, deg));
         let want = 0;
-        if (holds.handsFree[i] && gap(hand, LIMB.hand * k) < ARM_CLEAR) {
+        if (holds.handsFree[i] && gap(hand, LIMB.hand * k) < ARM_CLEAR * body.scale) {
           let lo = 0;
           let hi = most;
-          if (gap(handAt(hi), LIMB.hand * k) >= ARM_CLEAR) {
+          if (gap(handAt(hi), LIMB.hand * k) >= ARM_CLEAR * body.scale) {
             for (let n = 0; n < 12; n++) {
               const mid = (lo + hi) / 2;
-              if (gap(handAt(mid), LIMB.hand * k) >= ARM_CLEAR) hi = mid;
+              if (gap(handAt(mid), LIMB.hand * k) >= ARM_CLEAR * body.scale) hi = mid;
               else lo = mid;
             }
           }
@@ -531,17 +538,17 @@ function shapeAt(body: BodyDims, line: RollLine, theta: number, hips: V3, holds:
       const elbowGap = (e: V3) => gap(e, LIMB.forearm * k);
       const turnedWas = was?.elbows[i] ?? 0;
       let want = 0;
-      if (tilt > 1e-3 && dot3(out, out) > 1e-6 && elbowGap(elbow) < ARM_CLEAR) {
+      if (tilt > 1e-3 && dot3(out, out) > 1e-6 && elbowGap(elbow) < ARM_CLEAR * body.scale) {
         const up = scale3(upward, 1 / tilt);
         const sign = Math.abs(turnedWas) > 1 ? Math.sign(turnedWas) : dot3(cross3(limb, out), up) >= 0 ? 1 : -1;
         const toUp = (Math.atan2(dot3(limb, cross3(out, up)), dot3(out, up)) * 180) / Math.PI;
         const rises = Math.min(ELBOW_TURN_MOST, sign > 0 ? (toUp >= 0 ? toUp : toUp + 360) : toUp <= 0 ? -toUp : 360 - toUp);
         let lo = 0;
         let hi = rises;
-        if (elbowGap(turned(sign * hi)) >= ARM_CLEAR) {
+        if (elbowGap(turned(sign * hi)) >= ARM_CLEAR * body.scale) {
           for (let n = 0; n < 14; n++) {
             const mid = (lo + hi) / 2;
-            if (elbowGap(turned(sign * mid)) >= ARM_CLEAR) hi = mid;
+            if (elbowGap(turned(sign * mid)) >= ARM_CLEAR * body.scale) hi = mid;
             else lo = mid;
           }
         }
@@ -556,6 +563,46 @@ function shapeAt(body: BodyDims, line: RollLine, theta: number, hips: V3, holds:
   const pose: BodyPose = { hips, pelvis, torso, head, shoes, knees, arms };
   const rig = rigOf(pose, body, board, 1, 1);
   return { pose, rig, com: centerOfMass(rig), clearing };
+}
+
+/** How far, at most, a knee swings out round its leg's line to stay out of the ground (degrees), and how fast (degrees a second): twice the clearing's, a knee being driven down at the ground as the body dives. */
+const KNEE_OUT_MOST = 90;
+const KNEE_RATE = 2 * CLEARING_RATE;
+
+/**
+ * A knee's bend (its pole) swung out round the line from the hip to the ankle (toward `out`) by an angle (degrees), and
+ * the least angle that keeps the knee out of the ground: diving off planted feet the knees bend down toward it, and
+ * splay out instead of going in.
+ */
+function kneeSplay(body: BodyDims, ground: (x: number, z: number) => number, hip: V3, shoe: ShoePose, pole: V3, out: V3) {
+  const ankle = ankleOf(shoe);
+  const radius = LIMB.knee * body.scale;
+  const axis = norm3(sub3(ankle, hip));
+  const across = cross3(axis, pole);
+  const side = dot3(across, out) >= 0 ? 1 : -1;
+  const swung = (deg: number) => {
+    const a = (deg * Math.PI) / 180;
+    const c = Math.cos(a);
+    return norm3(add3(add3(scale3(pole, c), scale3(across, side * Math.sin(a))), scale3(axis, dot3(axis, pole) * (1 - c))));
+  };
+  const clears = (deg: number) => {
+    const knee = twoBone(hip, ankle, body.thigh, body.shin, swung(deg));
+    return ground(knee.x, knee.z) - knee.y - radius >= 0;
+  };
+  let want = 0;
+  if (!clears(0)) {
+    let lo = 0;
+    let hi = KNEE_OUT_MOST;
+    if (clears(hi)) {
+      for (let n = 0; n < 12; n++) {
+        const mid = (lo + hi) / 2;
+        if (clears(mid)) hi = mid;
+        else lo = mid;
+      }
+    }
+    want = hi;
+  }
+  return { want, swung };
 }
 
 /** How far a leg's lowest point (its knee, ankle or sole) is off the ground, the shoe and knee posed as given. */
@@ -932,7 +979,7 @@ export function rollOut(setup: RollSetup): Roll {
         // It lets go stretched out, or once the body's come down onto the arm (its elbow's down at the ground, held off it).
         const span = Math.hypot(hand.at.x - arm.shoulder.x, hand.at.y - arm.shoulder.y, hand.at.z - arm.shoulder.z);
         const elbowGap = Math.min(...all.filter((x) => x.part === (i === 0 ? 'arm0' : 'arm1')).map((x) => x.gap));
-        if (theta >= HANDS_OFF || span > 0.97 * (body.upperArm + body.forearm) || elbowGap <= ARM_CLEAR + 0.05) hand.off = t;
+        if (theta >= HANDS_OFF || span > 0.97 * (body.upperArm + body.forearm) || elbowGap <= ARM_CLEAR * body.scale + 0.05) hand.off = t;
       }
       const foot = feet[i];
       if (foot && foot.off === Infinity) {

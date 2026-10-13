@@ -1,6 +1,7 @@
 import { Matrix4, type Bone, type BufferAttribute, type InterleavedBufferAttribute, type Skeleton } from 'three';
 import { smoothstep } from '../../math';
 import { softFloor } from '../../motion/skeleton';
+import { MODEL_SCALE } from '../human/humanProportions';
 import type { DeltaMush } from './deltaMush';
 
 /**
@@ -35,14 +36,14 @@ import type { DeltaMush } from './deltaMush';
  */
 
 /** How far the tee stands off the denim (world units), and how softly it starts to give before it touches. */
-const CLEAR = 0.6;
-const SOFT = 1.5;
+const CLEAR = 0.6 * MODEL_SCALE;
+const SOFT = 1.5 * MODEL_SCALE;
 /** Passes of spreading a push through the tee's neighbors. */
 const SPREAD = 32;
 /** Of the height a thigh lifts the tee by, the share it then lies forward along the thigh: the fabric keeps its length. */
 const DRAPE_SLIDE = 0.8;
 /** The most a thigh lifts the tee by; past it the lift fades out over the last quarter, and a leg only pushes the cloth aside. */
-const DRAPE_MAX = 24;
+const DRAPE_MAX = 24 * MODEL_SCALE;
 /**
  * A thigh starts to drape the tee as it swings across the body: from sin² of
  * its angle to the body's up of DRAPE_FROM (about 23°, a leg hanging), fully by
@@ -51,16 +52,16 @@ const DRAPE_MAX = 24;
 const DRAPE_FROM = 0.15;
 const DRAPE_FADE = 0.35;
 /** How far out along a thigh, past the hip joint, the tee is fully resting on it; behind the joint it hangs free. */
-const DRAPE_BEHIND = 10;
+const DRAPE_BEHIND = 10 * MODEL_SCALE;
 /** How much of a thigh a line up through the cloth must cross to lift it fully: less (grazing its side) lifts it less. */
-const DRAPE_CHORD = 6;
+const DRAPE_CHORD = 6 * MODEL_SCALE;
 /** Each leg's denim as a grid: slices along the bone, and angles round it. */
 const SLICES = 10;
 const ANGLES = 24;
 /** How much of a denim triangle its bone must carry (the rest is the hips', or the next bone's) for it to be that leg's. */
 const CARRIED = 0.75;
 /** Over how far (world units) each end of a leg closes, the way a capsule's does, so cloth slipping past an end is eased out rather than thrown. */
-const TAPER = 4;
+const TAPER = 4 * MODEL_SCALE;
 /** Where in a denim triangle it's sampled (barycentric), so a coarse leg still fills every cell of its grid. */
 const SAMPLES = [
   [1, 0, 0], [0, 1, 0], [0, 0, 1],
@@ -73,13 +74,13 @@ const BULGE = 1.5;
  * cloth over it, and rides the same bones: of their skin weights they share at
  * least SEWN. The trunk under a sleeve shares far less, so it isn't taken for a fold.
  */
-const FOLD = 5;
+const FOLD = 5 * MODEL_SCALE;
 const SEWN = 0.5;
 /** However the skinning squashes a fold, its inside stays at least this share of its depth at rest under the cloth over it. */
 const FOLD_KEEP = 0.5;
 /** Bins round the trunk, and up it (world units), the tee's triangles are sorted into to find what covers each node. */
 const COVER_ANGLES = 96;
-const COVER_HEIGHT = 2;
+const COVER_HEIGHT = 2 * MODEL_SCALE;
 const TAU = Math.PI * 2;
 
 /**

@@ -147,7 +147,7 @@ const TUCK_PASSES = 8;
 const LEG_STEP = 3;
 const LEG_LIFT = 15;
 /** Samples a trick's tuck is measured at, from the pop through touchdown. */
-const TUCK_SAMPLES = 64;
+const TUCK_SAMPLES = 96;
 
 /** How far (world units) a flip's flicking foot sets up out over its rail,
  *  and the seconds it shuffles there in, ahead of the pop. */

@@ -6,7 +6,8 @@ import { ROLL_IN, X0 } from '../../motion/trick';
 import { planStage, stageFrame } from '../../stage/stage';
 import type { RiderStance, Stance } from '../../types';
 import { dropInEnd, terrainSurface } from '../elToro/stairs';
-import { FOOT, WALLENBERG_DROP_IN, WALLENBERG_RAMP } from './wallenbergLayout';
+import { SET_FOOT, WALLENBERG_DROP_IN, WALLENBERG_RAMP } from './wallenbergLayout';
+import { SET_SCALE } from '../setScale';
 
 const plan = (stance: Stance = 'regular', riderStance: RiderStance = 'regular', popHeight = 1) =>
   planStage({ id: 'Kickflip', name: 'Kickflip', base: 'Kickflip', stance }, {
@@ -19,8 +20,8 @@ describe('Wallenberg roll-in', () => {
       const stage = plan('regular', 'regular', popHeight);
       const stairs = stage.stairs!;
       const start = stageFrame(stage, 0, 1);
-      expect(start.scroll).toBeCloseTo(WALLENBERG_DROP_IN.x);
-      expect(start.lift).toBeCloseTo(WALLENBERG_RAMP.height, 0);
+      expect(start.scroll).toBeCloseTo(WALLENBERG_DROP_IN.x * SET_SCALE);
+      expect(start.lift).toBeCloseTo(WALLENBERG_RAMP.height * SET_SCALE, 0);
       const foot = dropInEnd(stairs);
       expect(foot).toBeGreaterThan(1);
       // The trick's crouch starts on the flat, after the ramp.
@@ -36,7 +37,7 @@ describe('Wallenberg roll-in', () => {
       }
       const at = stageFrame(stage, foot, 1), before = stageFrame(stage, foot - dt, 1);
       expect((at.scroll - before.scroll) / dt / stairs.speed).toBeCloseTo(1, 1);
-      expect(at.scroll).toBeCloseTo(WALLENBERG_RAMP.bottom, -1);
+      expect(at.scroll).toBeCloseTo(WALLENBERG_RAMP.bottom * SET_SCALE, -1);
     }
   });
 
@@ -59,6 +60,6 @@ describe('Wallenberg roll-in', () => {
       }
     }
     expect(failures.slice(0, 12)).toEqual([]);
-    expect(WALLENBERG_RAMP.height).toBe(8 * FOOT);
+    expect(WALLENBERG_RAMP.height).toBe(8 * SET_FOOT);
   });
 });

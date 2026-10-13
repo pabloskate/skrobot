@@ -226,9 +226,10 @@ describe('Rider body physics', () => {
               const up = leg.shoe.up;
               const tilt = Math.acos((shin.x * up.x + shin.y * up.y + shin.z * up.z) / SHIN) * 180 / Math.PI;
               // A nollie's back foot, set up out over its rail and picked up
-              // by the tail popping into it, bends its ankle furthest, for a
-              // frame or two after the pop.
-              expect(tilt, `${rider} ${base} ${stance} ${leg.side} t=${t}`).toBeLessThan(77);
+              // by the tail popping into it (and tucked for the deck sweeping
+              // under it), bends its ankle furthest, for a frame or two after
+              // the pop.
+              expect(tilt, `${rider} ${base} ${stance} ${leg.side} t=${t}`).toBeLessThan(78);
             }
           }
         }

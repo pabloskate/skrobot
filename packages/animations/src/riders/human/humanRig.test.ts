@@ -65,7 +65,7 @@ describe('person rig', () => {
     }
   });
 
-  it('stands about two boards tall over the deck, where the robot stands one and a half', () => {
+  it('stands over two boards tall over the deck (5\'10" on a 31-inch board), where the robot stands one and a half', () => {
     const style = resolveSkateStyle(robot.skateStyle);
     const trick = TRICKS[0];
     const options = { landed: true, riderStance: 'regular' as const, style, fall: 'slam' as const, shankProgress: 0.65 };
@@ -75,8 +75,8 @@ describe('person rig', () => {
     // Crown over the deck: about 6 over the head frame, for the robot's head box and a person's skull alike.
     const crown = (rig: typeof robotRig) => rig.board.center.y - rig.head.origin.y + 6;
     expect(crown(robotRig) / board).toBeLessThan(1.45);
-    expect(crown(humanRig) / board).toBeGreaterThan(1.75);
-    expect(crown(humanRig) / board).toBeLessThan(2.1);
+    expect(crown(humanRig) / board).toBeGreaterThan(2);
+    expect(crown(humanRig) / board).toBeLessThan(2.3);
   });
 
   it('keeps each shoulder on its own side of the chest', () => {

@@ -7,7 +7,7 @@ import { ElToro3D } from './elToro3d';
 import { planStage, stageFrame } from '../../stage/stage';
 import { stageView, toThree } from '../../camera/view';
 import { CENTER_Z, FAR_RAIL_Z, HILL_EDGE, HILL_RAIL_Z, RIDER_LANE_Z, WALL_Z } from './elToroLayout';
-import { FOOT, RISER, STAIR_DROP, STAIR_RUN, STAIR_STEPS, TREAD } from './stairs';
+import { SET_FOOT, RISER, STAIR_DROP, STAIR_RUN, STAIR_STEPS, TREAD } from './stairs';
 import { buildElToroBuilding } from './elToroBuilding';
 import { Bake } from '../../three/bake';
 import { buildElToroCanopy, EL_TORO_CANOPY } from './elToroCanopy';
@@ -161,17 +161,17 @@ describe('El Toro environment geometry', () => {
       expect(STAIR_STEPS).toBe(20);
       expect(Math.min(...steps.map(({ x }) => x))).toBe(0);
       expect(Math.max(...steps.map(({ x }) => x))).toBeCloseTo(STAIR_RUN, 5);
-      expect(STAIR_RUN / FOOT).toBe(20);
+      expect(STAIR_RUN / SET_FOOT).toBe(20);
       expect(Math.max(...steps.map(({ y }) => y))).toBeCloseTo(0, 5);
       expect(Math.min(...steps.map(({ y }) => y))).toBeCloseTo(-STAIR_DROP, 5);
-      expect(STAIR_DROP / FOOT).toBe(9.5);
+      expect(STAIR_DROP / SET_FOOT).toBe(9.5);
       for (const face of risers.values()) {
         const minZ = Math.min(...face.map(({ z }) => z));
         const maxZ = Math.max(...face.map(({ z }) => z));
-        expect(maxZ - minZ).toBe(24 * FOOT);
+        expect(maxZ - minZ).toBe(24 * SET_FOOT);
         expect((minZ + maxZ) / 2).toBe(CENTER_Z);
-        expect(CENTER_Z - minZ).toBe(12 * FOOT);
-        expect(maxZ - CENTER_Z).toBe(12 * FOOT);
+        expect(CENTER_Z - minZ).toBe(12 * SET_FOOT);
+        expect(maxZ - CENTER_Z).toBe(12 * SET_FOOT);
       }
     } finally {
       set.dispose();
@@ -201,8 +201,8 @@ describe('El Toro environment geometry', () => {
             const localRider = build.worldToLocal(rider.clone());
             expect(build.position.z).toBe(fixedZ);
             expect(rider.z).toBe(0);
-            expect(localRider.z).toBe(RIDER_LANE_Z);
-            expect(localRider.z).toBe((CENTER_Z + WALL_Z) / 2);
+            expect(localRider.z).toBeCloseTo(RIDER_LANE_Z, 9);
+            expect(localRider.z).toBeCloseTo((CENTER_Z + WALL_Z) / 2, 9);
             expect(localRider.z).toBeGreaterThan(CENTER_Z);
             expect(localRider.z).toBeLessThan(WALL_Z);
 
@@ -211,7 +211,7 @@ describe('El Toro environment geometry', () => {
             for (const rail of centerRail) {
               const point = build.localToWorld(new Vector3(rail.x, rail.y, rail.z));
               expect(point.z).toBeLessThan(rider.z);
-              expect(rider.z - point.z).toBeGreaterThanOrEqual(6 * FOOT);
+              expect(rider.z - point.z).toBeGreaterThanOrEqual(6 * SET_FOOT);
               expect(point.z + rail.w).toBeLessThan(rider.z);
             }
             for (const rail of farRail) {

@@ -5,7 +5,7 @@ import { Bake, NO_INK, type Ink } from '../../three/bake';
 import { INK_PROP } from '../../three/materials';
 import { hash2 } from '../setKit';
 import {
-  FOOT,
+  SET_FOOT,
   WALLENBERG_ANNEX_HEIGHT,
   WALLENBERG_ANNEX_X,
   WALLENBERG_ANNEX_FRONT_X,
@@ -50,13 +50,13 @@ const PLYWOOD = '#caa36c';
 const LUMBER = '#a9824f';
 const PLANTING = '#6c7552';
 const UP: Vec3 = [0, 1, 0];
-const FAR = 1000 * FOOT;
+const FAR = 1000 * SET_FOOT;
 const ink = (id: number, solid = 0): Ink => ({ id, priority: 2, width: 0.16, kind: INK_PROP, solid });
 const blockInk = (i: number) => ink(40 + i, 10);
 const masonryInk = ink(80, 10);
 const steelInk = ink(61);
 const woodInk = ink(119);
-const INCH = FOOT / 12;
+const INCH = SET_FOOT / 12;
 
 /** A color lit once by the sun for a face's three-world normal, as boxes are. */
 const lit = (color: string, n: Vec3) => tone(color, lambert({ x: n[0], y: -n[1], z: n[2] }));
@@ -103,7 +103,7 @@ const FACE_SEGMENTS = 10;
 const ARC_SEGMENTS = 12;
 const SIDE_SEGMENTS = 8;
 /** How far toward the court the straight curbs' wear and weeds are drawn. */
-const NEAR = 75 * FOOT;
+const NEAR = 75 * SET_FOOT;
 
 /**
  * One of the top two curbs in plan: along its face from the side stairs,
@@ -174,7 +174,7 @@ function weathering(props: Bake, i: number, z0: number, z1: number) {
   const faceX = i * WALLENBERG_TREAD;
   const upper = wallenbergLevel(i);
   const lower = wallenbergLevel(i + 1);
-  const bays = Math.round((z1 - z0) / (1.1 * FOOT));
+  const bays = Math.round((z1 - z0) / (1.1 * SET_FOOT));
   for (let n = 0; n < bays; n++) {
     const z = z0 + (n * (z1 - z0)) / bays;
     const width = (z1 - z0) / bays;
@@ -185,7 +185,7 @@ function weathering(props: Bake, i: number, z0: number, z1: number) {
       props.quad([faceX + 0.14, lower + 2, z + 2], [faceX + 0.14, lower + 2, patchEnd], [faceX + 0.14, upper - dark - 2, patchEnd], [faceX + 0.14, upper - dark - 2, z + 2], [1, 0, 0], { color: '#dfe0d6' }, NO_INK);
     }
     // Kept off the board's line.
-    if (Math.abs(z) > 4 * FOOT && n % 3 === 0) {
+    if (Math.abs(z) > 4 * SET_FOOT && n % 3 === 0) {
       for (let k = 0; k < 4; k++) {
         const s = z + k * 2;
         props.triangle([faceX + 1, lower, s], [faceX + 1, lower, s + 1.8], [faceX + 2 + k, lower + 5 + hash2(n, k, 55) * 6, s + 3], [1, 0, 0], { color: '#767e4d' }, NO_INK);
@@ -222,22 +222,22 @@ export function buildWallenbergBlocks(ground: Bake, props: Bake) {
   const top0 = [...curbLine(0, meet1), ...Array.from({ length: SIDE_SEGMENTS }, (_, k): Plan => [meet1 + ((meet0 - meet1) * (k + 1)) / SIDE_SEGMENTS, end0])];
   curbFace(ground, top0, 0, WHITE, blockInk(0));
   curbFace(ground, curbLine(1, meet1), wallenbergLevel(1), WHITE, blockInk(1));
-  strip(ground, curbLine(0, meet0, 0.5 * FOOT), curbLine(0, meet0), 0.07, CAP);
-  strip(ground, curbLine(1, meet1, 0.5 * FOOT), curbLine(1, meet1), wallenbergLevel(1) + 0.07, CAP);
+  strip(ground, curbLine(0, meet0, 0.5 * SET_FOOT), curbLine(0, meet0), 0.07, CAP);
+  strip(ground, curbLine(1, meet1, 0.5 * SET_FOOT), curbLine(1, meet1), wallenbergLevel(1) + 0.07, CAP);
   for (let i = 2; i < WALLENBERG_STEPS; i++) {
     const x = i * T;
     curbFace(ground, [[x, WALLENBERG_SIDE_STAIRS_Z0], [x, -FAR]], wallenbergLevel(i), WHITE, blockInk(i));
-    floor(ground, x - 0.5 * FOOT, x + 0.04, -NEAR, WALLENBERG_SIDE_STAIRS_Z0, wallenbergLevel(i) + 0.07, CAP);
+    floor(ground, x - 0.5 * SET_FOOT, x + 0.04, -NEAR, WALLENBERG_SIDE_STAIRS_Z0, wallenbergLevel(i) + 0.07, CAP);
   }
   for (let i = 0; i < WALLENBERG_STEPS; i++) {
     weathering(props, i, i < WALLENBERG_END_Z.length ? WALLENBERG_END_Z[i] + WALLENBERG_CORNER_R[i] : -NEAR, WALLENBERG_SIDE_STAIRS_Z0);
     if (i + 1 < WALLENBERG_STEPS) {
-      for (let n = 0; n < 7; n++) crack(ground, i * T + 20 + hash2(i, n, 51) * 50, -9 * FOOT + n * 120, wallenbergLevel(i + 1), i * 9 + n, 35 + hash2(i, n, 52) * 48);
+      for (let n = 0; n < 7; n++) crack(ground, i * T + 20 + hash2(i, n, 51) * 50, -9 * SET_FOOT + n * 120, wallenbergLevel(i + 1), i * 9 + n, 35 + hash2(i, n, 52) * 48);
     }
   }
   // The slope: past the alley's ledge, past the top curb's end, past the second's, flat beyond the gate.
   const r1 = WALLENBERG_CORNER_R[1], end1 = WALLENBERG_END_Z[1];
-  const level = WALLENBERG_GATE_X - 10 * FOOT;
+  const level = WALLENBERG_GATE_X - 10 * SET_FOOT;
   const slab = (x0: number, x1: number, z1: number) => fan(ground, [[x0, -FAR], [x1, -FAR], [x1, z1], [x0, z1]], wallenbergSlope, '#686a64');
   slab(-FAR, level, WALLENBERG_LEDGE_Z);
   slab(level, meet0, WALLENBERG_LEDGE_Z);
@@ -252,11 +252,11 @@ export function buildWallenbergBlocks(ground: Bake, props: Bake) {
   fan(ground, corner1, wallenbergSlope, '#686a64', [T, end1]);
   // Tyre marks scuffed down it.
   for (let k = 0; k < 6; k++) {
-    const z = (-24 - k * 7 - 4 * hash2(k, 1, 57)) * FOOT;
-    for (let x = -40 * FOOT; x < 4 * FOOT; x += 2 * FOOT) {
-      const bend = Math.sin((x / FOOT + k * 3) * 0.12) * 2 * FOOT;
-      const y0 = wallenbergSlope(x) + 0.12, y1 = wallenbergSlope(x + 2 * FOOT) + 0.12;
-      ground.quad([x, y0, z + bend - 3], [x, y0, z + bend + 3], [x + 2 * FOOT, y1, z + bend + 3], [x + 2 * FOOT, y1, z + bend - 3], UP, { color: lit('#5c5f59', UP) }, NO_INK);
+    const z = (-24 - k * 7 - 4 * hash2(k, 1, 57)) * SET_FOOT;
+    for (let x = -40 * SET_FOOT; x < 4 * SET_FOOT; x += 2 * SET_FOOT) {
+      const bend = Math.sin((x / SET_FOOT + k * 3) * 0.12) * 2 * SET_FOOT;
+      const y0 = wallenbergSlope(x) + 0.12, y1 = wallenbergSlope(x + 2 * SET_FOOT) + 0.12;
+      ground.quad([x, y0, z + bend - 3], [x, y0, z + bend + 3], [x + 2 * SET_FOOT, y1, z + bend + 3], [x + 2 * SET_FOOT, y1, z + bend - 3], UP, { color: lit('#5c5f59', UP) }, NO_INK);
     }
   }
 }
@@ -280,20 +280,20 @@ function sideStairs(ground: Bake, props: Bake, shadows: RailShadow[]) {
       const top = wallenbergLevel(i) - (j + 1) * rise;
       const front = x + j * WALLENBERG_STEP_RUN;
       // The last step of a flight runs on as the landing to the next.
-      const back = j + 1 < steps ? front + WALLENBERG_STEP_RUN : i + 1 < WALLENBERG_STEPS ? (i + 1) * WALLENBERG_TREAD : front + 4 * FOOT;
+      const back = j + 1 < steps ? front + WALLENBERG_STEP_RUN : i + 1 < WALLENBERG_STEPS ? (i + 1) * WALLENBERG_TREAD : front + 4 * SET_FOOT;
       if (top <= bottom + 0.01) continue;
       ground.box([front, bottom, z0], [back, top, z1], CONCRETE, '#c6c5b9', ink(95), 'tfke');
     }
   }
   // Rails at both edges: sloped over each flight of three, level along its landing.
-  for (const z of [z0 + 0.6 * FOOT, z1 - 0.6 * FOOT]) {
-    const points: Vec3[] = [[-1.5 * FOOT, 34 * INCH, z]];
+  for (const z of [z0 + 0.6 * SET_FOOT, z1 - 0.6 * SET_FOOT]) {
+    const points: Vec3[] = [[-1.5 * SET_FOOT, 34 * INCH, z]];
     for (let i = 0; i < WALLENBERG_STEPS - 1; i++) {
       const x = i * WALLENBERG_TREAD;
       points.push([x, wallenbergLevel(i) + 34 * INCH, z]);
       points.push([x + WALLENBERG_FLIGHTS[i] * WALLENBERG_STEP_RUN, wallenbergLevel(i + 1) + 34 * INCH, z]);
     }
-    points.push([(WALLENBERG_STEPS - 1) * WALLENBERG_TREAD - 0.5 * FOOT, wallenbergLevel(WALLENBERG_STEPS - 1) + 34 * INCH, z]);
+    points.push([(WALLENBERG_STEPS - 1) * WALLENBERG_TREAD - 0.5 * SET_FOOT, wallenbergLevel(WALLENBERG_STEPS - 1) + 34 * INCH, z]);
     pipe(props, points, shadows);
     for (const p of points) line(props, [p[0], sideStairHeight(p[0] - 1), z], p, 1.5);
   }
@@ -356,39 +356,39 @@ function gym(props: Bake) {
   const h = WALLENBERG_GYM_HEIGHT;
   props.box([WALLENBERG_GYM_BACK_X, 0, z], [x, h, WALLENBERG_GYM_FAR_Z], '#d2d4c8', '#c1c4b8', masonryInk, 'tfke');
   props.box([WALLENBERG_GYM_BACK_X - 8, h, z - 8], [x + 9, h + 12, WALLENBERG_GYM_FAR_Z + 8], '#b0b5ab', '#bfc4bb', ink(105));
-  const brick = 4.25 * FOOT;
+  const brick = 4.25 * SET_FOOT;
   // Front: brick round the corner, the glazing above it, then white block to the door.
-  const brickEnd = z + 8.5 * FOOT;
+  const brickEnd = z + 8.5 * SET_FOOT;
   brickwork(props, 'x', x, z, brickEnd, brick, 1);
-  bay(props, 'x', x, z + 0.8 * FOOT, brickEnd - 0.6 * FOOT, 1, [9.5 * FOOT, 14 * FOOT], [14 * FOOT, 20.5 * FOOT]);
-  for (const s of [z + 2.5 * FOOT, z + 6.2 * FOOT]) vent(props, 'x', x, s, 7.4 * FOOT, 1);
+  bay(props, 'x', x, z + 0.8 * SET_FOOT, brickEnd - 0.6 * SET_FOOT, 1, [9.5 * SET_FOOT, 14 * SET_FOOT], [14 * SET_FOOT, 20.5 * SET_FOOT]);
+  for (const s of [z + 2.5 * SET_FOOT, z + 6.2 * SET_FOOT]) vent(props, 'x', x, s, 7.4 * SET_FOOT, 1);
   line(props, [x + 6, 0, brickEnd + 6], [x + 6, h - 2, brickEnd + 6], 2.6, '#c98a62');
-  const doorZ = 14 * FOOT;
-  props.box([x, 0, doorZ], [x + 4, 7.2 * FOOT, doorZ + 3.4 * FOOT], '#353e3d', '#353e3d', NO_INK, 'e');
-  props.box([x + 4, 3.6 * FOOT, doorZ + 0.3 * FOOT], [x + 5, 3.9 * FOOT, doorZ + 1.4 * FOOT], '#b9beb4', '#b9beb4', NO_INK, 'e');
-  props.box([x, 7.4 * FOOT, doorZ - 14], [x + 2 * FOOT, 7.7 * FOOT, doorZ + 3.4 * FOOT + 14], '#4f7fae', '#bcd0d8', ink(108));
-  props.box([x + 0.5, 4.2 * FOOT, doorZ - 1.3 * FOOT], [x + 1.2, 5 * FOOT, doorZ - 0.6 * FOOT], '#2f63a6', '#2f63a6', NO_INK, 'e');
+  const doorZ = 14 * SET_FOOT;
+  props.box([x, 0, doorZ], [x + 4, 7.2 * SET_FOOT, doorZ + 3.4 * SET_FOOT], '#353e3d', '#353e3d', NO_INK, 'e');
+  props.box([x + 4, 3.6 * SET_FOOT, doorZ + 0.3 * SET_FOOT], [x + 5, 3.9 * SET_FOOT, doorZ + 1.4 * SET_FOOT], '#b9beb4', '#b9beb4', NO_INK, 'e');
+  props.box([x, 7.4 * SET_FOOT, doorZ - 14], [x + 2 * SET_FOOT, 7.7 * SET_FOOT, doorZ + 3.4 * SET_FOOT + 14], '#4f7fae', '#bcd0d8', ink(108));
+  props.box([x + 0.5, 4.2 * SET_FOOT, doorZ - 1.3 * SET_FOOT], [x + 1.2, 5 * SET_FOOT, doorZ - 0.6 * SET_FOOT], '#2f63a6', '#2f63a6', NO_INK, 'e');
   // A conduit runs up across the white block to a light over the door.
-  line(props, [x + 3, 6.6 * FOOT, doorZ + 8 * FOOT], [x + 3, 13.5 * FOOT, doorZ + 0.8 * FOOT], 1.1, '#c9cbbd');
-  line(props, [x + 3, 13.5 * FOOT, doorZ + 0.8 * FOOT], [x + 3, 13.5 * FOOT, doorZ - 2 * FOOT], 1.1, '#c9cbbd');
-  props.box([x, 11.6 * FOOT, doorZ + 1.2 * FOOT], [x + 10, 12.2 * FOOT, doorZ + 2.2 * FOOT], '#696f67', '#92968a', ink(113));
+  line(props, [x + 3, 6.6 * SET_FOOT, doorZ + 8 * SET_FOOT], [x + 3, 13.5 * SET_FOOT, doorZ + 0.8 * SET_FOOT], 1.1, '#c9cbbd');
+  line(props, [x + 3, 13.5 * SET_FOOT, doorZ + 0.8 * SET_FOOT], [x + 3, 13.5 * SET_FOOT, doorZ - 2 * SET_FOOT], 1.1, '#c9cbbd');
+  props.box([x, 11.6 * SET_FOOT, doorZ + 1.2 * SET_FOOT], [x + 10, 12.2 * SET_FOOT, doorZ + 2.2 * SET_FOOT], '#696f67', '#92968a', ink(113));
   for (let y = 14; y < h; y += 35) props.box([x + 0.12, y, brickEnd], [x + 0.23, y + 0.6, WALLENBERG_GYM_FAR_Z], '#bbbfaf', '#bbbfaf', NO_INK, 'e');
   // Side: the brick base along the run-up, vents and lights, the glazing above.
   brickwork(props, 'z', z, WALLENBERG_ANNEX_FRONT_X, x, brick, -1);
   for (let k = 0; k < 4; k++) {
-    const s0 = x - 2 * FOOT - (k + 1) * 6.2 * FOOT;
-    bay(props, 'z', z, s0, s0 + 5.4 * FOOT, -1, [11 * FOOT, 15.5 * FOOT], [15.5 * FOOT, 21.5 * FOOT]);
-    vent(props, 'z', z, s0 + 2.7 * FOOT, 8.6 * FOOT, -1);
-    props.box([s0 + 1.2 * FOOT, 10.1 * FOOT, z - 12], [s0 + 2.2 * FOOT, 10.7 * FOOT, z], '#696f67', '#92968a', ink(114));
+    const s0 = x - 2 * SET_FOOT - (k + 1) * 6.2 * SET_FOOT;
+    bay(props, 'z', z, s0, s0 + 5.4 * SET_FOOT, -1, [11 * SET_FOOT, 15.5 * SET_FOOT], [15.5 * SET_FOOT, 21.5 * SET_FOOT]);
+    vent(props, 'z', z, s0 + 2.7 * SET_FOOT, 8.6 * SET_FOOT, -1);
+    props.box([s0 + 1.2 * SET_FOOT, 10.1 * SET_FOOT, z - 12], [s0 + 2.2 * SET_FOOT, 10.7 * SET_FOOT, z], '#696f67', '#92968a', ink(114));
   }
   for (let y = 14; y < h; y += 35) props.box([WALLENBERG_GYM_BACK_X, y, z - 0.23], [x, y + 0.6, z - 0.12], '#bbbfaf', '#bbbfaf', NO_INK, 'k');
   // The little roof over the side door, level with the roll-in's deck: the ramp's high end butts up to it.
   const r = WALLENBERG_RAMP;
   const roof = r.height + 0.6;
   const front = r.deck - 1;
-  props.box([front - 5.5 * FOOT, roof - 7 * INCH, -0.5 * FOOT], [front, roof, z], '#8c9ea8', '#b4c0c4', ink(109), 'tbke');
-  props.box([front - 3.6 * FOOT, 0, z - 4], [front - 0.6 * FOOT, 7 * FOOT, z], '#3a4342', '#3a4342', NO_INK, 'k');
-  props.box([front - 1.2 * FOOT, 3.4 * FOOT, z - 5], [front - 1 * FOOT, 3.7 * FOOT, z - 4], '#b9beb4', '#b9beb4', NO_INK, 'k');
+  props.box([front - 5.5 * SET_FOOT, roof - 7 * INCH, -0.5 * SET_FOOT], [front, roof, z], '#8c9ea8', '#b4c0c4', ink(109), 'tbke');
+  props.box([front - 3.6 * SET_FOOT, 0, z - 4], [front - 0.6 * SET_FOOT, 7 * SET_FOOT, z], '#3a4342', '#3a4342', NO_INK, 'k');
+  props.box([front - 1.2 * SET_FOOT, 3.4 * SET_FOOT, z - 5], [front - 1 * SET_FOOT, 3.7 * SET_FOOT, z - 4], '#b9beb4', '#b9beb4', NO_INK, 'k');
 }
 
 /* ----- The run-up ----- */
@@ -407,18 +407,18 @@ function alley(ground: Bake, props: Bake, shadows: RailShadow[]) {
     const [a, c] = [xs[k], xs[k + 1]];
     face(props, [a, 0, z], [a, wallenbergSlope(a), z], [c, wallenbergSlope(c), z], [c, 0, z], [0, 0, 1], '#c3c4b8', ink(92, 10));
     const n: Vec3 = [WALLENBERG_SLOPE, 1, 0];
-    ground.quad([a, wallenbergSlope(a) + 0.07, z - 0.6 * FOOT], [a, wallenbergSlope(a) + 0.07, z], [c, wallenbergSlope(c) + 0.07, z], [c, wallenbergSlope(c) + 0.07, z - 0.6 * FOOT], n, { color: lit('#c9cabf', n) }, NO_INK);
+    ground.quad([a, wallenbergSlope(a) + 0.07, z - 0.6 * SET_FOOT], [a, wallenbergSlope(a) + 0.07, z], [c, wallenbergSlope(c) + 0.07, z], [c, wallenbergSlope(c) + 0.07, z - 0.6 * SET_FOOT], n, { color: lit('#c9cabf', n) }, NO_INK);
   }
   // The rail along it, a little in from the edge.
-  const zr = z - 0.3 * FOOT;
-  const start = from - 2 * FOOT;
-  const railEnd = WALLENBERG_ANNEX_FRONT_X + 0.5 * FOOT;
-  pipe(props, [[start, wallenbergSlope(start) + 2.6 * FOOT, zr], [WALLENBERG_GATE_X + 10 * FOOT, wallenbergSlope(WALLENBERG_GATE_X + 10 * FOOT) + 2.6 * FOOT, zr], [railEnd, wallenbergSlope(railEnd) + 2.6 * FOOT, zr]], shadows);
-  for (let x = start; x > railEnd; x -= 5 * FOOT) line(props, [x, wallenbergSlope(x), zr], [x, wallenbergSlope(x) + 2.6 * FOOT, zr], 1.4);
+  const zr = z - 0.3 * SET_FOOT;
+  const start = from - 2 * SET_FOOT;
+  const railEnd = WALLENBERG_ANNEX_FRONT_X + 0.5 * SET_FOOT;
+  pipe(props, [[start, wallenbergSlope(start) + 2.6 * SET_FOOT, zr], [WALLENBERG_GATE_X + 10 * SET_FOOT, wallenbergSlope(WALLENBERG_GATE_X + 10 * SET_FOOT) + 2.6 * SET_FOOT, zr], [railEnd, wallenbergSlope(railEnd) + 2.6 * SET_FOOT, zr]], shadows);
+  for (let x = start; x > railEnd; x -= 5 * SET_FOOT) line(props, [x, wallenbergSlope(x), zr], [x, wallenbergSlope(x) + 2.6 * SET_FOOT, zr], 1.4);
 
   // The annex, brick, against the gym's side wall well behind the roll-in.
   const x0 = WALLENBERG_ANNEX_X, x1 = WALLENBERG_ANNEX_FRONT_X;
-  const z0 = -12 * FOOT, z1 = WALLENBERG_GYM_Z;
+  const z0 = -12 * SET_FOOT, z1 = WALLENBERG_GYM_Z;
   const h = WALLENBERG_ANNEX_HEIGHT;
   props.box([x0, 0, z0], [x1, h, z1], BRICK, '#a39d8f', masonryInk, 'tke');
   for (let row = 0; row < 40; row++) {
@@ -429,18 +429,18 @@ function alley(ground: Bake, props: Bake, shadows: RailShadow[]) {
     }
   }
   const sill = wallenbergSlope(x1);
-  props.box([x1, sill, -10 * FOOT], [x1 + 3, sill + 7 * FOOT, -7.2 * FOOT], '#c99a8c', '#c99a8c', ink(85), 'e');
-  props.box([x1, sill + 7 * FOOT, -10.3 * FOOT], [x1 + 4, sill + 7.4 * FOOT, -6.9 * FOOT], '#d0cdc2', '#d0cdc2', NO_INK, 'te');
+  props.box([x1, sill, -10 * SET_FOOT], [x1 + 3, sill + 7 * SET_FOOT, -7.2 * SET_FOOT], '#c99a8c', '#c99a8c', ink(85), 'e');
+  props.box([x1, sill + 7 * SET_FOOT, -10.3 * SET_FOOT], [x1 + 4, sill + 7.4 * SET_FOOT, -6.9 * SET_FOOT], '#d0cdc2', '#d0cdc2', NO_INK, 'te');
   // Its parapet, a coping along the front, and a planter on the roof's edge.
-  props.box([x0, h, z0], [x1 + 3, h + 1.2 * FOOT, z0 + 0.7 * FOOT], '#b7b1a4', '#c9c3b5', ink(84), 'tke');
-  props.box([x1 - 0.7 * FOOT, h, z0], [x1 + 3, h + 0.3 * FOOT, z1], '#b7b1a4', '#c9c3b5', ink(84), 'tke');
+  props.box([x0, h, z0], [x1 + 3, h + 1.2 * SET_FOOT, z0 + 0.7 * SET_FOOT], '#b7b1a4', '#c9c3b5', ink(84), 'tke');
+  props.box([x1 - 0.7 * SET_FOOT, h, z0], [x1 + 3, h + 0.3 * SET_FOOT, z1], '#b7b1a4', '#c9c3b5', ink(84), 'tke');
   for (const [a, c] of [[-11.5, -5.5]] as const) {
-    props.box([x1 - 3 * FOOT, h, a * FOOT], [x1 - 0.8 * FOOT, h + 2 * FOOT, c * FOOT], '#9b6a52', '#b38a6e', ink(86), 'tfke');
+    props.box([x1 - 3 * SET_FOOT, h, a * SET_FOOT], [x1 - 0.8 * SET_FOOT, h + 2 * SET_FOOT, c * SET_FOOT], '#9b6a52', '#b38a6e', ink(86), 'tfke');
     for (let k = 0; k < 6; k++) {
-      const cx = x1 - 1.9 * FOOT, cz = (a + ((c - a) * (k + 0.5)) / 6) * FOOT;
-      const r = (0.8 + 0.4 * hash2(k, a, 87)) * FOOT;
-      props.box([cx - r, h + 2 * FOOT, cz - r], [cx + r, h + 2 * FOOT + r * 1.3, cz + r], '#55693f', '#637a49', ink(88, 13), 'tfkle');
-      props.box([cx - 3, h + 2 * FOOT + r * 1.3, cz - 3], [cx + 3, h + 2 * FOOT + r * 1.3 + 3, cz + 3], '#e8e8de', '#f2f2ea', NO_INK, 't');
+      const cx = x1 - 1.9 * SET_FOOT, cz = (a + ((c - a) * (k + 0.5)) / 6) * SET_FOOT;
+      const r = (0.8 + 0.4 * hash2(k, a, 87)) * SET_FOOT;
+      props.box([cx - r, h + 2 * SET_FOOT, cz - r], [cx + r, h + 2 * SET_FOOT + r * 1.3, cz + r], '#55693f', '#637a49', ink(88, 13), 'tfkle');
+      props.box([cx - 3, h + 2 * SET_FOOT + r * 1.3, cz - 3], [cx + 3, h + 2 * SET_FOOT + r * 1.3 + 3, cz + 3], '#e8e8de', '#f2f2ea', NO_INK, 't');
     }
   }
 }
@@ -478,7 +478,7 @@ function rollIn(ground: Bake, props: Bake) {
     const lift = (x: number): Vec3 => [x + n[0] * 0.2, wallenbergRampHeight(x) + sheet + n[1] * 0.2, 0];
     const [pa, pc] = [lift(a), lift(c)];
     ground.quad([pa[0], pa[1], -0.4], [pa[0], pa[1], 0.4], [pc[0], pc[1], 0.4], [pc[0], pc[1], -0.4], n, { color: lit('#9d7d50', n) }, NO_INK);
-    if (Math.floor((rolled + step) / (4 * FOOT)) > Math.floor(rolled / (4 * FOOT))) {
+    if (Math.floor((rolled + step) / (4 * SET_FOOT)) > Math.floor(rolled / (4 * SET_FOOT))) {
       ground.quad([pc[0] - 0.4, pc[1], -w], [pc[0] - 0.4, pc[1], w], [pc[0] + 0.4, pc[1], w], [pc[0] + 0.4, pc[1], -w], n, { color: lit('#9d7d50', n) }, NO_INK);
     }
     rolled += step;
@@ -493,14 +493,14 @@ function rollIn(ground: Bake, props: Bake) {
       if (ya < rib && yc < rib) continue;
       face(props, [a, Math.max(0, ya - rib), z + side * 0.8], [a, ya, z + side * 0.8], [c, yc, z + side * 0.8], [c, Math.max(0, yc - rib), z + side * 0.8], [0, 0, side], LUMBER, woodInk);
     }
-    for (let x = r.deck + 2; x < r.bottom - 2.5 * FOOT; x += 16 * INCH) {
+    for (let x = r.deck + 2; x < r.bottom - 2.5 * SET_FOOT; x += 16 * INCH) {
       const top = wallenbergRampHeight(x + 1.5 * INCH) - rib;
       if (top < 4) continue;
       props.box([x, 0, z - 0.75 * INCH], [x + 1.5 * INCH, top, z + 0.75 * INCH], LUMBER, '#b8935f', ink(120), 'fkle');
     }
-    for (let x = r.deck + 2; x < r.joint + 3 * FOOT; x += 32 * INCH) {
-      const a: Vec3 = [x, 0.4 * FOOT, z + side * 1.6];
-      const c: Vec3 = [x + 30 * INCH, Math.min(wallenbergRampHeight(x + 30 * INCH) - rib, 5 * FOOT), z + side * 1.6];
+    for (let x = r.deck + 2; x < r.joint + 3 * SET_FOOT; x += 32 * INCH) {
+      const a: Vec3 = [x, 0.4 * SET_FOOT, z + side * 1.6];
+      const c: Vec3 = [x + 30 * INCH, Math.min(wallenbergRampHeight(x + 30 * INCH) - rib, 5 * SET_FOOT), z + side * 1.6];
       props.tube([a, c], [1.3, 1.3], { color: '#9e7a4a' }, ink(121), 4);
     }
   }
@@ -510,10 +510,10 @@ function rollIn(ground: Bake, props: Bake) {
     props.box([x, 0, z], [x + 3.5 * INCH, deckUnder, z + 3.5 * INCH], LUMBER, '#b8935f', ink(123), 'fkle');
   }
   const brace = (a: Vec3, c: Vec3) => props.tube([a, c], [1.4, 1.4], { color: '#9e7a4a' }, ink(121), 4);
-  brace([r.deck - 1, 0.5 * FOOT, -w], [r.deck - 1, deckUnder - 0.5 * FOOT, w]);
-  brace([r.deck - 1, 0.5 * FOOT, w], [r.deck - 1, deckUnder - 0.5 * FOOT, -w]);
-  for (const z of [-w - 2, w + 2]) brace([r.deck, 0.5 * FOOT, z], [r.top, deckUnder - 0.5 * FOOT, z]);
-  for (const y of [2 * FOOT, 5 * FOOT]) props.box([r.deck, y, -w], [r.deck + 3.5 * INCH, y + 1.5 * INCH, w], LUMBER, '#b8935f', ink(122), 'tkfle');
+  brace([r.deck - 1, 0.5 * SET_FOOT, -w], [r.deck - 1, deckUnder - 0.5 * SET_FOOT, w]);
+  brace([r.deck - 1, 0.5 * SET_FOOT, w], [r.deck - 1, deckUnder - 0.5 * SET_FOOT, -w]);
+  for (const z of [-w - 2, w + 2]) brace([r.deck, 0.5 * SET_FOOT, z], [r.top, deckUnder - 0.5 * SET_FOOT, z]);
+  for (const y of [2 * SET_FOOT, 5 * SET_FOOT]) props.box([r.deck, y, -w], [r.deck + 3.5 * INCH, y + 1.5 * INCH, w], LUMBER, '#b8935f', ink(122), 'tkfle');
   face(props, [r.deck, deckUnder, -w], [r.deck, r.height + 0.6, -w], [r.deck, r.height + 0.6, w], [r.deck, deckUnder, w], [-1, 0, 0], LUMBER, woodInk);
 }
 
@@ -528,8 +528,8 @@ function fence(props: Bake, from: [number, number], to: [number, number], base: 
     return [x, base(x) + h, from[1] + uz * s];
   };
   const n: Vec3 = [-uz, 0, ux];
-  if (posts) for (let s = 0; s <= length; s += 7 * FOOT) line(props, at(s, 0), at(s, height + 3), 2.0);
-  for (let s = 0; s < length; s += 7 * FOOT) line(props, at(s, height), at(Math.min(length, s + 7 * FOOT), height), 1.55);
+  if (posts) for (let s = 0; s <= length; s += 7 * SET_FOOT) line(props, at(s, 0), at(s, height + 3), 2.0);
+  for (let s = 0; s < length; s += 7 * SET_FOOT) line(props, at(s, height), at(Math.min(length, s + 7 * SET_FOOT), height), 1.55);
   // Diamonds of wire: each strand climbs from the bottom rail to the top, either way along.
   for (let base0 = -height; base0 < length + height; base0 += 10) {
     for (const dir of [-1, 1]) {
@@ -576,7 +576,7 @@ function tree(props: Bake, x: number, z: number, ground: number, height: number,
  */
 function yard(ground: Bake, props: Bake) {
   const bottom = -WALLENBERG_DROP;
-  const gutter = WALLENBERG_RUN + 1.5 * FOOT;
+  const gutter = WALLENBERG_RUN + 1.5 * SET_FOOT;
   floor(ground, WALLENBERG_RUN, gutter, -FAR, WALLENBERG_SIDE_STAIRS_Z0, bottom, '#a3a499');
   floor(ground, gutter, FAR, -FAR, WALLENBERG_SIDE_STAIRS_Z0, bottom, STREET);
   floor(ground, WALLENBERG_RUN, FAR, WALLENBERG_SIDE_STAIRS_Z0, FAR, bottom, STREET);
@@ -585,35 +585,35 @@ function yard(ground: Bake, props: Bake) {
   const bank: Vec3 = [WALLENBERG_DROP / Math.hypot(WALLENBERG_DROP, WALLENBERG_RUN), WALLENBERG_RUN / Math.hypot(WALLENBERG_DROP, WALLENBERG_RUN), 0];
   const z1 = WALLENBERG_SIDE_STAIRS_Z1;
   ground.quad([0, 0, FAR], [WALLENBERG_RUN, bottom, FAR], [WALLENBERG_RUN, bottom, z1], [0, 0, z1], bank, { color: lit(PLANTING, bank) }, NO_INK);
-  const edge = 0.5 * FOOT;
+  const edge = 0.5 * SET_FOOT;
   face(props, [0, 0, z1], [0, edge, z1], [WALLENBERG_RUN, edge - WALLENBERG_DROP, z1], [WALLENBERG_RUN, -WALLENBERG_DROP, z1], [0, 0, -1], CONCRETE, ink(130));
-  face(props, [0, edge, z1], [0, edge, z1 + 0.6 * FOOT], [WALLENBERG_RUN, edge - WALLENBERG_DROP, z1 + 0.6 * FOOT], [WALLENBERG_RUN, edge - WALLENBERG_DROP, z1], bank, '#cacabe', ink(131));
+  face(props, [0, edge, z1], [0, edge, z1 + 0.6 * SET_FOOT], [WALLENBERG_RUN, edge - WALLENBERG_DROP, z1 + 0.6 * SET_FOOT], [WALLENBERG_RUN, edge - WALLENBERG_DROP, z1], bank, '#cacabe', ink(131));
   // The galvanized picket fence along it.
-  const fenceTop = (x: number) => Math.min(0, -x / WALLENBERG_RUN * WALLENBERG_DROP) + 4 * FOOT;
-  line(props, [-1 * FOOT, fenceTop(0), z1 + 0.3 * FOOT], [WALLENBERG_RUN, fenceTop(WALLENBERG_RUN), z1 + 0.3 * FOOT], 1.4);
+  const fenceTop = (x: number) => Math.min(0, -x / WALLENBERG_RUN * WALLENBERG_DROP) + 4 * SET_FOOT;
+  line(props, [-1 * SET_FOOT, fenceTop(0), z1 + 0.3 * SET_FOOT], [WALLENBERG_RUN, fenceTop(WALLENBERG_RUN), z1 + 0.3 * SET_FOOT], 1.4);
   for (let x = 0; x <= WALLENBERG_RUN; x += 5 * INCH) {
     const y0 = Math.min(0, -x / WALLENBERG_RUN * WALLENBERG_DROP);
-    line(props, [x, y0, z1 + 0.3 * FOOT], [x, fenceTop(x) + 4, z1 + 0.3 * FOOT], 0.55);
+    line(props, [x, y0, z1 + 0.3 * SET_FOOT], [x, fenceTop(x) + 4, z1 + 0.3 * SET_FOOT], 0.55);
   }
   // Shrubs on the bank.
   for (let k = 0; k < 9; k++) {
-    const x = (k + 0.3) * 2.1 * FOOT, z = z1 + (2.5 + 5 * hash2(k, 1, 131)) * FOOT;
+    const x = (k + 0.3) * 2.1 * SET_FOOT, z = z1 + (2.5 + 5 * hash2(k, 1, 131)) * SET_FOOT;
     const y = Math.min(0, -x / WALLENBERG_RUN * WALLENBERG_DROP);
-    const r = (1.2 + hash2(k, 2, 131)) * FOOT;
+    const r = (1.2 + hash2(k, 2, 131)) * SET_FOOT;
     props.box([x - r, y, z - r], [x + r, y + 1.6 * r, z + r], '#4c5c3c', '#5d6f47', ink(132, 13), 'tfkle');
   }
   // Chain link along the slope's far edge, and across its top the gate between the annex and it.
-  fence(props, [WALLENBERG_GATE_X, WALLENBERG_FENCE_Z], [WALLENBERG_TREAD, WALLENBERG_FENCE_Z], wallenbergSlope, 6 * FOOT);
-  fence(props, [WALLENBERG_GATE_X, WALLENBERG_LEDGE_Z - 0.6 * FOOT], [WALLENBERG_GATE_X, -30 * FOOT], wallenbergSlope, 6 * FOOT);
-  fence(props, [WALLENBERG_GATE_X, -54 * FOOT], [WALLENBERG_GATE_X, WALLENBERG_FENCE_Z], wallenbergSlope, 6 * FOOT);
-  gate(props, WALLENBERG_GATE_X, -30 * FOOT, -54 * FOOT, wallenbergSlope(WALLENBERG_GATE_X), 6 * FOOT);
+  fence(props, [WALLENBERG_GATE_X, WALLENBERG_FENCE_Z], [WALLENBERG_TREAD, WALLENBERG_FENCE_Z], wallenbergSlope, 6 * SET_FOOT);
+  fence(props, [WALLENBERG_GATE_X, WALLENBERG_LEDGE_Z - 0.6 * SET_FOOT], [WALLENBERG_GATE_X, -30 * SET_FOOT], wallenbergSlope, 6 * SET_FOOT);
+  fence(props, [WALLENBERG_GATE_X, -54 * SET_FOOT], [WALLENBERG_GATE_X, WALLENBERG_FENCE_Z], wallenbergSlope, 6 * SET_FOOT);
+  gate(props, WALLENBERG_GATE_X, -30 * SET_FOOT, -54 * SET_FOOT, wallenbergSlope(WALLENBERG_GATE_X), 6 * SET_FOOT);
   for (let k = 0; k < 18; k++) crack(ground, WALLENBERG_RUN + 20 + k * 95, -560 + hash2(k, 0, 78) * 1100, bottom, k + 98, 90);
-  yucca(props, 2 * WALLENBERG_TREAD - 0.2 * FOOT, WALLENBERG_SIDE_STAIRS_Z0 - 1.6 * FOOT, wallenbergLevel(2));
+  yucca(props, 2 * WALLENBERG_TREAD - 0.2 * SET_FOOT, WALLENBERG_SIDE_STAIRS_Z0 - 1.6 * SET_FOOT, wallenbergLevel(2));
   houses(props);
-  tree(props, -66 * FOOT, -22 * FOOT, wallenbergSlope(-66 * FOOT), 36 * FOOT, 11, ['#2f3d2e', '#4f5e46']);
-  tree(props, 6 * FOOT, 38 * FOOT, -1.5 * FOOT, 38 * FOOT, 12);
-  tree(props, -14 * FOOT, 52 * FOOT, 0, 40 * FOOT, 13);
-  tree(props, 70 * FOOT, -120 * FOOT, bottom, 36 * FOOT, 14);
+  tree(props, -66 * SET_FOOT, -22 * SET_FOOT, wallenbergSlope(-66 * SET_FOOT), 36 * SET_FOOT, 11, ['#2f3d2e', '#4f5e46']);
+  tree(props, 6 * SET_FOOT, 38 * SET_FOOT, -1.5 * SET_FOOT, 38 * SET_FOOT, 12);
+  tree(props, -14 * SET_FOOT, 52 * SET_FOOT, 0, 40 * SET_FOOT, 13);
+  tree(props, 70 * SET_FOOT, -120 * SET_FOOT, bottom, 36 * SET_FOOT, 14);
 }
 
 /** A double chain-link gate, braced corner to corner, between posts at z0 and z1. */
@@ -634,7 +634,7 @@ function yucca(props: Bake, x: number, z: number, y: number) {
   for (let k = 0; k < 34; k++) {
     const a = k * 2.4;
     const tilt = 0.35 + 0.55 * hash2(k, 3, 140);
-    const length = (2.4 + 1.2 * hash2(k, 4, 140)) * FOOT;
+    const length = (2.4 + 1.2 * hash2(k, 4, 140)) * SET_FOOT;
     const tip: Vec3 = [x + Math.cos(a) * Math.sin(tilt) * length, y + Math.cos(tilt) * length, z + Math.sin(a) * Math.sin(tilt) * length];
     const side: Vec3 = [-Math.sin(a) * 2.2, 0, Math.cos(a) * 2.2];
     const n: Vec3 = [Math.cos(a), 0.4, Math.sin(a)];
@@ -649,22 +649,22 @@ function houses(props: Bake) {
   const row = (x0: number, base: number, from: number, count: number, step: number, facing: 1 | -1, seed: number) => {
     for (let k = 0; k < count; k++) {
       const z = from + k * step;
-      const height = (24 + 14 * hash2(k, seed, 150)) * FOOT;
-      const depth = 40 * FOOT;
+      const height = (24 + 14 * hash2(k, seed, 150)) * SET_FOOT;
+      const depth = 40 * SET_FOOT;
       const x1 = facing > 0 ? x0 : x0 + depth;
       const x2 = facing > 0 ? x0 - depth : x0;
-      props.box([Math.min(x1, x2), base, z], [Math.max(x1, x2), base + height, z + step - 1.5 * FOOT], colors[(k + seed) % colors.length], '#bfc0b6', ink(151, 10), facing > 0 ? 'tfke' : 'tfkl');
-      for (let floorY = base + 9 * FOOT; floorY < base + height - 6 * FOOT; floorY += 10 * FOOT) {
+      props.box([Math.min(x1, x2), base, z], [Math.max(x1, x2), base + height, z + step - 1.5 * SET_FOOT], colors[(k + seed) % colors.length], '#bfc0b6', ink(151, 10), facing > 0 ? 'tfke' : 'tfkl');
+      for (let floorY = base + 9 * SET_FOOT; floorY < base + height - 6 * SET_FOOT; floorY += 10 * SET_FOOT) {
         for (let w = 0; w < 3; w++) {
-          const wz = z + (2 + w * (step - 3.5 * FOOT) / 3) * 1;
+          const wz = z + (2 + w * (step - 3.5 * SET_FOOT) / 3) * 1;
           const wx = x0 + facing * 0.6;
-          props.quad([wx, floorY, wz + 3 * FOOT], [wx, floorY, wz], [wx, floorY + 5 * FOOT, wz], [wx, floorY + 5 * FOOT, wz + 3 * FOOT], [facing, 0, 0], { color: '#47545a' }, NO_INK);
+          props.quad([wx, floorY, wz + 3 * SET_FOOT], [wx, floorY, wz], [wx, floorY + 5 * SET_FOOT, wz], [wx, floorY + 5 * SET_FOOT, wz + 3 * SET_FOOT], [facing, 0, 0], { color: '#47545a' }, NO_INK);
         }
       }
     }
   };
-  row(WALLENBERG_GYM_BACK_X - 40 * FOOT, wallenbergSlope(-FAR), -170 * FOOT, 11, 24 * FOOT, 1, 1);
-  row(WALLENBERG_RUN + 150 * FOOT, -WALLENBERG_DROP, -140 * FOOT, 9, 28 * FOOT, -1, 4);
+  row(WALLENBERG_GYM_BACK_X - 40 * SET_FOOT, wallenbergSlope(-FAR), -170 * SET_FOOT, 11, 24 * SET_FOOT, 1, 1);
+  row(WALLENBERG_RUN + 150 * SET_FOOT, -WALLENBERG_DROP, -140 * SET_FOOT, 9, 28 * SET_FOOT, -1, 4);
 }
 
 export function buildWallenbergGeometry() {
@@ -680,7 +680,7 @@ export function buildWallenbergGeometry() {
   const r = WALLENBERG_RAMP;
   const shadowBoxes: Array<{ min: Vec3; max: Vec3 }> = [
     { min: [WALLENBERG_GYM_BACK_X, 0, WALLENBERG_GYM_Z], max: [WALLENBERG_GYM_X, WALLENBERG_GYM_HEIGHT, WALLENBERG_GYM_FAR_Z] },
-    { min: [WALLENBERG_ANNEX_X, 0, -12 * FOOT], max: [WALLENBERG_ANNEX_FRONT_X, WALLENBERG_ANNEX_HEIGHT, WALLENBERG_GYM_Z] },
+    { min: [WALLENBERG_ANNEX_X, 0, -12 * SET_FOOT], max: [WALLENBERG_ANNEX_FRONT_X, WALLENBERG_ANNEX_HEIGHT, WALLENBERG_GYM_Z] },
     { min: [r.deck, 0, -r.halfWidth], max: [r.joint, r.height, r.halfWidth] },
   ];
   return { ground: ground.geometry(), props: props.geometry(), railSegments, shadowBoxes };

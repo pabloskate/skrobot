@@ -6,8 +6,10 @@ import type { Obstacle } from './sets';
 import { elToroPropMaterial, elToroSkyMaterial } from './elToro/elToroMaterials';
 import { StreetProps, type StreetPropPlacements } from './props/streetProps';
 import { wireMeshMaterial, type WireMesh } from './wireMesh';
+import { SET_SCALE } from './setScale';
 
 export interface SpotTripod { u: number; z: number; height: number; frame: number; place: number }
+/** A spot's scenery and cameras, laid out in its own set units (setScale.ts): the stage draws and films it SET_SCALE bigger. */
 export interface ClassicSpotConfig {
   build: () => {
     ground: BufferGeometry; props: BufferGeometry;
@@ -27,10 +29,11 @@ export interface ClassicSpotConfig {
   cameraZ?: [number, number];
   tripods?: Readonly<Record<TripodId, SpotTripod>>;
   /**
-   * Obstacles the crane films from up top (Hollywood's fence): it stays at
-   * the run-up's height and tilts down after the rider as they drop past
-   * the fence, as the filmer at the top does, rather than sinking down
-   * behind it and filming the pickets.
+   * Obstacles the crane films from up top (Hollywood's fence; 'stairs' for a
+   * spot's only way down, Leap of Faith's drop beside its stair block): it
+   * stays at the run-up's height and tilts down after the rider as they
+   * drop, as the filmer at the top does, rather than sinking down behind the
+   * pickets or into the stairs.
    */
   stayUp?: readonly Obstacle[];
   /** Where the filmers stand instead for a trick over another obstacle (Hollywood's fence). */
@@ -166,6 +169,9 @@ export class ClassicSpot3D {
     this.streetProps = config.streetProps ? new StreetProps(config.streetProps) : null;
     if (this.streetProps) this.scenery.add(this.streetProps.group);
     this.ready = this.streetProps?.ready ?? Promise.resolve();
+    // Built in set units; the stage's are SET_SCALE bigger.
+    this.scenery.scale.setScalar(SET_SCALE);
+    this.overlay.scale.setScalar(SET_SCALE);
     this.group.add(sky, this.scenery);
   }
 
@@ -177,18 +183,18 @@ export class ClassicSpot3D {
       ?? (frame.stairs.obstacle && this.config.obstacleTripods?.[frame.stairs.obstacle]) ?? this.config.tripods;
     if (tripod && tripods) {
       const p = tripods[tripod];
-      const eye: Vec3 = [p.u - frame.scroll, p.height, p.z - across];
-      return tripodView(eye, frame.lift, p.frame, p.place, zoom, aspect);
+      const eye: Vec3 = [p.u * SET_SCALE - frame.scroll, p.height * SET_SCALE, p.z * SET_SCALE - across];
+      return tripodView(eye, frame.lift, p.frame * SET_SCALE, p.place, zoom, aspect);
     }
     const rad = Math.PI / 180;
     const uphill = Math.max(0, Math.sin(camera.yaw * rad));
     const floorPitch = Math.atan(this.config.grade * uphill + Math.tan(3 * rad)) / rad;
-    const up = frame.stairs.obstacle && this.config.stayUp?.includes(frame.stairs.obstacle);
+    const up = this.config.stayUp?.includes(frame.stairs.obstacle ?? 'stairs');
     const floored = { ...camera, pitch: Math.max(camera.pitch, floorPitch) };
     const safe = up ? { ...floored, pitch: stayUpPitch(frame.lift, floored) } : floored;
     const view = stageView(frame.lift, safe, zoom, aspect);
     if (!this.config.cameraZ) return view;
-    const [min, max] = this.config.cameraZ.map(z => z - across);
+    const [min, max] = this.config.cameraZ.map(z => z * SET_SCALE - across);
     const bound = Math.max(min, Math.min(max, view.eye[2]));
     if (bound === view.eye[2]) return view;
     const target = camera.targetZ ?? 0;
@@ -197,7 +203,7 @@ export class ClassicSpot3D {
   }
 
   update(view: StageView, scroll: number, size: { width: number; height: number }, shadow: Texture, opacity: [number, number, number], frame?: StageFrame) {
-    this.scenery.position.set(-scroll, 0, -(frame?.stairs?.across ?? this.config.laneZ));
+    this.scenery.position.set(-scroll, 0, -(frame?.stairs?.across ?? this.config.laneZ * SET_SCALE));
     this.overlay.position.copy(this.scenery.position);
     this.streetProps?.drive(frame?.t ?? 0);
     const u = this.surface.uniforms;

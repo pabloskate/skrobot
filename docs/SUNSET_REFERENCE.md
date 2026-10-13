@@ -57,7 +57,7 @@ These images were used as visual references, not redistributed as textures.
 No reliable survey or published measured bank section was located. Every
 numeric dimension below is a **photo-based reconstruction estimate**, informed
 by people, rail heights and the canopy proportions. Do not present these as
-verified real-world measurements. Units match El Toro at 29 world units/foot.
+verified real-world measurements. Units match El Toro at 29 set units/foot.
 The current estimates include the 1.5× scene-scale correction described above.
 
 | Feature | Reconstruction | Basis |
@@ -122,8 +122,8 @@ and rider to the bank and carries the rollout through the toe onto the street.
 Geometry uses the same profile and smooth normals, with 16 segments at the toe.
 Scenery is authored in its original normalized coordinates, then geometry and
 architectural shadow bounds are scaled by `SUNSET_SCALE=1.5`. The layout exports
-world-scale dimensions for collision and motion. Rider scale stays at 29 world
-units per foot; the larger obstacle therefore produces the corresponding
+world-scale dimensions for collision and motion, in set units that `SET_SCALE`
+takes onto the riders' units. The riders keep their own scale; the larger obstacle therefore produces the corresponding
 flight, drop and rollout rather than enlarging the rider with the scene.
 
 The environment merges into one ground and one prop mesh plus the shared sky.

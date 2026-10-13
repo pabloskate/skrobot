@@ -44,6 +44,13 @@ and `@skrobot/animations/three/video` (`recordTrickVideo`, `renderTrickPreview`,
 private to the package; the import graph test checks alias and relative
 imports, and that the root entry never loads three.js.
 
+Scale: `units.ts` sets the stage's units by the board (the 31-inch deck is 96
+units long; `INCH`, `FOOT`), and the riders are built in them: a grown skater
+stands 5'10", and the robot keeps its size against the board. Sets are
+authored at 29 units a foot (`SET_FOOT`); `sets/setScale.ts` (`SET_SCALE`,
+`stageTerrain`, `stageHandrail`) brings their terrain and rails onto the stage,
+and the renderer, set cameras and haze shaders scale their drawing to match.
+
 One folder per concept under `packages/animations/src/`:
 
 | Folder | What lives there |

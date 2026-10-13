@@ -4,11 +4,15 @@ import type { SkateStyle } from '../../types';
 import type { Handrail } from '../../motion/grind';
 import { rad, smoothstep } from '../../math';
 import { WHEEL_X } from '../../board/board';
+import { FOOT } from '../../units';
+import { SET_FOOT } from '../setScale';
 
 /**
  * El Toro: the 20 stair at El Toro High School (Lake Forest, California),
  * for the three.js stage. Twenty steps falling 9.5 feet over 20 feet, laid out
- * at the robot's scale (about five feet tall), and the flight down them.
+ * in set units (setScale.ts), and the planner for any drop: the flight down
+ * a set's terrain, in the stage's units once the set hands it over
+ * (stageTerrain).
  *
  * The trick itself is the flatground one, frame for frame: the stage plays
  * computeFrame on a clock whose flight is stretched over the longer hang
@@ -21,18 +25,17 @@ import { WHEEL_X } from '../../board/board';
  * downhill positive; heights are over the top landing, up positive.
  */
 
-/** World units per foot: the robot stands about five feet over its deck. */
-export const FOOT = 29;
+export { SET_FOOT };
 export const STAIR_STEPS = 20;
 /** Nine and a half feet down; geometry and physics share this drop. */
-export const STAIR_DROP = 9.5 * FOOT;
+export const STAIR_DROP = 9.5 * SET_FOOT;
 /** …over twenty feet, lip to bottom step. */
-export const STAIR_RUN = 20 * FOOT;
+export const STAIR_RUN = 20 * SET_FOOT;
 /** Twenty risers and the nineteen treads between them. */
 export const RISER = STAIR_DROP / STAIR_STEPS;
 export const TREAD = STAIR_RUN / (STAIR_STEPS - 1);
 
-/** 32 ft/s², so the drop takes the time a real one does at this scale. */
+/** 32 ft/s², so the drop takes the time a real one does. */
 export const DROP_GRAVITY = 32.2 * FOOT;
 const GRAVITY = DROP_GRAVITY;
 /** How far the deck rises over the top landing off a neutral pop. */
@@ -45,7 +48,7 @@ const RUN_UP = 0.6;
 /** Board center behind the lip when the tail strikes. */
 const POP_BEHIND = 26;
 /** Board center past the bottom step at touchdown. */
-const LAND_PAST = 4 * FOOT;
+const LAND_PAST = 4 * SET_FOOT;
 
 export interface StairPlan {
   terrain: DropTerrain;
@@ -87,7 +90,7 @@ export interface DropInPath {
   s: readonly number[];
 }
 
-/** A fixed takeoff and its actual landing surface; distances use the same scale as scenery. */
+/** A fixed takeoff and its actual landing surface: a set lays it out in set units, the planner takes it in the stage's (stageTerrain). */
 export interface DropTerrain {
   drop: number;
   run: number;
@@ -126,13 +129,13 @@ export interface DropTerrain {
 }
 
 export const EL_TORO_TERRAIN: DropTerrain = {
-  drop: STAIR_DROP, run: STAIR_RUN, landPast: LAND_PAST, laneZ: 12 * FOOT, ground: stairGround,
+  drop: STAIR_DROP, run: STAIR_RUN, landPast: LAND_PAST, laneZ: 12 * SET_FOOT, ground: stairGround,
 };
 const ROLLOUT_HZ = 240;
 /** How far the ground has to fall away under a rolling deck in one step for it to leave the surface. */
 const LEDGE = 0.5;
 
-export function planStairs(style: Pick<SkateStyle, 'popHeight'>, landed: boolean, terrain = EL_TORO_TERRAIN): StairPlan {
+export function planStairs(style: Pick<SkateStyle, 'popHeight'>, landed: boolean, terrain: DropTerrain): StairPlan {
   const rise = Math.sqrt(2 * GRAVITY * POP_RISE * Math.max(style.popHeight, terrain.pop ?? 0));
   const landingX = terrain.run + terrain.landPast;
   const drop = -terrain.ground(landingX);
@@ -506,7 +509,7 @@ export const nosingLine = (u: number) => (-u * RISER) / TREAD;
 
 /** Galvanized pipe, its axis 36" over the nosings, as the code wants a handrail. */
 export const RAIL_R = 2.4;
-export const RAIL_TOP = 3 * FOOT;
+export const RAIL_TOP = 3 * SET_FOOT;
 /** The straight rail runs on this far past the top and bottom steps. */
 export const RAIL_EXT = 35;
 
@@ -525,7 +528,7 @@ export const EL_TORO_RAIL: Handrail = {
   ground: stairGround,
   rest: (u) => Math.max(-STAIR_DROP, Math.min(0, nosingLine(u))),
   // A good roll for a rail: well under the speed it takes to jump the set.
-  speed: 13 * FOOT,
+  speed: 13 * SET_FOOT,
 };
 
 export interface StairTimeline {
@@ -538,8 +541,8 @@ export interface StairTimeline {
   end: number;
 }
 
-/** The moments of a trick down the stairs, for a robot's style (its pop sets the hang time). */
-export function stairTimeline(style: SkateStyle | undefined, landed = true, terrain = EL_TORO_TERRAIN): StairTimeline {
+/** The moments of a trick down a drop (stage units), for a robot's style (its pop sets the hang time). */
+export function stairTimeline(style: SkateStyle | undefined, landed: boolean, terrain: DropTerrain): StairTimeline {
   const plan = planStairs(resolveSkateStyle(style), landed, terrain);
   return {
     pop: plan.pop,

@@ -1,5 +1,6 @@
 import { HANGER_BOTTOM, WHEEL_HALF_W, WHEEL_INNER, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z } from '../board/board';
 import { THICKNESS, TIP_X, halfWidth, kickY } from '../board/deck';
+import { BOARD_WIDTH_SCALE } from '../board/boardDimensions';
 import { add3, dot3, scale3, sub3, type V3 } from '../math';
 import { SHOE_HALF_HEIGHT, SHOE_HALF_LENGTH, SHOE_HALF_WIDTH, type BoardRig, type Frame3, type LegRig } from './skeleton';
 
@@ -15,7 +16,7 @@ import { SHOE_HALF_HEIGHT, SHOE_HALF_LENGTH, SHOE_HALF_WIDTH, type BoardRig, typ
 
 /** The renderer draws the deck and axles this much wider than the physics'
  *  board (board/boardDimensions.ts); feet that clear it clear both. */
-export const WIDEST_BOARD = 1.2;
+export const WIDEST_BOARD = BOARD_WIDTH_SCALE;
 /** How far outside a shoe's footprint the board still counts as under it:
  *  the board is sampled every couple of units, and soles are rounded. */
 const FOOTPRINT_PAD = 0.6;
@@ -29,12 +30,14 @@ export const LIMB_RADII = { hip: 6.5, knee: 5.2, ankle: 4.3 } as const;
 const BOARD_PARTS: readonly (readonly V3[])[] = (() => {
   const parts: V3[][] = [];
   const stations = 40;
+  const ACROSS = Math.ceil((halfWidth(0) * WIDEST_BOARD * stations) / (2 * TIP_X));
   let deck: V3[] = [];
   for (let i = 0; i <= stations; i++) {
     const x = -TIP_X + (2 * TIP_X * i) / stations;
     const half = halfWidth(x) * WIDEST_BOARD;
+    // Across the deck about as far apart as the stations are along it.
     for (const y of [kickY(x) - THICKNESS / 2, kickY(x) + THICKNESS / 2]) {
-      for (let k = -4; k <= 4; k++) deck.push({ x, y, z: (half * k) / 4 });
+      for (let k = -ACROSS; k <= ACROSS; k++) deck.push({ x, y, z: (half * k) / ACROSS });
     }
     if (i % 4 === 3 || i === stations) {
       parts.push(deck);

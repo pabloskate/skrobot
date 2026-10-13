@@ -3,8 +3,8 @@
 Researched October 8, 2026. This set depicts the classic skateable version of
 the Miami Triangle at Bayfront Park, downtown Miami: the gap from the tip of the
 Challenger Memorial's raised terrace onto the tilted granite triangle at its
-foot, or clear over it. It uses the existing animation scale of 29 world units
-per foot. It is a photo-, video- and aerial-guided reconstruction, not a survey:
+foot, or clear over it. It uses the sets' scale of 29 units per foot
+(`SET_FOOT`). It is a photo-, video- and aerial-guided reconstruction, not a survey:
 no surveyed drawing of the memorial is reachable, and the numbers below say how
 far each one can be trusted.
 

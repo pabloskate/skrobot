@@ -4,6 +4,7 @@ import { planStage, stageFrame } from '../../stage/stage';
 import { resolveSkateStyle } from '../../motion/style';
 import { WALLENBERG_ANNEX_FRONT_X, WALLENBERG_ANNEX_HEIGHT, WALLENBERG_ANNEX_X, WALLENBERG_GYM_HEIGHT, WALLENBERG_GYM_X, WALLENBERG_GYM_Z, wallenbergSurface } from './wallenbergLayout';
 import { wallenbergView } from './wallenbergCamera';
+import { SET_SCALE } from '../setScale';
 
 const target = (view: StageView) => view.eye.map((value, i) => value - view.back[i] * view.distance);
 const DEG = 180 / Math.PI;
@@ -24,7 +25,8 @@ describe('Wallenberg crane', () => {
         for (let t = 0; t <= plan.end; t += 1 / 60) {
           const frame = stageFrame(plan, t, 1);
           const view = wallenbergView(frame.lift, frame.scroll, camera, 1, 500 / 404);
-          const [x, y, z] = [view.eye[0] + frame.scroll, view.eye[1], view.eye[2]];
+          // Where the eye is in the set's own layout (set units).
+          const [x, y, z] = [view.eye[0] + frame.scroll, view.eye[1], view.eye[2]].map((v) => v / SET_SCALE);
           const at = `${JSON.stringify(camera)} at ${t.toFixed(2)}`;
           expect(view.eye.every(Number.isFinite), at).toBe(true);
           expect(x < WALLENBERG_GYM_X && z > WALLENBERG_GYM_Z && y < WALLENBERG_GYM_HEIGHT, `in the gym: ${at}`).toBe(false);
@@ -34,10 +36,11 @@ describe('Wallenberg crane', () => {
           const requested = stageView(frame.lift, camera, 1, 500 / 404);
           target(view).forEach((value, i) => expect(value).toBeCloseTo(target(requested)[i], 6));
           expect(view.focal / view.distance).toBeCloseTo(requested.focal / requested.distance, 6);
-          // It swings, never snaps.
+          // It swings, never snaps: the crane follows the rider at their size, so past the gym's corner,
+          // SET_SCALE closer to them than the set is drawn round, it turns that much quicker.
           if (previous) {
             const turn = Math.acos(Math.min(1, view.back.reduce((sum, v, i) => sum + v * previous!.back[i], 0))) * DEG * 60;
-            expect(turn, `turning ${turn.toFixed(0)}°/s: ${at}`).toBeLessThan(90);
+            expect(turn, `turning ${turn.toFixed(0)}°/s: ${at}`).toBeLessThan(90 * SET_SCALE);
           }
           previous = view;
         }

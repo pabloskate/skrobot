@@ -1,5 +1,6 @@
 import { DoubleSide, GLSL3, ShaderMaterial, Vector2, Vector3, Vector4 } from 'three';
 import { glslRgb, SUN } from '../../three/materials';
+import { SET_SCALE } from '../setScale';
 
 /** Deterministic, world-anchored materials: no texture downloads or camera-facing decals. */
 export const EL_TORO_NOISE = /* glsl */ `
@@ -97,7 +98,7 @@ export function elToroPropMaterial() {
             color += vec3(0.035, 0.04, 0.018) * smoothstep(0.67, 0.81, leaf);
           }
         }
-        float haze = 0.72 * smoothstep(2400.0, 12000.0, length(vWorld - cameraPosition));
+        float haze = 0.72 * smoothstep(2400.0, 12000.0, length(vWorld - cameraPosition) / ${SET_SCALE.toFixed(5)});
         color = mix(color, ${glslRgb('#c6d0cc')}, haze);
         outColor = vec4(color, 1.0);
         outInfo = vInfo;

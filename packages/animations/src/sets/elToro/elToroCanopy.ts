@@ -1,7 +1,7 @@
 import { lambert } from '../../camera/camera';
 import { mixHex } from '../../math';
 import { hash2 } from '../setKit';
-import { FOOT } from './stairs';
+import { SET_FOOT } from './stairs';
 import { Bake, NO_INK, type Ink } from '../../three/bake';
 import type { Vec3 } from '../../camera/view';
 
@@ -68,8 +68,8 @@ export function buildElToroCanopy(props: Bake, dir: 1 | -1): void {
   // mortar gaps read at close range while the original open silhouette stays clear.
   EL_TORO_CANOPY_COLUMNS.forEach(({ u, z, half, height }, column) => {
     box(P(u - half, 0, z - half), P(u + half, height, z + half), '#93836c', MASONRY);
-    const blockH = FOOT * 2 / 3;
-    const blockW = FOOT * 4 / 3;
+    const blockH = SET_FOOT * 2 / 3;
+    const blockW = SET_FOOT * 4 / 3;
     const sides: Array<{ point: (s: number, y: number) => Vec3; normal: Vec3 }> = [
       { point: (s, y) => P(u - half + s, y, z + half + 0.45), normal: [0, 0, 1] },
       { point: (s, y) => P(u + half - s, y, z - half - 0.45), normal: [0, 0, -1] },
@@ -152,10 +152,10 @@ export function buildElToroCanopy(props: Bake, dir: 1 | -1): void {
   const guardU = C.u0 + 16;
   const z0 = C.z0 + 52;
   const z1 = C.z1 - 55;
-  for (const height of [9, 3.4 * FOOT]) {
+  for (const height of [9, 3.4 * SET_FOOT]) {
     box(P(guardU - 1.8, height, z0), P(guardU + 1.8, height + 3.3, z1), '#697977', METAL);
   }
   for (let z = z0; z <= z1; z += 20) {
-    box(P(guardU - 1.1, 0, z - 1.1), P(guardU + 1.1, 3.4 * FOOT + 3.3, z + 1.1), '#687977', METAL);
+    box(P(guardU - 1.1, 0, z - 1.1), P(guardU + 1.1, 3.4 * SET_FOOT + 3.3, z + 1.1), '#687977', METAL);
   }
 }

@@ -2,7 +2,8 @@ import { AlwaysDepth, Camera, EqualDepth, Mesh, NeverDepth, NotEqualDepth, type 
 import type { StageView } from '../camera/view';
 
 export const SCENE_NEAR = 2;
-export const SCENE_FAR = 40000;
+/** Far enough for the spots' far scenery, which stands SET_SCALE bigger than it's drawn (sets/setScale.ts). */
+export const SCENE_FAR = 52000;
 
 /** Forward depth needs a larger near plane; close tripods still keep the rider. */
 export function sceneNear(distance: number, reversed: boolean) {

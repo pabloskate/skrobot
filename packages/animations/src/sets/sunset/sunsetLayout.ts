@@ -1,4 +1,4 @@
-import { FOOT } from '../elToro/stairs';
+import { SET_FOOT, SET_SCALE } from '../setScale';
 
 /**
  * Sunset Car Wash, its skateable 2019 appearance. Dimensions are photo-based
@@ -8,7 +8,7 @@ import { FOOT } from '../elToro/stairs';
  */
 /** Recalibrated against the rider in the supplied wide shot; still a photo estimate. */
 export const SUNSET_SCALE = 1.5;
-const UNIT = FOOT * SUNSET_SCALE;
+const UNIT = SET_FOOT * SUNSET_SCALE;
 export const SUNSET_DROP = 12 * UNIT;
 export const SUNSET_BANK_START = 0;
 export const SUNSET_BANK_END = 8 * UNIT;
@@ -25,8 +25,8 @@ export const SUNSET_ROOF_BACK = -36 * UNIT;
 export const SUNSET_ROOF_Z0 = -6 * UNIT;
 export const SUNSET_ROOF_Z1 = 59 * UNIT;
 export const SUNSET_POP_X = -2 * UNIT;
-// Tail-pop offset belongs to the unchanged board size, not the enlarged building.
-export const SUNSET_POP_Z = SUNSET_ROOF_Z0 + 26;
+// The tail pops 26 stage units (the board's) in from the roof's edge, whatever the building's scale.
+export const SUNSET_POP_Z = SUNSET_ROOF_Z0 + 26 / SET_SCALE;
 export const SUNSET_SIDEWALK_END = SUNSET_BANK_END + 5 * UNIT;
 
 /**

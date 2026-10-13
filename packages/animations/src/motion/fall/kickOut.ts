@@ -3,6 +3,7 @@ import type { Expression } from '../../riders/look';
 import type { SkateStyle } from '../../types';
 import { SHOE_HALF_HEIGHT, SHOE_HALF_LENGTH, armDirs, moveFrame, type ArmPose, type BoardRig, type LegRig, type Rig } from '../skeleton';
 import { TIP_X, deckBottomY, deckTopY } from '../../board/deck';
+import { FOOT } from '../../units';
 import { BOARD_WIDTH_SCALE } from '../../board/boardDimensions';
 import { DECK_HALF_WIDTH } from '../skeleton';
 import { ANKLE_IN_SHOE, ankleOf, poseOf, rigOf, twoBone, type BodyDims, type BodyPose, type ShoePose } from './body';
@@ -41,13 +42,16 @@ import { stepOut } from './stepOut';
 /** Seconds before the catch the rider's own motion takes over, and the foot meets the board (just before the catch would have). */
 const TAKEOVER_LEAD = 0.13;
 const CONTACT_LEAD = 0.01;
-/** How long the push lasts, and the least and most speed it gives the board (as much as it takes to clear the rider's feet). */
+/**
+ * How long the push lasts, and the least and most speed it gives the board (world units a second: as much as it takes to
+ * clear the rider's feet, at most a hard shove's 22 feet a second).
+ */
 const PUSH_T = 0.075;
-const PUSH = { least: 200, most: 640 } as const;
+const PUSH = { least: 200, most: 22 * FOOT } as const;
 /** How finely the least push is found. */
 const PUSH_STEP = 8;
 /** The pushes tried, hardest first, where none clears the legs. */
-const FALLBACK_PUSHES = [640, 560, 480, 400];
+const FALLBACK_PUSHES = [1, 0.875, 0.75, 0.625].map((share) => share * PUSH.most);
 /**
  * The push's direction: out across the way the rider's going (away from the foot that lands first), a little along it, and
  * down; or, where no push that way clears the legs, back against it (the board left behind, the rider running on past it).

@@ -5,7 +5,7 @@ import { planStage, stageFrame, type StagePlan } from '../../stage/stage';
 import { STAGE_SETS, setTerrain } from '../../sets/sets';
 import { resolveSkateStyle } from '../style';
 import type { V3 } from '../../math';
-import { moveFrame } from '../skeleton';
+import { PERSON_SCALE, moveFrame } from '../skeleton';
 import { hipsAt, kickOutAt, type KickOutPlan } from './kickOut';
 import { poseOf } from './body';
 import { qconj, qlog, qmul, type Quat } from './rotation';
@@ -32,9 +32,10 @@ const TRUNK = 13;
 const HEAD = 15;
 /**
  * The most a limb's step off the hips may change from one 120th of a second to the next (robot units). A hard swing makes
- * a few, a foot slapping down or a fast run's knee drive up to about 20; a limb that pops, 25 and more.
+ * a few, a foot slapping down or a fast run's knee drive up to about 22 (the robot running off a bank as fast as a grown-up
+ * would); a limb that pops, 25 and more.
  */
-const POP = 22;
+const POP = 23;
 const style = resolveSkateStyle({ popHeight: 0.5, rotationSpeed: 1.16, flickStrength: 0.88 });
 const angle = (a: Quat, b: Quat) => {
   const l = qlog(qmul(a, qconj(b)));
@@ -70,7 +71,7 @@ function cases(): Case[] {
 }
 
 interface Measures {
-  /** Largest change in the hips' step from one 120th of a second to the next (world units), on the feet and rolling. */
+  /** Largest change in the hips' step from one 120th of a second to the next (robot units), on the feet and rolling. */
   jerkOnFeet: number;
   jerkRolling: number;
   /** Largest change in a knee's, ankle's, hand's, elbow's or the head's step off the hips, likewise (robot units). */
@@ -151,7 +152,7 @@ function measure({ stage, plan }: Case): Measures {
     m.turn = Math.max(m.turn, angle(pose.pelvis, prev.pelvis) / H, angle(pose.torso, prev.torso) / H);
     const step = { x: pose.hips.x - prev.hips.x, y: pose.hips.y - prev.hips.y, z: pose.hips.z - prev.hips.z };
     if (prevStep) {
-      const jerk = dist(step, prevStep);
+      const jerk = dist(step, prevStep) / k;
       if (rolling(t)) m.jerkRolling = Math.max(m.jerkRolling, jerk);
       else m.jerkOnFeet = Math.max(m.jerkOnFeet, jerk);
     }
@@ -257,7 +258,8 @@ describe('kick-out', () => {
   });
 
   it('turns no faster than a body can', () => {
-    expect(failing((m) => m.turn > 32)).toEqual([]);
+    // A grown-up's 32 rad/s; a smaller body's quicker by the root of how much smaller (rates go as √(gravity / size)).
+    expect(all.filter(({ c, m }) => m.turn > 32 * Math.sqrt(PERSON_SCALE / c.plan.setup.body.scale)).map(({ c }) => c.label)).toEqual([]);
   });
 
   it('keeps a planted foot where it is', () => {

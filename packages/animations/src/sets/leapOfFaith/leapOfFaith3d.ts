@@ -269,6 +269,9 @@ export class LeapOfFaith3D extends ClassicSpot3D {
       run: LEAP_OF_FAITH_RUN,
       drop: LEAP_OF_FAITH_DROP,
       framing: 0.84,
+      // The crane stays up on the walkway and tilts down after the drop, as the
+      // filmer up top does, rather than sinking into the stair block beside it.
+      stayUp: ['stairs'],
       streetProps: {
         trees: [
           { at: [-24 * F, FLOOR, -70 * F], height: 43 * F, yaw: 27 },

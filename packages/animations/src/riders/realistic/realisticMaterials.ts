@@ -1,5 +1,6 @@
 import { Color, CustomBlending, DoubleSide, MinEquation, OneFactor, Vector2, Vector3, Vector4, type ShaderMaterial, type Texture } from 'three';
 import { SUN, sceneMaterial } from '../../three/materials';
+import { MODEL_SCALE } from '../human/humanProportions';
 
 /**
  * The realistic skater's surfaces. Each is lit by the scene's sun and sky
@@ -50,7 +51,7 @@ void main() {
   #include <begin_vertex>
   #include <beginnormal_vertex>
   #include <skinnormal_vertex>
-  // The rest pose in world units, whatever the mesh's own (packed) frame.
+  // The rest pose in world units, whatever the mesh's own (packed) frame…
   #if defined(USE_REST)
     vRest = rest;
   #elif defined(USE_SKINNING)
@@ -58,6 +59,8 @@ void main() {
   #else
     vRest = (modelMatrix * vec4(position, 1.0)).xyz;
   #endif
+  // …as the model is built, which its patterns are laid out on (it's drawn MODEL_SCALE bigger).
+  vRest /= ${MODEL_SCALE.toFixed(6)};
   #include <skinning_vertex>
   vec4 world = modelMatrix * vec4(transformed, 1.0);
   vWorld = world.xyz;
@@ -150,8 +153,8 @@ export interface SunShadow {
   uShadowCenter: { value: Vector3 };
   uShadowOn: { value: number };
 }
-export const SHADOW_HALF = 120;
-export const SHADOW_RANGE = 420;
+export const SHADOW_HALF = 120 * MODEL_SCALE;
+export const SHADOW_RANGE = 420 * MODEL_SCALE;
 export const SHADOW_SIZE = 1024;
 
 export const sunShadow = (): SunShadow => ({
@@ -181,11 +184,11 @@ float sunlit(vec3 n) {
   vec3 y = cross(SHADOW_Z, SHADOW_X);
   // Offset along the normal against shadow acne on surfaces turned from the sun.
   float facing = dot(n, SHADOW_Z);
-  vec3 p = vWorld + n * (0.6 + 0.8 * (1.0 - abs(facing))) - uShadowCenter;
+  vec3 p = vWorld + n * (0.6 + 0.8 * (1.0 - abs(facing))) * ${MODEL_SCALE.toFixed(4)} - uShadowCenter;
   vec2 uv = vec2(dot(p, SHADOW_X), dot(p, y)) / SHADOW_HALF * 0.5 + 0.5;
   if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return 1.0;
   float depth = (SHADOW_RANGE * 0.5 - dot(p, SHADOW_Z)) / SHADOW_RANGE;
-  float bias = 1.2 / SHADOW_RANGE;
+  float bias = ${(1.2 * MODEL_SCALE).toFixed(4)} / SHADOW_RANGE;
   vec2 texel = vec2(1.0 / ${SHADOW_SIZE.toFixed(1)});
   float lit = 0.0;
   for (int i = -2; i <= 2; i++) {
@@ -478,7 +481,7 @@ export function outfitMaterial(albedo: Texture, normal: Texture, ao: Texture, lo
     uAlbedo: { value: albedo }, uNormal: { value: normal }, uAO: { value: ao },
     uTee: { value: new Color(look.tee) }, uDenimDark: { value: new Color(look.denimDark) }, uDenimLight: { value: new Color(look.denimLight) },
     ...knees,
-  }, shadow, 244, { defines: { OUTER_LAYER: '1.2' }, side: DoubleSide });
+  }, shadow, 244, { defines: { OUTER_LAYER: (1.2 * MODEL_SCALE).toFixed(3) }, side: DoubleSide });
 }
 
 export interface ShoeLook {

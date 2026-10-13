@@ -1,5 +1,6 @@
 import type { StageFrame } from './stage/stage';
 import type { V3 } from './math';
+import { WHEEL_BOTTOM } from './board/board';
 
 /**
  * Test helpers shared across the package's suites. Not exported from the
@@ -20,7 +21,7 @@ export function frameNumbers(frame: StageFrame): number[] {
     frame.wheels.sweep,
     ...point(rig.board.center),
     ...point(rig.board.point({ x: 48, y: 0, z: 10 })),
-    ...point(rig.board.point({ x: -48, y: 13, z: -10 })),
+    ...point(rig.board.point({ x: -48, y: WHEEL_BOTTOM, z: -10 })),
     rig.board.flipDeg,
     rig.board.yawDeg,
     ...rig.legs.flatMap((leg) => [...point(leg.hip), ...point(leg.knee), ...point(leg.ankle)]),

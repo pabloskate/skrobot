@@ -46,8 +46,9 @@ export {
 } from './camera/camera';
 /** The sets (spots) a trick can be staged at, and what each changes: stairs and other obstacles, handrails, tripods. */
 export { STAGE_SETS, hasObstacle, railLineFor, setGrindSpec, setHandrail, setInfo, setTerrain, setTimeline, type Obstacle, type RailChoice, type RailLine, type SetInfo, type SetObstacle, type SetRails, type StageSet } from './sets/sets';
-/** El Toro's 20 stair: its size and the moments of a trick down it. */
-export { FOOT, STAIR_DROP, STAIR_RUN, STAIR_STEPS, stairTimeline, type StairTimeline } from './sets/elToro/stairs';
+/** The stage's yardstick (the 31-inch deck), and the moments of a trick down a drop. */
+export { FOOT, INCH } from './units';
+export { stairTimeline, type StairTimeline } from './sets/elToro/stairs';
 /** Who rides: the robot, the realistic human, or the alien. */
 export { SKATERS, skaterInfo, type Skater, type SkaterInfo } from './riders/skaters';
 /** Grinds and slides: on the flat bar, or down a spot's handrail. */

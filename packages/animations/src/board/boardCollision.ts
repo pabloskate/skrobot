@@ -1,4 +1,4 @@
-import { HANGER_BOTTOM, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z } from './board';
+import { HANGER_BOTTOM, TRUCK, WHEEL_HALF_W, WHEEL_INNER, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z } from './board';
 import { THICKNESS, TIP_X, kickY } from './deck';
 import { add3, cross3, dot3, norm3, scale3, sub3, type V3 } from '../math';
 import { SHOE_HALF_HEIGHT, SHOE_HALF_LENGTH, type BoardRig, type Frame3, type LegRig } from '../motion/skeleton';
@@ -87,18 +87,19 @@ const BOARD_SOLIDS: LocalConvex[] = (() => {
   }
   for (const x of [-WHEEL_X, WHEEL_X]) {
     const underside = kickY(x) + THICKNESS / 2;
-    solids.push(scaledWidth(roundedBox({ x, y: (underside + 1.2) / 2, z: 0 }, { x: 4.2, y: 0.55, z: 2.6 }, 0.5)));
-    solids.push(scaledWidth(roundedBox({ x, y: (1.2 + 4.5) / 2, z: 0 }, { x: 1.5, y: 1.75, z: 1.45 }, 1.2)));
+    const { plate, plateBottom, bushing, humpTop, hump, wing, round } = TRUCK;
+    solids.push(scaledWidth(roundedBox({ x, y: (underside + plateBottom) / 2, z: 0 }, { x: plate.f, y: plate.u, z: plate.s }, plate.r)));
+    solids.push(scaledWidth(roundedBox({ x, y: (plateBottom + humpTop) / 2, z: 0 }, { x: bushing.f, y: bushing.u, z: bushing.s }, bushing.r)));
     const corners: V3[] = [];
     for (const forward of [-1, 1]) for (const side of [-1, 1]) {
       corners.push(
-        { x: x + forward * 1.9, y: 4.5 + 0.8, z: side * 1.1 },
-        { x: x + forward * 1.9, y: HANGER_BOTTOM - 0.8, z: side * 1.1 },
-        { x: x + forward * 1.2, y: WHEEL_Y - 1.3 + 0.8, z: side * (5 - 0.8) },
-        { x: x + forward * 1.2, y: HANGER_BOTTOM - 0.8, z: side * (5 - 0.8) },
+        { x: x + forward * hump.f, y: humpTop + round, z: side * hump.s },
+        { x: x + forward * hump.f, y: HANGER_BOTTOM - round, z: side * hump.s },
+        { x: x + forward * wing.f, y: wing.top + round, z: side * (WHEEL_INNER - round) },
+        { x: x + forward * wing.f, y: HANGER_BOTTOM - round, z: side * (WHEEL_INNER - round) },
       );
     }
-    solids.push(scaledWidth(hull(corners, 0.8)));
+    solids.push(scaledWidth(hull(corners, round)));
     for (const side of [-1, 1]) {
       const center = { x, y: WHEEL_Y, z: side * WHEEL_Z * BOARD_WIDTH_SCALE };
       solids.push(bounded({
@@ -108,7 +109,7 @@ const BOARD_SOLIDS: LocalConvex[] = (() => {
           return add3(center, {
             x: radial ? WHEEL_R * direction.x / radial : 0,
             y: radial ? WHEEL_R * direction.y / radial : 0,
-            z: Math.sign(direction.z) * WHEEL_R * 0.46 * BOARD_WIDTH_SCALE,
+            z: Math.sign(direction.z) * WHEEL_HALF_W * BOARD_WIDTH_SCALE,
           });
         },
       }));

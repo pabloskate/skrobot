@@ -25,6 +25,7 @@ import {
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import type { Rig } from '../../motion/skeleton';
+import { MODEL_SCALE } from '../human/humanProportions';
 import type { Expression } from '../look';
 import { toThree, type StageView } from '../../camera/view';
 import type { StageFrame } from '../../stage/stage';
@@ -180,7 +181,7 @@ export class RealisticHuman3D {
     }
     const tex = loaded as Textures;
     const scene = model.value.scene;
-    scene.updateMatrixWorld(true);
+    growToPerson(scene);
 
     const meshes = new Map<string, SkinnedMesh>();
     scene.traverse((object) => {
@@ -206,11 +207,12 @@ export class RealisticHuman3D {
       this.world.push(new Matrix4());
     }
 
-    const floor = Math.min(soles.L.center.y, soles.R.center.y);
+    // The materials lay their patterns out on the rest pose as the model is built (realisticMaterials.ts).
+    const floor = Math.min(soles.L.center.y, soles.R.center.y) / MODEL_SCALE;
     const boneAt = (name: string) => rest.bones.findIndex((b) => b.name.replace(/\./g, '') === name);
     this.legBones = ['L', 'R'].map((s) => [boneAt(`upperleg01${s}`), boneAt(`lowerleg01${s}`), boneAt(`foot${s}`)] as [number, number, number]);
-    this.knees.uKneeL.value.copy(rest.bones[this.legBones[0][1]].head);
-    this.knees.uKneeR.value.copy(rest.bones[this.legBones[1][1]].head);
+    this.knees.uKneeL.value.copy(rest.bones[this.legBones[0][1]].head).divideScalar(MODEL_SCALE);
+    this.knees.uKneeR.value.copy(rest.bones[this.legBones[1][1]].head).divideScalar(MODEL_SCALE);
     this.knees.uHem.value = floor + 7;
     const shadow = this.shadow;
     const beanie = look.beanie;
@@ -359,6 +361,29 @@ export class RealisticHuman3D {
 
 /** A loader for the skater: its meshes are meshopt-compressed (gltfpack). */
 export const skaterLoader = () => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+
+/**
+ * The loaded model grown from its size as built to the person the rig
+ * poses (MODEL_SCALE: its legs the rig's, 5'10" tall), baked into its meshes,
+ * bones and bind matrices, so everything posing it works in the stage's
+ * units. Its matrices are left up to date.
+ */
+export function growToPerson(scene: Object3D): void {
+  const k = MODEL_SCALE;
+  const geometries = new Set<BufferGeometry>();
+  const inverses = new Set<Matrix4>();
+  scene.traverse((object) => {
+    if (object instanceof Bone) object.position.multiplyScalar(k);
+    if (object instanceof SkinnedMesh) {
+      geometries.add(object.geometry);
+      for (const inverse of object.skeleton.boneInverses) inverses.add(inverse);
+    }
+  });
+  for (const geometry of geometries) geometry.scale(k, k, k);
+  // A bone's inverse bind matrix undoes its rest place: that moves k times as far.
+  for (const inverse of inverses) for (const i of [12, 13, 14]) inverse.elements[i] *= k;
+  scene.updateMatrixWorld(true);
+}
 
 /** The skeleton at rest (world), the soles of the shoes, and the jeans round the legs, from the loaded skater (its matrices up to date). */
 export function restSkeleton(body: SkinnedMesh, shoes: SkinnedMesh, outfit?: SkinnedMesh): RestSkeleton {

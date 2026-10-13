@@ -4,6 +4,7 @@ import { PALETTE } from '../../camera/camera';
 import { mixHex } from '../../math';
 import { LEDGE_FRONT_Z, PROM_Z, SLAB, TREE_Z, WALL_Z, WATER_Z, WF } from './waterfrontLayout';
 import { rgb } from '../../three/materials';
+import { SET_SCALE } from '../setScale';
 
 /**
  * The waterfront's ground for TrickScene3D: plazaGround in waterfront.tsx,
@@ -298,7 +299,8 @@ const VERT = /* glsl */ `
 out vec3 vWorld;
 void main() {
   vec4 world = modelMatrix * vec4(position, 1.0);
-  vWorld = world.xyz;
+  // The plaza is laid out in set units: the stage's world, SET_SCALE smaller.
+  vWorld = world.xyz / ${SET_SCALE.toFixed(6)};
   gl_Position = projectionMatrix * viewMatrix * world;
 }
 `;

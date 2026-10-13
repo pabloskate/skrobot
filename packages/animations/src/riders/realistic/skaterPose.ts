@@ -1,5 +1,6 @@
 import { Matrix4, Quaternion, Vector3 } from 'three';
 import { SHOE_HALF_HEIGHT, type Rig } from '../../motion/skeleton';
+import { MODEL_SCALE } from '../human/humanProportions';
 import { dirToThree, toThree } from '../../camera/view';
 import { smoothstep } from '../../math';
 import type { Expression } from '../look';
@@ -36,7 +37,9 @@ import type { Expression } from '../look';
  *  - a body thrown down lies on top of the ground, not in it.
  *
  * The rig is the trick; this is how a person wears it. Positions are in
- * three's world (y up), in the rig's units (about a centimetre).
+ * three's world (y up), in the rig's units (about a third of an inch); the
+ * model is grown to them as it loads (growToPerson), and lengths here are
+ * measured on it as built, times MODEL_SCALE.
  */
 
 export interface RestBone {
@@ -244,7 +247,7 @@ const THUMB_AWAY = 12;
 const HAND_HANG = { curl: 0.9, flex: -12, dev: 6 } as const;
 const HAND_OUT = { curl: 0.3, flex: -24, dev: 3 } as const;
 /** Arm speed (world units/s) at which the hand is fully reaching. */
-const HAND_FAST = 260;
+const HAND_FAST = 260 * MODEL_SCALE;
 /** Hand shape springs: each finger a little slower than the one before it, so the hand closes as a wave. */
 const FINGER_OMEGA = [22, 19, 16, 14] as const;
 const WRIST_OMEGA = 16;
@@ -343,7 +346,7 @@ class Springs {
 const besideWeight = (pitch: number) => smoothstep((Math.cos(pitch * DEG) - 0.15) / 0.5);
 
 /** How far over the ground a hand stays (world units). */
-const HAND_OFF_GROUND = 3;
+const HAND_OFF_GROUND = 3 * MODEL_SCALE;
 const clamp = (v: number, max: number) => Math.max(-max, Math.min(max, v));
 /**
  * Crouching: the trunk leans CROUCH_LEAN degrees per degree the knees bend past
@@ -388,9 +391,9 @@ const ARM_HINGE_IN = 0.45;
 const ARM_CARRY = 0.13;
 const ARM_DRIFT = { out: 2 * DEG, swing: 3.5 * DEG, elbow: 5 * DEG } as const;
 /** How far from the spine a hand stays: clear of the hips and the tee. */
-const HAND_CLEARANCE = 19;
+const HAND_CLEARANCE = 19 * MODEL_SCALE;
 /** How far outside the jeans a hand stays (half a finger's thickness, and a little air). */
-const HAND_OFF_JEANS = 1.6;
+const HAND_OFF_JEANS = 1.6 * MODEL_SCALE;
 /** How quickly (s) a hand the jeans pushed out settles back once nothing holds it there: a leg that swept through where the arm hangs lets it go gently. */
 const HAND_JEANS_RELEASE = 0.07;
 

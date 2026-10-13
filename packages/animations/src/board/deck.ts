@@ -5,14 +5,16 @@ import { DECK_HALF_WIDTH } from '../motion/skeleton';
  * The deck's shape: a popsicle, flat between the trucks, kicked up past them
  * into a nose and tail that curl harder toward the tip, with round ends.
  * Board-local units: x along the deck to the nose, y down, z across it.
+ * Thirty-one inches nose to tail (units.ts), seven plies of maple thick.
  */
 
 export const TIP_X = 48;
-export const THICKNESS = 2.4;
+export const THICKNESS = 1.4;
 const KICK_FROM = 28;
 const KICK_RISE = 8.4;
 const KICK_CURL = 1.3;
-const MID_Y = -1;
+/** The midplane between the trucks: the grip 2.2 over the board's center, where the feet stand. */
+const MID_Y = -1.5;
 const HALF_W = DECK_HALF_WIDTH;
 const CORNER_R = 9.5;
 /** Segments along the deck. */

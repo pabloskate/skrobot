@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { Group } from 'three';
 import { FLIP_T, LAND_T, ROLL_IN, TRICK_BASES } from '../../motion/trick';
-import { WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z } from '../../board/board';
+import { WHEEL_BOTTOM, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z } from '../../board/board';
 import { DEFAULT_SCENE_CAMERA } from '../../camera/camera';
 import { BOTTOM_LOCAL, TOP_LOCAL } from '../../board/deck';
 import { cross3, dot3, type V3 } from '../../math';
 import { SQUAT_FLOOR } from '../../motion/skeleton';
-import { EL_TORO_TERRAIN, FOOT, RISER, STAIR_DROP, STAIR_RUN, STAIR_STEPS, TREAD, planStairs, stairClock, stairGround, stairTimeline } from './stairs';
+import { EL_TORO_TERRAIN, SET_FOOT, RISER, STAIR_DROP, STAIR_RUN, STAIR_STEPS, TREAD, planStairs, stairClock, stairGround, stairTimeline } from './stairs';
+import { SET_SCALE, stageTerrain } from '../setScale';
+import { FOOT } from '../../units';
 import { resolveSkateStyle } from '../../motion/style';
 import type { RiderStance, Robot, Stance, Trick } from '../../types';
 import { ElToro3D } from './elToro3d';
@@ -16,7 +18,7 @@ import { X0 } from '../../motion/trick';
 
 /**
  * El Toro's 20 stair: flatground tricks go down it. These pin the set's
- * size at the robot's scale, that every trick clears every step and lands
+ * size in real feet around the robot, that every trick clears every step and lands
  * past the bottom one whatever the robot's pop, that the trick and rider are
  * the flatground ones carried down whole, and that the camera keeps it all
  * in the shot.
@@ -49,6 +51,10 @@ const frames = (stage: StagePlan, from = 0, to = stage.end) => {
 /** Distance down the stairs of a world point on a frame. */
 const along = (frame: StageFrame, p: V3) => frame.scroll * frame.stairs!.dir + frame.stairs!.dir * (p.x - X0);
 const height = (p: V3) => ASPHALT - p.y;
+/** The stairs as the stage has them: the set's layout, SET_SCALE bigger. */
+const TERRAIN = stageTerrain(EL_TORO_TERRAIN);
+const DROP = STAIR_DROP * SET_SCALE;
+const RUN = STAIR_RUN * SET_SCALE;
 
 const BOARD_POINTS: V3[] = [...TOP_LOCAL, ...BOTTOM_LOCAL];
 for (const x of [-WHEEL_X, WHEEL_X]) for (const z of [-WHEEL_Z, WHEEL_Z]) BOARD_POINTS.push({ x, y: WHEEL_Y + WHEEL_R, z });
@@ -59,34 +65,36 @@ const RIDERS: RiderStance[] = ['regular', 'goofy'];
 const POPS = [0.45, 1, 1.15];
 
 describe('El Toro', () => {
-  it('is twenty steps falling nine and a half feet over twenty, at a robot about five feet tall', () => {
+  it('is twenty steps falling nine and a half feet over twenty, at a robot under four feet tall', () => {
     expect(STAIR_STEPS).toBe(20);
-    expect(STAIR_DROP / FOOT).toBe(9.5);
-    expect(STAIR_RUN / FOOT).toBe(20);
+    expect(STAIR_DROP / SET_FOOT).toBe(9.5);
+    expect(STAIR_RUN / SET_FOOT).toBe(20);
     expect(stairGround(-1)).toBe(0);
     expect(stairGround(TREAD * 0.5)).toBeCloseTo(-RISER);
     expect(stairGround(STAIR_RUN - 1)).toBeCloseTo(-(STAIR_STEPS - 1) * RISER);
     expect(stairGround(STAIR_RUN)).toBe(-STAIR_DROP);
     const standing = stageFrame(plan('Ollie', { set: 'plaza' }), 0.1, 1).rig;
     const tall = (height(standing.head.at(0, 15, 0)) - height(standing.board.center)) / FOOT;
-    expect(tall).toBeGreaterThan(4.4);
-    expect(tall).toBeLessThan(5.4);
+    expect(tall).toBeGreaterThan(3.4);
+    expect(tall).toBeLessThan(4.2);
+    expect(DROP / FOOT).toBeCloseTo(9.5, 9);
+    expect(RUN / FOOT).toBeCloseTo(20, 9);
   });
 
   it('adapts to the taller drop with the same gravity and pop, landing at the same distance', () => {
     const gravity = 32.2 * FOOT;
     for (const popHeight of POPS) {
-      const stairs = planStairs({ popHeight }, true);
-      const oldHeight = planStairs({ popHeight }, true, {
-        ...EL_TORO_TERRAIN, drop: 9 * FOOT, ground: () => -9 * FOOT,
-      });
+      const stairs = planStairs({ popHeight }, true, TERRAIN);
+      const oldHeight = planStairs({ popHeight }, true, stageTerrain({
+        ...EL_TORO_TERRAIN, drop: 9 * SET_FOOT, ground: () => -9 * SET_FOOT,
+      }));
       expect(stairs.rise).toBe(oldHeight.rise);
       expect(stairs.pop).toBe(oldHeight.pop);
       expect(stairs.flight).toBeGreaterThan(oldHeight.flight);
       expect(stairs.speed).toBeLessThan(oldHeight.speed);
       expect(stairs.rise * stairs.flight - 0.5 * gravity * stairs.flight ** 2).toBeCloseTo(-9.5 * FOOT, 6);
       expect(stairs.velocity.x * stairs.flight).toBeCloseTo(oldHeight.velocity.x * oldHeight.flight, 6);
-      expect(stairGround(STAIR_RUN + stairs.terrain.landPast)).toBe(-9.5 * FOOT);
+      expect(TERRAIN.ground(RUN + stairs.terrain.landPast)).toBeCloseTo(-9.5 * FOOT, 9);
     }
   });
 
@@ -100,14 +108,14 @@ describe('El Toro', () => {
           for (const frame of frames(stage, stairs.pop + 0.05, stairs.land - 1 / 60)) {
             for (const local of BOARD_POINTS) {
               const p = frame.rig.board.point(local);
-              const clear = height(p) - stairGround(along(frame, p));
+              const clear = height(p) - TERRAIN.ground(along(frame, p));
               if (clear < -0.01) problems.push(`${base} ${stance} ${rider} pop ${pop} t=${frame.t.toFixed(2)}: ${clear.toFixed(1)}`);
             }
           }
           const touchdown = stageFrame(stage, stairs.land, 1);
           // The whole board past the bottom step, down on the bottom landing.
-          if (along(touchdown, touchdown.rig.board.center) < STAIR_RUN + 48) problems.push(`${base} ${stance} ${rider} pop ${pop} lands on the stairs`);
-          expect(height(touchdown.rig.board.center)).toBeCloseTo(-STAIR_DROP + height({ x: 0, y: ASPHALT - 13, z: 0 }), 0);
+          if (along(touchdown, touchdown.rig.board.center) < RUN + 48) problems.push(`${base} ${stance} ${rider} pop ${pop} lands on the stairs`);
+          expect(height(touchdown.rig.board.center)).toBeCloseTo(-DROP + height({ x: 0, y: ASPHALT - WHEEL_BOTTOM, z: 0 }), 0);
         }
       }
     }
@@ -266,8 +274,9 @@ describe('El Toro', () => {
       for (const frame of all) {
         const level = frame.stairs!.shadowY;
         expect(level).toBeLessThanOrEqual(0);
-        expect(level).toBeGreaterThanOrEqual(-STAIR_DROP);
-        expect(Math.abs(level / RISER - Math.round(level / RISER))).toBeLessThan(1e-6);
+        expect(level).toBeGreaterThanOrEqual(-DROP);
+        const steps = level / (RISER * SET_SCALE);
+        expect(Math.abs(steps - Math.round(steps))).toBeLessThan(1e-6);
         expect(level).toBeLessThanOrEqual(height(frame.rig.board.center));
       }
       const distances = all.map((f) => f.scroll * f.stairs!.dir);
@@ -279,7 +288,7 @@ describe('El Toro', () => {
   it('times the explorer’s moments to the stage, and sends grinds down the center rail instead', () => {
     for (const pop of POPS) {
       const stage = plan('Kickflip', { pop });
-      const timeline = stairTimeline(robotWith(pop).skateStyle);
+      const timeline = stairTimeline(robotWith(pop).skateStyle, true, TERRAIN);
       expect(timeline.end).toBeCloseTo(stage.end, 9);
       expect(timeline.land).toBeCloseTo(stage.stairs!.land, 9);
       expect(timeline.pop).toBeLessThan(timeline.peak);

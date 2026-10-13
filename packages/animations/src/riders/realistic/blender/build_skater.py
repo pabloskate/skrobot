@@ -3,8 +3,9 @@
 The body, its rig and weights, the eyes, brows, lashes, outfit and shoes are
 MakeHuman assets (CC0) put together with MPFB, MakeHuman's Blender add-on.
 The beanie is modelled here, fitted over the skull. Everything is scaled to
-the trick rig's world units (about a centimetre each) and exported as one
-skinned GLB, with its textures re-encoded beside it.
+units of about a centimetre and exported as one skinned GLB, with its
+textures re-encoded beside it; the browser grows it onto the trick rig's legs
+as it loads (MODEL_SCALE in humanProportions.ts).
 
 The alien is the same body in the same clothes, reshaped: MakeHuman's head
 targets (a domed cranium over a small, narrow face), each eye warped into a
@@ -32,7 +33,7 @@ assert LOOK in ("skater", "alien"), LOOK
 ALIEN = LOOK == "alien"
 os.makedirs(OUT, exist_ok=True)
 DATA = LocationService.get_user_data()
-# Metres to world units: a 1.8 m adult whose legs reach the rig's ankles.
+# Metres to the model's units: a 1.8 m adult. Its legs measure MODEL_LEGS (humanProportions.ts).
 SCALE = 97.0
 
 for o in list(bpy.data.objects):

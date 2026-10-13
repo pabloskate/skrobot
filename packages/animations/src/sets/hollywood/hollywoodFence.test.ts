@@ -7,7 +7,9 @@ import { resolveSkateStyle } from '../../motion/style';
 import { TRICK_BASES, X0 } from '../../motion/trick';
 import { planStage, stageFrame, type StageFrame } from '../../stage/stage';
 import type { RiderStance, Stance } from '../../types';
-import { EL_TORO_TERRAIN, landingYaw } from '../elToro/stairs';
+import { landingYaw } from '../elToro/stairs';
+import { SET_SCALE } from '../setScale';
+import { FOOT } from '../../units';
 import { setInfo, setTerrain, setTimeline } from '../sets';
 import { Hollywood3D, HOLLYWOOD_TRAFFIC, HOLLYWOOD_TREES } from './hollywood3d';
 import {
@@ -30,8 +32,10 @@ const fence = (base: string, stance: Stance = 'regular', riderStance: RiderStanc
     fall: 'slam', shankProgress: 0.65,
   });
 
-/** A rig point in the set's own coordinates: down the stairs, height over the top landing, across. */
-const inSet = (frame: StageFrame, p: V3) => ({ x: frame.scroll + p.x - X0, y: ASPHALT - p.y, z: frame.stairs!.across + p.z });
+/** A stage length in the set's own units. */
+const set = (units: number) => units / SET_SCALE;
+/** A rig point in the set's own coordinates (set units): down the stairs, height over the top landing, across. */
+const inSet = (frame: StageFrame, p: V3) => ({ x: set(frame.scroll + p.x - X0), y: set(ASPHALT - p.y), z: set(frame.stairs!.across + p.z) });
 /** The top of the side rail's pipe over the top landing, `x` down the stairs. */
 const railTop = (x: number) => hollywoodNosing(x) + HOLLYWOOD_RAIL_HEIGHT + HOLLYWOOD_RAIL_RADIUS;
 
@@ -40,16 +44,18 @@ describe('Hollywood 16: over the fence', () => {
     const info = setInfo('hollywood-high');
     expect(info.obstacles?.map((o) => o.id)).toEqual(['stairs', 'fence']);
     expect(setTerrain('hollywood-high')).toBe(info.terrain);
-    expect(setTerrain('hollywood-high', 'fence')).toBe(HOLLYWOOD_FENCE_TERRAIN);
+    const fenceTerrain = setTerrain('hollywood-high', 'fence')!;
+    expect(fenceTerrain).toBe(info.obstacles![1].terrain);
+    expect(fenceTerrain.drop).toBeCloseTo(HOLLYWOOD_FENCE_TERRAIN.drop * SET_SCALE, 9);
     // Spots without a fence keep their only drop.
-    expect(setTerrain('el-toro', 'fence')).toBe(EL_TORO_TERRAIN);
+    expect(setTerrain('el-toro', 'fence')).toBe(setInfo('el-toro').terrain);
     const style = resolveSkateStyle();
     const options = { set: 'hollywood-high' as const, landed: true, riderStance: 'regular' as const, style, fall: 'slam' as const, shankProgress: 0.65 };
     const kickflip = { id: 'k', name: 'Kickflip', base: 'Kickflip', stance: 'regular' as const };
     const stairs = planStage(kickflip, options);
     expect(stairs.obstacle).toBe('stairs');
     expect(stairs.stairs!.terrain).toBe(info.terrain);
-    expect(planStage(kickflip, { ...options, obstacle: 'fence' }).stairs!.terrain).toBe(HOLLYWOOD_FENCE_TERRAIN);
+    expect(planStage(kickflip, { ...options, obstacle: 'fence' }).stairs!.terrain).toBe(fenceTerrain);
     // Grinds ride the handrail whatever the obstacle; elsewhere there's no choice to report.
     expect(planStage({ id: 'g', name: 'g', base: 'Frontside 50-50 Grind', stance: 'regular' }, { ...options, obstacle: 'fence' }).obstacle).toBeNull();
     expect(planStage(kickflip, { ...options, set: 'el-toro', obstacle: 'fence' }).obstacle).toBeNull();
@@ -92,7 +98,7 @@ describe('Hollywood 16: over the fence', () => {
       for (let t = 0; t <= stage.stairs!.pop + 0.5; t += 1 / 30) {
         const frame = stageFrame(stage, t, 1);
         if (t <= stage.stairs!.pop) {
-          const { x, z } = { x: frame.scroll, z: frame.stairs!.across };
+          const { x, z } = { x: set(frame.scroll), z: set(frame.stairs!.across) };
           expect(x).toBeLessThan(0);
           expect(z).toBeLessThan(HOLLYWOOD_BUILDING_FACE - 2 * F);
           expect(z).toBeGreaterThan(HOLLYWOOD_LEFT_Z + 2 * F);
@@ -126,7 +132,7 @@ describe('Hollywood 16: over the fence', () => {
           else board = Math.min(board, clearance);
           if (clearance < (isLeg ? F : 0.4 * F)) failures.push(`${base}/${stance}/${rider} t=${t.toFixed(2)} ${isLeg ? 'leg' : 'board'} ${(clearance / F).toFixed(2)} ft`);
         };
-        for (const x of [-WHEEL_X, WHEEL_X]) for (const z of [-WHEEL_Z, WHEEL_Z]) check(frame.rig.board.point({ x, y: WHEEL_Y, z }), WHEEL_R, 1.5, false);
+        for (const x of [-WHEEL_X, WHEEL_X]) for (const z of [-WHEEL_Z, WHEEL_Z]) check(frame.rig.board.point({ x, y: WHEEL_Y, z }), set(WHEEL_R), 1.5, false);
         for (const x of [-42, 0, 42]) for (const z of [-10, 10]) check(frame.rig.board.point({ x, y: 0, z }), 0, 1.5, false);
         for (const leg of frame.rig.legs) for (const p of [leg.knee, leg.ankle]) check(p, 0, 5, true);
       }
@@ -143,8 +149,8 @@ describe('Hollywood 16: over the fence', () => {
     expect(low.rise).toBeCloseTo(high.rise, 6);
     expect(low.speed).toBeCloseTo(high.speed, 6);
     // About nineteen feet a second over a twenty-four foot flight.
-    expect(low.speed / F).toBeGreaterThan(15);
-    expect(low.speed / F).toBeLessThan(21);
+    expect(low.speed / FOOT).toBeGreaterThan(15);
+    expect(low.speed / FOOT).toBeLessThan(21);
     // The stairs still go by each rider's own pop.
     const stairs = (popHeight: number) => planStage({ id: 'k', name: 'k', base: 'Kickflip', stance: 'regular' }, {
       set: 'hollywood-high', landed: true, riderStance: 'regular', style: resolveSkateStyle({ popHeight, rotationSpeed: 1, flickStrength: 1 }), fall: 'slam', shankProgress: 0.65,
@@ -157,15 +163,15 @@ describe('Hollywood 16: over the fence', () => {
       const stage = fence(base, stance, rider, { landed });
       const context = `${base}/${stance}/${rider}/${landed ? 'landed' : 'fall'}`;
       const touchdown = stageFrame(stage, stage.stairs!.land, 1);
-      expect(touchdown.stairs!.across, context).toBeLessThan(HOLLYWOOD_FENCE_Z - 5 * F);
-      expect(hollywoodSurface(touchdown.scroll, touchdown.stairs!.across)).toBe(-HOLLYWOOD_DROP);
-      expect(touchdown.stairs!.shadowY).toBeCloseTo(-HOLLYWOOD_DROP, 0);
+      expect(set(touchdown.stairs!.across), context).toBeLessThan(HOLLYWOOD_FENCE_Z - 5 * F);
+      expect(hollywoodSurface(set(touchdown.scroll), set(touchdown.stairs!.across))).toBe(-HOLLYWOOD_DROP);
+      expect(set(touchdown.stairs!.shadowY)).toBeCloseTo(-HOLLYWOOD_DROP, 0);
       for (let t = stage.stairs!.land; t <= stage.end; t += 1 / 30) {
         const frame = stageFrame(stage, t, 1);
-        const z = frame.stairs!.across;
+        const z = set(frame.stairs!.across);
         expect(z, `${context} at ${t.toFixed(2)}`).toBeLessThan(HOLLYWOOD_CHEEK_Z - 3 * F);
         expect(z, `${context} at ${t.toFixed(2)}`).toBeGreaterThan(HOLLYWOOD_CURB_Z + 2.5 * F);
-        for (const { at } of HOLLYWOOD_TREES) expect(Math.hypot(frame.scroll - at[0], z - at[2]), context).toBeGreaterThan(4 * F);
+        for (const { at } of HOLLYWOOD_TREES) expect(Math.hypot(set(frame.scroll) - at[0], z - at[2]), context).toBeGreaterThan(4 * F);
       }
       const end = stageFrame(stage, stage.end, 1);
       const straight = { ...stage, stairs: { ...stage.stairs!, terrain: { ...stage.stairs!.terrain, entry: { ...stage.stairs!.terrain.entry!, yaw: 0 } } } };
@@ -224,7 +230,7 @@ describe('Hollywood 16: over the fence', () => {
             expect(p.y, `y at ${t.toFixed(2)}`).toBeLessThan(view.box.y + view.box.height);
           }
           // The eye never drops under the fence's spear tips, and tilts smoothly.
-          expect(view.eye[1], `eye at ${t.toFixed(2)}`).toBeGreaterThan(HOLLYWOOD_FENCE_TIPS + 2 * F);
+          expect(set(view.eye[1]), `eye at ${t.toFixed(2)}`).toBeGreaterThan(HOLLYWOOD_FENCE_TIPS + 2 * F);
           const now = Math.asin(view.back[1]) * 180 / Math.PI;
           expect(Math.abs(now - pitch), `tilt at ${t.toFixed(2)}`).toBeLessThan(4);
           pitch = now;
@@ -249,7 +255,7 @@ describe('Hollywood 16: over the fence', () => {
           const view = spot.view(frame, DEFAULT_SCENE_CAMERA, 1, 1.24, tripod)!;
           // Standing on the ground somewhere the rider never goes.
           const eye = { x: view.eye[0] + frame.scroll, z: view.eye[2] + frame.stairs!.across };
-          expect(Math.hypot(eye.x - frame.scroll, eye.z - frame.stairs!.across), `${tripod} at ${t.toFixed(2)}`).toBeGreaterThan(5 * F);
+          expect(Math.hypot(eye.x - frame.scroll, eye.z - frame.stairs!.across), `${tripod} at ${t.toFixed(2)}`).toBeGreaterThan(5 * FOOT);
           const p = view.cam.project(frame.rig.board.center);
           expect(p.x, `${tripod} x at ${t.toFixed(2)}`).toBeGreaterThan(view.box.x);
           expect(p.x).toBeLessThan(view.box.x + view.box.width);

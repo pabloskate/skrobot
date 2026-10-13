@@ -1,5 +1,5 @@
 import { add3, cross3, dot3, norm3, scale3, sub3, type V3 } from '../../math';
-import { HUMAN_FOREARM, HUMAN_SCALE, HUMAN_SHIN, HUMAN_THIGH, HUMAN_UPPER_ARM } from '../../riders/human/humanProportions';
+import { HUMAN_FOREARM, HUMAN_HEAD, HUMAN_SCALE, HUMAN_SHIN, HUMAN_THIGH, HUMAN_UPPER_ARM } from '../../riders/human/humanProportions';
 import { HUMAN_SHOULDER, HUMAN_SHOULDER_DROP } from '../../riders/human/humanRig';
 import { skaterInfo, type Skater } from '../../riders/skaters';
 import {
@@ -65,9 +65,9 @@ const ROBOT: BodyDims = {
 /** The robot's rig as humanRig grows it (same frames, hips up, shoulders in and down, the head a little less). */
 const PERSON: BodyDims = (() => {
   const k = HUMAN_SCALE;
-  // humanRig grows the head out from its pivot on the neck by 1.2 and the rest by k.
+  // humanRig grows the head out from its pivot on the neck by HUMAN_HEAD and the rest by k.
   const pivot = { f: 1.5, u: -15 };
-  const headGrow = 1.2;
+  const headGrow = HUMAN_HEAD;
   return {
     scale: k,
     hipHalf: HIP_Z * k,

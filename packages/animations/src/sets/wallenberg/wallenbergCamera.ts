@@ -1,16 +1,31 @@
-import type { SceneCamera } from '../../camera/camera';
+import { DISTANCE, type SceneCamera } from '../../camera/camera';
 import { stageView, type StageView } from '../../camera/view';
 import {
-  FOOT, WALLENBERG_ANNEX_FRONT_X, WALLENBERG_ANNEX_HEIGHT, WALLENBERG_ANNEX_X, WALLENBERG_DROP, WALLENBERG_GYM_X, WALLENBERG_GYM_Z, WALLENBERG_RUN, wallenbergRampHeight, wallenbergSurface,
+  WALLENBERG_ANNEX_FRONT_X, WALLENBERG_ANNEX_HEIGHT, WALLENBERG_ANNEX_X, WALLENBERG_DROP, WALLENBERG_GYM_X, WALLENBERG_GYM_Z, WALLENBERG_RUN, wallenbergRampHeight, wallenbergSurface,
 } from './wallenbergLayout';
+import { SET_SCALE } from '../setScale';
+import { FOOT } from '../../units';
 
-/** How far the crane keeps off the gym's side wall, the annex and the ground. */
+/** How far the crane keeps off the gym's side wall, the annex and the ground (stage units, as the rest here). */
 export const WALLENBERG_CLEAR = 1.5 * FOOT;
-/** Fastest the crane swings back out past the gym: degrees per foot the rider travels. */
-const RELEASE = 2.8 / FOOT;
+/**
+ * Fastest the crane swings back out past the gym: about fifty degrees as the
+ * rider travels the crane's own distance (degrees per unit travelled), so it
+ * keeps up with the eye clearing the gym's corner however close it follows.
+ */
+const RELEASE = 50 / DISTANCE;
 /** Sampling of the rider's travel, and the rounding of the swing's corners. */
 const STEP = FOOT / 2;
 const ROUND = 6;
+
+/** The gym, the annex and the ground, laid out in set units, where the crane is: on the stage. */
+const GYM_X = WALLENBERG_GYM_X * SET_SCALE;
+const GYM_Z = WALLENBERG_GYM_Z * SET_SCALE;
+const ANNEX_X = WALLENBERG_ANNEX_X * SET_SCALE;
+const ANNEX_FRONT_X = WALLENBERG_ANNEX_FRONT_X * SET_SCALE;
+const ANNEX_HEIGHT = WALLENBERG_ANNEX_HEIGHT * SET_SCALE;
+const rampHeight = (x: number) => SET_SCALE * wallenbergRampHeight(x / SET_SCALE);
+const surface = (x: number, z: number) => SET_SCALE * wallenbergSurface(x / SET_SCALE, z / SET_SCALE);
 const DEG = Math.PI / 180;
 /** Steepest the crane tilts up to see over the roll-in or the annex; past it, it closes in instead. */
 const MAX_TILT = 45;
@@ -24,9 +39,9 @@ const MAX_TILT = 45;
  * eye is out past the front; between those, behind, the eye is in the gym.
  */
 function swing(yaw: number, reach: number, x: number, z: number): number {
-  const wall = WALLENBERG_GYM_Z - WALLENBERG_CLEAR - z;
+  const wall = GYM_Z - WALLENBERG_CLEAR - z;
   const alongWall = wall >= reach ? 0 : wall <= -reach ? 90 : Math.acos(wall / reach) / DEG;
-  const front = WALLENBERG_GYM_X + WALLENBERG_CLEAR;
+  const front = GYM_X + WALLENBERG_CLEAR;
   if (yaw > 0) return x - reach * Math.sin(alongWall * DEG) >= front ? 0 : alongWall;
   const ahead = (front - x) / reach;
   return Math.min(alongWall, ahead <= 0 ? 0 : ahead >= 1 ? 90 : Math.asin(ahead) / DEG);
@@ -75,15 +90,15 @@ export function wallenbergView(lift: number, scroll: number, camera: Readonly<Sc
   // Over the roll-in (the whole alley's width, so a swung crane never sees its edge), the annex and the slope:
   // tilt up over them, as a filmer up on the deck would, eased over the rider's travel; failing that, close in.
   const clearAt = ([x, y, z]: number[]) => {
-    const inAnnex = x < WALLENBERG_ANNEX_FRONT_X + WALLENBERG_CLEAR && x > WALLENBERG_ANNEX_X && z < WALLENBERG_GYM_Z && y < WALLENBERG_ANNEX_HEIGHT + WALLENBERG_CLEAR;
-    const ground = x < 0 && Math.abs(z) < WALLENBERG_GYM_Z ? wallenbergRampHeight(x) : wallenbergSurface(x, z);
+    const inAnnex = x < ANNEX_FRONT_X + WALLENBERG_CLEAR && x > ANNEX_X && z < GYM_Z && y < ANNEX_HEIGHT + WALLENBERG_CLEAR;
+    const ground = x < 0 && Math.abs(z) < GYM_Z ? rampHeight(x) : surface(x, z);
     return !inAnnex && y >= ground + WALLENBERG_CLEAR;
   };
   const view = safe === pitched ? requested : stageView(lift, safe, zoom, aspect);
   const target = view.eye.map((v, i) => v - view.back[i] * view.distance);
   const turn = safe.yaw * DEG;
   // The eye with the rider at x down the line (as high as the roll-in carries them there), tilted to `pitch`.
-  const ride = (x: number) => (x < 0 ? wallenbergRampHeight(x) : 0);
+  const ride = (x: number) => (x < 0 ? rampHeight(x) : 0);
   const eyeAt = (x: number, pitch: number) => [
     x + target[0] - view.distance * Math.sin(turn) * Math.cos(pitch * DEG),
     target[1] + ride(x) - ride(scroll) + view.distance * Math.sin(pitch * DEG),

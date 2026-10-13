@@ -12,6 +12,7 @@ import {
 } from 'three';
 import { PALETTE } from '../../camera/camera';
 import { mixHex } from '../../math';
+import { SET_SCALE } from '../setScale';
 import { RISER, STAIR_DROP, STAIR_RUN, STAIR_STEPS, TREAD, nosingLine, stairGround } from './stairs';
 import { Bake, type Ink, type Paint } from '../../three/bake';
 import { INK_PROP, SUN, glslRgb } from '../../three/materials';
@@ -308,7 +309,7 @@ void main() {
   color = mix(color, color * vec3(0.51, 0.59, 0.65), min(a * 1.65, 0.75));
 
   // Air: far ground fades into the horizon.
-  float dist = length(vWorld - cameraPosition);
+  float dist = length(vWorld - cameraPosition) / ${SET_SCALE.toFixed(5)};
   color = mix(color, HORIZON, 0.85 * smoothstep(1800.0, 11000.0, dist));
   outColor = vec4(color, 1.0);
   outInfo = vInfo;
@@ -476,9 +477,11 @@ function buildSet(dir: 1 | -1, solid: ShaderMaterial): Build {
     (su.uRailB.value as Vector4[])[i].set(b[0], b[1], b[2], 0);
   });
   const group = new Group();
-  // Keep the rig and camera around their shared origin while centering the
-  // fixed spot on the chosen line in the left-hand flight.
-  group.position.z = -RIDER_LANE_Z;
+  // Drawn in set units, standing SET_SCALE bigger on the stage. Keep the rig
+  // and camera around their shared origin while centering the fixed spot on
+  // the chosen line in the left-hand flight.
+  group.scale.setScalar(SET_SCALE);
+  group.position.z = -RIDER_LANE_Z * SET_SCALE;
   const groundMesh = new Mesh(ground.geometry(), surface);
   const propMesh = new Mesh(props.geometry(), solid);
   for (const m of [groundMesh, propMesh]) m.frustumCulled = false;
@@ -526,9 +529,9 @@ export class ElToro3D {
   update(view: StageView, scroll: number, size: { width: number; height: number }, shadow: Texture, shadowOpacity: [number, number, number], frame?: StageFrame) {
     const stairs = frame?.stairs ?? null;
     const build = this.build();
-    build.group.position.x = -scroll + (stairs ? 0 : LIP_AWAY);
+    build.group.position.x = -scroll + (stairs ? 0 : LIP_AWAY * SET_SCALE);
     // Under the rider: their line down the left-hand flight, or the center rail they grind.
-    build.group.position.z = -(stairs?.across ?? RIDER_LANE_Z);
+    build.group.position.z = -(stairs?.across ?? RIDER_LANE_Z * SET_SCALE);
     const u = build.surface.uniforms;
     u.uShadow.value = shadow;
     u.uShadowOpacity.value.set(...shadowOpacity);

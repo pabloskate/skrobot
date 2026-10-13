@@ -4,7 +4,8 @@ import { grindSpecFor, type GrindSpec } from '../motion/grindDefinitions';
 import { resolveRiderMechanics, type RiderMechanics } from '../motion/stance';
 import type { RiderStance, SkateStyle, Trick } from '../types';
 import { CENTER_Z, FAR_RAIL_Z, HILL_RAIL_Z } from './elToro/elToroLayout';
-import { EL_TORO_RAIL, EL_TORO_TERRAIN, FOOT, stairTimeline, type DropTerrain } from './elToro/stairs';
+import { EL_TORO_RAIL, EL_TORO_TERRAIN, SET_FOOT, stairTimeline, type DropTerrain } from './elToro/stairs';
+import { SET_SCALE, stageHandrail, stageTerrain } from './setScale';
 import { HOLLYWOOD_DROP, HOLLYWOOD_FENCE_TERRAIN, HOLLYWOOD_RUN, HOLLYWOOD_LANE_Z, HOLLYWOOD_RAIL, HOLLYWOOD_CENTER_Z, HOLLYWOOD_LEFT_RAIL_Z, HOLLYWOOD_RIGHT_RAIL_Z, hollywoodGround } from './hollywood/hollywoodLayout';
 import { WALLENBERG_DROP, WALLENBERG_DROP_IN, WALLENBERG_RUN, WALLENBERG_LANE_Z, wallenbergGround, wallenbergSurface } from './wallenberg/wallenbergLayout';
 import { SUNSET_DROP, SUNSET_LAND_X, SUNSET_LANE_Z, SUNSET_POP_X, SUNSET_POP_Z, sunsetGround, sunsetSlope, sunsetSurface } from './sunset/sunsetLayout';
@@ -20,6 +21,10 @@ import { MIAMI_BANK_TERRAIN, MIAMI_GAP_TERRAIN, MIAMI_LEDGES } from './miami/mia
  * panorama only where there is one, and the explorer offers tripods where
  * the set has them. Each set's scenery is its own folder under sets/, built
  * for the renderer in three/renderer.ts.
+ *
+ * Each set lays itself out in set units; what's here is the stage's
+ * (setScale.ts): the terrain, handrails, ledges and lines across the set
+ * are scaled as they're registered.
  */
 
 export type StageSet = 'plaza' | 'waterfront' | 'el-toro' | 'hollywood-high' | 'wallenberg' | 'sunset-car-wash' | 'lyon-25' | 'leap-of-faith' | 'miami-triangle';
@@ -104,7 +109,22 @@ export interface SetInfo {
   tripods: readonly TripodId[];
 }
 
-const HOLLYWOOD_STAIRS: DropTerrain = { drop: HOLLYWOOD_DROP, run: HOLLYWOOD_RUN, landPast: 4 * FOOT, laneZ: HOLLYWOOD_LANE_Z, ground: hollywoodGround };
+const HOLLYWOOD_STAIRS: DropTerrain = stageTerrain({ drop: HOLLYWOOD_DROP, run: HOLLYWOOD_RUN, landPast: 4 * SET_FOOT, laneZ: HOLLYWOOD_LANE_Z, ground: hollywoodGround });
+
+/** A set's handrails, laid out in set units, on the stage. */
+const stageRails = (handrail: Handrail, z: Readonly<Record<RailLine, number>>, sideGrinds?: boolean): SetRails => ({
+  handrail: stageHandrail(handrail),
+  z: { center: z.center * SET_SCALE, left: z.left * SET_SCALE, right: z.right * SET_SCALE },
+  ...(sideGrinds != null && { sideGrinds }),
+});
+
+/** A set's ledges, laid out in set units, on the stage. */
+const stageLedges = (ledges: Readonly<Record<'left' | 'right', PlacedLedge>>): Readonly<Record<'left' | 'right', PlacedLedge>> => {
+  const place = ({ handrail, x, z, yaw }: PlacedLedge): PlacedLedge => ({ handrail: stageHandrail(handrail), x: x * SET_SCALE, z: z * SET_SCALE, yaw });
+  return { left: place(ledges.left), right: place(ledges.right) };
+};
+
+const MIAMI_BANK = stageTerrain(MIAMI_BANK_TERRAIN);
 
 export const STAGE_SETS: readonly SetInfo[] = [
   { id: 'plaza', label: 'Plaza', terrain: null, grinds: true, rails: null, farPanorama: false, tripods: [] },
@@ -112,9 +132,9 @@ export const STAGE_SETS: readonly SetInfo[] = [
   {
     id: 'el-toro',
     label: 'El Toro',
-    terrain: EL_TORO_TERRAIN,
+    terrain: stageTerrain(EL_TORO_TERRAIN),
     grinds: true,
-    rails: { handrail: EL_TORO_RAIL, z: { center: CENTER_Z, left: HILL_RAIL_Z, right: FAR_RAIL_Z } },
+    rails: stageRails(EL_TORO_RAIL, { center: CENTER_Z, left: HILL_RAIL_Z, right: FAR_RAIL_Z }),
     farPanorama: false,
     tripods: ['bottom', 'side', 'top'],
   },
@@ -124,51 +144,51 @@ export const STAGE_SETS: readonly SetInfo[] = [
     terrain: HOLLYWOOD_STAIRS,
     obstacles: [
       { id: 'stairs', label: 'Stairs', hint: 'down the stairs', terrain: HOLLYWOOD_STAIRS },
-      { id: 'fence', label: 'Fence', hint: 'over the rail and fence, coming in at an angle', terrain: HOLLYWOOD_FENCE_TERRAIN },
+      { id: 'fence', label: 'Fence', hint: 'over the rail and fence, coming in at an angle', terrain: stageTerrain(HOLLYWOOD_FENCE_TERRAIN) },
     ],
-    rails: { handrail: HOLLYWOOD_RAIL, sideGrinds: false, z: { center: HOLLYWOOD_CENTER_Z, left: HOLLYWOOD_LEFT_RAIL_Z, right: HOLLYWOOD_RIGHT_RAIL_Z } },
+    rails: stageRails(HOLLYWOOD_RAIL, { center: HOLLYWOOD_CENTER_Z, left: HOLLYWOOD_LEFT_RAIL_Z, right: HOLLYWOOD_RIGHT_RAIL_Z }, false),
     farPanorama: false, tripods: ['bottom', 'side', 'top'],
   },
   {
     id: 'wallenberg', label: 'Wallenberg', grinds: false,
     description: 'San Francisco · Down the roll-in, then four blocks: 51 inches down and 198 inches across.',
-    terrain: {
-      drop: WALLENBERG_DROP, run: WALLENBERG_RUN, landPast: 3 * FOOT, laneZ: WALLENBERG_LANE_Z,
+    terrain: stageTerrain({
+      drop: WALLENBERG_DROP, run: WALLENBERG_RUN, landPast: 3 * SET_FOOT, laneZ: WALLENBERG_LANE_Z,
       ground: wallenbergGround, surface: wallenbergSurface, dropIn: WALLENBERG_DROP_IN,
-    },
+    }),
     rails: null, farPanorama: false, tripods: ['bottom', 'side', 'top'],
   },
   {
     id: 'sunset-car-wash', label: 'Sunset Car Wash', grinds: false,
     description: 'Sunset Boulevard, Los Angeles · Along the roof, a quarter-turn into the bank, then downhill.',
-    terrain: {
+    terrain: stageTerrain({
       drop: SUNSET_DROP, run: SUNSET_LAND_X, landPast: 0, laneZ: SUNSET_LANE_Z,
       ground: sunsetGround, slope: sunsetSlope, surface: sunsetSurface,
       entry: { x: SUNSET_POP_X, z: SUNSET_POP_Z, yaw: -90 },
-    },
+    }),
     rails: null, farPanorama: false, tripods: ['bottom', 'side', 'top'],
   },
   {
     id: 'lyon-25', label: 'Lyon 25', grinds: false,
     description: 'Cité internationale, Lyon · 25 stairs, 14.76 feet down and 21.29 feet across, beside the terracotta buildings.',
-    terrain: LYON_TERRAIN,
+    terrain: stageTerrain(LYON_TERRAIN),
     rails: null, farPanorama: false, tripods: ['bottom', 'side', 'top'],
   },
   {
     id: 'leap-of-faith', label: 'Leap of Faith', grinds: false,
     description: 'Point Loma High School, San Diego · Over the walkway guardrail into the courtyard, a 14.3-foot drop in the classic Jamie Thomas setting.',
-    terrain: LEAP_OF_FAITH_TERRAIN,
+    terrain: stageTerrain(LEAP_OF_FAITH_TERRAIN),
     rails: null, farPanorama: false, tripods: ['bottom', 'side', 'top'],
   },
   {
     id: 'miami-triangle', label: 'Miami Triangle', grinds: true,
     description: 'Bayfront Park, Miami · Off the tip of the Challenger Memorial terrace onto the tilted granite triangle, over it to the plaza, or down one of its edges.',
-    terrain: MIAMI_BANK_TERRAIN,
+    terrain: MIAMI_BANK,
     obstacles: [
-      { id: 'stairs', label: 'Bank', hint: 'off the terrace tip onto the granite triangle, then down it', terrain: MIAMI_BANK_TERRAIN },
-      { id: 'triangle', label: 'Over', hint: 'over the whole triangle to the plaza', terrain: MIAMI_GAP_TERRAIN },
+      { id: 'stairs', label: 'Bank', hint: 'off the terrace tip onto the granite triangle, then down it', terrain: MIAMI_BANK },
+      { id: 'triangle', label: 'Over', hint: 'over the whole triangle to the plaza', terrain: stageTerrain(MIAMI_GAP_TERRAIN) },
     ],
-    rails: null, ledges: MIAMI_LEDGES, farPanorama: false, tripods: ['bottom', 'side', 'top'],
+    rails: null, ledges: stageLedges(MIAMI_LEDGES), farPanorama: false, tripods: ['bottom', 'side', 'top'],
   },
 ];
 

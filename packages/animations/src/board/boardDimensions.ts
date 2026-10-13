@@ -1,8 +1,13 @@
 import { TIP_X } from './deck';
 import { DECK_HALF_WIDTH } from '../motion/skeleton';
+import { INCH } from '../units';
 
-/** Broader 3D deck and axle silhouette; length and ride height follow the shared rig. */
-export const BOARD_WIDTH_SCALE = 1.2;
+/**
+ * How much wider the meshes and the collision solids draw the deck and its
+ * running gear than the physics' board: out to a 7¾-inch deck, a 31-inch
+ * popsicle's width. Length and ride height follow the shared rig.
+ */
+export const BOARD_WIDTH_SCALE = (3.875 * INCH) / DECK_HALF_WIDTH;
 
 export function boardHalfWidth(x: number): number {
   const start = TIP_X - 9.5;

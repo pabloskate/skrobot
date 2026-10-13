@@ -1,7 +1,7 @@
 import { lambert } from '../../camera/camera';
 import { mixHex, type V3 } from '../../math';
 import { hash2 } from '../setKit';
-import { FOOT } from './stairs';
+import { SET_FOOT } from './stairs';
 import { Bake, NO_INK, type Ink, type Paint } from '../../three/bake';
 import {
   BUILDING_DEPTH,
@@ -68,8 +68,8 @@ export function buildElToroBuilding(props: Bake, dir: 1 | -1): void {
   box(P(u0, 0, back), P(BUILDING_END, BUILDING_H, facade), '#988974', wallInk);
   type WallPoint = (along: number, height: number, depth: number) => Vec3;
   const masonry = (length: number, point: WallPoint, normal: Vec3, seed: number) => {
-    const blockW = FOOT * 4 / 3;
-    const blockH = FOOT * 2 / 3;
+    const blockW = SET_FOOT * 4 / 3;
+    const blockH = SET_FOOT * 2 / 3;
     for (let row = 0; row * blockH < BUILDING_H; row++) {
       const y0 = row * blockH + 0.5;
       const y1 = Math.min(BUILDING_H, (row + 1) * blockH - 0.5);
@@ -236,7 +236,7 @@ export function buildElToroBuilding(props: Bake, dir: 1 | -1): void {
   const fenceU = BUILDING_END + 12;
   const fenceBack = back + 24;
   const fenceFront = facade + 27;
-  const fenceH = 5.6 * FOOT;
+  const fenceH = 5.6 * SET_FOOT;
   const fenceInk = ink(88, 12);
   const fence = (a: Vec3, b: Vec3) => {
     const dx = b[0] - a[0];
@@ -275,7 +275,7 @@ export function buildElToroBuilding(props: Bake, dir: 1 | -1): void {
   const lampU = 66;
   const lampZ = -51;
   const baseH = hill(lampU);
-  const shaftTop = baseH + 14.5 * FOOT;
+  const shaftTop = baseH + 14.5 * SET_FOOT;
   const lampTop = shaftTop + 64;
   const lampInk = ink(92, 12);
   box(P(lampU - 8, baseH, lampZ - 8), P(lampU + 8, baseH + 6, lampZ + 8), '#a7a794', wallInk);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { WHEEL_X, WHEEL_Y, WHEEL_Z } from './board';
 import { kickY } from './deck';
-import { add3, rotX, rotY, rotZ, type V3 } from '../math';
+import { add3, rotX, rotY, rotZ, sub3, type V3 } from '../math';
 import { frameOf, type BoardRig, type LegRig } from '../motion/skeleton';
 import { BOARD_WIDTH_SCALE } from './boardDimensions';
 import { capsuleIntersectsBoard, legBoardCollision, shoeIntersectsBoard } from './boardCollision';
@@ -99,13 +99,15 @@ describe('rendered board volume collisions', () => {
   });
 
   it('detects contact against independently generated rounded shoe and capsule surfaces', () => {
+    // A deck on its edge with the middle of its midplane at `point`.
+    const deckAt = (point: V3) => boardAt(90, 0, 0, sub3(point, boardAt(90).dir({ x: 0, y: kickY(0), z: 0 })));
     const shoe = shoeAt({ x: 0, y: -15, z: 0 });
     const shoeGeometry = roundedBoxGeometry({ f: 12, u: 4, s: 6, r: 3.6 }, 4);
     const shoeVertices = shoeGeometry.getAttribute('position');
     // Put the deck midpoint on a selection of actual shoe surface points.
     for (let i = 0; i < shoeVertices.count; i += 73) {
       const point = shoe.at(shoeVertices.getX(i), shoeVertices.getY(i), shoeVertices.getZ(i));
-      expect(shoeIntersectsBoard(boardAt(90, 0, 0, point), shoe), `shoe vertex ${i}`).toBe(true);
+      expect(shoeIntersectsBoard(deckAt(point), shoe), `shoe vertex ${i}`).toBe(true);
     }
     const capsule = new Capsule();
     const a = { x: 0, y: -25, z: 0 };
@@ -114,7 +116,7 @@ describe('rendered board volume collisions', () => {
     const limbVertices = capsule.geometry.getAttribute('position');
     for (let i = 0; i < limbVertices.count; i += 13) {
       const point = { x: limbVertices.getX(i), y: -limbVertices.getY(i), z: limbVertices.getZ(i) };
-      expect(capsuleIntersectsBoard(boardAt(90, 0, 0, point), a, b, 4.7, 3.5), `limb vertex ${i}`).toBe(true);
+      expect(capsuleIntersectsBoard(deckAt(point), a, b, 4.7, 3.5), `limb vertex ${i}`).toBe(true);
     }
     shoeGeometry.dispose();
     capsule.geometry.dispose();

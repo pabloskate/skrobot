@@ -155,7 +155,7 @@ function toBoard(rig: Rig, p: V3): V3 {
 function boardSamples(rig: Rig): V3[] {
   const pts: V3[] = [];
   for (let x = -46; x <= 46; x += 4) {
-    for (const z of [-DECK_HALF_WIDTH + 1, 0, DECK_HALF_WIDTH - 1]) pts.push(rig.board.point({ x, y: deckTopY(x) + 2, z }));
+    for (const z of [-DECK_HALF_WIDTH + 1, 0, DECK_HALF_WIDTH - 1]) pts.push(rig.board.point({ x, y: deckBottomY(x) - 0.4, z }));
   }
   for (const tx of [-WHEEL_X, WHEEL_X]) {
     for (let z = -5; z <= 5; z += 2.5) pts.push(rig.board.point({ x: tx, y: HANGER_BOTTOM, z }));

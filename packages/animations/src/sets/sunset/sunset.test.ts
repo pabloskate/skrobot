@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DoubleSide, Mesh, MeshBasicMaterial, Raycaster, Vector3 } from 'three';
 import { projectThree, stageView } from '../../camera/view';
-import { FOOT } from '../elToro/stairs';
+import { SET_FOOT } from '../elToro/stairs';
 import { buildSunsetGeometry } from './sunset3d';
 import {
   SUNSET_BANK_END, SUNSET_BANK_START, SUNSET_BANK_TOP, SUNSET_BANK_Z0,
@@ -16,12 +16,12 @@ describe('Sunset roof-to-bank geometry', () => {
     try {
       const mesh = new Mesh(geometry.ground, material);
       const samples = [
-        [SUNSET_BANK_END + FOOT, SUNSET_LANE_Z + 7],
-        [SUNSET_SIDEWALK_END - FOOT, SUNSET_LANE_Z - 13],
-        [SUNSET_SIDEWALK_END + 42 * FOOT * SUNSET_SCALE, SUNSET_LANE_Z + 7],
+        [SUNSET_BANK_END + SET_FOOT, SUNSET_LANE_Z + 7],
+        [SUNSET_SIDEWALK_END - SET_FOOT, SUNSET_LANE_Z - 13],
+        [SUNSET_SIDEWALK_END + 42 * SET_FOOT * SUNSET_SCALE, SUNSET_LANE_Z + 7],
       ];
       for (const [x, z] of samples) {
-        const ray = new Raycaster(new Vector3(x, -SUNSET_DROP + FOOT, z), new Vector3(0, -1, 0), 0, FOOT * 2);
+        const ray = new Raycaster(new Vector3(x, -SUNSET_DROP + SET_FOOT, z), new Vector3(0, -1, 0), 0, SET_FOOT * 2);
         // Ignore raised expansion joints. Distinct floor heights less than a
         // unit apart fight for the same pixels from a low, distant camera.
         const floors = ray.intersectObject(mesh).filter(hit => hit.point.y <= -SUNSET_DROP + 0.01)
@@ -36,9 +36,9 @@ describe('Sunset roof-to-bank geometry', () => {
   });
 
   it('lands on the steep bank and joins the sidewalk with continuous height and tangent', () => {
-    expect(FOOT).toBe(29);
+    expect(SET_FOOT).toBe(29);
     expect(SUNSET_SCALE).toBe(1.5);
-    expect(SUNSET_DROP).toBe(18 * FOOT);
+    expect(SUNSET_DROP).toBe(18 * SET_FOOT);
     expect(sunsetSurface(SUNSET_POP_X, SUNSET_POP_Z)).toBe(0);
     expect(SUNSET_LANE_Z).toBeLessThan(SUNSET_ROOF_Z0);
     expect(sunsetSurface(SUNSET_POP_X, SUNSET_LANE_Z)).toBeLessThan(0);
@@ -99,8 +99,8 @@ describe('Sunset roof-to-bank geometry', () => {
       }
       expect(crestEnds.has(SUNSET_BANK_Z0)).toBe(true);
       expect(crestEnds.has(SUNSET_BANK_Z1)).toBe(true);
-      expect(SUNSET_ROOF_Z0 - SUNSET_BANK_Z0).toBe(33 * FOOT);
-      expect(SUNSET_BANK_Z1 - SUNSET_BANK_Z0).toBe(135 * FOOT);
+      expect(SUNSET_ROOF_Z0 - SUNSET_BANK_Z0).toBe(33 * SET_FOOT);
+      expect(SUNSET_BANK_Z1 - SUNSET_BANK_Z0).toBe(135 * SET_FOOT);
       expect(bankXs.size).toBeGreaterThan(16);
       expect(SUNSET_BANK_START).toBe(0);
       expect(Math.min(...bankXs)).toBe(SUNSET_BANK_START);
@@ -124,21 +124,21 @@ describe('Sunset roof-to-bank geometry', () => {
       }
       expect(roofZs.length).toBeGreaterThanOrEqual(6);
       const roofMin = Math.min(...roofZs), roofMax = Math.max(...roofZs);
-      expect(roofMin).toBe(-9 * FOOT);
-      expect(roofMax).toBe(88.5 * FOOT);
-      expect(roofMax - roofMin).toBe(97.5 * FOOT);
-      expect(SUNSET_ROOF_BACK).toBe(-54 * FOOT);
-      expect(SUNSET_LANE_Z).toBe(-18 * FOOT);
+      expect(roofMin).toBe(-9 * SET_FOOT);
+      expect(roofMax).toBe(88.5 * SET_FOOT);
+      expect(roofMax - roofMin).toBe(97.5 * SET_FOOT);
+      expect(SUNSET_ROOF_BACK).toBe(-54 * SET_FOOT);
+      expect(SUNSET_LANE_Z).toBe(-18 * SET_FOOT);
       expect(SUNSET_LANE_Z).toBeLessThan(roofMin);
       const roofMiddle = (roofMin + roofMax) / 2;
       const streetView = stageView(0, { yaw: -90, pitch: 8, lens: 1 });
       expect(projectThree(streetView, [0, SUNSET_BANK_TOP, SUNSET_LANE_Z]).x)
         .toBeGreaterThan(projectThree(streetView, [0, SUNSET_BANK_TOP, roofMiddle]).x);
       for (const z of [SUNSET_BANK_Z0, SUNSET_LANE_Z, SUNSET_ROOF_Z0, roofMiddle, SUNSET_ROOF_Z1, SUNSET_BANK_Z1]) {
-        expect(sunsetSurface(0, z)).toBe(-6 * FOOT);
+        expect(sunsetSurface(0, z)).toBe(-6 * SET_FOOT);
       }
-      expect(SUNSET_DROP + SUNSET_BANK_TOP).toBe(12 * FOOT);
-      expect(SUNSET_BANK_END - SUNSET_BANK_START).toBe(12 * FOOT);
+      expect(SUNSET_DROP + SUNSET_BANK_TOP).toBe(12 * SET_FOOT);
+      expect(SUNSET_BANK_END - SUNSET_BANK_START).toBe(12 * SET_FOOT);
     } finally {
       geometry.ground.dispose();
       geometry.props.dispose();

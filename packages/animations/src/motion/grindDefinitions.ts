@@ -6,6 +6,7 @@
 import type { Stance, Trick } from '../types';
 import { GROUND } from './trick';
 import { HANGER_BOTTOM, WHEEL_X, deckBottomY } from '../board/board';
+import { TIP_X } from '../board/deck';
 import { rotZ, type V3 } from '../math';
 import { hopTrickFor, type HopTrick } from './grindTricks';
 
@@ -33,10 +34,17 @@ const KICK_DEG = (Math.atan2(deckBottomY(SLIDE_X - 3) - deckBottomY(SLIDE_X + 3)
  * between that kick and its truck, whose wheels hang past the far side.
  */
 const BLUNT_DEG = 35;
-const BLUNT_EDGE = 35;
+const BLUNT_EDGE = WHEEL_X + 8;
 /** Half the length of a truck hanger's bearing line, and of the deck around a slide's contact. */
 const HANGER_HALF = 5.1;
 const DECK_REACH = 8;
+/**
+ * Up on one truck's hanger, how far the board tips (degrees) before the
+ * other end's kick, at its tip, comes down onto the bar: about 34°.
+ */
+const KICK_TOUCH_DEG = (Math.atan2(HANGER_BOTTOM - deckBottomY(TIP_X), TIP_X - WHEEL_X) * 180) / Math.PI;
+/** A 5-0 or a nosegrind holds its kick this far short of that: a couple of inches over the bar. */
+const TRUCK_LOCK_DEG = KICK_TOUCH_DEG - 12;
 
 // ----- Catalog -----
 
@@ -68,9 +76,9 @@ interface GrindDef {
 const GRINDS: Record<string, GrindDef> = {
   '50-50 Grind': { contact: 'trucks', yaw: 0, pitch: 0, roll: 0, feet: [22, -24], side: 'frontside' },
   // Up on one truck, the other end held well up: the kick comes down to a couple of inches
-  // over the bar (it would touch at about 42°), never onto it, so it can't read as a 50-50.
-  '5-0 Grind': { contact: 'tail truck', yaw: 0, pitch: -30, roll: 0, feet: [14, -31], side: 'backside' },
-  Nosegrind: { contact: 'nose truck', yaw: 0, pitch: 30, roll: 0, feet: [31, -14], side: 'frontside' },
+  // over the bar (KICK_TOUCH_DEG), never onto it, so it can't read as a 50-50.
+  '5-0 Grind': { contact: 'tail truck', yaw: 0, pitch: -TRUCK_LOCK_DEG, roll: 0, feet: [14, -31], side: 'backside' },
+  Nosegrind: { contact: 'nose truck', yaw: 0, pitch: TRUCK_LOCK_DEG, roll: 0, feet: [31, -14], side: 'frontside' },
   'Crooked Grind': { contact: 'nose truck', yaw: 36, pitch: 20, roll: -32, feet: [34, -12], side: 'backside' },
   'Overcrooked Grind': { contact: 'nose truck', yaw: -30, pitch: 16, roll: 28, feet: [34, -12], side: 'frontside' },
   'Smith Grind': { contact: 'tail truck', yaw: -24, pitch: 22, roll: -8, feet: [16, -29], side: 'backside' },
@@ -147,7 +155,7 @@ const NOSE_BLUNT = overBar(BLUNT_EDGE, BLUNT_DEG);
  * tail hangs down outside the edge.
  */
 const LEDGE_BLUNT_DEG = 45;
-const LEDGE_BLUNT_EDGE = 41;
+const LEDGE_BLUNT_EDGE = WHEEL_X + 13;
 
 const BEARINGS: Record<Contact, Bearing> = {
   trucks: { at: { x: 0, y: HANGER_BOTTOM, z: 0 }, lines: [hanger(-WHEEL_X), hanger(WHEEL_X)] },

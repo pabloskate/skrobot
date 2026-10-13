@@ -13,6 +13,8 @@ import { GROUND, X0 } from '../../motion/trick';
 import { planStage, stageFrame, type StageFrame, type StagePlan } from '../../stage/stage';
 import type { RiderStance, Stance } from '../../types';
 import { setInfo } from '../sets';
+import { SET_SCALE } from '../setScale';
+import { FOOT } from '../../units';
 import { buildMiamiGeometry, Miami3D } from './miami3d';
 import {
   MIAMI_EDGE_FALL, MIAMI_EDGE_YAW, MIAMI_FOOT as F, MIAMI_GRIND_LOCK, MIAMI_GRIND_SPEED, MIAMI_LEDGES, MIAMI_PLAZA_HALF, MIAMI_PLAZA_Y,
@@ -53,8 +55,10 @@ function* everyGrind() {
   for (const base of COMBOS) for (const rider of RIDERS) yield { base, rider, stance: 'regular' as Stance };
 }
 
-/** A rig point in the set's own coordinates: down the line, height over the deck, across. */
-const inSet = (frame: StageFrame, p: V3) => ({ x: frame.scroll + p.x - X0, y: ASPHALT - p.y, z: frame.stairs!.across + p.z });
+/** A stage length in the set's own units. */
+const set = (units: number) => units / SET_SCALE;
+/** A rig point in the set's own coordinates (set units): down the line, height over the deck, across. */
+const inSet = (frame: StageFrame, p: V3) => ({ x: set(frame.scroll + p.x - X0), y: set(ASPHALT - p.y), z: set(frame.stairs!.across + p.z) });
 
 /** A set point along an edge from the apex (`s`), how far outside it (`out`), and how high over its line (`over`). */
 function onEdge(line: 'left' | 'right', q: V3) {
@@ -166,12 +170,12 @@ describe('Miami Triangle: grinding the slab’s edges', () => {
       // It locks on past the apex, with most of the edge still to grind: popping higher for a trick
       // in, the rider comes in slower to come down in the same place.
       const ride = g.handrail!;
-      expect(ride.lockS, context).toBeCloseTo(MIAMI_GRIND_LOCK, 6);
-      expect(ride.offS - ride.lockS, context).toBeGreaterThan(5 * F);
-      expect(ride.speed, context).toBeLessThanOrEqual(MIAMI_GRIND_SPEED + 1e-6);
-      expect(ride.speed / F, context).toBeGreaterThan(11);
+      expect(set(ride.lockS), context).toBeCloseTo(MIAMI_GRIND_LOCK, 6);
+      expect(set(ride.offS - ride.lockS), context).toBeGreaterThan(5 * F);
+      expect(set(ride.speed), context).toBeLessThanOrEqual(MIAMI_GRIND_SPEED + 1e-6);
+      expect(ride.speed / FOOT, context).toBeGreaterThan(11);
       // The hop is a real ollie, not a launch.
-      expect(g.apex / F, context).toBeLessThan(3);
+      expect(g.apex / FOOT, context).toBeLessThan(3);
     }
   }, 120_000);
 
@@ -255,7 +259,7 @@ describe('Miami Triangle: grinding the slab’s edges', () => {
       const g = stage.grind!;
       const edge = stage.rail!.line as 'left' | 'right';
       const context = `${base}/${stance}/${rider}`;
-      expect(GROUND - g.landY, context).toBeCloseTo(MIAMI_PLAZA_Y, 6);
+      expect(set(GROUND - g.landY), context).toBeCloseTo(MIAMI_PLAZA_Y, 6);
       const touchdown = stageFrame(stage, g.land, 1);
       const at = inSet(touchdown, touchdown.rig.board.center);
       expect(onMiamiSlab(at.x, at.z), context).toBe(false);
@@ -288,8 +292,8 @@ describe('Miami Triangle: grinding the slab’s edges', () => {
           const view = spot.view(frame, DEFAULT_SCENE_CAMERA, 1, 1.24, tripod)!;
           const context = `${base}/${rider}/${tripod ?? 'crane'} at ${t.toFixed(2)}`;
           expect(view.eye.every(Number.isFinite)).toBe(true);
-          const eye = { x: view.eye[0] + frame.scroll, z: view.eye[2] + frame.stairs!.across };
-          expect(view.eye[1], context).toBeGreaterThan(miamiSurface(eye.x, eye.z) + F);
+          const eye = { x: set(view.eye[0] + frame.scroll), z: set(view.eye[2] + frame.stairs!.across) };
+          expect(set(view.eye[1]), context).toBeGreaterThan(miamiSurface(eye.x, eye.z) + F);
           const hips = inSet(frame, frame.rig.board.center);
           if (tripod) expect(Math.hypot(eye.x - hips.x, eye.z - hips.z), context).toBeGreaterThan(5 * F);
           for (const point of [frame.rig.head.at(0, -30, 0), frame.rig.board.center]) {
@@ -322,7 +326,7 @@ describe('Miami Triangle: grinding the slab’s edges', () => {
           for (let t = from; t <= until; t += 1 / 20) {
             const frame = stageFrame(stage, t, 1);
             const view = spot.view(frame, DEFAULT_SCENE_CAMERA, 1, 1.24, tripod)!;
-            const eye = new Vector3(view.eye[0] + frame.scroll, view.eye[1], view.eye[2] + frame.stairs!.across);
+            const eye = new Vector3(set(view.eye[0] + frame.scroll), set(view.eye[1]), set(view.eye[2] + frame.stairs!.across));
             for (const point of [frame.rig.head.at(0, -30, 0), frame.rig.board.center]) {
               const p = inSet(frame, point);
               const direction = new Vector3(p.x, p.y, p.z).sub(eye);

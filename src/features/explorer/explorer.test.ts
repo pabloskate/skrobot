@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SCENE_CAMERA, FLIP_T, FOOT, LAND_T, ROLL_IN, SCENE_ORBIT_BOUNDS, SCENE_ZOOM, SKATERS, TRICK_BASES, grindSpecFor, grindTimelineFor, setInfo, setTimeline, stairTimeline } from '@skrobot/animations';
+import { DEFAULT_SCENE_CAMERA, FLIP_T, FOOT, LAND_T, ROLL_IN, SCENE_ORBIT_BOUNDS, SCENE_ZOOM, SKATERS, TRICK_BASES, grindSpecFor, grindTimelineFor, setInfo, setTimeline } from '@skrobot/animations';
 import { TRICK_BY_ID } from '@/features/tricks';
 import {
   CAMERA_PRESETS,
@@ -147,7 +147,7 @@ describe('Trick Explorer timeline', () => {
   it('runs a trick down El Toro for the drop’s longer hang time, timed to the stage', () => {
     const style = { popHeight: 0.92, rotationSpeed: 1.08, flickStrength: 0.95 };
     const { phases, duration } = timelineFor(flatState({ set: 'el-toro' }), style);
-    const stairs = stairTimeline(style);
+    const stairs = setTimeline('el-toro', style)!;
     expect(duration).toBe(stairs.end);
     expect(duration).toBeGreaterThan(ROLL_IN + FLIP_T + LAND_T);
     expect(phases.map((p) => p.label)).toEqual(['Set up', 'Pop', 'Peak', 'Catch', 'Land']);
@@ -339,7 +339,7 @@ describe('Trick Explorer camera', () => {
     const dragged = turnCamera(camera, -40, 7);
     expect(dragged).toEqual({ yaw: -130, pitch: 13, lens: 1, targetZ: -6 * FOOT });
     const state = flatState({ set: 'el-toro', camera: dragged });
-    expect(searchFromState(state)).toBe('?trick=kickflip&cam=-130_13_1_-174&set=el-toro');
+    expect(searchFromState(state)).toBe('?trick=kickflip&cam=-130_13_1_-223&set=el-toro');
     expect(stateFromSearch(searchFromState(state))).toEqual(state);
     expect(stateFromSearch('?trick=kickflip&cam=-130_13_1_-999').camera).toEqual(dragged);
     expect(stateFromSearch('?cam=-130_13_1_NaN').camera).toBe(DEFAULT_STATE.camera);

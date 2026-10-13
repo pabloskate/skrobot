@@ -1,18 +1,18 @@
-import { FOOT, type DropTerrain } from '../elToro/stairs';
+import { SET_FOOT, type DropTerrain } from '../elToro/stairs';
 
 /** Point Loma High's original 1997 courtyard gap. The requested 14.3 ft is
  * authoritative here; secondary reports disagree. See docs/LEAP_OF_FAITH_REFERENCE.md. */
-export const LEAP_OF_FAITH_FOOT = FOOT;
-export const LEAP_OF_FAITH_DROP = 14.3 * FOOT;
+export const LEAP_OF_FAITH_FOOT = SET_FOOT;
+export const LEAP_OF_FAITH_DROP = 14.3 * SET_FOOT;
 export const LEAP_OF_FAITH_LIP_X = 0;
 /** The skater rolls out toward the court across the head of the stairs and
  * ollies three feet short of the top step, in line with the center pipe,
  * angled 35° over the stair's bay-side rail into the open drop in front of
  * the undercroft. Crossing that rail a few steps down lets the pop stay low. */
-export const LEAP_OF_FAITH_POP_X = -3 * FOOT;
-export const LEAP_OF_FAITH_POP_Z = 4.5 * FOOT;
+export const LEAP_OF_FAITH_POP_X = -3 * SET_FOOT;
+export const LEAP_OF_FAITH_POP_Z = 4.5 * SET_FOOT;
 export const LEAP_OF_FAITH_YAW = -35;
-export const LEAP_OF_FAITH_RUN = 11 * FOOT;
+export const LEAP_OF_FAITH_RUN = 11 * SET_FOOT;
 export const LEAP_OF_FAITH_LAND_X = LEAP_OF_FAITH_RUN;
 const turn = LEAP_OF_FAITH_YAW * Math.PI / 180;
 export const leapOfFaithLineZ = (x: number) => LEAP_OF_FAITH_POP_Z + (x - LEAP_OF_FAITH_POP_X) * Math.tan(turn);
@@ -24,10 +24,10 @@ export const LEAP_OF_FAITH_LANE_Z = leapOfFaithLineZ(LEAP_OF_FAITH_LAND_X);
  * lower flight 90° again, parallel to the facade, descending away from the
  * walkway (+z). Counts and widths are photo estimates. */
 /** Stair-local across offsets: 0 is the bay-side rail, X0 the far side. */
-export const LEAP_OF_FAITH_STAIR_X0 = -9 * FOOT;
+export const LEAP_OF_FAITH_STAIR_X0 = -9 * SET_FOOT;
 export const LEAP_OF_FAITH_STAIR_X1 = 0;
 export const LEAP_OF_FAITH_STAIR_WIDTH = -LEAP_OF_FAITH_STAIR_X0;
-export const LEAP_OF_FAITH_STAIR_RUN = 9 * FOOT;
+export const LEAP_OF_FAITH_STAIR_RUN = 9 * SET_FOOT;
 export const LEAP_OF_FAITH_STEPS = 10;
 export const LEAP_OF_FAITH_MID_DROP = LEAP_OF_FAITH_DROP * LEAP_OF_FAITH_STEPS / 27;
 export const LEAP_OF_FAITH_RISER = LEAP_OF_FAITH_MID_DROP / LEAP_OF_FAITH_STEPS;
@@ -37,18 +37,18 @@ export const LEAP_OF_FAITH_TREAD = LEAP_OF_FAITH_STAIR_RUN / (LEAP_OF_FAITH_STEP
 export const LEAP_OF_FAITH_BEND_DEGREES = 90;
 export const LEAP_OF_FAITH_BEND_LENGTH = LEAP_OF_FAITH_STAIR_WIDTH * Math.PI / 2;
 export const LEAP_OF_FAITH_MID_END_Z = LEAP_OF_FAITH_STAIR_RUN + LEAP_OF_FAITH_BEND_LENGTH;
-export const LEAP_OF_FAITH_LOWER_RUN = 16 * FOOT;
+export const LEAP_OF_FAITH_LOWER_RUN = 16 * SET_FOOT;
 export const LEAP_OF_FAITH_LOWER_STEPS = 17;
 export const LEAP_OF_FAITH_STAIR_END_Z = LEAP_OF_FAITH_MID_END_Z + LEAP_OF_FAITH_LOWER_RUN;
-export const LEAP_OF_FAITH_RAIL_HEIGHT = 3 * FOOT;
+export const LEAP_OF_FAITH_RAIL_HEIGHT = 3 * SET_FOOT;
 export const LEAP_OF_FAITH_RAIL_RADIUS = 1.7;
-export const LEAP_OF_FAITH_BALCONY_BACK = -42 * FOOT;
-export const LEAP_OF_FAITH_BALCONY_END_Z = -56 * FOOT;
-export const LEAP_OF_FAITH_ALCOVE_Z = -5 * FOOT;
-export const LEAP_OF_FAITH_ALCOVE_BACK = -10 * FOOT;
-export const LEAP_OF_FAITH_ROOF_Y = 12 * FOOT;
+export const LEAP_OF_FAITH_BALCONY_BACK = -42 * SET_FOOT;
+export const LEAP_OF_FAITH_BALCONY_END_Z = -56 * SET_FOOT;
+export const LEAP_OF_FAITH_ALCOVE_Z = -5 * SET_FOOT;
+export const LEAP_OF_FAITH_ALCOVE_BACK = -10 * SET_FOOT;
+export const LEAP_OF_FAITH_ROOF_Y = 12 * SET_FOOT;
 /** The walkway's floor carries on behind the head of the stairs. */
-export const LEAP_OF_FAITH_HEAD_Z = 20 * FOOT;
+export const LEAP_OF_FAITH_HEAD_Z = 20 * SET_FOOT;
 
 /** World heading of the stair's downhill direction, radians from +x toward +z. */
 export function leapOfFaithStairHeading(s: number): number {

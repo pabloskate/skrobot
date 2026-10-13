@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z } from '../board/board';
+import { WHEEL_BOTTOM, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z } from '../board/board';
 import { ASPHALT } from '../camera/view';
 import { resolveSkateStyle } from '../motion/style';
 import { X0 } from '../motion/trick';
@@ -7,11 +7,15 @@ import { planStage, stageFrame } from '../stage/stage';
 import type { RiderStance, Stance } from '../types';
 import { setInfo, setTimeline, type StageSet } from './sets';
 import { SUNSET_BANK_END, SUNSET_LAND_X, SUNSET_POP_X, SUNSET_POP_Z, SUNSET_ROOF_Z0, sunsetGround, sunsetSlope } from './sunset/sunsetLayout';
-import { entryTurn, FOOT, terrainSurface, TURN_PAST_TOUCHDOWN } from './elToro/stairs';
+import { entryTurn, SET_FOOT, terrainSurface, TURN_PAST_TOUCHDOWN } from './elToro/stairs';
 import { LEAN_PAST_TOUCHDOWN } from '../stage/bank';
 import { Sunset3D } from './sunset/sunset3d';
 import { DEFAULT_SCENE_CAMERA } from '../camera/camera';
-import { HOLLYWOOD_RAIL, HOLLYWOOD_RUN } from './hollywood/hollywoodLayout';
+import { HOLLYWOOD_RUN } from './hollywood/hollywoodLayout';
+import { SET_SCALE } from './setScale';
+
+/** The set's layout (set units) as the stage has it. */
+const K = SET_SCALE;
 
 const SPOTS: StageSet[] = ['hollywood-high', 'wallenberg', 'sunset-car-wash', 'lyon-25', 'leap-of-faith', 'miami-triangle'];
 const plan = (set: StageSet, base = 'Kickflip', stance: Stance = 'regular', riderStance: RiderStance = 'regular', popHeight = 1) =>
@@ -28,9 +32,9 @@ describe('classic spots use their actual terrain', () => {
           style: resolveSkateStyle(), fall: 'slam', shankProgress: 0.65,
         });
         expect(stage.rail).toEqual({ line: 'center', z: 0 });
-        expect(stage.grind!.handrail!.rail).toBe(HOLLYWOOD_RAIL);
+        expect(stage.grind!.handrail!.rail).toBe(setInfo('hollywood-high').rails!.handrail);
         const landing = stageFrame(stage, stage.grind!.land, 1);
-        expect(landing.scroll).toBeGreaterThan(HOLLYWOOD_RUN);
+        expect(landing.scroll).toBeGreaterThan(HOLLYWOOD_RUN * K);
         expect(landing.stairs!.shadowY).toBeCloseTo(-setInfo('hollywood-high').terrain!.drop);
       }
     }
@@ -80,7 +84,7 @@ describe('classic spots use their actual terrain', () => {
       const trucks = (frame: typeof touchdown) => [-WHEEL_X, WHEEL_X]
         .map(x => frame.rig.board.point({ x, y: WHEEL_Y + WHEEL_R, z: WHEEL_Z }))
         .sort((a, b) => a.x - b.x)
-        .map(p => ASPHALT - p.y - sunsetGround(frame.scroll + p.x - X0));
+        .map(p => ASPHALT - p.y - K * sunsetGround((frame.scroll + p.x - X0) / K));
       // Still leaning in as it lands: a little flatter than the bank, so the
       // uphill truck touches while the nose is a few inches off it.
       const [uphill, downhill] = trucks(touchdown);
@@ -88,14 +92,14 @@ describe('classic spots use their actual terrain', () => {
       expect(downhill).toBeGreaterThan(5);
       const leaned = stageFrame(stage, land + LEAN_PAST_TOUCHDOWN, 1);
       const axis = leaned.rig.board.dir({ x: 1, y: 0, z: 0 });
-      expect(axis.y / axis.x).toBeCloseTo(-sunsetSlope(leaned.scroll), 3);
+      expect(axis.y / axis.x).toBeCloseTo(-sunsetSlope(leaned.scroll / K), 3);
       for (const height of trucks(leaned)) expect(height).toBeLessThan(0.5);
-      expect(touchdown.scroll).toBeCloseTo(SUNSET_LAND_X);
-      expect(touchdown.scroll).toBeLessThan(SUNSET_BANK_END);
+      expect(touchdown.scroll).toBeCloseTo(SUNSET_LAND_X * K);
+      expect(touchdown.scroll).toBeLessThan(SUNSET_BANK_END * K);
       const end = stageFrame(stage, stage.end, 1);
-      expect(end.scroll).toBeGreaterThan(SUNSET_BANK_END + 60);
+      expect(end.scroll).toBeGreaterThan(SUNSET_BANK_END * K + 60);
       expect(end.rig.board.dir({ x: 1, y: 0, z: 0 }).y).toBeCloseTo(0, 3);
-      expect(ASPHALT - end.rig.board.center.y - sunsetGround(end.scroll)).toBeCloseTo(13, 0);
+      expect(ASPHALT - end.rig.board.center.y - K * sunsetGround(end.scroll / K)).toBeCloseTo(WHEEL_BOTTOM, 0);
     }
   });
 
@@ -108,15 +112,15 @@ describe('classic spots use their actual terrain', () => {
         const setup = stageFrame(stage, pop - 0.2, 1);
         const takeoff = stageFrame(stage, pop, 1);
         const touchdown = stageFrame(stage, land, 1);
-        expect(setup.scroll).toBeCloseTo(SUNSET_POP_X);
-        expect(takeoff.scroll).toBeCloseTo(SUNSET_POP_X);
+        expect(setup.scroll).toBeCloseTo(SUNSET_POP_X * K);
+        expect(takeoff.scroll).toBeCloseTo(SUNSET_POP_X * K);
         expect(setup.stairs!.across).toBeGreaterThan(takeoff.stairs!.across);
-        expect(takeoff.stairs!.across).toBeCloseTo(SUNSET_POP_Z);
-        expect(takeoff.stairs!.across).toBeGreaterThan(SUNSET_ROOF_Z0);
-        expect(touchdown.stairs!.across).toBe(-18 * FOOT);
-        expect(SUNSET_ROOF_Z0 - touchdown.stairs!.across).toBe(9 * FOOT);
-        expect(touchdown.scroll).toBeCloseTo(SUNSET_LAND_X);
-        expect(touchdown.scroll).toBeCloseTo(3 * FOOT);
+        expect(takeoff.stairs!.across).toBeCloseTo(SUNSET_POP_Z * K);
+        expect(takeoff.stairs!.across).toBeGreaterThan(SUNSET_ROOF_Z0 * K);
+        expect(touchdown.stairs!.across).toBeCloseTo(-18 * SET_FOOT * K, 9);
+        expect(SUNSET_ROOF_Z0 * K - touchdown.stairs!.across).toBeCloseTo(9 * SET_FOOT * K, 9);
+        expect(touchdown.scroll).toBeCloseTo(SUNSET_LAND_X * K);
+        expect(touchdown.scroll).toBeCloseTo(3 * SET_FOOT * K);
         // The terrain contributes +90° before takeoff, a few degrees still
         // to carve at touchdown and none once that carve is done, regardless
         // of the selected trick's own yaw and forward/fakie stance.

@@ -17,6 +17,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { SUN, sceneMaterial } from '../../three/materials';
 import type { Vec3 } from '../../camera/view';
+import { SET_FOOT, SET_SCALE } from '../setScale';
 
 /**
  * Realistic street props for the classic spots: trees from Poly Haven scans
@@ -37,8 +38,8 @@ const TREE = {
 /** The tree model's height (its units are metres). */
 const TREE_HEIGHT = 19.47;
 const CARS = new URL('./assets/cars.glb', import.meta.url).href;
-/** World units per metre: the sets are laid out in feet of 29 units. */
-const METRE = 29 / 0.3048;
+/** Set units per metre (the sets are laid out in feet of SET_FOOT units). */
+const METRE = SET_FOOT / 0.3048;
 
 export type CarModel = 'sedan' | 'hatchback' | 'suv';
 
@@ -112,7 +113,7 @@ in vec2 vUv;
 in float vShade;
 const vec3 SUN = ${sun};
 vec3 hazed(vec3 color) {
-  float haze = 0.72 * smoothstep(2400.0, 12000.0, length(vWorld - cameraPosition));
+  float haze = 0.72 * smoothstep(2400.0, 12000.0, length(vWorld - cameraPosition) / ${SET_SCALE.toFixed(5)});
   return mix(color, vec3(0.776, 0.816, 0.8), haze);
 }
 `;

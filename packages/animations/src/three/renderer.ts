@@ -39,6 +39,7 @@ import { LeapOfFaith3D } from '../sets/leapOfFaith/leapOfFaith3d';
 import { Miami3D } from '../sets/miami/miami3d';
 import { Plaza3D } from '../sets/plaza3d';
 import { setInfo, type StageSet } from '../sets/sets';
+import { SET_SCALE } from '../sets/setScale';
 import { Waterfront3D } from '../sets/waterfront/waterfront3d';
 import type { GroundPolygon, StageFrame } from '../stage/stage';
 import { rgb, shadowShapeMaterial } from './materials';
@@ -211,6 +212,8 @@ export class SceneRenderer {
     this.shadowScene.add(shadows, this.propShadows);
     if (this.set.shadowGeometry) {
       const props = new Mesh(this.set.shadowGeometry, this.propShadowMaterial);
+      // Laid out in the set's units, as its scenery is.
+      props.scale.setScalar(SET_SCALE);
       props.frustumCulled = false;
       this.propShadows.add(props);
     }

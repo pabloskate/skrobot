@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Matrix4, Mesh, ShaderMaterial, SkinnedMesh, Texture, TextureLoader, Vector3 } from 'three';
 import { GLTFLoader, type GLTF } from 'three/addons/loaders/GLTFLoader.js';
-import { RealisticHuman3D, restSkeleton, skaterLoader, type RealisticCharacter } from './realisticHuman3d';
+import { RealisticHuman3D, growToPerson, restSkeleton, skaterLoader, type RealisticCharacter } from './realisticHuman3d';
 import { SkaterSolver, aroundBone, girthAt, girthFrame, type RestSkeleton, type SkeletonPose } from './skaterPose';
 import { DeltaMush } from './deltaMush';
 import { TeeDrape } from './teeDrape';
@@ -11,6 +11,8 @@ import { planStage, stageFrame } from '../../stage/stage';
 import { stageView, toThree } from '../../camera/view';
 import { DEFAULT_SKATE_STYLE } from '../../motion/style';
 import { SHOE_HALF_HEIGHT } from '../../motion/skeleton';
+import { HUMAN_SHIN, HUMAN_THIGH, MODEL_SCALE } from '../human/humanProportions';
+import { INCH } from '../../units';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -21,7 +23,7 @@ async function skater(character: RealisticCharacter = 'skater'): Promise<GLTF> {
   const file = readFileSync(new URL(character === 'alien' ? './assets/alien.glb' : './assets/skater.glb', import.meta.url));
   const buffer = file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength);
   const gltf = await new Promise<GLTF>((resolve, reject) => skaterLoader().parse(buffer, '', resolve, reject));
-  gltf.scene.updateMatrixWorld(true);
+  growToPerson(gltf.scene);
   return gltf;
 }
 
@@ -181,7 +183,8 @@ describe.each(CHARACTERS)('realistic %s skeleton', (character) => {
         for (let t = 0; t <= stage.end; t += 1 / 60) {
           const pose = solver.solve(stageFrame(stage, t, 1).rig);
           for (const s of ['L', 'R']) {
-            expect(roll(pose, `upperleg01.${s}`, 'root', `lowerleg01.${s}`), `${base} ${stance} ${t.toFixed(2)} thigh ${s}`).toBeLessThan(30);
+            // A hip turns the thigh about 45° either way at most; a deep landing squat over the board's feet splays it furthest.
+            expect(roll(pose, `upperleg01.${s}`, 'root', `lowerleg01.${s}`), `${base} ${stance} ${t.toFixed(2)} thigh ${s}`).toBeLessThan(32);
             expect(roll(pose, `upperarm01.${s}`, `clavicle.${s}`, `lowerarm01.${s}`), `${base} ${stance} ${t.toFixed(2)} arm ${s}`).toBeLessThan(30);
           }
           if (last) {
@@ -364,13 +367,20 @@ describe('realistic skater assets', () => {
     }
   });
 
-  it('is built as an adult about 1.8 m tall standing on its soles, toes forward', async () => {
+  it('stands a grown-up 5\'10" on its soles, toes forward, its legs the rig\'s', async () => {
+    const gltf = await skater();
+    const body = meshes(gltf).get('body')!;
+    body.geometry.computeBoundingBox();
+    // Crown over the floor its feet stand on, in inches.
+    expect(body.geometry.boundingBox!.max.y / INCH).toBeCloseTo(70, 0);
     const skeleton = await rest();
-    const head = skeleton.bones[named(skeleton, 'head')].head;
-    expect(head.y).toBeGreaterThan(155);
-    expect(head.y).toBeLessThan(175);
+    const at = (name: string) => skeleton.bones[named(skeleton, name)].head;
+    for (const side of ['L', 'R']) {
+      const legs = at(`upperleg01${side}`).distanceTo(at(`lowerleg01${side}`)) + at(`lowerleg01${side}`).distanceTo(at(`foot${side}`));
+      expect(legs).toBeCloseTo(HUMAN_THIGH + HUMAN_SHIN, 1);
+    }
     for (const sole of [skeleton.soles.L, skeleton.soles.R]) {
-      expect(Math.abs(sole.center.y)).toBeLessThan(3);
+      expect(Math.abs(sole.center.y)).toBeLessThan(3 * MODEL_SCALE);
       expect(sole.fwd.dot(new Vector3(0, 0, 1))).toBeGreaterThan(0.95);
     }
   });

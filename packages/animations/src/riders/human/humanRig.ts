@@ -1,15 +1,16 @@
 import { add3, cross3, dot3, norm3, scale3, smoothstep, sub3, type V3 } from '../../math';
 import type { ArmRig, BoardRig, Frame3, LegRig, Rig } from '../../motion/skeleton';
 import { capsuleIntersectsBoard } from '../../board/boardCollision';
-import { HUMAN_FOREARM, HUMAN_HEAD, HUMAN_SCALE, HUMAN_SHIN, HUMAN_THIGH, HUMAN_UPPER_ARM, shinRadius, thighRadius } from './humanProportions';
+import { HUMAN_FOREARM, HUMAN_HEAD, HUMAN_SCALE, HUMAN_SHIN, HUMAN_THIGH, HUMAN_UPPER_ARM, MODEL_SCALE, shinRadius, thighRadius } from './humanProportions';
 import { ASPHALT } from '../../camera/view';
 
 /**
  * The robot's rig worn by a person. The rig is sized for a toy: legs and
  * a chest that put its head about a board and a third over the deck, with
  * stubby arms set wide on a boxy chest (UPPER_ARM 13, FOREARM 12,
- * shoulders 17 off the spine). A grown skater stands about two boards tall,
- * with arms that hang to mid-thigh from shoulders set in narrower.
+ * shoulders 17 off the spine). A grown skater stands 5'10", over two and a
+ * quarter boards, with arms that hang to mid-thigh from shoulders set in
+ * narrower.
  *
  * So the person is the robot's pose, bigger: everything from the hips up is
  * scaled by HUMAN_SCALE out from under the feet, and the legs are that much
@@ -100,8 +101,8 @@ function kneeClear(board: BoardRig, hip: V3, knee: V3, ankle: V3): V3 {
 }
 
 /** How far over the ground an elbow and a hand stay (world units): about their thickness. */
-const ELBOW_OFF_GROUND = 4.5;
-const HAND_OFF_GROUND = 3;
+const ELBOW_OFF_GROUND = 4.5 * MODEL_SCALE;
+const HAND_OFF_GROUND = 3 * MODEL_SCALE;
 
 /**
  * A bone's direction from `from`, tipped up just enough that its far end,

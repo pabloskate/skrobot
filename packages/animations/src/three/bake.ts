@@ -266,9 +266,11 @@ flat out vec4 vInfo;
 out vec3 vNormal;
 void main() {
   vec4 view = modelViewMatrix * vec4(position, 1.0);
-  // Picture-plane art: offset in the camera's plane, then pulled toward it in depth only.
-  view.xy += aCorner.xy;
-  view.xyz *= 1.0 - aCorner.z / max(length(view.xyz), 1.0);
+  // Picture-plane art: offset in the camera's plane, then pulled toward it in
+  // depth only, at the model's scale (a set is drawn SET_SCALE bigger).
+  vec3 corner = aCorner * length(modelMatrix[0].xyz);
+  view.xy += corner.xy;
+  view.xyz *= 1.0 - corner.z / max(length(view.xyz), 1.0);
   vColor = aColor;
   vLit = aLit;
   vBand = aBand;

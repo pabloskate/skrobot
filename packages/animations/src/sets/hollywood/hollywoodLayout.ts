@@ -1,9 +1,10 @@
 import type { Handrail } from '../../motion/grind';
 import type { DropTerrain } from '../elToro/stairs';
+import { SET_FOOT } from '../setScale';
 
 /** Hollywood High's south-facing sixteen. Measurements are visual estimates;
  * see docs/HOLLYWOOD_REFERENCE.md, including the separate twelve-stair warning. */
-export const HOLLYWOOD_FOOT = 29;
+export const HOLLYWOOD_FOOT = SET_FOOT;
 const F = HOLLYWOOD_FOOT;
 export const HOLLYWOOD_STEPS = 16;
 export const HOLLYWOOD_DROP = 8 * F;

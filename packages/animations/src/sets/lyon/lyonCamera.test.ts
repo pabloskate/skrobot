@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { resolveSkateStyle } from '../../motion/style';
 import { planStage, stageFrame } from '../../stage/stage';
 import { Lyon3D } from './lyon3d';
+import { SET_SCALE } from '../setScale';
 import {
   LYON_FOOT as F, LYON_LEFT_Z, LYON_RIGHT_Z, lyonGround,
 } from './lyonLayout';
@@ -21,12 +22,13 @@ describe('Lyon enclosed-courtyard cameras', () => {
         ]) for (let t = 0; t <= plan.end; t += 1 / 15) {
           const frame = stageFrame(plan, t, 1);
           const view = set.view(frame, camera, 1, aspect, null)!;
-          const x = view.eye[0] + frame.scroll;
-          const z = view.eye[2] + frame.stairs!.across;
+          // Where the eye is in the set's own layout (set units).
+          const x = (view.eye[0] + frame.scroll) / SET_SCALE;
+          const z = (view.eye[2] + frame.stairs!.across) / SET_SCALE;
           expect(view.eye.every(Number.isFinite)).toBe(true);
           expect(z).toBeGreaterThanOrEqual(LYON_LEFT_Z + 1.9 * F);
           expect(z).toBeLessThanOrEqual(LYON_RIGHT_Z - 7.9 * F);
-          expect(view.eye[1], `ground clearance at t=${t}, yaw=${camera.yaw}`).toBeGreaterThan(lyonGround(x));
+          expect(view.eye[1] / SET_SCALE, `ground clearance at t=${t}, yaw=${camera.yaw}`).toBeGreaterThan(lyonGround(x));
         }
       }
     } finally { set.dispose(); }

@@ -10,6 +10,7 @@ import { LEAN_PAST_TOUCHDOWN } from '../../stage/bank';
 import { planStage, stageFrame, type StageFrame } from '../../stage/stage';
 import type { RiderStance, Stance } from '../../types';
 import { routeHeight } from '../elToro/stairs';
+import { SET_SCALE } from '../setScale';
 import { setInfo, setTerrain, setTimeline, type Obstacle } from '../sets';
 import { buildMiamiGeometry, Miami3D } from './miami3d';
 import { miamiTowerNode, MIAMI_TOWER_HEIGHT, MIAMI_TOWER_NODES } from './miamiGeometry';
@@ -31,8 +32,10 @@ const attempt = (base: string, obstacle: Obstacle = 'stairs', stance: Stance = '
     fall: 'slam', shankProgress: 0.65,
   },
 );
-/** A rig point in the set's own coordinates: down the line, height over the deck, across. */
-const inSet = (frame: StageFrame, p: V3) => ({ x: frame.scroll + p.x - X0, y: ASPHALT - p.y, z: frame.stairs!.across + p.z });
+/** A stage length in the set's own units. */
+const set = (units: number) => units / SET_SCALE;
+/** A rig point in the set's own coordinates (set units): down the line, height over the deck, across. */
+const inSet = (frame: StageFrame, p: V3) => ({ x: set(frame.scroll + p.x - X0), y: set(ASPHALT - p.y), z: set(frame.stairs!.across + p.z) });
 /** Each wheel's height over the slab (or whatever is under it), uphill first. */
 const trucks = (frame: StageFrame) => [-WHEEL_X, WHEEL_X]
   .map((x) => inSet(frame, frame.rig.board.point({ x, y: WHEEL_Y + WHEEL_R, z: WHEEL_Z })))
@@ -116,12 +119,15 @@ describe('Miami Triangle: the Challenger Memorial', () => {
   it('offers the gap onto the slab first, and over the whole triangle', () => {
     const info = setInfo('miami-triangle');
     expect(info.obstacles?.map((o) => o.id)).toEqual(['stairs', 'triangle']);
-    expect(info.terrain).toBe(MIAMI_BANK_TERRAIN);
-    expect(setTerrain('miami-triangle')).toBe(MIAMI_BANK_TERRAIN);
-    expect(setTerrain('miami-triangle', 'triangle')).toBe(MIAMI_GAP_TERRAIN);
-    expect(setTerrain('miami-triangle', 'fence')).toBe(MIAMI_BANK_TERRAIN);
+    const [bank, gap] = info.obstacles!.map((o) => o.terrain);
+    expect(info.terrain).toBe(bank);
+    expect(bank.run).toBeCloseTo(MIAMI_BANK_TERRAIN.run * SET_SCALE, 9);
+    expect(gap.run).toBeCloseTo(MIAMI_GAP_TERRAIN.run * SET_SCALE, 9);
+    expect(setTerrain('miami-triangle')).toBe(bank);
+    expect(setTerrain('miami-triangle', 'triangle')).toBe(gap);
+    expect(setTerrain('miami-triangle', 'fence')).toBe(bank);
     expect(attempt('Kickflip').obstacle).toBe('stairs');
-    expect(attempt('Kickflip', 'triangle').stairs!.terrain).toBe(MIAMI_GAP_TERRAIN);
+    expect(attempt('Kickflip', 'triangle').stairs!.terrain).toBe(gap);
     const stage = attempt('Kickflip', 'triangle');
     const timeline = setTimeline('miami-triangle', stage.style, true, 'triangle')!;
     expect(timeline.land).toBe(stage.stairs!.land);
@@ -133,12 +139,12 @@ describe('Miami Triangle: the Challenger Memorial', () => {
     for (const obstacle of ['stairs', 'triangle'] as Obstacle[]) for (const rider of RIDERS) for (const stance of STANCES) {
       const stage = attempt('Kickflip', obstacle, stance, rider);
       const pop = stageFrame(stage, stage.stairs!.pop, 1);
-      expect(pop.scroll).toBeCloseTo(MIAMI_POP_X, 6);
+      expect(pop.scroll).toBeCloseTo(MIAMI_POP_X * SET_SCALE, 6);
       for (let t = 0; t <= stage.stairs!.pop; t += 1 / 60) {
         const frame = stageFrame(stage, t, 1);
         const context = `${obstacle}/${rider}/${stance} at ${t.toFixed(2)}`;
         expect(frame.stairs!.across).toBe(0);
-        expect(miamiSurface(frame.scroll, 0), context).toBe(0);
+        expect(miamiSurface(set(frame.scroll), 0), context).toBe(0);
         // Rolling, up to the crouch: every wheel on the flat deck.
         if (t > stage.stairs!.pop - 0.3) continue;
         for (const x of [-WHEEL_X, WHEEL_X]) for (const z of [-WHEEL_Z, WHEEL_Z]) {
@@ -155,14 +161,14 @@ describe('Miami Triangle: the Challenger Memorial', () => {
       const stage = attempt('Kickflip', 'stairs', stance, rider, { skater, popHeight: 0.8 });
       const plan = stage.stairs!;
       const touchdown = stageFrame(stage, plan.land, 1);
-      expect(touchdown.scroll).toBeCloseTo(MIAMI_BANK_LAND_X);
+      expect(touchdown.scroll).toBeCloseTo(MIAMI_BANK_LAND_X * SET_SCALE);
       const [uphill, downhill] = trucks(touchdown);
       expect(uphill, context).toBeLessThan(1);
       expect(downhill, context).toBeGreaterThan(2);
       // Leaned onto the face, both trucks on it, down to the low edge.
       for (let t = plan.land + LEAN_PAST_TOUCHDOWN; ; t += 1 / 120) {
         const frame = stageFrame(stage, t, 1);
-        if (frame.scroll + WHEEL_X > MIAMI_SLAB_LIP_X) break;
+        if (set(frame.scroll + WHEEL_X) > MIAMI_SLAB_LIP_X) break;
         const axis = frame.rig.board.dir({ x: 1, y: 0, z: 0 });
         expect(Math.abs(axis.y / axis.x), `${context} pitch at ${t.toFixed(3)}`).toBeCloseTo(MIAMI_SLAB_GRADE, 2);
         for (const height of trucks(frame)) expect(height, `${context} at ${t.toFixed(3)}`).toBeLessThan(0.5);
@@ -170,14 +176,14 @@ describe('Miami Triangle: the Challenger Memorial', () => {
       // Off the edge once: a short drop through the air, then the pavers.
       expect(plan.ledges, context).toHaveLength(1);
       const ledge = plan.ledges[0];
-      expect(stageFrame(stage, ledge.t, 1).scroll).toBeGreaterThan(MIAMI_SLAB_LIP_X);
+      expect(set(stageFrame(stage, ledge.t, 1).scroll)).toBeGreaterThan(MIAMI_SLAB_LIP_X);
       expect(ledge.t - plan.land).toBeGreaterThan(0.2);
       expect(ledge.impact).toBeGreaterThan(0);
       let airborne = 0;
-      for (let x = MIAMI_SLAB_LIP_X; x < MIAMI_SLAB_LIP_X + 4 * F; x += 1) if (routeHeight(plan, x) > MIAMI_PLAZA_Y + 1) airborne++;
+      for (let x = MIAMI_SLAB_LIP_X; x < MIAMI_SLAB_LIP_X + 4 * F; x += 1) if (set(routeHeight(plan, x * SET_SCALE)) > MIAMI_PLAZA_Y + 1) airborne++;
       expect(airborne).toBeGreaterThan(5);
       const end = stageFrame(stage, stage.end, 1);
-      expect(end.scroll).toBeGreaterThan(MIAMI_SLAB_LIP_X + 4 * F);
+      expect(set(end.scroll)).toBeGreaterThan(MIAMI_SLAB_LIP_X + 4 * F);
       expect(end.rig.board.dir({ x: 1, y: 0, z: 0 }).y).toBeCloseTo(0, 3);
       for (const height of trucks(end)) expect(height, context).toBeLessThan(0.5);
     }
@@ -219,7 +225,7 @@ describe('Miami Triangle: the Challenger Memorial', () => {
             else board = Math.min(board, clearance);
             if (clearance < (isLeg ? F : 0.5 * F)) failures.push(`${where} ${(clearance / F).toFixed(2)} ft at x=${(q.x / F).toFixed(2)}`);
           };
-          for (const x of [-WHEEL_X, WHEEL_X]) for (const z of [-WHEEL_Z, WHEEL_Z]) check(frame.rig.board.point({ x, y: WHEEL_Y, z }), WHEEL_R, false);
+          for (const x of [-WHEEL_X, WHEEL_X]) for (const z of [-WHEEL_Z, WHEEL_Z]) check(frame.rig.board.point({ x, y: WHEEL_Y, z }), set(WHEEL_R), false);
           for (const x of [-42, 0, 42]) for (const z of [-10, 10]) check(frame.rig.board.point({ x, y: 0, z }), 0, false);
           for (const leg of frame.rig.legs) for (const p of [leg.knee, leg.ankle]) check(p, 0, true);
         }
@@ -238,13 +244,13 @@ describe('Miami Triangle: the Challenger Memorial', () => {
       const context = `${base}/${stance}/${rider}`;
       expect(stage.stairs!.ledges).toHaveLength(0);
       const touchdown = stageFrame(stage, stage.stairs!.land, 1);
-      expect(touchdown.scroll, context).toBeCloseTo(MIAMI_GAP_LAND_X);
-      expect(touchdown.stairs!.shadowY).toBeCloseTo(MIAMI_PLAZA_Y, 0);
+      expect(touchdown.scroll, context).toBeCloseTo(MIAMI_GAP_LAND_X * SET_SCALE);
+      expect(set(touchdown.stairs!.shadowY)).toBeCloseTo(MIAMI_PLAZA_Y, 0);
       for (let t = stage.stairs!.land; t <= stage.end; t += 1 / 30) {
         const frame = stageFrame(stage, t, 1);
         expect(frame.stairs!.across).toBe(0);
         // The rollout stays on the paving, short of the plaza's far corner.
-        expect(frame.scroll, context).toBeLessThan(MIAMI_WALL_X + MIAMI_PLAZA_HALF - 4 * F);
+        expect(set(frame.scroll), context).toBeLessThan(MIAMI_WALL_X + MIAMI_PLAZA_HALF - 4 * F);
       }
     }
   });
@@ -260,9 +266,9 @@ describe('Miami Triangle: the Challenger Memorial', () => {
           const view = spot.view(frame, DEFAULT_SCENE_CAMERA, 1, 1.24, tripod)!;
           const context = `${obstacle}/${rider}/${tripod ?? 'crane'} at ${t.toFixed(2)}`;
           expect(view.eye.every(Number.isFinite)).toBe(true);
-          const eye = { x: view.eye[0] + frame.scroll, z: view.eye[2] + frame.stairs!.across };
-          expect(view.eye[1], context).toBeGreaterThan(miamiSurface(eye.x, eye.z) + F);
-          if (tripod) expect(Math.hypot(eye.x - frame.scroll, eye.z - frame.stairs!.across), context).toBeGreaterThan(5 * F);
+          const eye = { x: set(view.eye[0] + frame.scroll), z: set(view.eye[2] + frame.stairs!.across) };
+          expect(set(view.eye[1]), context).toBeGreaterThan(miamiSurface(eye.x, eye.z) + F);
+          if (tripod) expect(Math.hypot(eye.x - set(frame.scroll), eye.z - set(frame.stairs!.across)), context).toBeGreaterThan(5 * F);
           for (const point of [frame.rig.head.at(0, -30, 0), frame.rig.board.center]) {
             const p = view.cam.project(point);
             expect(p.x, context).toBeGreaterThan(view.box.x);
@@ -294,7 +300,7 @@ describe('Miami Triangle: the Challenger Memorial', () => {
           for (let t = pop - 0.4; t <= until; t += 1 / 20) {
             const frame = stageFrame(stage, t, 1);
             const view = spot.view(frame, DEFAULT_SCENE_CAMERA, 1, 1.24, tripod)!;
-            const eye = new Vector3(view.eye[0] + frame.scroll, view.eye[1], view.eye[2] + frame.stairs!.across);
+            const eye = new Vector3(set(view.eye[0] + frame.scroll), set(view.eye[1]), set(view.eye[2] + frame.stairs!.across));
             const points = tripod === 'top' || t >= pop + 0.15 ? [frame.rig.head.at(0, -30, 0), frame.rig.board.center] : [frame.rig.head.at(0, -30, 0)];
             for (const point of points) {
               const p = inSet(frame, point);

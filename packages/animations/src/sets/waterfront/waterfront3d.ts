@@ -33,6 +33,7 @@ import { Bake, NO_INK, bakedMaterial, overlayMaterial, type Ink, type Paint } fr
 import { INK_PROP, rgb } from '../../three/materials';
 import { groundHull, type GroundPolygon } from '../../stage/stage';
 import { waterfrontGroundMaterial } from './waterfrontGround';
+import { SET_SCALE } from '../setScale';
 import { ASPHALT, type StageView, type Vec3 } from '../../camera/view';
 
 /**
@@ -473,7 +474,11 @@ export class Waterfront3D {
       return m;
     };
     this.street.add(mesh(props, solid));
-    this.group.add(ground, this.street, mesh(wall, solid));
+    // Built in set units; the stage's are SET_SCALE bigger. The street slides
+    // by the stage's scroll, its contents scaled inside it.
+    const seaWall = mesh(wall, solid);
+    for (const part of [ground, this.street, seaWall, this.overlayStreet]) part.scale.setScalar(SET_SCALE);
+    this.group.add(ground, this.street, seaWall);
 
     const flat = overlayMaterial();
     const soft = overlayMaterial(true);
@@ -511,12 +516,13 @@ export class Waterfront3D {
     u.uBox.value.set(box.x, box.y, box.width, box.height);
     u.uRes.value.set(size.width, size.height);
     u.uHorizon.value = cam.horizonY;
-    u.uPlazaNear.value = cam.project({ x: X0, y: ASPHALT, z: 120 }).y;
-    u.uScroll.value = scroll;
+    u.uPlazaNear.value = cam.project({ x: X0, y: ASPHALT, z: 120 * SET_SCALE }).y;
+    // The ground's own scroll, in set units.
+    u.uScroll.value = scroll / SET_SCALE;
     u.uPxPerUnit.value = size.height / box.height;
     u.uShadow.value = shadow;
     u.uShadowOpacity.value.set(...shadowOpacity);
-    this.glints.uniforms.uScroll.value = scroll;
+    this.glints.uniforms.uScroll.value = scroll / SET_SCALE;
     this.glints.uniforms.uFocal.value = view.focal;
   }
 

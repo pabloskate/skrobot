@@ -9,6 +9,7 @@ import { X0 } from '../../motion/trick';
 import { planStage, stageFrame, type StageFrame } from '../../stage/stage';
 import type { RiderStance, Stance } from '../../types';
 import { planStairs, stairTrack } from '../elToro/stairs';
+import { SET_SCALE, stageTerrain } from '../setScale';
 import { buildLeapOfFaithGeometry, LeapOfFaith3D } from './leapOfFaith3d';
 import {
   LEAP_OF_FAITH_DROP, LEAP_OF_FAITH_FOOT as F, LEAP_OF_FAITH_LANE_Z,
@@ -26,7 +27,10 @@ const attempt = (base = 'Kickflip', stance: Stance = 'regular', riderStance: Rid
   { id: base, name: base, base, stance },
   { set: 'leap-of-faith', landed: true, riderStance, style: resolveSkateStyle({ popHeight, rotationSpeed: 1, flickStrength: 1 }), skater: 'realistic', fall: 'slam', shankProgress: 0.65 },
 );
-const inSet = (frame: StageFrame, point: V3) => ({ x: frame.scroll + point.x - X0, y: ASPHALT - point.y, z: frame.stairs!.across + point.z });
+/** A stage length in the set's own units. */
+const set = (units: number) => units / SET_SCALE;
+/** A rig point in the set's own coordinates (set units). */
+const inSet = (frame: StageFrame, point: V3) => ({ x: set(frame.scroll + point.x - X0), y: set(ASPHALT - point.y), z: set(frame.stairs!.across + point.z) });
 
 describe('Leap of Faith: the original Point Loma courtyard', () => {
   it('uses the requested decimal 14.3 ft and rolls in on the upper landing', () => {
@@ -35,10 +39,10 @@ describe('Leap of Faith: the original Point Loma courtyard', () => {
     expect(leapOfFaithSurface(LEAP_OF_FAITH_POP_X, LEAP_OF_FAITH_POP_Z)).toBe(0);
     expect(leapOfFaithSurface(LEAP_OF_FAITH_RUN, LEAP_OF_FAITH_LANE_Z)).toBe(-LEAP_OF_FAITH_DROP);
     for (const popHeight of [0.45, 1.15]) {
-      const plan = planStairs({ popHeight }, true, LEAP_OF_FAITH_TERRAIN);
+      const plan = planStairs({ popHeight }, true, stageTerrain(LEAP_OF_FAITH_TERRAIN));
       for (let t = 0; t <= plan.pop; t += 1 / 60) {
         const p = stairTrack(plan, t, 0);
-        expect(leapOfFaithSurface(p.x, p.z), `runup t=${t}`).toBe(0);
+        expect(leapOfFaithSurface(set(p.x), set(p.z)), `runup t=${t}`).toBe(0);
       }
     }
   });
@@ -119,9 +123,10 @@ describe('Leap of Faith: the original Point Loma courtyard', () => {
         for (let t = takeoff; t < land; t += 1 / 90) {
           const frame = stageFrame(stage, t, 1);
           const points: { p: V3; below: number }[] = [];
-          for (const x of [-WHEEL_X, WHEEL_X]) for (const z of [-WHEEL_Z, WHEEL_Z]) points.push({ p: frame.rig.board.point({ x, y: WHEEL_Y, z }), below: WHEEL_R });
-          for (const x of [-42, 0, 42]) for (const z of [-10, 10]) points.push({ p: frame.rig.board.point({ x, y: 0, z }), below: 1 });
-          for (const leg of frame.rig.legs) points.push({ p: leg.ankle, below: 4 }, { p: leg.knee, below: 4 });
+          // How far each point's part reaches below it, in set units.
+          for (const x of [-WHEEL_X, WHEEL_X]) for (const z of [-WHEEL_Z, WHEEL_Z]) points.push({ p: frame.rig.board.point({ x, y: WHEEL_Y, z }), below: set(WHEEL_R) });
+          for (const x of [-42, 0, 42]) for (const z of [-10, 10]) points.push({ p: frame.rig.board.point({ x, y: 0, z }), below: set(1) });
+          for (const leg of frame.rig.legs) points.push({ p: leg.ankle, below: set(4) }, { p: leg.knee, below: set(4) });
           for (const { p, below } of points) {
             const at = inSet(frame, p);
             const top = leapOfFaithGuardTop(at.x, at.z, 4);
@@ -150,8 +155,8 @@ describe('Leap of Faith: the original Point Loma courtyard', () => {
             const frame = stageFrame(stage, t, 1);
             const view = spot.view(frame, DEFAULT_SCENE_CAMERA, 1, 1.24, tripod)!;
             expect(view.eye.every(Number.isFinite)).toBe(true);
-            const eyeFloor = leapOfFaithSurface(view.eye[0] + frame.scroll, view.eye[2] + frame.stairs!.across);
-            expect(view.eye[1], `${tripod} camera below the rebuilt surface`).toBeGreaterThan(eyeFloor);
+            const eyeFloor = leapOfFaithSurface(set(view.eye[0] + frame.scroll), set(view.eye[2] + frame.stairs!.across));
+            expect(set(view.eye[1]), `${tripod} camera below the rebuilt surface`).toBeGreaterThan(eyeFloor);
             for (const point of [frame.rig.head.at(0, -30, 0), frame.rig.board.center]) {
               const p = view.cam.project(point);
               expect(p.x, `${tripod}/${rider} x at ${t.toFixed(2)}`).toBeGreaterThan(view.box.x);
@@ -177,7 +182,7 @@ describe('Leap of Faith: the original Point Loma courtyard', () => {
         for (const t of times) {
           const frame = stageFrame(stage, t, 1);
           const view = spot.view(frame, DEFAULT_SCENE_CAMERA, 1, 1.24, 'top')!;
-          const eye = new Vector3(view.eye[0] + frame.scroll, view.eye[1], view.eye[2] + frame.stairs!.across);
+          const eye = new Vector3(set(view.eye[0] + frame.scroll), set(view.eye[1]), set(view.eye[2] + frame.stairs!.across));
           for (const point of [frame.rig.head.at(0, -30, 0), frame.rig.board.center]) {
             const p = inSet(frame, point);
             const target = new Vector3(p.x, p.y, p.z);

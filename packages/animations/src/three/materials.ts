@@ -451,7 +451,8 @@ void main() {
   vCorner = position.xy;
   vId = aId;
   vec4 center = modelViewMatrix * vec4(aCanopy.xyz, 1.0);
-  float r = aCanopy.w;
+  // The radius as the model's scale draws it (a set is drawn SET_SCALE bigger).
+  float r = aCanopy.w * length(modelMatrix[0].xyz);
   float dist = length(center.xyz);
   // Pull the disc to the sphere's front, scaled so its outline stays put.
   vec3 front = center.xyz * (1.0 - r / dist);

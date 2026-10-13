@@ -1,6 +1,6 @@
 import { GROUND, JUMP, X0 } from '../motion/trick';
 import { clamp01, mixHex, norm3, rad, smoothstep, type P2, type V3 } from '../math';
-import { FOOT } from '../sets/elToro/stairs';
+import { FOOT } from '../units';
 
 /**
  * The crane camera that films the stage, and the scene's sun and palette.

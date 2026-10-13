@@ -73,9 +73,11 @@ export const THIGH = 34;
 export const SHIN = 30;
 /**
  * A person is the robot's rig grown this much, hips up and the legs' bones,
- * over the same feet (riders/human/humanRig.ts): the biggest who rides.
+ * over the same feet (riders/human/humanRig.ts): the biggest who rides, a
+ * grown-up 5'10" tall on the 31-inch board (the realistic skater, grown to
+ * these legs, stands 70 inches in his socks).
  */
-export const PERSON_SCALE = 1.42;
+export const PERSON_SCALE = 1.71;
 const LEG_REACH = THIGH + SHIN - 0.4;
 /** Hip height above the deck center while cruising: an athletic, soft-kneed stance. */
 export const RIDE_HEIGHT = 63;

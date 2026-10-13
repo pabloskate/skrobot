@@ -2,7 +2,8 @@
 
 The recreation depicts the classic open sixteen-stair on the south end of the
 Hollywood High auditorium walkway. Research and image inspection: October 5,
-2026. It is an architectural interpretation at El Toro's 29 world units per foot,
+2026. It is an architectural interpretation at the sets' 29 units per foot
+(`SET_FOOT`; the stage scales sets onto the riders' units with `SET_SCALE`),
 not a measured survey or a claim about present-day access.
 
 ## Sources and image checks

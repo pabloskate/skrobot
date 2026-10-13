@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SCENE_CAMERA } from '../../camera/camera';
 import { STAIR_DROP, stairGround } from './stairs';
+import { SET_SCALE } from '../setScale';
+import { FOOT } from '../../units';
 import { resolveSkateStyle } from '../../motion/style';
 import type { RiderStance, Stance } from '../../types';
 import { elToroView, EL_TORO_CAMERA_MIN_Z, EL_TORO_CAMERA_Z } from './elToroCamera';
-import { HILL_EDGE, RIDER_LANE_Z, WALL_Z, hill } from './elToroLayout';
+import { HILL_EDGE, WALL_Z, hill } from './elToroLayout';
 import { planStage, stageFrame } from '../../stage/stage';
 import { projectThree, stageView, type StageView, type Vec3 } from '../../camera/view';
 
@@ -17,7 +19,7 @@ describe('El Toro camera clearance', () => {
         for (const lens of [0.65, 1, 1.25, 1.6]) {
           const camera = { yaw, pitch, lens };
           const setup = elToroView(0, camera, 1, 500 / 404);
-          for (const lift of [0, 75, -STAIR_DROP]) {
+          for (const lift of [0, 75, -STAIR_DROP * SET_SCALE]) {
             const view = elToroView(lift, camera, 1, 500 / 404);
             expect(view.eye[2]).toBeLessThanOrEqual(EL_TORO_CAMERA_Z + 1e-8);
             expect(view.eye[2]).toBeGreaterThanOrEqual(EL_TORO_CAMERA_MIN_Z - 1e-8);
@@ -63,12 +65,13 @@ describe('El Toro camera clearance', () => {
   });
 
   it('centers the bottom shot on the rail and respects both buildings when orbiting that target', () => {
-    const centerZ = -6 * 29;
-    const view = elToroView(-STAIR_DROP, { yaw: -90, pitch: 6, lens: 1, targetZ: centerZ }, 0.63, 500 / 404);
+    // The center rail, six feet across from the rider's line.
+    const centerZ = -6 * FOOT;
+    const view = elToroView(-STAIR_DROP * SET_SCALE, { yaw: -90, pitch: 6, lens: 1, targetZ: centerZ }, 0.63, 500 / 404);
     const center = projectThree(view, [0, target(view)[1], centerZ]);
     expect(center.x).toBeCloseTo(view.anchor.x, 8);
     expect(view.eye[2]).toBeCloseTo(centerZ, 8);
-    for (const targetZ of [-174, 174]) {
+    for (const targetZ of [-6 * FOOT, 6 * FOOT]) {
       for (let yaw = -180; yaw < 180; yaw += 15) {
         const camera = { yaw, pitch: 6, lens: 1.6, targetZ };
         const framed = elToroView(0, camera, 1, 500 / 404);
@@ -96,12 +99,13 @@ describe('El Toro camera clearance', () => {
               for (let yaw = -180; yaw <= 180; yaw += 30) {
                 for (const pitch of [0, 15, 60]) {
                   for (const lens of [0.65, 1.6]) {
-                    for (const targetZ of [-174, 0, 174]) {
+                    for (const targetZ of [-6 * FOOT, 0, 6 * FOOT]) {
                       const view = elToroView(frame.lift, { yaw, pitch, lens, targetZ }, 1, 500 / 404);
-                      const z = view.eye[2] + RIDER_LANE_Z;
-                      const u = frame.scroll + view.eye[0];
+                      // Where the eye is in the set's own layout (set units).
+                      const z = (view.eye[2] + frame.stairs!.across) / SET_SCALE;
+                      const u = (frame.scroll + view.eye[0]) / SET_SCALE;
                       const ground = z >= HILL_EDGE && z <= WALL_Z ? stairGround(u) : hill(u);
-                      minimum = Math.min(minimum, view.eye[1] - ground);
+                      minimum = Math.min(minimum, view.eye[1] - ground * SET_SCALE);
                     }
                   }
                 }

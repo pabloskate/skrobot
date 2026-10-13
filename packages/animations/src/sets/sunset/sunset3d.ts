@@ -2,7 +2,7 @@ import { Bake, NO_INK, type Ink } from '../../three/bake';
 import { INK_PROP } from '../../three/materials';
 import { ClassicSpot3D } from '../classicSpot3d';
 import { lambert, tone } from '../../camera/camera';
-import { FOOT } from '../elToro/stairs';
+import { SET_FOOT } from '../elToro/stairs';
 import { hash2 } from '../setKit';
 import { mixHex } from '../../math';
 import type { Vec3 } from '../../camera/view';
@@ -49,7 +49,7 @@ export function buildSunsetGeometry() {
   const ground = new Bake();
   const props = new Bake();
   const lower = -SUNSET_DROP;
-  const taperEnd = SUNSET_BANK_Z0 - 12 * FOOT;
+  const taperEnd = SUNSET_BANK_Z0 - 12 * SET_FOOT;
 
   // The canopy is a roof you can skate, never a solid cuboid filling its bays.
   horizontal(ground, SUNSET_ROOF_BACK, 0, SUNSET_ROOF_Z0, SUNSET_ROOF_Z1, 0, SC.roof);
@@ -59,7 +59,7 @@ export function buildSunsetGeometry() {
   const paving: Array<{ x0: number; x1: number; z0: number; z1: number; color: string | null }> = [
     { x0: SUNSET_BANK_START, x1: SUNSET_BANK_END, z0: taperEnd, z1: SUNSET_BANK_Z1, color: null },
     { x0: SUNSET_BANK_END, x1: SUNSET_SIDEWALK_END, z0: -10000, z1: 10000, color: SC.sidewalk },
-    { x0: SUNSET_SIDEWALK_END + 39 * FOOT, x1: SUNSET_SIDEWALK_END + 46 * FOOT, z0: -10000, z1: 10000, color: SC.sidewalk },
+    { x0: SUNSET_SIDEWALK_END + 39 * SET_FOOT, x1: SUNSET_SIDEWALK_END + 46 * SET_FOOT, z0: -10000, z1: 10000, color: SC.sidewalk },
     { x0: SUNSET_ROOF_BACK - 2000, x1: SUNSET_BANK_END, z0: SUNSET_BANK_Z1, z1: 3500, color: '#aaa99a' },
     { x0: SUNSET_ROOF_BACK - 2000, x1: SUNSET_BANK_END, z0: -4000, z1: taperEnd, color: '#aaa99a' },
   ];
@@ -132,7 +132,7 @@ export function buildSunsetGeometry() {
   // Expansion joints, patched pavement, a shallow curb line and storm drains.
   for (let z = -3200; z < 3200; z += 145) {
     horizontal(ground, SUNSET_BANK_END + 1, SUNSET_SIDEWALK_END - 2, z, z + 0.9, lower + 0.13, '#8d9186');
-    horizontal(ground, SUNSET_SIDEWALK_END + 40 * FOOT, SUNSET_SIDEWALK_END + 46 * FOOT, z, z + 0.9, lower + 0.13, '#939589');
+    horizontal(ground, SUNSET_SIDEWALK_END + 40 * SET_FOOT, SUNSET_SIDEWALK_END + 46 * SET_FOOT, z, z + 0.9, lower + 0.13, '#939589');
   }
   horizontal(ground, SUNSET_SIDEWALK_END - 7, SUNSET_SIDEWALK_END, -6000, 6000, lower + 0.15, '#aaa99a');
   for (const z of [-1230, 840]) {
@@ -144,11 +144,11 @@ export function buildSunsetGeometry() {
     const z = -1700 + hash2(k, 4, 855) * 3400;
     horizontal(ground, x, x + 20 + hash2(k, 5, 855) * 70, z, z + 100, lower - 0.12, '#71766d');
   }
-  for (const x of [SUNSET_SIDEWALK_END + 19 * FOOT, SUNSET_SIDEWALK_END + 19.4 * FOOT]) {
+  for (const x of [SUNSET_SIDEWALK_END + 19 * SET_FOOT, SUNSET_SIDEWALK_END + 19.4 * SET_FOOT]) {
     horizontal(ground, x, x + 3.4, -11000, 11000, lower + 0.02, '#c4b46f');
   }
   for (let z = -3400; z <= 3400; z += 270) {
-    for (const x of [SUNSET_SIDEWALK_END + 9 * FOOT, SUNSET_SIDEWALK_END + 30 * FOOT]) horizontal(ground, x, x + 3.6, z, z + 105, lower + 0.02, '#c9c9b9');
+    for (const x of [SUNSET_SIDEWALK_END + 9 * SET_FOOT, SUNSET_SIDEWALK_END + 30 * SET_FOOT]) horizontal(ground, x, x + 3.6, z, z + 105, lower + 0.02, '#c9c9b9');
   }
 
   // Weathered tar/gravel roof with low seam ridges; takeoff remains flush.
@@ -258,7 +258,7 @@ export function buildSunsetGeometry() {
   }
 
   // A small service driveway and poles remain outside the rider's lane.
-  for (const z of [SUNSET_BANK_Z1 + 130, SUNSET_BANK_Z0 - 15 * FOOT]) {
+  for (const z of [SUNSET_BANK_Z1 + 130, SUNSET_BANK_Z0 - 15 * SET_FOOT]) {
     const x = SUNSET_SIDEWALK_END - 32;
     props.tube([[x, lower, z], [x, lower + 625, z]], [4.8, 3.2], { color: '#808b7d' }, NO_INK, 10);
     props.tube([[x, lower + 615, z], [x + 38, lower + 660, z], [x + 105, lower + 665, z]], [3, 2.7, 2.5], { color: '#879083' }, NO_INK, 8);
@@ -317,9 +317,9 @@ export class Sunset3D extends ClassicSpot3D {
       framing: 0.82,
       streetProps: SUNSET_STREET_PROPS,
       tripods: {
-        bottom: { u: (SUNSET_BANK_END + 22 * FOOT) * SCALE, z: -12 * FOOT * SCALE, height: (-SUNSET_DROP + 3 * FOOT) * SCALE, frame: 24 * FOOT, place: 0.44 },
-        side: { u: 13 * FOOT * SCALE, z: -32 * FOOT * SCALE, height: (-SUNSET_DROP + 6 * FOOT) * SCALE, frame: 27 * FOOT, place: 0.48 },
-        top: { u: -4 * FOOT * SCALE, z: -9 * FOOT * SCALE, height: 8 * FOOT * SCALE, frame: 22 * FOOT, place: 0.48 },
+        bottom: { u: (SUNSET_BANK_END + 22 * SET_FOOT) * SCALE, z: -12 * SET_FOOT * SCALE, height: (-SUNSET_DROP + 3 * SET_FOOT) * SCALE, frame: 24 * SET_FOOT, place: 0.44 },
+        side: { u: 13 * SET_FOOT * SCALE, z: -32 * SET_FOOT * SCALE, height: (-SUNSET_DROP + 6 * SET_FOOT) * SCALE, frame: 27 * SET_FOOT, place: 0.48 },
+        top: { u: -4 * SET_FOOT * SCALE, z: -9 * SET_FOOT * SCALE, height: 8 * SET_FOOT * SCALE, frame: 22 * SET_FOOT, place: 0.48 },
       },
     });
   }

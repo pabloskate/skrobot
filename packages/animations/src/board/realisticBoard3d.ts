@@ -1,5 +1,5 @@
 import { BufferGeometry, CylinderGeometry, Float32BufferAttribute, Group, LatheGeometry, Mesh, Quaternion, TorusGeometry, Vector2, Vector3 } from 'three';
-import { HANGER_BOTTOM, WHEEL_HALF_W, WHEEL_INNER, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z, type WheelSpin } from './board';
+import { HANGER_BOTTOM, TRUCK, WHEEL_HALF_W, WHEEL_INNER, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z, type WheelSpin } from './board';
 import { THICKNESS, kickY } from './deck';
 import type { BoardRig } from '../motion/skeleton';
 import { BOARD_WIDTH_SCALE } from './boardDimensions';
@@ -56,29 +56,31 @@ function boardAssembly(): BufferGeometry {
   // Exact shared deck surface: kicktails, sole contacts and flip clearances
   // remain the same. Layering and grain are evaluated on this geometry.
   a.add(deckGeometry(), S.grip, true);
+  const { plate, plateBottom, humpTop, hump, wing, round } = TRUCK;
   for (const tx of [-WHEEL_X, WHEEL_X]) {
     const underside = kickY(tx) + THICKNESS / 2;
-    a.add(roundedBoxGeometry({ f: 4.2, u: 0.55, s: 2.6, r: 0.5 }, 2).translate(tx, -(underside + 1.2) / 2, 0), S.aluminum);
+    a.add(roundedBoxGeometry(plate, 2).translate(tx, -(underside + plateBottom) / 2, 0), S.aluminum);
     // Retain the grind-contact hanger hull and flat underside exactly.
-    const round = 0.8;
     const corners: Vec3[] = [];
     for (const f of [-1, 1]) for (const side of [-1, 1]) corners.push(
-      [f * 1.9, -(4.5 + round), side * 1.1], [f * 1.9, -(HANGER_BOTTOM - round), side * 1.1],
-      [f * 1.2, -(WHEEL_Y - 1.3 + round), side * (WHEEL_INNER - round)],
-      [f * 1.2, -(HANGER_BOTTOM - round), side * (WHEEL_INNER - round)],
+      [f * hump.f, -(humpTop + round), side * hump.s], [f * hump.f, -(HANGER_BOTTOM - round), side * hump.s],
+      [f * wing.f, -(wing.top + round), side * (WHEEL_INNER - round)],
+      [f * wing.f, -(HANGER_BOTTOM - round), side * (WHEEL_INNER - round)],
     );
     a.add(solidHullGeometry(corners, round).translate(tx, 0, 0), S.aluminum);
-    // Dark urethane cushions, polished compression washers and a steel kingpin.
+    // Dark urethane cushions, polished compression washers and a steel kingpin,
+    // under the baseplate (`below`: three's y that far under its bottom).
     const sign = Math.sign(tx);
-    a.cylinder([tx - sign * 1.2, -1.1, 0], [tx + sign * 0.25, -5.1, 0], 0.47, 0.47, S.steel);
-    a.cylinder([tx - sign * 0.9, -1.6, 0], [tx - sign * 0.1, -3.7, 0], 1.35, 1.15, S.bushing, 24);
-    a.cylinder([tx - sign * 0.93, -1.48, 0], [tx - sign * 0.85, -1.72, 0], 1.55, 1.55, S.steel, 24);
-    a.cylinder([tx - sign * 0.12, -3.65, 0], [tx + sign * 0.04, -4.1, 0], 1.4, 1.4, S.steel, 24);
-    a.cylinder([tx + sign * 0.05, -4.15, 0], [tx + sign * 0.23, -4.75, 0], 0.95, 0.95, S.steel, 6);
+    const below = (d: number) => -(plateBottom + d);
+    a.cylinder([tx - sign * 1.2, below(-0.12), 0], [tx + sign * 0.25, below(3.2), 0], 0.47, 0.47, S.steel);
+    a.cylinder([tx - sign * 0.9, below(0.27), 0], [tx - sign * 0.1, below(2.05), 0], 1.35, 1.15, S.bushing, 24);
+    a.cylinder([tx - sign * 0.93, below(0.18), 0], [tx - sign * 0.85, below(0.37), 0], 1.55, 1.55, S.steel, 24);
+    a.cylinder([tx - sign * 0.12, below(2.01), 0], [tx + sign * 0.04, below(2.38), 0], 1.4, 1.4, S.steel, 24);
+    a.cylinder([tx + sign * 0.05, below(2.42), 0], [tx + sign * 0.23, below(2.92), 0], 0.95, 0.95, S.steel, 6);
     a.cylinder([tx, -WHEEL_Y, -(WHEEL_Z + WHEEL_HALF_W + 0.35)], [tx, -WHEEL_Y, WHEEL_Z + WHEEL_HALF_W + 0.35], 0.46, 0.46, S.steel, 16);
     // A cast bridge ridge and pivot cup, kept above the hanger's grind plane.
-    a.cylinder([tx + sign * 2.7, -1.1, 0], [tx + sign * 1.25, -5.8, 0], 0.7, 0.95, S.aluminum, 16);
-    a.cylinder([tx + sign * 2.7, -0.8, 0], [tx + sign * 2.4, -1.7, 0], 0.97, 0.84, S.rubber, 16);
+    a.cylinder([tx + sign * 2.7, below(-0.12), 0], [tx + sign * 1.25, below(3.8), 0], 0.7, 0.95, S.aluminum, 16);
+    a.cylinder([tx + sign * 2.7, below(-0.35), 0], [tx + sign * 2.4, below(0.35), 0], 0.97, 0.84, S.rubber, 16);
     // Eight flush mounting bolts, plus their underside nuts. The grip surface
     // stays authoritative; screw recesses sit inside each head's top face.
     for (const dx of [-2.6, 2.6]) for (const z of [-1.85, 1.85]) {
@@ -89,7 +91,7 @@ function boardAssembly(): BufferGeometry {
         const slot = roundedBoxGeometry({ f: 0.27, u: 0.006, s: 0.065, r: 0.005 }, 1).rotateY(turn).translate(x, top + 0.013, z);
         a.add(slot, S.rubber);
       }
-      a.cylinder([x, -1.0, z], [x, -1.55, z], 0.56, 0.56, S.steel, 6);
+      a.cylinder([x, -(plateBottom - 0.2), z], [x, -(plateBottom + 0.35), z], 0.56, 0.56, S.steel, 6);
     }
   }
   return a.finish();
@@ -99,21 +101,24 @@ function wheelAssembly(): BufferGeometry {
   const a = new Assembly();
   const w = WHEEL_HALF_W;
   // Rounded urethane lips, a full-radius contact patch and recessed bearing
-  // sockets, all inside the original wheel radius and half width.
+  // sockets, all inside the wheel's radius and half width (shares of them).
+  const half: Array<[number, number]> = [
+    [0.16, 0], [0.3, 0], [0.48, 0.063], [0.73, 0], [0.89, 0.106], [0.98, 0.28], [1, 0.45],
+  ];
   const profile: Array<[number, number]> = [
-    [0.72, -w], [1.36, -w], [2.15, -w + 0.13], [3.3, -w],
-    [4, -w + 0.22], [4.4, -w + 0.58], [WHEEL_R, -w + 0.93],
-    [WHEEL_R, w - 0.93], [4.4, w - 0.58], [4, w - 0.22],
-    [3.3, w], [2.15, w - 0.13], [1.36, w], [0.72, w], [0.72, -w],
+    ...half.map(([r, z]): [number, number] => [r * WHEEL_R, -w + z * w]),
+    ...[...half].reverse().map(([r, z]): [number, number] => [r * WHEEL_R, w - z * w]),
+    [half[0][0] * WHEEL_R, -w],
   ];
   a.add(new LatheGeometry(profile.map(([r, z]) => new Vector2(r, z)), 48).rotateX(Math.PI / 2), S.urethane);
   for (const side of [-1, 1]) {
-    const face = side * (w + 0.035);
-    a.cylinder([0, 0, side * (w - 0.28)], [0, 0, face], 1.51, 1.51, S.rubber, 32);
-    a.ring(face, 1.34, 0.13, S.steel);
-    a.ring(face + side * 0.02, 0.73, 0.1, S.steel);
-    a.cylinder([0, 0, face - side * 0.03], [0, 0, face + side * 0.29], 0.79, 0.79, S.steel, 6);
-    a.cylinder([0, 0, face + side * 0.3], [0, 0, face + side * 0.32], 0.29, 0.29, S.bolt, 12);
+    // A 22 mm bearing in each face.
+    const face = side * (w + 0.025);
+    a.cylinder([0, 0, side * (w - 0.18)], [0, 0, face], 1.35, 1.35, S.rubber, 32);
+    a.ring(face, 1.2, 0.12, S.steel);
+    a.ring(face + side * 0.015, 0.65, 0.09, S.steel);
+    a.cylinder([0, 0, face - side * 0.02], [0, 0, face + side * 0.19], 0.71, 0.71, S.steel, 6);
+    a.cylinder([0, 0, face + side * 0.2], [0, 0, face + side * 0.21], 0.26, 0.26, S.bolt, 12);
   }
   return a.finish();
 }

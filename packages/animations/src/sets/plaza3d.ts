@@ -18,6 +18,7 @@ import { X0 } from '../motion/trick';
 import { PALETTE, lambert, tone } from '../camera/camera';
 import { mixHex } from '../math';
 import { SPAN_HI, SPAN_LO } from './setKit';
+import { SET_SCALE } from './setScale';
 import { faceBoxGeometry } from '../three/geometry';
 import {
   boxMaterial,
@@ -37,7 +38,8 @@ import { ASPHALT, type StageView } from '../camera/view';
  * is one screen-space pass. The ground is a real plane: the plaza's concrete
  * with its slab joints, the lawn behind it, and the cast shadows. The trees
  * and the ledge row are real objects, repeating along the street and sliding
- * with it.
+ * with it. It's drawn in set units, the ground and its props SET_SCALE
+ * bigger on the stage (setScale.ts).
  */
 
 const SLAB = 64;
@@ -152,6 +154,8 @@ export class Plaza3D {
   private readonly ledges = new Group();
   private readonly trees: Group;
   private readonly farTrees: Group;
+  /** The ground and everything standing on it, in set units. */
+  private readonly scenery = new Group();
 
   constructor() {
     const skyGeometry = new BufferGeometry();
@@ -160,14 +164,15 @@ export class Plaza3D {
     sky.frustumCulled = false;
     sky.renderOrder = -100;
 
+    // The ground's lines are worked out in the stage's world.
     this.ground = groundMaterial({
-      lawnZ: LAWN_Z,
-      farZ: FAR_Z,
-      jointFromZ: LEDGE_FRONT_Z + SLAB * 0.5,
-      jointToZ: 700,
-      crossFromZ: LEDGE_FRONT_Z,
-      crossToZ: 900,
-      slab: SLAB,
+      lawnZ: LAWN_Z * SET_SCALE,
+      farZ: FAR_Z * SET_SCALE,
+      jointFromZ: (LEDGE_FRONT_Z + SLAB * 0.5) * SET_SCALE,
+      jointToZ: 700 * SET_SCALE,
+      crossFromZ: LEDGE_FRONT_Z * SET_SCALE,
+      crossToZ: 900 * SET_SCALE,
+      slab: SLAB * SET_SCALE,
       x0: X0,
     });
     const groundGeometry = new PlaneGeometry(80000, 30000);
@@ -203,14 +208,16 @@ export class Plaza3D {
       lit: farTone,
     }, { trunkId: 0, canopyId: () => 0, kind: INK_NONE });
 
-    this.group.add(sky, ground, this.ledges, this.trees, this.farTrees);
+    this.scenery.scale.setScalar(SET_SCALE);
+    this.scenery.add(ground, this.ledges, this.trees, this.farTrees);
+    this.group.add(sky, this.scenery);
   }
 
   update(view: StageView, scroll: number, size: { width: number; height: number }, shadow: Texture, shadowOpacity: [number, number, number]) {
     const { cam, box } = view;
     const horizon = cam.horizonY;
-    const plazaNear = cam.project({ x: X0, y: ASPHALT, z: 120 }).y;
-    const lawnNear = cam.project({ x: X0, y: ASPHALT, z: LAWN_Z }).y;
+    const plazaNear = cam.project({ x: X0, y: ASPHALT, z: 120 * SET_SCALE }).y;
+    const lawnNear = cam.project({ x: X0, y: ASPHALT, z: LAWN_Z * SET_SCALE }).y;
     for (const material of [this.sky, this.ground]) {
       const u = material.uniforms;
       u.uBox.value.set(box.x, box.y, box.width, box.height);
@@ -227,9 +234,11 @@ export class Plaza3D {
     g.uPxPerUnit.value = size.height / box.height;
     g.uShadow.value = shadow;
     g.uShadowOpacity.value.set(...shadowOpacity);
-    slide(this.ledges, LEDGE_PERIOD, scroll);
-    slide(this.trees, TREE_PERIOD, scroll);
-    slide(this.farTrees, FAR_TREE_PERIOD, scroll);
+    // The scenery's own scroll, in set units.
+    const along = scroll / SET_SCALE;
+    slide(this.ledges, LEDGE_PERIOD, along);
+    slide(this.trees, TREE_PERIOD, along);
+    slide(this.farTrees, FAR_TREE_PERIOD, along);
   }
 
   dispose() {

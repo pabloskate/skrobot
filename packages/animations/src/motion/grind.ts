@@ -17,6 +17,7 @@ import {
 } from './trick';
 import { HANGER_BOTTOM, WHEEL_BOTTOM, WHEEL_HALF_W, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z } from '../board/board';
 import { BOTTOM_LOCAL, TIP_X } from '../board/deck';
+import { BOARD_WIDTH_SCALE } from '../board/boardDimensions';
 import { POP_RISE, solveRig } from './rig';
 import { FOLLOW_POP } from '../camera/camera';
 import {
@@ -422,8 +423,8 @@ const RAIL_BESIDE = 15;
  * robot's legs grown PERSON_SCALE over the same feet), as thick as a person's
  * legs in jeans: thigh and shin radii. The robot, smaller, clears it by more.
  */
-const LEG_THIGH = 8;
-const LEG_SHIN = 6.5;
+const LEG_THIGH = 9.6;
+const LEG_SHIN = 7.8;
 /** Air left between a leg and the rail going past it: the jeans don't brush it, whoever's in them. */
 const LEG_AIR = 4;
 /** How far a person's knees turn from the rig's toward the way they face: over the toes (riders/realistic/skaterPose.ts KNEE_FORWARD). */
@@ -547,6 +548,8 @@ const LEDGE_POINTS: V3[] = (() => {
   }
   return pts;
 })();
+/** The deck's underside and the wheels' rims as the board is drawn, BOARD_WIDTH_SCALE wider across than the physics' board. */
+const DRAWN_POINTS: V3[] = LEDGE_POINTS.map((p) => ({ ...p, z: p.z * BOARD_WIDTH_SCALE }));
 /** Board-local points that come down past a bar's side onto a lock (crossingFor): the deck's underside, the hangers, and the wheels' rims, finely round. */
 const CROSS_POINTS: V3[] = (() => {
   const pts: V3[] = [...BOTTOM_LOCAL];
@@ -629,6 +632,26 @@ function ledgePopOut(lock: BoardPose, popOut: number, spec: GrindSpec, rail: Han
     const extra = ((popOut - lock.pitch) * k) / 20;
     const snap = snapped(seat, lock, extra, spec.pivot);
     if (ledgeDepth(snap.center, snap.pose, rail, far, s, spec.dir) <= LEDGE_TOUCH) return lock.pitch + extra;
+  }
+  return lock.pitch;
+}
+
+/**
+ * Popping off the flat bar, the snap off the lock likewise stops where the
+ * end it drives down meets the bar's top (a crook's nose, pinched over it),
+ * as a tail strikes it.
+ */
+function barPopOut(lock: BoardPose, popOut: number, spec: GrindSpec): number {
+  const seat = onBar(lock, spec.contact);
+  for (let k = 20; k > 0; k--) {
+    const extra = ((popOut - lock.pitch) * k) / 20;
+    const snap = snapped(seat, lock, extra, spec.pivot);
+    const dir = poseDir(snap.pose);
+    const depth = Math.max(...DRAWN_POINTS.map((p) => {
+      const q = add3(snap.center, dir(p));
+      return Math.min(q.y - BAR_TOP_Y, BAR_TOP_Y + 2 * BAR_HALF - q.y, BAR_HALF - Math.abs(q.z - BAR_Z));
+    }));
+    if (depth <= LEDGE_TOUCH) return lock.pitch + extra;
   }
   return lock.pitch;
 }
@@ -980,7 +1003,7 @@ export function planGrind(
   const snapOut = spec.slide
     ? lock.pitch + popEnd * SLIDE_POP_OUT
     : popEnd * Math.max(POP_OUT, popEnd * lock.pitch + TRUCK_POP_LEVER);
-  const popOut = rail?.ledge ? ledgePopOut(lock, snapOut, spec, rail, far) : snapOut;
+  const popOut = rail?.ledge ? ledgePopOut(lock, snapOut, spec, rail, far) : rail ? snapOut : barPopOut(lock, snapOut, spec);
   // The board's height over the bar's top at the lock: a flat bar's is BAR_TOP under the lock-in height.
   const overBar = ride ? lockRise - (GROUND - railTopY(ride.rail, ride.lockS)) : lockRise - BAR_TOP;
   const plainOffPop = Math.max(OFF_POP, ride ? WHEEL_BOTTOM + OFF_CLEAR - overBar : BAR_TOP + WHEEL_BOTTOM + OFF_CLEAR - lockRise);
@@ -1168,7 +1191,7 @@ export interface GrindFrame {
  */
 const CARVE = 0.55;
 const SETTLED = 0.15;
-/** The furthest off the bar (world units, about 6 ft) a roll-in starts, and the tightest a carve gets (share of its time). */
+/** The furthest off the bar (world units, about 5 ft) a roll-in starts, and the tightest a carve gets (share of its time). */
 const START_MAX = 180;
 const CARVE_TIGHTEST = 0.5;
 /** Coming down onto the lock, the board keeps at least this much higher per unit it still has to go sideways. */

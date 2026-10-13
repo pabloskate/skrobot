@@ -1,6 +1,6 @@
 import { Group, Matrix4, Mesh, type BufferGeometry, type ShaderMaterial } from 'three';
 import { PALETTE, lambert, tone } from '../camera/camera';
-import { HANGER_BOTTOM, WHEEL_HALF_W, WHEEL_INNER, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z, type BoardLook, type WheelSpin } from './board';
+import { HANGER_BOTTOM, TRUCK, WHEEL_HALF_W, WHEEL_INNER, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z, type BoardLook, type WheelSpin } from './board';
 import { THICKNESS, kickY } from './deck';
 import { dot3, norm3, sub3 } from '../math';
 import type { BoardRig } from '../motion/skeleton';
@@ -18,14 +18,9 @@ import { BOARD_WIDTH_SCALE } from './boardDimensions';
  * so flips, shuvs, and grind locks follow the motion exactly.
  */
 
-/** Truck dimensions (board-local, y down from the deck). */
-const PLATE = { f: 4.2, u: 0.55, s: 2.6, r: 0.5 };
-const BUSHING = { f: 1.5, u: 1.75, s: 1.45, r: 1.2 };
-const PLATE_BOTTOM = 1.2;
-const HUMP_TOP = 4.5;
-const HANGER_ROUND = 0.8;
-const HUMP = { f: 1.9, s: 1.1 };
-const WING = { f: 1.2, s: WHEEL_INNER - HANGER_ROUND, top: WHEEL_Y - 1.3 };
+/** Truck dimensions (board-local, y down from the deck): board.ts's. */
+const { plate: PLATE, bushing: BUSHING, plateBottom: PLATE_BOTTOM, humpTop: HUMP_TOP, round: HANGER_ROUND, hump: HUMP } = TRUCK;
+const WING = { ...TRUCK.wing, s: WHEEL_INNER - HANGER_ROUND };
 
 /** Outline widths (world units): the deck's contour and crease, and the running gear's. */
 const DECK_INK = 2 * 1.15 * 0.85 * 0.62;

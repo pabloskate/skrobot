@@ -1,8 +1,8 @@
 # Leap of Faith reference notes
 
 Researched and visually checked October 7, 2026. This set depicts the original
-1997 gap at Point Loma High School, San Diego, using the existing animation
-scale of 29 world units per foot. It is a photo-guided reconstruction, not a
+1997 gap at Point Loma High School, San Diego, using the sets'
+scale of 29 units per foot (`SET_FOOT`). It is a photo-guided reconstruction, not a
 survey of the school or its present-day configuration.
 
 ## References actually inspected

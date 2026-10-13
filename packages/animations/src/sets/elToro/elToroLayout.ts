@@ -1,4 +1,4 @@
-import { FOOT, RISER, STAIR_DROP, STAIR_RUN, TREAD, nosingLine } from './stairs';
+import { SET_FOOT, RISER, STAIR_DROP, STAIR_RUN, TREAD, nosingLine } from './stairs';
 
 /** The rails' pipe, height and run past the steps: the center one is the one grinds ride (stairs.ts). */
 export { RAIL_EXT, RAIL_R, RAIL_TOP } from './stairs';
@@ -6,18 +6,18 @@ export { RAIL_EXT, RAIL_R, RAIL_TOP } from './stairs';
 // ----- Layout: distances down the stairs (u, from the lip), across the set (z, toward the camera), heights over the top landing -----
 
 /** The right flight runs from the planted bank to the single center rail. */
-export const HILL_EDGE = -6 * FOOT;
-export const CENTER_Z = 6 * FOOT;
+export const HILL_EDGE = -6 * SET_FOOT;
+export const CENTER_Z = 6 * SET_FOOT;
 /** Six feet left of the center rail when looking up the stairs. */
-export const RIDER_LANE_Z = CENTER_Z + 6 * FOOT;
+export const RIDER_LANE_Z = CENTER_Z + 6 * SET_FOOT;
 /** Two equal twelve-foot flights, with the rail at the exact center of the stairs. */
 export const WALL_Z = CENTER_Z + (CENTER_Z - HILL_EDGE);
 export const WALL_THICK = 20;
-export const WALL_H = 1.5 * FOOT;
+export const WALL_H = 1.5 * SET_FOOT;
 export const HILL_RAIL_Z = HILL_EDGE + 24;
 export const FAR_RAIL_Z = WALL_Z - 24;
 /** A mid rail half way up the handrails. */
-export const RAIL_MID = 1.5 * FOOT;
+export const RAIL_MID = 1.5 * SET_FOOT;
 /** Posts, at these distances down the stairs. */
 export const POSTS = [0.5, 6.5, 12.5, 18.5].map((k) => k * TREAD);
 /** The hill lies just under the steps' inner corners, so their ends stand out of the dirt. */
@@ -36,10 +36,10 @@ export const DIRT_WIDTH = 520;
 export const BUILDING_END = -50;
 export const BUILDING_LENGTH = 1400;
 /** The school keeps its position, with an open upper walkway beside the stairs. */
-export const BUILDING_FACE = CENTER_Z + 20 * FOOT + 90;
+export const BUILDING_FACE = CENTER_Z + 20 * SET_FOOT + 90;
 export const BUILDING_DEPTH = 420;
 export const BUILDING_BACK = BUILDING_FACE + BUILDING_DEPTH;
-export const BUILDING_H = 11 * FOOT;
+export const BUILDING_H = 11 * SET_FOOT;
 export const ROOF_RISE = 80;
 export const EAVE = 38;
 /** The landings and the slopes beside the stairs run off toward the horizon. */

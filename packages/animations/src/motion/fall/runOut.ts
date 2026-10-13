@@ -484,7 +484,7 @@ export function runOut(setup: RunOutSetup): RunOut {
       footfalls[next].off = setup.start + 0.4 * (on - setup.start);
     }
   }
-  for (let guard = 0; guard < 16 && on < setup.start + until; guard++) {
+  for (let guard = 0; guard < 40 && on < setup.start + until; guard++) {
     const other: 0 | 1 = next === 0 ? 1 : 0;
     const stance = footfalls.filter((f) => f.foot === other).pop();
     let placed = place(planFrom, next, on);

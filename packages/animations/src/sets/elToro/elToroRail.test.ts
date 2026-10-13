@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { X0, type FallVariant } from '../../motion/trick';
-import { HANGER_BOTTOM, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z } from '../../board/board';
+import { HANGER_BOTTOM, WHEEL_BOTTOM, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z } from '../../board/board';
 import { BOTTOM_LOCAL, TOP_LOCAL, deckBottomY } from '../../board/deck';
 import { GRIND_BASES } from '../../motion/grindDefinitions';
 import { handrailHeight, railTrack, type GrindPlan } from '../../motion/grind';
 import { add3, scale3, type V3 } from '../../math';
 import { SHIN, THIGH, type Rig } from '../../motion/skeleton';
-import { EL_TORO_RAIL, FOOT, RAIL_R, RAIL_TOP, STAIR_DROP, STAIR_RUN, TREAD, nosingLine, stairGround } from './stairs';
+import * as stairs from './stairs';
 import { resolveSkateStyle } from '../../motion/style';
 import type { RiderStance, Robot, Stance } from '../../types';
 import { planStage, stageFrame, type StageFrame, type StagePlan } from '../../stage/stage';
@@ -14,7 +14,9 @@ import { ASPHALT } from '../../camera/view';
 import { LEG_RADII } from '../../board/boardCollision';
 import type { Skater } from '../../riders/skaters';
 import type { RailChoice } from '../sets';
-import { CENTER_Z, FAR_RAIL_Z, HILL_EDGE, HILL_RAIL_Z, WALL_THICK, WALL_U0, WALL_U1, WALL_Z, wallTop } from './elToroLayout';
+import * as layout from './elToroLayout';
+import { SET_SCALE, stageHandrail } from '../setScale';
+import { FOOT } from '../../units';
 
 /**
  * Grinds down El Toro's center handrail. These pin what a skater would
@@ -23,6 +25,17 @@ import { CENTER_Z, FAR_RAIL_Z, HILL_EDGE, HILL_RAIL_Z, WALL_THICK, WALL_U0, WALL
  * ever goes through it, the grind picks up speed, the board comes down past
  * the bottom step, and the body stays whole and moves smoothly throughout.
  */
+
+/** El Toro as the stage has it: the set's layout (set units), SET_SCALE bigger. */
+const K = SET_SCALE;
+const EL_TORO_RAIL = stageHandrail(stairs.EL_TORO_RAIL);
+const [RAIL_R, RAIL_TOP, STAIR_DROP, STAIR_RUN, TREAD] = [stairs.RAIL_R, stairs.RAIL_TOP, stairs.STAIR_DROP, stairs.STAIR_RUN, stairs.TREAD].map((v) => v * K);
+const nosingLine = (u: number) => K * stairs.nosingLine(u / K);
+const stairGround = (u: number) => K * stairs.stairGround(u / K);
+const [CENTER_Z, FAR_RAIL_Z, HILL_EDGE, HILL_RAIL_Z, WALL_THICK, WALL_U0, WALL_U1, WALL_Z] = [
+  layout.CENTER_Z, layout.FAR_RAIL_Z, layout.HILL_EDGE, layout.HILL_RAIL_Z, layout.WALL_THICK, layout.WALL_U0, layout.WALL_U1, layout.WALL_Z,
+].map((v) => v * K);
+const wallTop = (u: number) => K * layout.wallTop(u / K);
 
 const robot: Robot = {
   id: 'shifty',
@@ -103,16 +116,16 @@ const frames = (stage: StagePlan, step = 1 / 60) => {
 };
 
 describe('El Toro handrail', () => {
-  it('pops as the rail starts, locks on about five steps down, and speeds up all the way down it', () => {
+  it('pops as the rail starts, locks on five to eight steps down, and speeds up all the way down it', () => {
     for (const base of GRIND_BASES) {
       const g = grindOf(plan(`Frontside ${base}`));
       const ride = g.handrail!;
       // Not far back from the rail: a foot or so before it starts.
       expect(ride.popS).toBeGreaterThan(EL_TORO_RAIL.start - 2 * FOOT);
       expect(ride.popS).toBeLessThan(EL_TORO_RAIL.start);
-      // A few steps down, not on the rail's top end.
-      expect(ride.lockS / TREAD, base).toBeGreaterThan(4);
-      expect(ride.lockS / TREAD, base).toBeLessThan(7);
+      // Several steps down, not on the rail's top end: the robot's pop, under four feet tall, against a real 36" rail.
+      expect(ride.lockS / TREAD, base).toBeGreaterThan(5);
+      expect(ride.lockS / TREAD, base).toBeLessThan(8);
       // Well under the rail's top end (3.6 ft): a truck grind no higher an ollie than the flat bar's,
       // a slide a little higher, for the time over the rail to step across and turn into it. Up on
       // one truck (a 5-0, a nosegrind) the board's middle rides higher over the truck it's on.
@@ -171,7 +184,7 @@ describe('El Toro handrail', () => {
       }
       const touchdown = stageFrame(stage, g.land, 1);
       expect(railTrack(g, g.land), base).toBeGreaterThan(STAIR_RUN + 3 * FOOT);
-      expect(ASPHALT - touchdown.rig.board.center.y).toBeCloseTo(-STAIR_DROP + 13, 0);
+      expect(ASPHALT - touchdown.rig.board.center.y).toBeCloseTo(-STAIR_DROP + WHEEL_BOTTOM, 0);
       expect(handrailHeight(g, g.end)).toBeCloseTo(-STAIR_DROP, 6);
     }
     expect(problems.slice(0, 8)).toEqual([]);

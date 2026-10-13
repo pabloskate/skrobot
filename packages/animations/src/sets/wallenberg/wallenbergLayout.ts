@@ -1,14 +1,15 @@
-/** World units per foot, shared with the existing five-foot rider scale. */
-export const FOOT = 29;
-const INCH = FOOT / 12;
+import { SET_FOOT } from '../setScale';
+
+export { SET_FOOT };
+const INCH = SET_FOOT / 12;
 
 /**
  * Jenkem's measured 51-inch height and 198-inch lip-to-lip length (2017),
  * over four curbs: three 15-inch blocks and the short street curb at the
  * bottom (6 inches), with equal treads between their lips.
  */
-export const WALLENBERG_DROP = (51 / 12) * FOOT;
-export const WALLENBERG_RUN = (198 / 12) * FOOT;
+export const WALLENBERG_DROP = (51 / 12) * SET_FOOT;
+export const WALLENBERG_RUN = (198 / 12) * SET_FOOT;
 export const WALLENBERG_RISERS: readonly number[] = [15, 15, 15, 6].map((inches) => inches * INCH);
 export const WALLENBERG_STEPS = WALLENBERG_RISERS.length;
 export const WALLENBERG_TREAD = WALLENBERG_RUN / (WALLENBERG_STEPS - 1);
@@ -35,39 +36,39 @@ export function wallenbergLevel(i: number): number {
  */
 
 /** Where the top two curbs round their corners on the court side, and how round. */
-export const WALLENBERG_END_Z: readonly number[] = [-12, -20].map((feet) => feet * FOOT);
-export const WALLENBERG_CORNER_R: readonly number[] = [3.5, 3.5].map((feet) => feet * FOOT);
+export const WALLENBERG_END_Z: readonly number[] = [-12, -20].map((feet) => feet * SET_FOOT);
+export const WALLENBERG_CORNER_R: readonly number[] = [3.5, 3.5].map((feet) => feet * SET_FOOT);
 /** The side stairs: the curbs stop at them; a flight per curb, of three steps but one at the short bottom curb. */
-export const WALLENBERG_SIDE_STAIRS_Z0 = 22 * FOOT;
-export const WALLENBERG_SIDE_STAIRS_Z1 = 29 * FOOT;
+export const WALLENBERG_SIDE_STAIRS_Z0 = 22 * SET_FOOT;
+export const WALLENBERG_SIDE_STAIRS_Z1 = 29 * SET_FOOT;
 export const WALLENBERG_FLIGHTS: readonly number[] = [3, 3, 3, 1];
-export const WALLENBERG_STEP_RUN = FOOT;
+export const WALLENBERG_STEP_RUN = SET_FOOT;
 /** The roll-in's deck, its back edge clear of everything behind it. */
-export const WALLENBERG_RAMP_DECK_X = -33 * FOOT;
+export const WALLENBERG_RAMP_DECK_X = -33 * SET_FOOT;
 /** The one-storey brick annex against the gym's side wall near its back, well behind the roll-in: front, back and roof. */
-export const WALLENBERG_ANNEX_FRONT_X = -56 * FOOT;
-export const WALLENBERG_ANNEX_X = -74 * FOOT;
-export const WALLENBERG_ANNEX_HEIGHT = 10 * FOOT;
+export const WALLENBERG_ANNEX_FRONT_X = -56 * SET_FOOT;
+export const WALLENBERG_ANNEX_X = -74 * SET_FOOT;
+export const WALLENBERG_ANNEX_HEIGHT = 10 * SET_FOOT;
 /** The gym: its front face behind the top platform, its side wall along the run-up. */
-export const WALLENBERG_GYM_X = -8 * FOOT;
-export const WALLENBERG_GYM_Z = 4.5 * FOOT;
-export const WALLENBERG_GYM_FAR_Z = 44 * FOOT;
-export const WALLENBERG_GYM_BACK_X = -80 * FOOT;
-export const WALLENBERG_GYM_HEIGHT = 24 * FOOT;
+export const WALLENBERG_GYM_X = -8 * SET_FOOT;
+export const WALLENBERG_GYM_Z = 4.5 * SET_FOOT;
+export const WALLENBERG_GYM_FAR_Z = 44 * SET_FOOT;
+export const WALLENBERG_GYM_BACK_X = -80 * SET_FOOT;
+export const WALLENBERG_GYM_HEIGHT = 24 * SET_FOOT;
 /** The ledge along the alley's court side, holding the slope back. */
-export const WALLENBERG_LEDGE_Z = -4.5 * FOOT;
+export const WALLENBERG_LEDGE_Z = -4.5 * SET_FOOT;
 /**
  * The slope on the court side: level with the second tread where the
  * second curb's face would run, rising back toward the gate at this grade,
  * to the level of the top platform and on past it, flat beyond the gate.
  */
 export const WALLENBERG_SLOPE = 0.13;
-export const WALLENBERG_GATE_X = -50 * FOOT;
-export const WALLENBERG_FENCE_Z = -75 * FOOT;
+export const WALLENBERG_GATE_X = -50 * SET_FOOT;
+export const WALLENBERG_FENCE_Z = -75 * SET_FOOT;
 
 /** Height of the court-side slope `x` along the line. */
 export function wallenbergSlope(x: number): number {
-  return wallenbergLevel(2) + WALLENBERG_SLOPE * (WALLENBERG_TREAD - Math.max(x, WALLENBERG_GATE_X - 10 * FOOT));
+  return wallenbergLevel(2) + WALLENBERG_SLOPE * (WALLENBERG_TREAD - Math.max(x, WALLENBERG_GATE_X - 10 * SET_FOOT));
 }
 
 /** Where the slope comes level with tread `i` (0 the top platform, 1 the second block's top). */
@@ -79,17 +80,17 @@ export const slopeMeets = (i: number) => WALLENBERG_TREAD - (wallenbergLevel(i) 
  * the alley floor.
  */
 export const WALLENBERG_RAMP = (() => {
-  const height = 8 * FOOT;
+  const height = 8 * SET_FOOT;
   const angle = (65 * Math.PI) / 180;
-  const lip = 1.5 * FOOT;
-  const top = WALLENBERG_RAMP_DECK_X + 3 * FOOT;
+  const lip = 1.5 * SET_FOOT;
+  const top = WALLENBERG_RAMP_DECK_X + 3 * SET_FOOT;
   const radius = height / (1 - Math.cos(angle)) - lip;
   const joint = top + lip * Math.sin(angle);
-  return { height, angle, lip, radius, deck: WALLENBERG_RAMP_DECK_X, top, joint, bottom: joint + radius * Math.sin(angle), halfWidth: 3.25 * FOOT };
+  return { height, angle, lip, radius, deck: WALLENBERG_RAMP_DECK_X, top, joint, bottom: joint + radius * Math.sin(angle), halfWidth: 3.25 * SET_FOOT };
 })();
 
 /** Where the rider stands on the roll-in's deck, nose at the lip, and the nudge they drop in with. */
-export const WALLENBERG_DROP_IN = { x: WALLENBERG_RAMP.top - 1 * FOOT, speed: 3.5 * FOOT };
+export const WALLENBERG_DROP_IN = { x: WALLENBERG_RAMP.top - 1 * SET_FOOT, speed: 3.5 * SET_FOOT };
 
 /** Height of the roll-in's riding surface over the alley floor, `x` along the line. */
 export function wallenbergRampHeight(x: number): number {
