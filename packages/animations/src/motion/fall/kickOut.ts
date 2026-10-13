@@ -43,7 +43,7 @@ import { stepOut } from './stepOut';
  */
 
 /** Seconds before the catch the rider's own motion takes over, and the foot meets the board (just before the catch would have). */
-const TAKEOVER_LEAD = 0.13;
+export const TAKEOVER_LEAD = 0.13;
 const CONTACT_LEAD = 0.01;
 /**
  * How long the push lasts, and the least and most speed it gives the board (world units a second: as much as it takes to
@@ -113,7 +113,28 @@ export interface KickOutSetup {
   catchAt: number;
   touchdown: number;
   end: number;
+  /**
+   * Jumping off a rail instead (railBail.ts): the velocity the legs give the hips leaving the board, over JUMP_T from the
+   * takeover, the board holding their weight till then. The board is under the feet, not slipping out.
+   */
+  jump?: V3;
+  /** What the board meets, if not the rider's `ground`: with the rail it was left on, over it (`y`, a point's height). Its hangers meet it too. */
+  boardGround?: (x: number, z: number, y: number) => number;
+  /**
+   * Rolls it out on level ground coming down faster than this, all told (in sqrt(g * leg)), rather than only past the
+   * hard limits of a ridden fall (rollOut.ts): off a rail the feet come down still across the way the body's going.
+   */
+  rollAbove?: number;
 }
+
+/** Points on the deck this close in height (world units) are as high as each other, for where the kicking foot finds it. */
+const LEVEL_TIE = 0.25;
+
+/** The least a rolling knee's middle keeps over the ground (world units). */
+const KNEE_OVER_GROUND = 0.5;
+
+/** How long the legs take to throw the body off a rail (seconds): a jump's push. */
+export const JUMP_T = 0.16;
 
 interface PoseRate {
   hips: V3;
@@ -285,7 +306,8 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
   // How far it has turned about that axis by clock t.
   const turnedAt: number[] = [0];
   const STEP = 1 / 240;
-  for (let t = setup.pop; t < takeover; t += STEP) turnedAt.push(turnedAt[turnedAt.length - 1] + dot3(ownSpinAt(Math.min(takeover, t + STEP / 2)), axisLocal) * STEP);
+  // (A board that never leaves the feet doesn't miss its turn: there's none to follow.)
+  if (!setup.glued) for (let t = setup.pop; t < takeover; t += STEP) turnedAt.push(turnedAt[turnedAt.length - 1] + dot3(ownSpinAt(Math.min(takeover, t + STEP / 2)), axisLocal) * STEP);
   const turned = (t: number) => {
     const at = Math.max(0, Math.min(turnedAt.length - 1, (Math.min(t, takeover) - setup.pop) / STEP));
     const i = Math.min(turnedAt.length - 2, Math.floor(at));
@@ -306,7 +328,7 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
   }
   const error = setup.glued ? () => IDENTITY : missBy(lost);
   const atTakeover = boardMotion(setup, error, takeover);
-  if (setup.glued) {
+  if (setup.glued && !setup.jump) {
     // The board slips out from under the feet: it rolls off its toeside rail and swings, the way a missed ollie squirts out.
     const slip = ((MISS_DEG * 0.75 * Math.PI) / 180) / (contact - takeover);
     atTakeover.spin = add3(atTakeover.spin, qrot(atTakeover.q, { x: slip, y: slip * 0.35, z: 0 }));
@@ -338,7 +360,9 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
 
   // ----- The push -----
   // Where the foot finds the board: the highest point of the deck's cross-section under it, when it gets there.
-  const freeTrack = simulateBoard(atTakeover, takeover, contact + 0.05, { gravity, ground });
+  const boardGround = setup.boardGround ?? ground;
+  const hangers = setup.boardGround != null;
+  const freeTrack = simulateBoard(atTakeover, takeover, contact + 0.05, { gravity, ground: boardGround, hangers });
   const atContact = boardAt(freeTrack, contact);
   const toLocal = (p: V3) => qrot(qconj(atTakeover.q), sub3(p, atTakeover.center));
   const footX = Math.max(-26, Math.min(26, toLocal(start.shoes[kick].at).x));
@@ -352,7 +376,12 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
     { x: footX, y: deckBottomY(footX), z: 0 },
   ];
   const world = (local: V3) => add3(atContact.center, qrot(atContact.q, local));
-  const contactLocal = candidates.reduce((best, c) => (world(c).y < world(best).y ? c : best));
+  // (Off a rail the board's level on it, its edges as high as each other: the one nearer the kicking foot, so a goofy
+  // rider's is a regular one's mirror.)
+  const nearKick = (c: V3) => Math.hypot(world(c).x - start.shoes[kick].at.x, world(c).z - start.shoes[kick].at.z);
+  const higher = (c: V3, best: V3) => (setup.jump && Math.abs(world(c).y - world(best).y) < LEVEL_TIE
+    ? nearKick(c) < nearKick(best) : world(c).y < world(best).y);
+  const contactLocal = candidates.reduce((best, c) => (higher(c, best) ? c : best));
   // The shoe meets it level, its toe still the way it was: over the deck's top edge (a board coming round wrong is on its
   // side), a sole turned to the deck would put the shoe's far end into it.
   const kickFwd = qrot(start.shoes[kick].q, { x: 1, y: 0, z: 0 });
@@ -370,7 +399,8 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
     if (!sim) {
       sim = boardSimulation(atTakeover, takeover, {
         gravity,
-        ground,
+        ground: boardGround,
+        hangers,
         pushes: [{ from: contact, until: release, at: contactLocal, impulse: scale3(dir, push) }],
       });
       sims.set(key, sim);
@@ -379,10 +409,16 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
   };
 
   // ----- The rider's run -----
-  // The push shoves the rider back as it goes: a half-sine of the board's impulse, over RIDER_MASS.
+  // The push shoves the rider back as it goes: a half-sine of the board's impulse, over RIDER_MASS. Jumping off a rail,
+  // the legs throw the body too, as hard at the start as a jump's push (and holding its weight up while they're on it).
+  const jumpOf = (t: number): V3 => {
+    if (!setup.jump) return { x: 0, y: 0, z: 0 };
+    const k = clamp01((t - takeover) / JUMP_T);
+    return add3(scale3(setup.jump, (1 - Math.cos(Math.PI * k)) / 2), scale3(UP, gravity * k * JUMP_T));
+  };
   const shoveOf = (dir: V3, push: number) => (t: number): V3 => {
     const k = clamp01((t - contact) / PUSH_T);
-    return scale3(dir, (-push * (1 - Math.cos(Math.PI * k))) / 2 / RIDER_MASS);
+    return add3(scale3(dir, (-push * (1 - Math.cos(Math.PI * k))) / 2 / RIDER_MASS), jumpOf(t));
   };
   const heading0 = facing0;
   const yawRate = dot3(rate.rot.pelvis, { x: 0, y: 1, z: 0 });
@@ -458,7 +494,8 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
   const flatAhead = Array.from({ length: ROLL_ROOM.samples + 1 }, (_, i) => (i / ROLL_ROOM.samples) * ROLL_ROOM.ahead * leg)
     .flatMap((d) => [-1, 0, 1].map((side) => add3(add3(firstDown.at, scale3(travel, d)), scale3(rightOf(travel), side * ROLL_ROOM.half * leg))))
     .every((p) => Math.abs(ground(p.x, p.z) - level0) <= ROLL_ROOM.rise * leg);
-  const rolling = flatAhead && rollsOut(runOutAt(still, firstDown.on - still.dt).velocity, gravity, leg);
+  const downV = runOutAt(still, firstDown.on - still.dt).velocity;
+  const rolling = flatAhead && (rollsOut(downV, gravity, leg) || (setup.rollAbove != null && Math.hypot(downV.x, downV.y, downV.z) > setup.rollAbove * Math.sqrt(gravity * leg)));
   const rollBoard = boardRigOf(atContact);
   // Each run's roll, kept likewise.
   const rolls = new Map<RunOut, Roll>();
@@ -889,6 +926,14 @@ function kickShoeAt(plan: KickOutPlan, t: number, land: { at: V3; q: Quat; on: n
   return { at: hermite3(leave, leaveV, land.at, { x: 0, y: 0, z: 0 }, land.on - release, s), q: qslerp(plan.kickShoe, land.q, minJerk(s)) };
 }
 
+/** A shoe where it stood on the board at the takeover, carried with the board at `t`. */
+function onBoard(plan: KickOutPlan, shoe0: { at: V3; q: Quat }, t: number): ShoePose {
+  const was = boardAt(plan.board, plan.takeover);
+  const now = boardAt(plan.board, t);
+  const turn = qmul(now.q, qconj(was.q));
+  return { at: add3(now.center, qrot(turn, sub3(shoe0.at, was.center))), q: qnorm(qmul(turn, shoe0.q)) };
+}
+
 /** The shoe of foot `i` at `t`, over a run. */
 function shoeAt(plan: KickOutPlan, run: RunOut, i: 0 | 1, t: number): ShoePose {
   const { startShoes, takeover } = plan;
@@ -903,9 +948,20 @@ function shoeAt(plan: KickOutPlan, run: RunOut, i: 0 | 1, t: number): ShoePose {
     const land = next ?? mine[0];
     const { at: landAt, q: landQ } = restOf(plan, land);
     if (i === plan.kick) return kickShoeAt(plan, t, { at: landAt, q: landQ, on: land.on });
+    const arrive = { x: 0, y: 0.35 * Math.max(0, runOutAt(run, land.on - 0.01).velocity.y), z: 0 };
+    if (plan.setup.jump) {
+      // Jumping off a rail, the free foot stays on the deck, carried with it, while the legs throw the body up off it;
+      // it comes away as the other meets the board to kick it off, and reaches for the ground from there.
+      const leaves = plan.contact;
+      if (t < leaves) return onBoard(plan, shoe0, t);
+      const from = onBoard(plan, shoe0, leaves);
+      const h = 1 / 240;
+      const fromV = scale3(sub3(from.at, onBoard(plan, shoe0, leaves - h).at), 1 / h);
+      const s = (t - leaves) / (land.on - leaves);
+      return { at: hermite3(from.at, fromV, landAt, arrive, land.on - leaves, s), q: qslerp(from.q, landQ, minJerk(s)) };
+    }
     // The free foot reaches from the tuck straight for the ground, coming down onto it with the body.
     const s = (t - takeover) / (land.on - takeover);
-    const arrive = { x: 0, y: 0.35 * Math.max(0, runOutAt(run, land.on - 0.01).velocity.y), z: 0 };
     return { at: hermite3(shoe0.at, shoe0.velocity, landAt, arrive, land.on - takeover, s), q: qslerp(shoe0.q, landQ, minJerk(s)) };
   }
   if (!next) return standing(plan, run, last, t);
@@ -1247,6 +1303,16 @@ function inReach(shoes: [ShoePose, ShoePose], hips: V3, pelvis: Quat, body: Body
 const alongFace = (rig: Rig, leg: number): V3 => add3(rig.head.origin, scale3(rig.head.fwd, 3 * leg));
 
 /** The rider rolling: the roll's pose, blended in from the one they came down in, the kicking foot on its way down beside the other. */
+/** A shoe lifted (straight up) as far as its sole's lowest point, heel to toe, has gone into the ground. */
+function outOfGround(shoe: ShoePose, ground: (x: number, z: number) => number, k: number): ShoePose {
+  let deepest = 0;
+  for (const x of [-1, -0.5, 0, 0.5, 1]) {
+    const p = add3(shoe.at, qrot(shoe.q, { x: x * SHOE_HALF_LENGTH * k, y: -SHOE_HALF_HEIGHT, z: 0 }));
+    deepest = Math.max(deepest, p.y - ground(p.x, p.z));
+  }
+  return deepest > 0 ? { at: add3(shoe.at, scale3(UP, deepest)), q: shoe.q } : shoe;
+}
+
 function rollingAt(plan: KickOutPlan, roll: Roll, t: number): KickOutFrame {
   const { setup, kick } = plan;
   const { body } = setup;
@@ -1256,11 +1322,19 @@ function rollingAt(plan: KickOutPlan, roll: Roll, t: number): KickOutFrame {
   const land = roll.landing[kick];
   const shoes = [...pose.shoes] as [ShoePose, ShoePose];
   if (t < land.on) shoes[kick] = kickShoeAt(plan, t, { at: land.shoe.at, q: land.shoe.q, on: land.on });
-  pose.shoes = inReach(shoes, pose.hips, pose.pelvis, body);
+  // A foot peeling off the ground as the body goes over it is kept on it, not tipped into it.
+  pose.shoes = inReach(shoes, pose.hips, pose.pelvis, body).map((shoe) => outOfGround(shoe, setup.ground, body.scale)) as [ShoePose, ShoePose];
   const boardPose = boardAt(plan.board, t);
   const board = boardRigOf(boardPose);
   const rig = rigOf(pose, body, board, plan.toeDir, 1);
-  for (const legRig of rig.legs) legRig.knee = twoBone(legRig.hip, legRig.ankle, body.thigh, body.shin, sub3(legRig.knee, legRig.hip));
+  for (const legRig of rig.legs) {
+    // A knee the solve would put into the ground (coming over fast, folded) is turned up out of it, its foot and hip kept.
+    const pole = sub3(legRig.knee, legRig.hip);
+    legRig.knee = twoBone(legRig.hip, legRig.ankle, body.thigh, body.shin, pole);
+    for (let n = 1; n <= 8 && setup.ground(legRig.knee.x, legRig.knee.z) - legRig.knee.y < KNEE_OVER_GROUND; n++) {
+      legRig.knee = twoBone(legRig.hip, legRig.ankle, body.thigh, body.shin, add3(pole, scale3(UP, n * 0.25 * leg)));
+    }
+  }
   // The eyes go from the ground ahead, coming down, to where the face points as the head tucks.
   const ahead = add3(pose.hips, scale3(roll.travel, 1.6 * leg));
   const tuck = smoothstep((t - roll.start) / 0.2);

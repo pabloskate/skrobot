@@ -5,6 +5,7 @@ import { clearFeet } from '../board/footContact';
 import { wheelRoll } from '../board/board';
 import { barSpan, grindCameraLift, grindCameraTrack, grindStreetDist, planGrind, travel, type GrindPlan } from '../motion/grind';
 import type { KickOutPlan } from '../motion/fall/kickOut';
+import { planRailBail, type RailBail, type RailBailPlan } from '../motion/fall/railBail';
 import { solveGrindRig } from '../motion/grindRig';
 import { solveRig } from '../motion/rig';
 import { resolveRiderMechanics, type RiderMechanics } from '../motion/stance';
@@ -15,6 +16,7 @@ import { planStairs, type StairPlan } from '../sets/elToro/stairs';
 import { hasObstacle, ledgeFor, setGrindSpec, setInfo, setTerrain, sideRailFor, type Obstacle, type RailChoice, type RailLine, type StageSet } from '../sets/sets';
 import { railFrame, stairFrame } from './downhill';
 import { attemptRig, isKickOut, kickOutFrame, kickOutPlan } from './kickOutFrame';
+import { railBailFrame } from './railBailFrame';
 import { gazeAt } from './gaze';
 import {
   expressionAt,
@@ -61,6 +63,8 @@ export interface StagePlan {
   style: SkateStyle;
   landed: boolean;
   fall: FallVariant;
+  /** Kicked out on a grind: the rider jumps off the rail (forward or aside) from the grind ridden as landed; null otherwise. */
+  railBail: RailBailPlan | null;
   shankProgress: number;
   /** Clock time the attempt ends at. */
   end: number;
@@ -82,6 +86,8 @@ export function planStage(
     rail?: RailChoice;
     /** Where the set has several ways down: what a gap trick goes over (the stairs, or Hollywood's fence). */
     obstacle?: Obstacle;
+    /** A grind kicked out: which way the rider jumps off the rail. Forward unless asked. */
+    railBail?: RailBail;
   },
 ): StagePlan {
   const { landed, riderStance, style, shankProgress, skater = 'robot', set = 'plaza', rail: choice = 'center', obstacle } = options;
@@ -97,11 +103,13 @@ export function planStage(
     : grindSpec && rails ? (choice === 'side' && rails.sideGrinds !== false ? sideRailFor(grindSpec, mechanics) : 'center') : null;
   // A side rail stands at the edge of the stairs, with nothing past it to fall onto.
   const handrail = ledge ? ledge.handrail : rails && line ? (line === 'center' ? rails.handrail : { ...rails.handrail, edge: true }) : null;
-  // Off a grind the rider bails instead of kicking out.
-  const fall = options.fall === 'kickout' && grindSpec && grinds ? 'bail' : options.fall;
-  const grind = grindSpec && grinds ? planGrind(grindSpec, mechanics, style, landed, fall, handrail) : null;
+  // A grind kicked out is ridden as landed up to where the rider jumps off the rail.
+  const jumpsOff = !landed && options.fall === 'kickout' && grindSpec != null && grinds;
+  const fall = options.fall;
+  const grind = grindSpec && grinds ? planGrind(grindSpec, mechanics, style, landed || jumpsOff, fall, handrail) : null;
+  const railBail = jumpsOff && grind ? planRailBail(grind, options.railBail ?? 'forward') : null;
   // A kick-out down a drop flies the landed attempt's arc up to its takeover.
-  const kickOut = !landed && fall === 'kickout';
+  const kickOut = !landed && fall === 'kickout' && !grind;
   const stairs = terrain && !grind ? planStairs(style, landed || kickOut, terrain) : null;
   const over = stairs && setInfo(set).obstacles ? (obstacle && hasObstacle(set, obstacle) ? obstacle : 'stairs') : null;
   return {
@@ -114,8 +122,9 @@ export function planStage(
     style,
     landed,
     fall,
+    railBail,
     shankProgress,
-    end: grind?.end ?? (stairs ? (kickOut ? stairs.land + KICK_OUT_DROP_T : stairs.end) : ROLL_IN + flightTime(style) + (landed ? LAND_T : kickOut ? KICK_OUT_T : FALL_T)),
+    end: railBail?.end ?? grind?.end ?? (stairs ? (kickOut ? stairs.land + KICK_OUT_DROP_T : stairs.end) : ROLL_IN + flightTime(style) + (landed ? LAND_T : kickOut ? KICK_OUT_T : FALL_T)),
     skater,
   };
 }
@@ -135,6 +144,7 @@ export function stageFrame(stage: StagePlan, t: number, rate: number, headPose?:
 
 function frameAt(stage: StagePlan, t: number, rate: number, headPose?: HeadPose | null): StageFrame {
   // A kick-out is the landed attempt with its board off line up to the takeover, and its own from there.
+  if (stage.railBail && t >= stage.railBail.at) return railBailFrame(stage, t, rate, (at) => attemptAt(stage, null, at, rate, headPose));
   const kickOut = isKickOut(stage) ? kickOutPlan(stage) : null;
   if (kickOut && t >= kickOut.takeover) return kickOutFrame(stage, t, rate, (at) => attemptAt(stage, kickOut, at, rate, headPose));
   return attemptAt(stage, kickOut, t, rate, headPose);

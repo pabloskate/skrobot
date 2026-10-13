@@ -2,6 +2,7 @@ import { grindSpeed, travel } from '../motion/grind';
 import { ROLL_IN, flightTime } from '../motion/trick';
 import { stairSpeed } from '../sets/elToro/stairs';
 import type { StagePlan } from '../stage/stage';
+import { railBailBoardDown } from '../stage/railBailFrame';
 
 /**
  * What an attempt sounds like, on its own clock: the moments that make a
@@ -78,6 +79,23 @@ const quiet = () => 0;
 
 export function soundtrackFor(stage: StagePlan): Soundtrack {
   const { grind, stairs, landed } = stage;
+  if (grind && stage.railBail) {
+    // Jumping off: the grind scrapes up to the jump, and the board left on the rail clatters down on its own.
+    const leave = stage.railBail.at;
+    const boardDown = railBailBoardDown(stage);
+    const down = Number.isFinite(boardDown) ? boardDown : leave + grind.drop;
+    return {
+      cues: [
+        { kind: 'pop', at: grind.pop },
+        { kind: 'lock', at: grind.lockAt },
+        { kind: 'crash', at: down, weight: grind.handrail ? HANDRAIL_LANDING : 1 },
+      ],
+      slide: grind.spec.slide,
+      roll: wheels(grind.pop, down, false),
+      grind: (t) => (t >= grind.lockAt && t < leave ? 1 : 0),
+      speed: rolling((t) => grindSpeed(grind, Math.min(t, leave)), down, false),
+    };
+  }
   if (grind) {
     const down = grind.fail == null ? grind.land : grind.fail + grind.drop;
     const leave = grind.fail ?? grind.off;

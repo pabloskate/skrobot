@@ -6055,7 +6055,8 @@ main:has(.rps-arena) > .screen {
   line-height: 1.5;
 }
 
-.explorer-skater-field {
+.explorer-skater-field,
+.explorer-outcome-field {
   flex-wrap: wrap;
 }
 

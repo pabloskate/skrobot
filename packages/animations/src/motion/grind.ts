@@ -512,7 +512,7 @@ export function turnInShare(tau: number, turn: TurnIn): number {
 const shouldersIn = (tau: number, turn: TurnIn) => smoothstep(tau / (SHOULDERS_BY * turn.upT));
 
 /** Physics y of a handrail's top line at `s` along it. */
-const railTopY = (rail: Handrail, s: number) => GROUND + WHEEL_BOTTOM - (rail.top - rail.slope * s);
+export const railTopY = (rail: Handrail, s: number) => GROUND + WHEEL_BOTTOM - (rail.top - rail.slope * s);
 
 /** Physics y of the board's center rolling on ground `height` over the top landing. */
 const deckOn = (height: number) => GROUND - height;

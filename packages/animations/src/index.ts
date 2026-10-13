@@ -56,6 +56,8 @@ export { stairTimeline, type StairTimeline } from './sets/elToro/stairs';
 export { SKATERS, skaterInfo, type Skater, type SkaterInfo } from './riders/skaters';
 /** Grinds and slides: on the flat bar, or down a spot's handrail. */
 export { grindTimelineFor, type GrindTimeline, type Handrail } from './motion/grind';
+/** Bailing off a grind: jumping off the rail, forward or aside, and rolling it out. */
+export { RAIL_BAIL_OPTIONS, railBailTimelineFor, type RailBail, type RailBailTimeline } from './motion/fall/railBail';
 /**
  * Grind names. Flatground tricks can be popped into a grind ("Kickflip into
  * Frontside Lipslide", "Backside 180 into Frontside Nosegrind") and out of it

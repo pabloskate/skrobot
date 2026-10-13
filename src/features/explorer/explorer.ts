@@ -20,6 +20,7 @@ import {
   grindSpecFor,
   grindTimelineFor,
   joinGrindBase,
+  railBailTimelineFor,
   joinGrindExit,
   specFor,
   setTimeline,
@@ -27,6 +28,7 @@ import {
   wrapOrbitYaw,
   type Obstacle,
   type PopEnd,
+  type RailBail,
   type RailChoice,
   type RailLine,
   type RiderStance,
@@ -94,8 +96,47 @@ export interface ExplorerState {
   obstacle: Obstacle;
   /** Who skates it: the robot, the realistic human, or the alien. */
   skater: Skater;
-  /** A flatground or gap trick can be missed instead: caught wrong and kicked out. Null lands it. */
-  fall: 'kickout' | null;
+  /** How the attempt is missed instead (see Outcome), where the mode has that miss. Null lands it. */
+  fall: Outcome | null;
+}
+
+/**
+ * How an attempt ends when it isn't landed: a flatground or gap trick caught wrong and kicked out; a grind jumped off,
+ * forward along the rail or out to the side, and rolled out.
+ */
+export type Outcome = 'kickout' | 'jump-forward' | 'jump-side';
+
+export interface OutcomeOption {
+  fall: Outcome | null;
+  label: string;
+  /** What happens, in a few words. */
+  hint: string;
+}
+
+const LANDED: OutcomeOption = { fall: null, label: 'Land', hint: 'ridden away' };
+const OUTCOME_OPTIONS: Record<ExplorerMode, readonly OutcomeOption[]> = {
+  flatground: [LANDED, { fall: 'kickout', label: 'Kick out', hint: 'caught wrong, kicked away' }],
+  grinds: [
+    LANDED,
+    { fall: 'jump-forward', label: 'Jump forward', hint: 'jumped off ahead, rolled out' },
+    { fall: 'jump-side', label: 'Jump aside', hint: 'jumped off the side, rolled out' },
+  ],
+};
+
+/** The ways an attempt can end in this mode. */
+export const outcomeOptions = (mode: ExplorerMode): readonly OutcomeOption[] => OUTCOME_OPTIONS[mode];
+
+/** How the attempt on the stage ends: its outcome if the mode has it, else landed. */
+export function outcomeOf(state: Pick<ExplorerState, 'mode' | 'fall'>): Outcome | null {
+  return OUTCOME_OPTIONS[state.mode].some((option) => option.fall === state.fall) ? state.fall : null;
+}
+
+const RAIL_BAILS: Partial<Record<Outcome, RailBail>> = { 'jump-forward': 'forward', 'jump-side': 'side' };
+
+/** What the stage is told of an outcome: landed or not, the miss, and which way off a rail. */
+export function stageOutcome(fall: Outcome | null): { landed: boolean; fallVariant?: 'kickout'; railBail?: RailBail } {
+  if (fall == null) return { landed: true };
+  return { landed: false, fallVariant: 'kickout', railBail: RAIL_BAILS[fall] };
 }
 
 export const STANCES: readonly Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
@@ -225,6 +266,7 @@ export function withSet(state: ExplorerState, set: StageSet): ExplorerState {
     ...state,
     set,
     mode: setInfo(set).grinds ? state.mode : 'flatground',
+    fall: setInfo(set).grinds ? state.fall : outcomeOf({ mode: 'flatground', fall: state.fall }),
     rail: setInfo(set).rails?.sideGrinds === false ? 'center' : state.rail,
     obstacle: hasObstacle(set, state.obstacle) ? state.obstacle : DEFAULT_STATE.obstacle,
   };
@@ -236,7 +278,9 @@ export const picksObstacle = (state: Pick<ExplorerState, 'mode' | 'set'>) =>
 
 /** Switch between gap/flatground tricks and grinds where the spot supports them. */
 export function withMode(state: ExplorerState, mode: ExplorerMode): ExplorerState {
-  return { ...state, mode: mode === 'grinds' && !setInfo(state.set).grinds ? 'flatground' : mode };
+  const next = { ...state, mode: mode === 'grinds' && !setInfo(state.set).grinds ? 'flatground' as const : mode };
+  // A miss the other mode doesn't have goes back to landed.
+  return { ...next, fall: outcomeOf(next) };
 }
 
 /** Keeps a trick out only if the grind rides the end it pops off. */
@@ -379,7 +423,26 @@ export function timelineFor(state: ExplorerState, style: SkateStyle | undefined)
       ],
     };
   }
-  const grind = grindTimelineFor(stageTrick(state), state.rider, style, true, 'slam', setHandrail(state.set, stageTrick(state), state.rider, state.rail));
+  const handrail = setHandrail(state.set, stageTrick(state), state.rider, state.rail);
+  const { railBail } = stageOutcome(outcomeOf(state));
+  if (railBail) {
+    // Jumped off: the grind's on up to the jump, then the flight and the roll.
+    const bail = railBailTimelineFor(stageTrick(state), state.rider, style, railBail, handrail);
+    if (bail) {
+      return {
+        duration: bail.end,
+        phases: [
+          { label: 'Set up', time: 0 },
+          { label: 'Pop', time: bail.pop },
+          ...(bail.trickIn == null ? [] : [{ label: 'Trick in', time: bail.trickIn }]),
+          { label: 'Lock', time: bail.lock },
+          { label: 'Jump off', time: bail.bail },
+          { label: 'Roll', time: bail.down },
+        ],
+      };
+    }
+  }
+  const grind = grindTimelineFor(stageTrick(state), state.rider, style, true, 'slam', handrail);
   if (!grind) return { phases: [{ label: 'Set up', time: 0 }], duration: flatTimeline(style).end };
   return {
     duration: grind.end,
@@ -569,8 +632,8 @@ export function stateFromSearch(search: string): ExplorerState {
     rail: params.get('rail') === 'side' && setInfo(set).rails?.sideGrinds !== false ? 'side' : DEFAULT_STATE.rail,
     obstacle: setInfo(set).obstacles?.find((o) => o.id === params.get('obstacle'))?.id ?? DEFAULT_STATE.obstacle,
     skater: SKATERS.find((option) => option.id === params.get('skater'))?.id ?? DEFAULT_STATE.skater,
-    // Only a flatground or gap trick kicks out.
-    fall: params.get('fall') === 'kickout' && params.has('trick') ? 'kickout' : null,
+    // Kept if it's a miss the mode named below has (a flatground trick's kick-out, a grind's jump off).
+    fall: OUTCOME_OPTIONS.grinds.concat(OUTCOME_OPTIONS.flatground).find((o) => o.fall != null && o.fall === params.get('fall'))?.fall ?? null,
   };
   const grind = fromSlug(GRIND_CHOICES, params.get('grind'));
   if (!grind) {
@@ -578,7 +641,9 @@ export function stateFromSearch(search: string): ExplorerState {
     // stage knows opens on the default grind (at El Toro, down its rail), or
     // on the trick at a spot with no grinds.
     const trick = fromSlug(FLATGROUND_BASES, params.get('trick'));
-    return trick ? { ...base, mode: 'flatground', trick } : withSet(base, base.set);
+    if (trick) return withMode({ ...base, trick }, 'flatground');
+    const opened = withSet(base, base.set);
+    return withMode(opened, opened.mode);
   }
   const outParam = params.get('out') ?? '';
   const nose = outParam.startsWith('nollie-');
@@ -626,6 +691,7 @@ export function searchFromState(state: ExplorerState): string {
   if (state.rail !== DEFAULT_STATE.rail) params.set('rail', state.rail);
   if (picksObstacle(state) && state.obstacle !== DEFAULT_STATE.obstacle) params.set('obstacle', state.obstacle);
   if (state.skater !== DEFAULT_STATE.skater) params.set('skater', state.skater);
-  if (state.mode === 'flatground' && state.fall) params.set('fall', state.fall);
+  const fall = outcomeOf(state);
+  if (fall) params.set('fall', fall);
   return `?${params.toString()}`;
 }

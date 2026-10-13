@@ -1,6 +1,6 @@
 import { BOARD_WIDTH_SCALE } from '../../board/boardDimensions';
 import { BOTTOM_LOCAL, TOP_LOCAL } from '../../board/deck';
-import { WHEEL_HALF_W, WHEEL_R, WHEEL_SPIN, WHEEL_X, WHEEL_Y, WHEEL_Z } from '../../board/board';
+import { HANGER_BOTTOM, WHEEL_HALF_W, WHEEL_R, WHEEL_SPIN, WHEEL_X, WHEEL_Y, WHEEL_Z } from '../../board/board';
 import { add3, clamp01, cross3, dot3, norm3, scale3, sub3, type V3 } from '../../math';
 import type { BoardRig } from '../skeleton';
 import { qconj, qexp, qlog, qmul, qnorm, qrot, qslerp, type Quat } from './rotation';
@@ -79,6 +79,13 @@ const CONTACTS: Contact[] = (() => {
   return out;
 })();
 
+/**
+ * And the trucks' hangers, under the deck between each pair of wheels: what a board left on a rail rests on (a 50-50's
+ * trucks straddle it), metal sliding like the deck's printed bottom. On flat ground the wheels always meet it first.
+ */
+const HANGER_CONTACTS: Contact[] = CONTACTS.concat([-WHEEL_X, WHEEL_X].flatMap((x) =>
+  [-1, -0.5, 0, 0.5, 1].map((k) => ({ local: { x, y: HANGER_BOTTOM, z: k * (WHEEL_Z * BOARD_WIDTH_SCALE - WHEEL_HALF_W) }, kind: 'bottom' as const }))));
+
 /** Where the board is at one instant: its deck's middle, its turn, and how far its wheels have turned (radians). */
 export interface BoardPose {
   center: V3;
@@ -115,7 +122,14 @@ const inertiaTimes = (q: Quat, v: V3, inverse: boolean): V3 => {
   return qrot(q, { x: local.x * k.x, y: local.y * k.y, z: local.z * k.z });
 };
 
-interface BoardSimOptions { gravity: number; ground: (x: number, z: number) => number; pushes?: Push[] }
+interface BoardSimOptions {
+  gravity: number;
+  /** The ground's height under a point, given where the point is up and down too (`y`): a rail stands only over its underside. */
+  ground: (x: number, z: number, y: number) => number;
+  pushes?: Push[];
+  /** Whether the trucks' hangers meet the ground too: a board left on a rail (whose `ground` has the rail's top in it). */
+  hangers?: boolean;
+}
 
 /**
  * The board from `start` (at clock `t0`) until `t1`, over ground whose
@@ -133,6 +147,7 @@ export function simulateBoard(start: BoardMotion, t0: number, t1: number, option
  */
 export function boardSimulation(start: BoardMotion, t0: number, options: BoardSimOptions): (t1: number) => BoardTrack {
   const { gravity, ground, pushes = [] } = options;
+  const contacts = options.hangers ? HANGER_CONTACTS : CONTACTS;
   const dt = 1 / SIM_HZ;
   let q = start.q;
   // The body moves about its center of mass.
@@ -174,10 +189,10 @@ export function boardSimulation(start: BoardMotion, t0: number, options: BoardSi
       // The ground: impulses at every point in it, moving into it.
       // Impulses so far at each contact: along the ground's normal, and along the roll and across it (a wheel), or x and z (the deck).
       const touching: Array<{ c: Contact; r: V3; depth: number; approach: number; normal: number; along: number; across: number; k: number[] }> = [];
-      for (const c of CONTACTS) {
+      for (const c of contacts) {
         const r = qrot(q, sub3(c.local, COM_LOCAL));
         const p = add3(com, r);
-        const depth = p.y - ground(p.x, p.z);
+        const depth = p.y - ground(p.x, p.z, p.y);
         if (depth < -0.05) continue;
         const vp = add3(v, cross3(w, r));
         // Normal is up: -y.

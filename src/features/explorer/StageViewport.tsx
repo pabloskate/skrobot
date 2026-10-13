@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, 
 import { useSoundEffects } from '@skrobot/animations';
 import type { Obstacle, RailChoice, RiderStance, Robot, SceneCamera, Skater, StageSet, Trick, TripodId } from '@skrobot/animations';
 import { TrickScene3D } from '@skrobot/animations/three';
-import { ZOOM_STEP, turnCamera, zoomBy } from './explorer';
+import { ZOOM_STEP, stageOutcome, turnCamera, zoomBy, type Outcome } from './explorer';
 import type { Playhead } from './usePlayhead';
 
 /** Pointer travel (CSS px) before a press counts as a drag rather than a tap. */
@@ -41,8 +41,8 @@ export interface StageScene {
   obstacle: Obstacle;
   /** Who skates: the robot, the realistic human, or the alien. */
   skater: Skater;
-  /** A flatground trick missed instead of landed: caught wrong and kicked out. Absent lands it. */
-  fall?: 'kickout' | null;
+  /** The attempt missed instead of landed: kicked out, or jumped off a rail (see Outcome). Absent lands it. */
+  fall?: Outcome | null;
 }
 
 interface Props {
@@ -196,9 +196,8 @@ export default function StageViewport({ scene, playhead, rate, onCamera, onZoom,
           <TrickScene3D
             robot={scene.robot}
             trick={scene.trick}
-            landed={!scene.fall}
+            {...stageOutcome(scene.fall ?? null)}
             knewIt
-            fallVariant={scene.fall ?? undefined}
             riderStance={scene.rider}
             fixedTime={playhead.time}
             playbackRate={playhead.playing ? rate : 0.05}

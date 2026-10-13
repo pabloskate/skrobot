@@ -70,7 +70,7 @@ export function dreamLine(state: ExplorerState): DreamLine {
 /** Hit something else at the spot, keeping the trick or grind picked for each. */
 export function withDreamLine(state: ExplorerState, line: DreamLine): ExplorerState {
   return line.mode === 'flatground'
-    ? { ...state, mode: 'flatground', obstacle: line.obstacle }
+    ? { ...withMode(state, 'flatground'), obstacle: line.obstacle }
     : { ...withMode(state, 'grinds'), rail: line.rail };
 }
 

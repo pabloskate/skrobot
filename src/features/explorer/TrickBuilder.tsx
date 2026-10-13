@@ -16,6 +16,8 @@ import {
   grindMatchesSearch,
   outEndsFor,
   outName,
+  outcomeOf,
+  outcomeOptions,
   shuffle,
   trickInName,
   withGrind,
@@ -32,12 +34,6 @@ const MODES: ReadonlyArray<{ id: ExplorerMode; label: string }> = [
 ];
 
 const END_LABELS: Record<PopEnd, string> = { tail: 'Off the tail', nose: 'Off the nose' };
-
-/** How a flatground or gap trick ends: ridden away, or caught wrong and kicked out. */
-const OUTCOMES: ReadonlyArray<{ fall: ExplorerState['fall']; label: string }> = [
-  { fall: null, label: 'Land' },
-  { fall: 'kickout', label: 'Kick out' },
-];
 
 const capitalize = (s: string) => `${s[0].toUpperCase()}${s.slice(1)}`;
 
@@ -59,22 +55,28 @@ interface FieldProps {
   set: (patch: Partial<ExplorerState>) => void;
 }
 
-/** The shared outcome control for flatground and gap tricks on both explorers. */
+/**
+ * The shared outcome control on both explorers: a flatground or gap trick ridden away or kicked out; a grind ridden away
+ * or jumped off, forward or aside.
+ */
 export function OutcomeField({ state, set }: FieldProps) {
   const labelId = useId();
+  const options = outcomeOptions(state.mode);
+  const fall = outcomeOf(state);
+  const chosen = options.find((option) => option.fall === fall) ?? options[0];
   return (
-    <div className="explorer-field explorer-field-inline">
+    <div className="explorer-field explorer-field-inline explorer-outcome-field">
       <span className="explorer-field-label" id={labelId}>
-        Outcome <small>{state.fall === 'kickout' ? 'caught wrong, kicked away' : 'ridden away'}</small>
+        Outcome <small>{chosen.hint}</small>
       </span>
       <div className="explorer-segmented explorer-segmented-compact" role="radiogroup" aria-labelledby={labelId}>
-        {OUTCOMES.map((option) => (
+        {options.map((option) => (
           <button
             key={option.label}
             type="button"
             role="radio"
-            aria-checked={state.fall === option.fall}
-            className={state.fall === option.fall ? 'active' : ''}
+            aria-checked={fall === option.fall}
+            className={fall === option.fall ? 'active' : ''}
             onClick={() => set({ fall: option.fall })}
           >
             {option.label}
@@ -191,7 +193,7 @@ export default function TrickBuilder({ state, onChange }: Props) {
 
       {state.mode === 'flatground' && <StanceField state={state} set={set} />}
 
-      {state.mode === 'flatground' && <OutcomeField state={state} set={set} />}
+      <OutcomeField state={state} set={set} />
 
       <div className="explorer-field explorer-field-inline explorer-skater-field">
         <span className="explorer-field-label" id="explorer-skater-label">

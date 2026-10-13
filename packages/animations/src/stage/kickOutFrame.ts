@@ -47,6 +47,13 @@ const landedWheel = (stage: StagePlan, t: number) =>
 /** About how thick the limbs and body are round a joint (world units, a robot's), for how far off the ground the body is. */
 const JOINT_RADIUS = 6;
 
+/** How far the lowest part of a rider on their own is off the ground: the soles, or rolling, whatever's down. */
+export function lowestOver(rig: Rig, ground: (x: number, z: number) => number, scale: number): number {
+  const lowestSole = Math.min(...rig.legs.map((leg) => ground(leg.shoe.origin.x, leg.shoe.origin.z) - leg.shoe.origin.y - SHOE_HALF_HEIGHT));
+  const joints = [rig.head.origin, rig.torso.origin, ...rig.arms.flatMap((arm) => [arm.shoulder, arm.elbow, arm.hand]), ...rig.legs.flatMap((leg) => [leg.hip, leg.knee])];
+  return Math.min(lowestSole, ...joints.map((p) => ground(p.x, p.z) - p.y - JOINT_RADIUS * scale));
+}
+
 /** The camera's natural frequency following the rider (rad/s): critically damped, and led by their speed so it doesn't lag. */
 const FOLLOW = 6;
 
@@ -55,14 +62,14 @@ const FOLLOW = 6;
  * and across (z) the street or the spot it's moved, following the rider's
  * hips. Sampled with the run.
  */
-interface Follow {
+export interface Follow {
   start: number;
   dt: number;
   x: number[];
   z: number[];
 }
 
-function followRider(plan: KickOutPlan, from: { x: number; vx: number; z: number; vz: number }): Follow {
+export function followRider(plan: KickOutPlan, from: { x: number; vx: number; z: number; vz: number }): Follow {
   const { takeover } = plan;
   const dt = plan.run.dt;
   const hips0 = hipsAt(plan, takeover).hips;
@@ -85,7 +92,7 @@ function followRider(plan: KickOutPlan, from: { x: number; vx: number; z: number
   return { start: takeover, dt, x, z };
 }
 
-function followAt(follow: Follow, t: number): { x: number; z: number } {
+export function followAt(follow: Follow, t: number): { x: number; z: number } {
   const at = Math.max(0, Math.min(follow.x.length - 1, (t - follow.start) / follow.dt));
   const i = Math.min(follow.x.length - 2, Math.floor(at));
   const k = at - i;
@@ -100,7 +107,7 @@ interface Planned {
 }
 
 /** Seconds the shadows take to go from how dark the attempt had them to how dark the kick-out has them. */
-const SHADOW_SEAM_T = 0.3;
+export const SHADOW_SEAM_T = 0.3;
 
 const plans = new WeakMap<StagePlan, Planned>();
 
@@ -230,9 +237,7 @@ function ownFrame(stage: StagePlan, t: number, rate: number): StageFrame {
   const headHeight = (ground(head.x, head.z) - head.y - (ASPHALT - GROUND)) / scale;
   const sink = smoothstep((clock - touchdown) / 0.3) * fallSink(headHeight);
   // The body's shadow fades with its lowest part off the ground: the soles, or rolling, whatever's down.
-  const lowestSole = Math.min(...at.rig.legs.map((leg) => ground(leg.shoe.origin.x, leg.shoe.origin.z) - leg.shoe.origin.y - SHOE_HALF_HEIGHT));
-  const joints = [at.rig.head.origin, at.rig.torso.origin, ...at.rig.arms.flatMap((arm) => [arm.shoulder, arm.elbow, arm.hand]), ...at.rig.legs.flatMap((leg) => [leg.hip, leg.knee])];
-  const lowestPart = Math.min(lowestSole, ...joints.map((p) => ground(p.x, p.z) - p.y - JOINT_RADIUS * scale));
+  const lowestPart = lowestOver(at.rig, ground, scale);
   const boardHeight = ground(at.board.center.x, at.board.center.z) - at.board.center.y - (ASPHALT - GROUND);
   const frame = {
     t,

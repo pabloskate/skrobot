@@ -21,6 +21,7 @@ import {
   zoomAt,
   ZOOM_RANGE,
   type ExplorerState,
+  outcomeOf,
 } from './explorer';
 import CameraDial from './CameraDial';
 import ExplorerStage from './ExplorerStage';
@@ -53,8 +54,8 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
   const camera = sceneCamera(state);
   const tripod = sceneTripod(state);
   const timeline = timelineFor(state, RIDER.skateStyle);
-  // A flatground or gap trick can be kicked out; a grind lands.
-  const fall = state.mode === 'flatground' ? state.fall : null;
+  // A flatground or gap trick can be kicked out; a grind jumped off.
+  const fall = outcomeOf(state);
   const steps = trickSteps(state);
   const preset = typeof state.camera === 'string' ? cameraPreset(state.camera) : null;
   const search = searchFromState(state);

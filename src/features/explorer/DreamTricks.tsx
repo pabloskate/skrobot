@@ -23,6 +23,7 @@ import {
   stageTrick,
   timelineFor,
   type ExplorerState,
+  outcomeOf,
 } from './explorer';
 import {
   DREAM_DEFAULT,
@@ -110,7 +111,7 @@ export default function DreamTricks({ initialSearch = '' }: { initialSearch?: st
   const shotZoom = shot ? cameraPreset(shot).zoom ?? 1 : 1;
   const search = searchFromState(state);
   const grinding = state.mode === 'grinds';
-  const fall = grinding ? null : state.fall;
+  const fall = outcomeOf(state);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -297,7 +298,7 @@ export default function DreamTricks({ initialSearch = '' }: { initialSearch?: st
 
             <Choice label="Stance" options={STANCES} value={state.stance} onChange={(stance) => set({ stance })} />
 
-            {!grinding && <OutcomeField state={state} set={set} />}
+            <OutcomeField state={state} set={set} />
 
             {grinding && (
               <Choice

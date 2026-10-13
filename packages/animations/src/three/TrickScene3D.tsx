@@ -7,6 +7,7 @@ import { useTrickPlayback } from './useTrickPlayback';
 import { randomFallVariant, randomShankProgress, type FallVariant } from '../motion/trick';
 import { DEFAULT_SCENE_CAMERA, type SceneCamera, type TripodId } from '../camera/camera';
 import { setInfo, type Obstacle, type RailChoice, type StageSet } from '../sets/sets';
+import type { RailBail } from '../motion/fall/railBail';
 import type { LeadIn } from '../types';
 import type { Skater } from '../riders/skaters';
 import type { SceneRenderer } from './renderer';
@@ -40,6 +41,8 @@ interface Props {
   /** Show the in-stage .5x / 1x playback toggle. Off for externally controlled viewers. */
   showSpeedToggle?: boolean;
   fallVariant?: FallVariant;
+  /** A grind kicked out (`fallVariant` 'kickout'): the rider jumps off the rail this way and rolls it out. Forward unless given. */
+  railBail?: RailBail;
   paused?: boolean;
   knewIt?: boolean;
   riderStance?: RiderStance;
@@ -76,6 +79,7 @@ export default function TrickScene3D({
   playbackRate = 1,
   showSpeedToggle = false,
   fallVariant,
+  railBail,
   paused = false,
   knewIt,
   riderStance = 'regular',
@@ -97,10 +101,10 @@ export default function TrickScene3D({
   const [shankProgress] = useState(randomShankProgress);
   const fall = forcedFall ?? fallVariant ?? randomizedFall;
   const stage = useMemo(
-    () => planStage(trick, { landed, riderStance, style, fall, shankProgress, skater, set, rail, obstacle }),
+    () => planStage(trick, { landed, riderStance, style, fall, shankProgress, skater, set, rail, obstacle, railBail }),
     // The trick's name and id don't change what is skated.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [robot, trick.base, trick.stance, landed, riderStance, style, fall, shankProgress, skater, set, rail, obstacle],
+    [robot, trick.base, trick.stance, landed, riderStance, style, fall, shankProgress, skater, set, rail, obstacle, railBail],
   );
   const {
     time, firstRun, isPlaying, staticTime, speedToggleVisible, effectivePlaybackRate,

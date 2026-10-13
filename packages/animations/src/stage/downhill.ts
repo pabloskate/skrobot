@@ -143,7 +143,7 @@ const CAMERA_LEAD = 0.03;
  * onto a rail, never ahead of it, then down the slope a little ahead of the
  * board, smoothed so the camera never jerks at the pop or the landing.
  */
-function craneDownhill(deckHeight: (t: number) => number, t: number, rideHeight: (t: number) => number = () => 0): number {
+export function craneDownhill(deckHeight: (t: number) => number, t: number, rideHeight: (t: number) => number = () => 0): number {
   let sum = 0;
   let total = 0;
   for (let k = -6; k <= 6; k++) {
@@ -187,7 +187,7 @@ function shadowGround(p: V3, u: number, dir: 1 | -1, ground: (u: number, z: numb
 }
 
 /** The level (over the top landing) the rider's shadows fall at: the step the sun casts the middle of them onto. */
-function shadowLevel(rig: Rig, u: number, dir: 1 | -1, ground: (u: number, z: number) => number, across = 0): number {
+export function shadowLevel(rig: Rig, u: number, dir: 1 | -1, ground: (u: number, z: number) => number, across = 0): number {
   const hips = hipsOf(rig);
   return shadowGround({ x: (hips.x + rig.board.center.x) / 2, y: (hips.y + rig.board.center.y) / 2, z: (hips.z + rig.board.center.z) / 2 }, u, dir, ground, across);
 }
@@ -347,18 +347,8 @@ export function stairFrame(stage: StagePlan, stairs: StairPlan, t: number, rate:
  * rails cast their shadows per pixel.
  */
 export function railFrame(stage: StagePlan, plan: GrindPlan, t: number, rate: number, headPose?: HeadPose | null): StageFrame {
-  const { mechanics, style } = stage;
   const rail = plan.handrail!.rail;
-  const grind = solveGrindRig(t, plan, mechanics, style, grownBy(stage.skater));
-  // How far down the stairs the rider is; the grind's own travel is down them either way round.
-  const u = railTrack(plan, t);
-  const heading = plan.spec.dir === -1 ? 180 : 0;
-  const downhill = heading ? reverseHeading(grind.rig) : grind.rig;
-  const stepUnder = (p: V3) => ASPHALT - rail.ground(u + (p.x - X0), p.z);
-  const solved = clearFeet(onTheGround(downhill, stepUnder));
-  // A person's arms keep off the steps under them (along their edges), not the top landing far above.
-  const hipsAlong = u + hipsOf(solved).x - X0;
-  const rig = posed(solved, stage.skater, headPose, ASPHALT - rail.rest(hipsAlong));
+  const { grind, u, heading, solved, rig } = railRig(stage, plan, t, headPose);
   // A fallen head is low over the steps under it, not under the top landing.
   const headHeight = GROUND - solved.head.origin.y - rail.rest(u + solved.head.origin.x - X0);
   const lift = craneDownhill((time) => handrailHeight(plan, time), t) - (grind.falling ? fallSink(headHeight) : 0);
@@ -404,6 +394,27 @@ export function railFrame(stage: StagePlan, plan: GrindPlan, t: number, rate: nu
   };
 }
 
+/**
+ * A handrail grind's rider at `t` in the rail's own frame, downhill (+x) whichever way it's ridden (and, for a ledge
+ * at an angle, before it's laid onto the set): `u` down the rail the frame's X0 is, and the rider solved on the board
+ * (`solved`) and as drawn (`rig`).
+ */
+export function railRig(stage: StagePlan, plan: GrindPlan, t: number, headPose?: HeadPose | null) {
+  const { mechanics, style } = stage;
+  const rail = plan.handrail!.rail;
+  const grind = solveGrindRig(t, plan, mechanics, style, grownBy(stage.skater));
+  // How far down the stairs the rider is; the grind's own travel is down them either way round.
+  const u = railTrack(plan, t);
+  const heading = plan.spec.dir === -1 ? 180 : 0;
+  const downhill = heading ? reverseHeading(grind.rig) : grind.rig;
+  const stepUnder = (p: V3) => ASPHALT - rail.ground(u + (p.x - X0), p.z);
+  const solved = clearFeet(onTheGround(downhill, stepUnder));
+  // A person's arms keep off the steps under them (along their edges), not the top landing far above.
+  const hipsAlong = u + hipsOf(solved).x - X0;
+  const rig = posed(solved, stage.skater, headPose, ASPHALT - rail.rest(hipsAlong));
+  return { grind, u, heading, solved, rig };
+}
+
 /** Seconds either side the frame averages a ledge grind's line across over, so it never jerks at the lock. */
 const LANE_FOLLOW = 0.08;
 
@@ -422,9 +433,12 @@ function onLedge(
   u: number,
   rig: Rig,
   dust: Puff[],
-): { rig: Rig; dust: Puff[]; x: number; z: number; ground: (x: number, z: number) => number } {
-  const yaw = placement.yaw ?? 0;
-  const rail = plan.handrail!.rail;
+) {
+  return placeOnLedge(placement, plan, u, ledgeAcross(plan, t), rig, dust);
+}
+
+/** Where across a ledge's line (its own frame, as shown) the frame follows the board at `t`: its planned line, smoothed. */
+export function ledgeAcross(plan: GrindPlan, t: number): number {
   // The board's line across, in the ledge's frame as shown (a fakie approach is turned round whole).
   let sum = 0, total = 0;
   for (let k = -6; k <= 6; k++) {
@@ -432,7 +446,23 @@ function onLedge(
     sum += w * grindLane(plan, Math.max(0, t + (k / 2.4) * LANE_FOLLOW));
     total += w;
   }
-  const across = plan.spec.dir * (sum / total);
+  return plan.spec.dir * (sum / total);
+}
+
+/**
+ * A frame in a ledge's own frame laid onto the set's: `u` along it and `across` it is the frame's middle, which
+ * comes to the stage's (X0, 0); turned to the ledge's heading about it.
+ */
+export function placeOnLedge(
+  placement: { x?: number; z: number; yaw?: number },
+  plan: GrindPlan,
+  u: number,
+  across: number,
+  rig: Rig,
+  dust: Puff[],
+): { rig: Rig; dust: Puff[]; x: number; z: number; ground: (x: number, z: number) => number; place: (p: V3) => V3 } {
+  const yaw = placement.yaw ?? 0;
+  const rail = plan.handrail!.rail;
   const c = Math.cos(rad(yaw)), s = Math.sin(rad(yaw));
   const place = (p: V3): V3 => {
     const d = rotY({ x: p.x - X0, y: p.y, z: p.z - across }, -yaw);
@@ -440,6 +470,7 @@ function onLedge(
   };
   return {
     rig: turnOnto(shiftRig(rig, { x: 0, y: 0, z: -across }), yaw),
+    place,
     dust: dust.map((puff) => ({ ...puff, center: place(puff.center) })),
     x: (placement.x ?? 0) + u * c - across * s,
     z: placement.z + u * s + across * c,
