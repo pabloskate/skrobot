@@ -6771,6 +6771,17 @@ main:has(.rps-arena) > .screen {
   margin-bottom: 0;
 }
 
+.dream-trick .explorer-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-top: 0;
+}
+
+.dream-trick .explorer-field-label small {
+  display: block;
+  margin-left: 0;
+}
+
 .dream-trick .explorer-tier h3 {
   margin-top: 4px;
 }

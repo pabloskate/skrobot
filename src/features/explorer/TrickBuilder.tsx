@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { TbChevronRight, TbDice5, TbSearch, TbX } from 'react-icons/tb';
 import { SKATERS, setInfo, type PopEnd } from '@skrobot/animations';
 import { trickMatchesSearch } from '@/features/tricks';
@@ -57,6 +57,32 @@ interface Props {
 interface FieldProps {
   state: ExplorerState;
   set: (patch: Partial<ExplorerState>) => void;
+}
+
+/** The shared outcome control for flatground and gap tricks on both explorers. */
+export function OutcomeField({ state, set }: FieldProps) {
+  const labelId = useId();
+  return (
+    <div className="explorer-field explorer-field-inline">
+      <span className="explorer-field-label" id={labelId}>
+        Outcome <small>{state.fall === 'kickout' ? 'caught wrong, kicked away' : 'ridden away'}</small>
+      </span>
+      <div className="explorer-segmented explorer-segmented-compact" role="radiogroup" aria-labelledby={labelId}>
+        {OUTCOMES.map((option) => (
+          <button
+            key={option.label}
+            type="button"
+            role="radio"
+            aria-checked={state.fall === option.fall}
+            className={state.fall === option.fall ? 'active' : ''}
+            onClick={() => set({ fall: option.fall })}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 /** How the trick is ridden. A flatground trick is named by it; a grind combo's belongs to its "Trick in". */
@@ -165,27 +191,7 @@ export default function TrickBuilder({ state, onChange }: Props) {
 
       {state.mode === 'flatground' && <StanceField state={state} set={set} />}
 
-      {state.mode === 'flatground' && (
-        <div className="explorer-field explorer-field-inline">
-          <span className="explorer-field-label" id="explorer-outcome-label">
-            Outcome <small>{state.fall === 'kickout' ? 'caught wrong, kicked away' : 'ridden away'}</small>
-          </span>
-          <div className="explorer-segmented explorer-segmented-compact" role="radiogroup" aria-labelledby="explorer-outcome-label">
-            {OUTCOMES.map((option) => (
-              <button
-                key={option.label}
-                type="button"
-                role="radio"
-                aria-checked={state.fall === option.fall}
-                className={state.fall === option.fall ? 'active' : ''}
-                onClick={() => set({ fall: option.fall })}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      {state.mode === 'flatground' && <OutcomeField state={state} set={set} />}
 
       <div className="explorer-field explorer-field-inline explorer-skater-field">
         <span className="explorer-field-label" id="explorer-skater-label">

@@ -36,7 +36,7 @@ import {
   withDreamLine,
   withDreamSpot,
 } from './dream';
-import { SearchField } from './TrickBuilder';
+import { OutcomeField, SearchField } from './TrickBuilder';
 import DreamStage from './DreamStage';
 import ShotIcon from './ShotIcon';
 import SpotArt from './SpotArt';
@@ -86,9 +86,10 @@ function Choice<T extends string>({ label, options, value, onChange, name = capi
 
 /**
  * Dream Tricks: pick a famous spot, what to hit there, and a trick, and
- * watch it land on repeat, from where a filmer would stand. Everything an
- * animator would tune (scrubbing, zoom, the plaza and waterfront) stays in
- * the Trick Explorer; the link still describes exactly what's on stage.
+ * watch it land or kick out on repeat, from where a filmer would stand.
+ * Everything an animator would tune (scrubbing, zoom, the plaza and
+ * waterfront) stays in the Trick Explorer; the link still describes
+ * exactly what's on stage.
  */
 export default function DreamTricks({ initialSearch = '' }: { initialSearch?: string }) {
   const [state, setState] = useState<ExplorerState>(() => dreamStateFromSearch(initialSearch));
@@ -109,6 +110,7 @@ export default function DreamTricks({ initialSearch = '' }: { initialSearch?: st
   const shotZoom = shot ? cameraPreset(shot).zoom ?? 1 : 1;
   const search = searchFromState(state);
   const grinding = state.mode === 'grinds';
+  const fall = grinding ? null : state.fall;
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -233,7 +235,7 @@ export default function DreamTricks({ initialSearch = '' }: { initialSearch?: st
           </section>
 
           <DreamStage
-            key={`${trick.id}:${state.rider}:${state.obstacle}`}
+            key={`${trick.id}:${state.rider}:${state.obstacle}:${fall ?? 'landed'}`}
             robot={RIDER}
             trick={trick}
             rider={state.rider}
@@ -244,6 +246,7 @@ export default function DreamTricks({ initialSearch = '' }: { initialSearch?: st
             rail={state.rail}
             obstacle={state.obstacle}
             skater={state.skater}
+            fall={fall}
             duration={timelineFor(state, RIDER.skateStyle).duration}
             caption={`${line.label} · ${spot.name}`}
             rate={rate}
@@ -293,6 +296,8 @@ export default function DreamTricks({ initialSearch = '' }: { initialSearch?: st
             </div>
 
             <Choice label="Stance" options={STANCES} value={state.stance} onChange={(stance) => set({ stance })} />
+
+            {!grinding && <OutcomeField state={state} set={set} />}
 
             {grinding && (
               <Choice
