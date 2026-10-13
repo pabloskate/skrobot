@@ -361,7 +361,7 @@ describe('computeFrame', () => {
     }
   });
 
-  it('a bigger pop flies higher in the same flight', () => {
+  it('a bigger pop flies higher and longer, by gravity', () => {
     const spec = specFor(trick('Ollie', 'regular'));
     const low = style({ popHeight: SKATE_STYLE_BOUNDS.popHeight.min });
     const high = style({ popHeight: SKATE_STYLE_BOUNDS.popHeight.max });
@@ -371,7 +371,8 @@ describe('computeFrame', () => {
     expect(lowFrame.board.y).toBeCloseTo(GROUND - boardRise(spec, low), 5);
     expect(highFrame.board.y).toBeCloseTo(GROUND - boardRise(spec, high), 5);
     expect(highFrame.board.y).toBeLessThan(lowFrame.board.y);
-    expect(flightTime(high)).toBe(flightTime(low));
+    // Air time goes with the square root of the height.
+    expect(flightTime(high) / flightTime(low)).toBeCloseTo(Math.sqrt(high.popHeight / low.popHeight), 6);
     expect(computeFrame(ROLL_IN, spec, true, 'slam', 0.65, high).board.y).toBe(GROUND);
     expect(computeFrame(ROLL_IN + flightTime(high), spec, true, 'slam', 0.65, high).board.y).toBe(GROUND);
   });

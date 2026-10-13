@@ -23,6 +23,10 @@ const FOOTPRINT_PAD = 0.6;
 
 /** The legs' round thickness at the hip, knee, and ankle (skeleton.ts LEG_RADII). */
 export const LIMB_RADII = LEG_RADII;
+/** How much thicker a leg counts against the board's samples: a limb can
+ *  graze the board between two samples, a couple of units apart, by about
+ *  this much. */
+const LIMB_PAD = 0.5;
 
 /** Board-local surface samples (x nose, y down, z across), in small clusters:
  *  a few deck stations, a truck, a wheel's rim. */
@@ -164,7 +168,7 @@ export function legInBoard(board: BoardRig, leg: LegRig): boolean {
     z: origin.z + ax.z * p.x + ay.z * p.y + az.z * p.z,
   });
   // Only the clusters whose ball reaches the box round the leg.
-  const r = LIMB_RADII.hip;
+  const r = LIMB_RADII.hip + LIMB_PAD;
   const joints = [leg.hip, leg.knee, leg.ankle];
   const lo = { x: Math.min(...joints.map((j) => j.x)) - r, y: Math.min(...joints.map((j) => j.y)) - r, z: Math.min(...joints.map((j) => j.z)) - r };
   const hi = { x: Math.max(...joints.map((j) => j.x)) + r, y: Math.max(...joints.map((j) => j.y)) + r, z: Math.max(...joints.map((j) => j.z)) + r };
@@ -175,6 +179,7 @@ export function legInBoard(board: BoardRig, leg: LegRig): boolean {
     if (c.x < lo.x - pad || c.x > hi.x + pad || c.y < lo.y - pad || c.y > hi.y + pad || c.z < lo.z - pad || c.z > hi.z + pad) return;
     for (const p of points) world.push(toWorld(p));
   });
-  return limbHits(world, leg.knee, leg.ankle, LIMB_RADII.knee, LIMB_RADII.ankle)
-    || limbHits(world, leg.hip, leg.knee, LIMB_RADII.hip, LIMB_RADII.knee);
+  const pad = (r: number) => r + LIMB_PAD;
+  return limbHits(world, leg.knee, leg.ankle, pad(LIMB_RADII.knee), pad(LIMB_RADII.ankle))
+    || limbHits(world, leg.hip, leg.knee, pad(LIMB_RADII.hip), pad(LIMB_RADII.knee));
 }

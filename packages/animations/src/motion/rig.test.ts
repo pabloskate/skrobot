@@ -325,10 +325,10 @@ describe('Rider body physics', () => {
 
   it('flies the hips on a ballistic arc, with the board pulled up into a knee tuck at the peak', () => {
     for (const base of ['Ollie', 'Frontside 180']) {
-      // Equal steps through mid-flight: constant gravity means a constant
-      // second difference. (Until the pop has eased level, the front foot
-      // rides the popped nose up and the hips give its knee the room.)
-      const ys = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8].map((s) => hipY(rigAt(base, 'regular', 'regular', 'landed', ROLL_IN + s * FLIP_T)));
+      // Equal steps from the top of the hop: constant gravity means a constant
+      // second difference. (Until the pop has levelled, by the top, the front
+      // foot rides the popped nose up and the hips give its knee the room.)
+      const ys = [0.5, 0.56, 0.62, 0.68, 0.74, 0.8].map((s) => hipY(rigAt(base, 'regular', 'regular', 'landed', ROLL_IN + s * FLIP_T)));
       const accel = ys.slice(2).map((y, i) => y - 2 * ys[i + 1] + ys[i]);
       for (const a of accel) expect(a, base).toBeCloseTo(accel[0], 6);
       expect(accel[0], `${base} falls back down`).toBeGreaterThan(0);

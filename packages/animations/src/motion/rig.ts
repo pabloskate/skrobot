@@ -57,8 +57,10 @@ import {
   boardGlued,
   boardRise,
   flightTime,
+  popLeft,
   popTuck,
   LIFT,
+  POP_RISE,
   ROLL_IN,
   boardYawDeg,
   clampFootReach,
@@ -162,19 +164,14 @@ function setupFor(t: number, flight: number): number {
   return flight < 0 ? out : out * (1 - smoothstep((flight - 0.45) / 0.35));
 }
 
-/** Share of the flight the physics eases a pop back to level over. */
-const POP_EASE = 0.3;
-/** Seconds the tail strike takes to tip the board up to its pop angle (the
- *  physics does it between two frames). */
-export const POP_RISE = 0.1;
 /** Share of the flight over which the feet go from where they stood to the
  *  physics' flight marks (it moves them between two frames). */
 const TAKEOFF_END = 0.12;
 /** A pop's pitch (deg) is the physics' up to POP_PITCH_KNEE, easing in to no
  *  more than POP_PITCH_MAX: as far as a tail strike tips a board with a foot
- *  riding the nose up. */
+ *  riding the nose up (the physics' 60 comes out about 40). */
 const POP_PITCH_KNEE = 25;
-const POP_PITCH_MAX = 45;
+const POP_PITCH_MAX = 40;
 /** How far over the board's middle (world units) the physics turns the feet
  *  it carries with the deck: its FOOT_Y - 6 stance against the hips' LIFT. */
 const GLUED_PIVOT = LIFT - FOOT_Y + 6;
@@ -569,13 +566,13 @@ function poseRig(
   const wrapRoll = -toeDir * WRAP_TILT * wrap;
   const center: V3 = { x: f.board.x, y: f.board.y, z: 0 };
   // The feet stand on the board through the tail strike and ride its pitch
-  // about the board's middle. The physics eases a pop level over POP_EASE of
-  // the flight; the feet hand back to it once it's nearly level, and as soon
-  // as the board spins away under them in a shuv. (A flip's front foot slides up
-  // the deck as it flicks, so a roll doesn't stop the ride.)
+  // about the board's middle as the front foot levels it (trick.ts popLeft).
+  // They hand back to the physics once it's nearly level, and as soon as the
+  // board spins away under them in a shuv. (A flip's front foot slides up the
+  // deck as it flicks, so a roll doesn't stop the ride.)
   const underFeet = (deg: number) => 1 - smoothstep(Math.abs(deg) / RIDE_TURN);
   const riding = spec.roll !== 0 || !airborne ? 0
-    : smoothstep((1 - smoothstep(flight / POP_EASE)) / RIDE_UNTIL) * underFeet(yawDeg - oriented.bodyYawDeg);
+    : smoothstep(popLeft(spec, flight, flightTime(skateStyle)) / RIDE_UNTIL) * underFeet(yawDeg - oriented.bodyYawDeg);
 
   // ----- Feet (board space, straight from the physics) -----
   const fallTurn = (p: V3): V3 => {

@@ -4,9 +4,9 @@ import { resolveRiderMechanics, type RiderMechanics } from './stance';
 import { resolveSkateStyle } from './style';
 import {
   FALL_T,
-  FLIP_T,
   GROUND,
   LAND_T,
+  POP_RISE,
   ROLL_IN,
   STREET_DASH_PERIOD,
   STREET_DASH_SECONDS,
@@ -18,7 +18,6 @@ import { FOOT, GRAVITY } from '../units';
 import { HANGER_BOTTOM, WHEEL_BOTTOM, WHEEL_HALF_W, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z } from '../board/board';
 import { BOTTOM_LOCAL, TIP_X } from '../board/deck';
 import { BOARD_WIDTH_SCALE } from '../board/boardDimensions';
-import { POP_RISE } from './rig';
 import { FOLLOW_POP } from '../camera/camera';
 import { CROUCH_START, DECK_HALF_WIDTH, POP_HEIGHT, RIDE_HEIGHT, TOUCHDOWN_HEIGHT, cruiseBob } from './skeleton';
 import { CROUCH_HOLD, EXTEND_MAX, extendTime, extending, flightLegs, flightSpeeds, landingSpring, rideAway } from './dynamics';
@@ -161,6 +160,12 @@ const SNAP = 0.07;
  */
 const FLAT_POP = 60;
 const POP_IN = 44;
+/**
+ * Seconds a plain pop onto the bar takes to level off. It levels from the
+ * strike, sooner than flatground's (which holds the nose up to the top of the
+ * hop), so the board comes down flat for its lock.
+ */
+const POP_IN_LEVEL = 0.28;
 /**
  * A tre-style scoop strikes the tail before the board leaves the ground: the
  * tail is driven down to the snap over SCOOP_STRIKE seconds, the board
@@ -1631,11 +1636,11 @@ export function grindFrame(time: number, plan: GrindPlan): GrindFrame {
       z: plan.laneZ + plan.approachSpeed * tau,
     };
     // The pop turns the board about its middle, as on flatground: the tail
-    // strike tips it up over the entry's snap and it levels off on flatground's
-    // clock; a trick's own pitch comes straight from the flatground physics,
-    // scaled to this pop.
+    // strike tips it up over the entry's snap and it levels off over
+    // POP_IN_LEVEL; a trick's own pitch comes straight from the flatground
+    // physics, scaled to this pop.
     const strike = smoothstep(tau / plan.popInRise);
-    let pop = strike * (trick ? (trick.flat.board.rot * POP_IN) / FLAT_POP : plan.popIn * (1 - smoothstep(tau / (0.3 * FLIP_T))));
+    let pop = strike * (trick ? (trick.flat.board.rot * POP_IN) / FLAT_POP : plan.popIn * (1 - smoothstep(tau / POP_IN_LEVEL)));
     // A scoop drives the tail all the way down to the snap, whatever the trick's own
     // pitch has eased to by then, and hands over to it once the tail has struck.
     if (scoop && trick) {

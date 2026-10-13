@@ -1,6 +1,6 @@
 import type { SkateStyle } from '../types';
 import { tailFirst, type RiderMechanics } from './stance';
-import { FALL_T, GROUND, ROLL_IN, X0, catchFraction, computeFrame, flightTime } from './trick';
+import { FALL_T, GROUND, POP_RISE, ROLL_IN, X0, catchFraction, computeFrame, flightTime } from './trick';
 import { GRAVITY } from '../units';
 import { deckTopY } from '../board/board';
 import { capsuleIntersectsBoard } from '../board/boardCollision';
@@ -45,7 +45,7 @@ import {
   type V3,
 } from '../math';
 import { kneeBetween, mapUpper, shiftRig, tipRig, turnRig, twistUpper } from './dynamics';
-import { FLICK_STYLE_REACH, POP_RISE, SETUP_HANG, SETUP_RAMP, measureTuck, solveRig, tuckAt, type Tuck, type TuckTrack } from './rig';
+import { FLICK_STYLE_REACH, SETUP_HANG, SETUP_RAMP, measureTuck, solveRig, tuckAt, type Tuck, type TuckTrack } from './rig';
 import { soleClearance } from './boardClearance';
 import {
   ANKLE_LIFT,

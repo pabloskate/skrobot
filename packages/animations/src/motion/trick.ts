@@ -1,4 +1,5 @@
 import type { SkateStyle, Trick } from '../types';
+import { GRAVITY } from '../units';
 import { DEFAULT_SKATE_STYLE, resolveSkateStyle } from './style';
 
 /**
@@ -214,39 +215,65 @@ const SWITCH_ARM_SPREAD = 0.28;
 // Extra sky above the viewBox so the taller pop doesn't clip the skater's head.
 const SKY_PAD = 64;
 
-/** Pop height (world units, at popHeight 1): a bigger pop buys the spin more hang time. */
-const JUMP = 165;
 /**
- * The knee tuck at mid-flight: how much further the board comes up toward
- * the hips. Glued tricks pull the board all the way up; flips and shuvs
- * tuck less.
+ * The pop. The hips (near enough the body's center of mass) fly a ballistic
+ * arc under gravity: a neutral pop hangs POP_FLIGHT, which lifts them about
+ * 31 inches and the board about three feet. The board's height is a
+ * max-effort ollie's (0.88 m in Heinen et al.'s model, Sports Engineering
+ * 2024), but there the body rises 0.27 m and hangs under half a second; this
+ * hang is longer, set by eye so the pop and the trick read. A robot's pop
+ * style scales the height, and the hang time goes as its root: a lower pop
+ * is a shorter hop, and a quicker one.
+ */
+const POP_FLIGHT = 0.8;
+const HIP_RISE = (GRAVITY * POP_FLIGHT ** 2) / 8;
+/**
+ * The knee tuck at mid-flight: how much further the board comes up than the
+ * hips, toward them. Glued tricks pull the board all the way up; flips and
+ * shuvs tuck less.
  */
 const TUCK_GLUED = 17;
 const TUCK_FREE = 12;
 
+/** Seconds the tail strike takes to tip the board up to its pop angle. */
+const POP_RISE = 0.1;
 /**
- * Global speed trim: every phase is stretched by this so pops, spins and
- * falls read a touch slower than baseline (a lower effective gravity and
- * angular speed, keeping each motion's shape).
+ * Share of the flight by which the front foot, dragging up the grip, has
+ * levelled the board: the top of the hop. Until then the board climbs with
+ * the popped end low and the other end up, so which end popped reads. A late
+ * trick levels sooner, to hold the board flat before it turns.
+ */
+const POP_LEVEL = 0.5;
+const LATE_LEVEL = 0.3;
+/**
+ * How much of a pop's pitch is left `p` of the way through a flight of
+ * `flight` seconds: all of it through the tail strike, then less as the
+ * front foot levels the board, none by its level share of the flight.
+ */
+const popLeft = (spec: Spec, p: number, flight: number) => {
+  const level = spec.late ? LATE_LEVEL : POP_LEVEL;
+  const struck = Math.min(POP_RISE / flight, level / 2);
+  return 1 - smoothstep(clamp01((p - struck) / (level - struck)));
+};
+
+/** How high (world units) a style's pop lifts the hips. */
+const popRise = (style: Readonly<Pick<SkateStyle, 'popHeight'>>) => HIP_RISE * style.popHeight;
+/** Seconds a style's pop is in the air: the hips up `popRise` and back down under gravity. */
+const flightTime = (style: Readonly<Pick<SkateStyle, 'popHeight'>>) => Math.sqrt((8 * popRise(style)) / GRAVITY);
+/** A trick's knee tuck at mid-flight. */
+const popTuck = (spec: Spec) => (boardGlued(spec) ? TUCK_GLUED : TUCK_FREE);
+/** How high the board's pop arc peaks over the ground: the hips' rise and the tuck bringing the board up to them. */
+const boardRise = (spec: Spec, style: Readonly<Pick<SkateStyle, 'popHeight'>>) => popRise(style) + popTuck(spec);
+
+/**
+ * Global speed trim: the roll-in, the landing and the falls are stretched by
+ * this so they read a touch slower than baseline. The flight isn't: gravity
+ * sets it.
  */
 const SPEED_SCALE = 1.12;
 const ROLL_IN = 0.5 * SPEED_SCALE;
-/**
- * The flight: a 130-unit pop flew for 0.75 s, and air time goes as the root
- * of the height. Every style flies the same flight; its popHeight sets how
- * high the board goes in it.
- */
-const FLIP_T = 0.75 * Math.sqrt(JUMP / 130) * SPEED_SCALE;
-
-/** How high (world units) a style's pop lifts the board. */
-const popRise = (style: Readonly<Pick<SkateStyle, 'popHeight'>>) => JUMP * style.popHeight;
-/** Seconds a style's pop is in the air (FLIP_T for every style). */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const flightTime = (_style?: Readonly<Pick<SkateStyle, 'popHeight'>>) => FLIP_T;
-/** A trick's knee tuck at mid-flight. */
-const popTuck = (spec: Spec) => (boardGlued(spec) ? TUCK_GLUED : TUCK_FREE);
-/** How high the board's pop arc peaks over the ground. */
-const boardRise = (_spec: Spec, style: Readonly<Pick<SkateStyle, 'popHeight'>>) => popRise(style);
+/** The neutral pop's flight; a style's own is `flightTime(style)`. */
+const FLIP_T = flightTime(DEFAULT_SKATE_STYLE);
 
 /** Share of the flight by which a robot's rotation is caught: 0.85 at neutral speed, never after touchdown. */
 const catchFraction = (style: Readonly<SkateStyle>) => Math.min(1, 0.85 / style.rotationSpeed);
@@ -715,9 +742,9 @@ function computeFrame(
       // Late tricks: board stays flat after the pop (no wobble). Shuvits
       // add a scoop dip as the back foot whips the tail around mid-flight;
       // late flips skip the dip — the flip itself comes from sy + pitch.
-      // smoothstep (zero slope at both ends) instead of a plain quadratic so
-      // the decay settles into the flat hold instead of arriving at speed.
-      boardRot = p < 0.3 ? popAngle * (1 - smoothstep(clamp01(p / 0.3))) : 0;
+      // The pop levels sooner (popLeft's LATE_LEVEL) and settles into the
+      // flat hold with zero slope instead of arriving at speed.
+      boardRot = popAngle * popLeft(spec, p, flipT);
       if (spec.yaw) {
         const scoopPhase = rawSpinP;
         const dipEase = Math.sin(clamp01(scoopPhase / 0.2) * Math.PI);
@@ -733,14 +760,14 @@ function computeFrame(
       // latest (a counter shuv's comes early).
       const fade = Math.min(TILT_POP_FADE, caughtAt);
       boardRot = popAngle * (1 - clamp01(p / fade)) ** 2;
-    } else if (p < 0.3) {
-      // smoothstep (zero slope at both ends) instead of a plain quadratic so
-      // the pop decay arrives at the wobble with zero velocity, not at speed.
-      boardRot = popAngle * (1 - smoothstep(clamp01(p / 0.3)));
+    } else if (p < POP_LEVEL) {
+      // The pop's pitch, held through the strike and levelled by the top of
+      // the hop (popLeft), arriving at the wobble with zero velocity.
+      boardRot = popAngle * popLeft(spec, p, flipT);
     } else {
       // Idle flight wobble, faded in from the pop-decay's zero so the handoff
       // doesn't jump straight to full amplitude mid-swing.
-      const wobbleP = clamp01((p - 0.3) / 0.7);
+      const wobbleP = clamp01((p - POP_LEVEL) / (1 - POP_LEVEL));
       const wobbleFade = smoothstep(Math.min(1, wobbleP / 0.25));
       boardRot = Math.sin(wobbleP * Math.PI * 2) * 4 * wobbleFade;
     }
@@ -1105,7 +1132,9 @@ export {
   SKY_PAD,
   FOOT_Y,
   LIFT,
-  JUMP,
+  HIP_RISE,
+  POP_RISE,
+  popLeft,
   popRise,
   flightTime,
   popTuck,
