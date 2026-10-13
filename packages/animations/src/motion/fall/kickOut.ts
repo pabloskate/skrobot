@@ -915,8 +915,9 @@ function shoeAt(plan: KickOutPlan, run: RunOut, i: 0 | 1, t: number): ShoePose {
   const s = (t - last.off) / (next.on - last.off);
   const k = minJerk(s);
   const leg = plan.setup.body.thigh + plan.setup.body.shin;
-  // A quick step swings low: it's lifted no higher than it has time for.
-  const quick = Math.min(1, (next.on - last.off) / (0.5 * Math.sqrt(leg / plan.setup.gravity)));
+  // A quick step swings low: it's lifted no higher than it has time for, by the square of that time, as far as the leg
+  // can accelerate it up and back down.
+  const quick = Math.min(1, (next.on - last.off) / (0.5 * Math.sqrt(leg / plan.setup.gravity))) ** 2;
   const liftAt = (u: number, v: number) => leg * (0.1 + 0.08 * Math.min(1, v / 300)) * quick * Math.sin(Math.PI * Math.min(1, u * 1.15)) ** 1.3;
   const speed = (u: number) => {
     const v = runOutAt(run, last.off + u * (next.on - last.off)).velocity;

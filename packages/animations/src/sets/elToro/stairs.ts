@@ -1,10 +1,11 @@
 import { FALL_T, LAND_T, ROLL_IN, flightTime, type AttemptTimeline } from '../../motion/trick';
 import { resolveSkateStyle } from '../../motion/style';
-import type { SkateStyle } from '../../types';
+import type { SkateStyle, Stance } from '../../types';
 import type { Handrail } from '../../motion/grind';
 import { rad, smoothstep } from '../../math';
 import { WHEEL_X } from '../../board/board';
-import { FOOT, GRAVITY } from '../../units';
+import { TIP_X } from '../../board/deck';
+import { FOOT, GRAVITY, INCH } from '../../units';
 import { SET_FOOT } from '../setScale';
 
 /**
@@ -48,6 +49,15 @@ const POP_RISE = 2 * FOOT;
 const RUN_UP = 0.6;
 /** Board center behind the lip when the tail strikes. */
 const POP_BEHIND = 26;
+/**
+ * How far short of the edge a nollie's nose strikes: the nose leads, and it
+ * needs the top landing under it to pop off, so the rider pops this much
+ * before it reaches the edge, not over the drop.
+ */
+const POP_SHORT = 2 * INCH;
+
+/** Whether a stance pops off the nose while it leads to the edge: nollie. */
+export const popsFromNose = (stance: Stance) => stance === 'nollie';
 /** Board center past the bottom step at touchdown. */
 const LAND_PAST = 4 * SET_FOOT;
 
@@ -63,8 +73,10 @@ export interface StairPlan {
   rolloutLift: readonly number[] | null;
   /** Touchdowns after rolling off an edge: clock time, and the speed the deck meets the ground with (square to it). */
   ledges: readonly { t: number; impact: number }[];
-  /** Clock time of the pop (the tail striking at the lip) and of touchdown. */
+  /** Clock time of the pop (the tail, or a nollie's nose, striking short of the lip) and of touchdown. */
   pop: number;
+  /** Where the board's middle is at the pop, down the stairs and across them. */
+  takeoff: { x: number; z: number };
   land: number;
   /** Seconds in the air. */
   flight: number;
@@ -138,20 +150,39 @@ const ROLLOUT_HZ = 240;
 /** How far the ground has to fall away under a rolling deck in one step for it to leave the surface. */
 const LEDGE = 0.5;
 
-export function planStairs(style: Pick<SkateStyle, 'popHeight'>, landed: boolean, terrain: DropTerrain): StairPlan {
+/**
+ * Where the board's middle is at the pop. A tail pop is the set's takeoff
+ * (or POP_BEHIND the lip), its leading wheels at the edge. A nollie strikes
+ * its leading nose on the takeoff's ground: the takeoff moves back along the
+ * route until the nose is POP_SHORT of where the ground falls away.
+ */
+function takeoffFor(terrain: DropTerrain, stance: Stance): { x: number; z: number } {
+  const from = { x: terrain.entry?.x ?? -POP_BEHIND, z: terrain.entry?.z ?? terrain.laneZ };
+  if (!popsFromNose(stance)) return from;
+  const yaw = rad(terrain.entry?.yaw ?? 0);
+  const along = (s: number) => terrainSurface(terrain, from.x + s * Math.cos(yaw), from.z + s * Math.sin(yaw));
+  const reach = TIP_X + POP_SHORT;
+  let ahead = 0;
+  while (ahead < reach && along(Math.min(reach, ahead + 1)) > -LEDGE) ahead = Math.min(reach, ahead + 1);
+  const back = reach - ahead;
+  return { x: from.x - back * Math.cos(yaw), z: from.z - back * Math.sin(yaw) };
+}
+
+export function planStairs(style: Pick<SkateStyle, 'popHeight'>, landed: boolean, terrain: DropTerrain, stance: Stance = 'regular'): StairPlan {
   const rise = Math.sqrt(2 * GRAVITY * POP_RISE * Math.max(style.popHeight, terrain.pop ?? 0));
   const landingX = terrain.run + terrain.landPast;
   const drop = -terrain.ground(landingX);
   const flight = (rise + Math.sqrt(rise * rise + 2 * GRAVITY * drop)) / GRAVITY;
+  const takeoff = takeoffFor(terrain, stance);
   const velocity = {
-    x: (landingX - (terrain.entry?.x ?? -POP_BEHIND)) / flight,
-    z: (terrain.laneZ - (terrain.entry?.z ?? terrain.laneZ)) / flight,
+    x: (landingX - takeoff.x) / flight,
+    z: (terrain.laneZ - takeoff.z) / flight,
   };
   const speed = Math.hypot(velocity.x, velocity.z);
   const dropIn = terrain.dropIn ? rollDown(terrain, terrain.dropIn, speed) : null;
   // Down the roll-in, then on along the flat at speed to the pop.
   const pop = dropIn
-    ? dropIn.t[dropIn.t.length - 1] + (-POP_BEHIND - dropIn.x[dropIn.x.length - 1]) / speed
+    ? dropIn.t[dropIn.t.length - 1] + (takeoff.x - dropIn.x[dropIn.x.length - 1]) / speed
     : (terrain.runUp ?? RUN_UP) + ROLL_IN;
   const land = pop + flight;
   let rollout: number[] | null = null;
@@ -208,6 +239,7 @@ export function planStairs(style: Pick<SkateStyle, 'popHeight'>, landed: boolean
     rolloutLift,
     ledges,
     pop,
+    takeoff,
     land,
     flight,
     clockFlight: flightTime(style),
@@ -399,8 +431,8 @@ export function landingJolt(plan: StairPlan): number {
 export function stairDistance(plan: StairPlan, t: number, streetDist: number): number {
   const entry = plan.terrain.entry;
   if (plan.dropIn && t < dropInEnd(plan)) return alongDropIn(plan.dropIn, t, plan.dropIn.x);
-  if (t <= plan.pop) return (entry?.x ?? -POP_BEHIND) + plan.speed * Math.cos(rad(entry?.yaw ?? 0)) * (t - plan.pop);
-  if (t < plan.land) return (entry?.x ?? -POP_BEHIND) + plan.velocity.x * (t - plan.pop);
+  if (t <= plan.pop) return plan.takeoff.x + plan.speed * Math.cos(rad(entry?.yaw ?? 0)) * (t - plan.pop);
+  if (t < plan.land) return plan.takeoff.x + plan.velocity.x * (t - plan.pop);
   if (plan.rollout) return alongRollout(plan.rollout, plan, t);
   return plan.terrain.run + plan.terrain.landPast + rideAway(plan, rolledAway(plan, streetDist)).x;
 }
@@ -482,8 +514,8 @@ export function stairTrack(plan: StairPlan, t: number, streetDist: number) {
     return { x, z: laneZ + (away?.z ?? 0), yaw: (away?.yaw ?? 0) + carving, travel: -POP_BEHIND + plan.speed * plan.flight + s };
   }
   const z = !entry ? laneZ
-    : t <= plan.pop ? entry.z + plan.speed * Math.sin(rad(entry.yaw)) * (t - plan.pop)
-    : entry.z + plan.velocity.z * (t - plan.pop);
+    : t <= plan.pop ? plan.takeoff.z + plan.speed * Math.sin(rad(entry.yaw)) * (t - plan.pop)
+    : plan.takeoff.z + plan.velocity.z * (t - plan.pop);
   const yaw = !entry ? 0 : entry.hold ? entry.yaw : entry.yaw * (1 - entryTurn(plan, t));
   return { x, z, yaw, travel: runUpTravel(plan, t) };
 }
@@ -539,9 +571,9 @@ export const EL_TORO_RAIL: Handrail = {
 /** A drop's moments; the catch is where the flatground trick is caught, on the stretched clock. */
 export type StairTimeline = AttemptTimeline;
 
-/** The moments of a trick down a drop (stage units), for a robot's style (its pop sets the hang time). */
-export function stairTimeline(style: SkateStyle | undefined, landed: boolean, terrain: DropTerrain): StairTimeline {
-  const plan = planStairs(resolveSkateStyle(style), landed, terrain);
+/** The moments of a trick down a drop (stage units), for a robot's style (its pop sets the hang time) and the trick's stance (which end it pops). */
+export function stairTimeline(style: SkateStyle | undefined, landed: boolean, terrain: DropTerrain, stance: Stance = 'regular'): StairTimeline {
+  const plan = planStairs(resolveSkateStyle(style), landed, terrain, stance);
   return {
     pop: plan.pop,
     peak: plan.pop + plan.rise / GRAVITY,

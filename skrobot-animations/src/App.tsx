@@ -293,7 +293,7 @@ export default function App() {
     [currentTrick, discipline, fallVariant, landed, selectedRiderStance, skateStyle, stageSet],
   );
   // Every landmark's timeline follows its own drop and landing geometry; flat ground, the robot's own pop.
-  const attempt = setTimeline(discipline === 'flatground' ? stageSet : 'plaza', skateStyle, landed !== false);
+  const attempt = setTimeline(discipline === 'flatground' ? stageSet : 'plaza', skateStyle, landed !== false, 'stairs', currentTrick?.stance);
   const duration = grind?.end ?? attempt.end;
   const phases = grind
     ? [
