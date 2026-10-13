@@ -22,7 +22,8 @@ Live API) for playing with earbuds at the skatepark.
 | `npm run dev` | Next dev server (Cloudflare bindings emulated via `initOpenNextCloudflareForDev`) |
 | `npm run build` | `next build` — typecheck + production build (catches type errors, not logic bugs) |
 | `npm test` | Vitest unit tests — the behavioral check for the rules engine, RPS, trick resolver, and animation motion |
-| `npm run test:changed` | Only the tests your uncommitted changes reach — the fast loop; the animation sweeps take over a minute in full |
+| `npm run test:changed` | Only the tests your uncommitted changes reach |
+| `npm run test:quick` | Every test with the animation sweeps thinned to a sample of their cases (`ANIMATION_SWEEP=quick`) — the fast loop, about 15 s; `npm test` sweeps in full in about a minute and a half |
 | `npm run lint` | ESLint (flat config) — also enforces the architecture import boundaries below |
 | `npm run typecheck:web` | Full root TypeScript check, including tests omitted by `next build` |
 | `npm run typecheck:mobile` | Typecheck the Expo companion app |
@@ -121,7 +122,7 @@ the exact graph test in `src/architecture.test.ts`.
 - **Animation changes:** edit `packages/animations` (folder map and "where to
   make common changes" in the Animation Source Map of `docs/ARCHITECTURE.md`);
   keep playground-only controls and fixture data in `skrobot-animations`.
-  Iterate with `npm run test:changed` (only tests your changes reach), then
+  Iterate with `npm run test:quick` (every suite, sweeps thinned), then
   run `npm test`. For motion changes, watch the trick in `/explore` from a
   few angles and both rider stances, or compare the playground Contact sheet
   before and after (`skrobot-animations/AGENTS.md`).

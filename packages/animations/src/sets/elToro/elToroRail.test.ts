@@ -17,6 +17,7 @@ import type { RailChoice } from '../sets';
 import * as layout from './elToroLayout';
 import { SET_SCALE, stageHandrail } from '../setScale';
 import { FOOT } from '../../units';
+import { sweep, sweepHz } from '../../testing';
 
 /**
  * Grinds down El Toro's center handrail. These pin what a skater would
@@ -77,6 +78,7 @@ function* everyGrind() {
   }
   for (const base of COMBOS) for (const rider of RIDERS) yield { base, rider, stance: 'regular' as Stance };
 }
+const EVERY_GRIND = sweep([...everyGrind()]);
 
 /** Board-local points that must never pass through the rail: the deck, its underside, the hangers, and the wheels. */
 const BOARD: V3[] = (() => {
@@ -150,10 +152,10 @@ describe('El Toro handrail', () => {
   it('never puts the board through the rail, and seats the riding part on it the whole way down', () => {
     const through: string[] = [];
     const loose: string[] = [];
-    for (const { base, rider, stance } of everyGrind()) {
+    for (const { base, rider, stance } of EVERY_GRIND) {
       const stage = plan(base, { stance, rider });
       const g = grindOf(stage);
-      for (let t = g.pop - 0.1; t < g.land; t += 1 / 60) {
+      for (let t = g.pop - 0.1; t < g.land; t += 1 / sweepHz(60)) {
         const frame = stageFrame(stage, t, 1);
         let nearest = Infinity;
         for (const local of BOARD) {
@@ -171,11 +173,11 @@ describe('El Toro handrail', () => {
 
   it('keeps the board out of the steps, and lands it on the bottom landing past the last one', () => {
     const problems: string[] = [];
-    for (const { base, rider, stance } of everyGrind()) {
+    for (const { base, rider, stance } of EVERY_GRIND) {
       if (stance === 'switch' || stance === 'nollie') continue;
       const stage = plan(base, { stance, rider });
       const g = grindOf(stage);
-      for (const frame of frames(stage, 1 / 40)) {
+      for (const frame of frames(stage, 1 / sweepHz(40))) {
         for (const local of BOARD) {
           const p = frame.rig.board.point(local);
           const clear = ASPHALT - p.y - stairGround(frame.scroll + p.x - X0);
@@ -199,7 +201,7 @@ describe('El Toro handrail', () => {
     const hits: string[] = [];
     for (const skater of ['robot', 'realistic'] as const) {
       const [hipR, kneeR, ankleR] = LEGS[skater];
-      for (const grind of GRIND_BASES) {
+      for (const grind of sweep(GRIND_BASES, 5)) {
         for (const side of ['Frontside', 'Backside']) {
           for (const into of ['', 'Kickflip into ', 'Heelflip into ']) {
             for (const rider of RIDERS) {
@@ -210,7 +212,7 @@ describe('El Toro handrail', () => {
               const g = grindOf(stage);
               let worst = Infinity;
               let when = 0;
-              for (let t = g.pop - 0.1; t <= g.lockAt; t += 1 / 60) {
+              for (let t = g.pop - 0.1; t <= g.lockAt; t += 1 / sweepHz(60)) {
                 const frame = stageFrame(stage, t, 1);
                 for (const leg of frame.rig.legs) {
                   for (let k = 0; k <= 6; k++) {
@@ -286,7 +288,7 @@ describe('El Toro handrail', () => {
     };
     const stretched: string[] = [];
     const rough: string[] = [];
-    for (const base of GRIND_BASES) {
+    for (const base of sweep(GRIND_BASES, 5)) {
       for (const fall of [null, 'slam', 'bail', 'shank'] as const) {
         const name = `Backside ${base}`;
         const label = `${base} ${fall ?? 'landed'}`;
@@ -356,7 +358,7 @@ describe('El Toro side rails', () => {
 
   it('rolls in on the steps toward the side rail, rides it, and rides away in line with it, for every grind', () => {
     const wrong: string[] = [];
-    for (const { base, rider, stance } of everyGrind()) {
+    for (const { base, rider, stance } of EVERY_GRIND) {
       const stage = plan(base, { rider, stance, rail: 'side' });
       const grind = grindOf(stage);
       const label = `${base} ${stance} ${rider} (${stage.rail!.line})`;
@@ -379,11 +381,11 @@ describe('El Toro side rails', () => {
     // The wall stands a little outside the right rail, up the stairs and a little past the bottom step.
     let deepest = -Infinity;
     let where = '';
-    for (const { base, rider, stance } of everyGrind()) {
+    for (const { base, rider, stance } of EVERY_GRIND) {
       const stage = plan(base, { rider, stance, rail: 'side' });
       if (stage.rail!.line !== 'right') continue;
       const grind = grindOf(stage);
-      for (let t = 0; t <= stage.end; t += 1 / 60) {
+      for (let t = 0; t <= stage.end; t += 1 / sweepHz(60)) {
         const frame = stageFrame(stage, t, 1);
         const { rig } = frame;
         const pts: V3[] = [

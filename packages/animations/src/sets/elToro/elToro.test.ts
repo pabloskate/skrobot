@@ -15,6 +15,7 @@ import { ElToro3D } from './elToro3d';
 import { planStage, stageFrame, type StageFrame, type StagePlan } from '../../stage/stage';
 import { ASPHALT, stageView } from '../../camera/view';
 import { X0 } from '../../motion/trick';
+import { sweep, sweepHz } from '../../testing';
 
 /**
  * El Toro's 20 stair: flatground tricks go down it. These pin the set's
@@ -43,9 +44,9 @@ const plan = (base: string, options: { stance?: Stance; rider?: RiderStance; pop
     set: options.set ?? 'el-toro',
   });
 };
-const frames = (stage: StagePlan, from = 0, to = stage.end) => {
+const frames = (stage: StagePlan, from = 0, to = stage.end, hz = 60) => {
   const out: StageFrame[] = [];
-  for (let t = from; t <= to + 1e-9; t += 1 / 60) out.push(stageFrame(stage, t, 1));
+  for (let t = from; t <= to + 1e-9; t += 1 / hz) out.push(stageFrame(stage, t, 1));
   return out;
 };
 /** Distance down the stairs of a world point on a frame. */
@@ -101,11 +102,11 @@ describe('El Toro', () => {
   it('clears every step and lands every trick past the bottom one, in every stance, whatever the pop', () => {
     const problems: string[] = [];
     for (const pop of POPS) {
-      for (const base of BASES) {
+      for (const base of sweep(BASES)) {
         for (const stance of STANCES) for (const rider of RIDERS) {
           const stage = plan(base, { stance, rider, pop });
           const stairs = stage.stairs!;
-          for (const frame of frames(stage, stairs.pop + 0.05, stairs.land - 1 / 60)) {
+          for (const frame of frames(stage, stairs.pop + 0.05, stairs.land - 1 / 60, sweepHz(60))) {
             for (const local of BOARD_POINTS) {
               const p = frame.rig.board.point(local);
               const clear = height(p) - TERRAIN.ground(along(frame, p));
@@ -250,7 +251,7 @@ describe('El Toro', () => {
     for (const base of ['Ollie', 'Kickflip', 'Frontside 360']) {
       const stage = plan(base);
       for (const zoom of [1, 1.6]) {
-        for (const frame of frames(stage)) {
+        for (const frame of frames(stage, 0, stage.end, sweepHz(60))) {
           const view = stageView(frame.lift, DEFAULT_SCENE_CAMERA, zoom);
           const { x, y, width, height: h } = view.box;
           // Zoomed in, the frame settles on the legs and board (on flatground too, the head pops out of it).

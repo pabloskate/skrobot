@@ -4,6 +4,7 @@ import { kickOutPlan } from '../../stage/kickOutFrame';
 import { planStage, stageFrame, type StagePlan } from '../../stage/stage';
 import { STAGE_SETS, setTerrain } from '../../sets/sets';
 import { resolveSkateStyle } from '../style';
+import { sweep } from '../../testing';
 import type { V3 } from '../../math';
 import { PERSON_SCALE, moveFrame } from '../skeleton';
 import { hipsAt, kickOutAt, type KickOutPlan } from './kickOut';
@@ -21,6 +22,10 @@ import type { Footfall } from './runOut';
  * go, no limb that pops, no spin no one could make, feet that stay put while
  * they're down, a board that stays out of the body, a run that slows on the
  * level, and no seam where the rider's own motion takes over from the trick's.
+ *
+ * Each case is its own tests, planned the first time one of them runs, so
+ * `-t` plays just the one (`-t "realistic lyon-25:stairs fakie"`). The quick
+ * tier plays every spot once, the riders and stances taking turns.
  */
 
 const H = 1 / 120;
@@ -47,27 +52,45 @@ const mid = (a: V3, b: V3): V3 => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: 
 
 interface Case {
   label: string;
+  skater: 'robot' | 'realistic';
+  set: string;
+  obstacle: string;
+  stance: 'regular' | 'fakie';
+}
+
+interface Planned {
   stage: StagePlan;
   plan: KickOutPlan;
 }
 
+/**
+ * The flatground plaza and every spot's drop, each played by both riders rolling up (regular) and backward (fakie). Spot
+ * by spot, each spot's four starting one further round than the last's: the quick tier's every fourth plays each spot
+ * once, with the riders and stances in turn.
+ */
 function cases(): Case[] {
-  const out: Case[] = [];
-  for (const skater of ['robot', 'realistic'] as const) {
-    for (const set of STAGE_SETS) {
-      for (const obstacle of set.obstacles?.map((o) => o.id) ?? ['stairs']) {
-        // The flatground plaza, and every spot's drop.
-        if (set.id !== 'plaza' && !setTerrain(set.id, obstacle as never)) continue;
-        for (const stance of ['regular', 'fakie'] as const) {
-          const stage = planStage({ id: 'Kickflip', name: 'Kickflip', base: 'Kickflip', stance }, {
-            landed: false, riderStance: 'regular', style, fall: 'kickout', shankProgress: 0.6, skater, set: set.id as never, obstacle: obstacle as never,
-          });
-          out.push({ label: `${skater} ${set.id}:${obstacle} ${stance}`, stage, plan: kickOutPlan(stage) });
-        }
-      }
-    }
+  const ways = [['realistic', 'fakie'], ['robot', 'regular'], ['robot', 'fakie'], ['realistic', 'regular']] as const;
+  const spots = STAGE_SETS.flatMap((set) => (set.obstacles?.map((o) => o.id) ?? ['stairs'])
+    .filter((obstacle) => set.id === 'plaza' || setTerrain(set.id, obstacle as never))
+    .map((obstacle) => ({ set: set.id as string, obstacle: obstacle as string })));
+  return spots.flatMap(({ set, obstacle }, i) => ways.map((_, j) => {
+    const [skater, stance] = ways[(i + j) % ways.length];
+    return { label: `${skater} ${set}:${obstacle} ${stance}`, skater, set, obstacle, stance };
+  }));
+}
+
+/** A case's stage and kick-out, planned the first time it's asked for. */
+const planned = new Map<Case, Planned>();
+function planOf(c: Case): Planned {
+  let known = planned.get(c);
+  if (!known) {
+    const stage = planStage({ id: 'Kickflip', name: 'Kickflip', base: 'Kickflip', stance: c.stance }, {
+      landed: false, riderStance: 'regular', style, fall: 'kickout', shankProgress: 0.6, skater: c.skater, set: c.set as never, obstacle: c.obstacle as never,
+    });
+    known = { stage, plan: kickOutPlan(stage) };
+    planned.set(c, known);
   }
-  return out;
+  return known;
 }
 
 interface Measures {
@@ -131,7 +154,7 @@ function drawn(stage: StagePlan, t: number): Record<string, number> {
   return o;
 }
 
-function measure({ stage, plan }: Case): Measures {
+function measure({ stage, plan }: Planned): Measures {
   const g = plan.setup.ground;
   const k = plan.setup.body.scale;
   const above = (p: V3) => g(p.x, p.z) - p.y;
@@ -228,57 +251,69 @@ function measure({ stage, plan }: Case): Measures {
   return m;
 }
 
-describe('kick-out', () => {
-  const all = cases().map((c) => ({ c, m: measure(c) }));
-  /** The cases where `bad` holds. */
-  const failing = (bad: (m: Measures) => unknown) => all.filter(({ m }) => bad(m)).map(({ c }) => c.label);
+/** A case's measures, taken the first time a test asks for them. */
+const measured = new Map<Case, Measures>();
+const measuresOf = (c: Case) => measured.get(c) ?? measured.set(c, measure(planOf(c))).get(c)!;
 
+describe('kick-out', () => {
+  const all = cases();
+  const played = sweep(all, 4);
+
+  for (const c of played) {
+    describe(c.label, () => {
+      /** The case, where `bad` holds of its measures. */
+      const failing = (bad: (m: Measures, plan: KickOutPlan) => unknown) => (bad(measuresOf(c), planOf(c).plan) ? [c.label] : []);
+
+      it('keeps every bone its length, and the hips, knees and ankles above the ground', () => {
+        expect(failing((m) => m.stretch > 0.005)).toEqual([]);
+        expect(failing((m) => m.hipsLow <= 0 || m.kneesLow <= 0 || m.anklesLow <= 0)).toEqual([]);
+      });
+
+      it('keeps the elbows and forearms off the ground (grazing it at most)', () => {
+        expect(failing((m) => m.elbowsLow < -1.5)).toEqual([]);
+      });
+
+      it('moves the hips without a jolt, on its feet and rolling', () => {
+        expect(failing((m) => m.jerkOnFeet > 2)).toEqual([]);
+        expect(failing((m) => m.jerkRolling > 6)).toEqual([]);
+      });
+
+      it('moves no limb with a pop', () => {
+        expect(failing((m) => m.pop > POP)).toEqual([]);
+      });
+
+      it('turns no faster than a body can', () => {
+        // A grown-up's 32 rad/s; a smaller body's quicker by the root of how much smaller (rates go as √(gravity / size)).
+        expect(failing((m, plan) => m.turn > 32 * Math.sqrt(PERSON_SCALE / plan.setup.body.scale))).toEqual([]);
+      });
+
+      it('keeps a planted foot where it is', () => {
+        expect(failing((m) => m.slip > 6)).toEqual([]);
+      });
+
+      it('keeps the legs out of the board, but for a sole grazing it a frame or two', () => {
+        expect(failing((m) => m.through.length > 2 || m.through.some((w) => !w.endsWith('s')))).toEqual([]);
+      });
+
+      it('keeps the board out of the arms, trunk, head and thighs', () => {
+        expect(failing((m) => m.inBody.length > 0)).toEqual([]);
+      });
+
+      it('only slows running on the level', () => {
+        expect(failing((m) => m.levelGain != null && m.levelGain > 1)).toEqual([]);
+      });
+
+      it('takes over from the trick without a seam', () => {
+        expect(failing((m) => m.seams.length > 0)).toEqual([]);
+      });
+    });
+  }
+
+  // Last, so it reads the plans the cases above have made.
   it('plays at every drop, both riders, both ways, and rolls off the big ones', () => {
     expect(all.length).toBeGreaterThanOrEqual(40);
-    expect(all.filter(({ c }) => c.plan.roll).length).toBeGreaterThan(0);
-    expect(all.filter(({ c }) => !c.plan.roll).length).toBeGreaterThan(0);
-  });
-
-  it('keeps every bone its length, and the hips, knees and ankles above the ground', () => {
-    expect(failing((m) => m.stretch > 0.005)).toEqual([]);
-    expect(failing((m) => m.hipsLow <= 0 || m.kneesLow <= 0 || m.anklesLow <= 0)).toEqual([]);
-  });
-
-  it('keeps the elbows and forearms off the ground (grazing it at most)', () => {
-    expect(failing((m) => m.elbowsLow < -1.5)).toEqual([]);
-  });
-
-  it('moves the hips without a jolt, on its feet and rolling', () => {
-    expect(failing((m) => m.jerkOnFeet > 2)).toEqual([]);
-    expect(failing((m) => m.jerkRolling > 6)).toEqual([]);
-  });
-
-  it('moves no limb with a pop', () => {
-    expect(failing((m) => m.pop > POP)).toEqual([]);
-  });
-
-  it('turns no faster than a body can', () => {
-    // A grown-up's 32 rad/s; a smaller body's quicker by the root of how much smaller (rates go as √(gravity / size)).
-    expect(all.filter(({ c, m }) => m.turn > 32 * Math.sqrt(PERSON_SCALE / c.plan.setup.body.scale)).map(({ c }) => c.label)).toEqual([]);
-  });
-
-  it('keeps a planted foot where it is', () => {
-    expect(failing((m) => m.slip > 6)).toEqual([]);
-  });
-
-  it('keeps the legs out of the board, but for a sole grazing it a frame or two', () => {
-    expect(failing((m) => m.through.length > 2 || m.through.some((w) => !w.endsWith('s')))).toEqual([]);
-  });
-
-  it('keeps the board out of the arms, trunk, head and thighs', () => {
-    expect(failing((m) => m.inBody.length > 0)).toEqual([]);
-  });
-
-  it('only slows running on the level', () => {
-    expect(failing((m) => m.levelGain != null && m.levelGain > 1)).toEqual([]);
-  });
-
-  it('takes over from the trick without a seam', () => {
-    expect(failing((m) => m.seams.length > 0)).toEqual([]);
+    const plans = played.map((c) => planOf(c).plan);
+    expect(plans.filter((plan) => plan.roll).length).toBeGreaterThan(0);
+    expect(plans.filter((plan) => !plan.roll).length).toBeGreaterThan(0);
   });
 }, 300_000);

@@ -9,6 +9,7 @@ import type { RiderStance, Stance } from '../types';
 import { BOARD_WIDTH_SCALE } from '../board/boardDimensions';
 import { LEG_RADII, capsuleIntersectsBoard, shoeIntersectsBoard } from '../board/boardCollision';
 import { clearFeet } from '../board/footContact';
+import { exitEndsFor, joinGrindBase, joinGrindExit } from '../motion/grindDefinitions';
 import { onTheGround, planStage, stageFrame } from './stage';
 
 /**
@@ -75,8 +76,10 @@ describe('board and rider', () => {
       for (const rider of ['regular', 'goofy'] as RiderStance[]) {
         for (const trick of TRICKS) {
           for (const grind of GRINDS) {
-            for (const out of [false, true]) {
-              const base = out ? `${grind} ${trick} Out` : `${trick} into ${grind}`;
+            // Into the grind, and out of it off every end it can pop off ("… Nollie Kickflip Out" off the nose).
+            const names = [joinGrindBase(trick, grind), ...exitEndsFor(grind).map((end) => joinGrindExit(grind, trick, end))];
+            for (const [i, base] of names.entries()) {
+              const out = i > 0;
               const stage = planStage({ id: base, name: base, base, stance: 'regular' }, {
                 landed: true, riderStance: rider, style, fall: 'slam', shankProgress: 0.65, set,
               });

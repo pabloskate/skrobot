@@ -37,3 +37,23 @@ export function frameNumbers(frame: StageFrame): number[] {
 
 /** Whether every number in a stage frame is finite. */
 export const isFiniteFrame = (frame: StageFrame) => frameNumbers(frame).every(Number.isFinite);
+
+/**
+ * The quick tier (`npm run test:quick`, ANIMATION_SWEEP=quick): the motion
+ * sweeps thin out to a sample of their cases and frames, for a loop of
+ * seconds while iterating. `npm test` (and `npm run check`) sweeps in full.
+ */
+export const QUICK_SWEEP = process.env.ANIMATION_SWEEP === 'quick';
+
+/** Every case in full; in the quick tier every `stride`th one, starting with the first. */
+export const sweep = <T>(cases: readonly T[], stride = 3): readonly T[] =>
+  QUICK_SWEEP ? cases.filter((_, i) => i % stride === 0) : cases;
+
+/** Frames per second a sweep samples at: `full`, or a quarter of it (at least 15) in the quick tier. */
+export const sweepHz = (full: number) => (QUICK_SWEEP ? Math.max(15, full / 4) : full);
+
+/**
+ * A full sweep's time limit. Files run side by side, which can slow a sweep
+ * several times over on a busy machine, so the limit only catches a hang.
+ */
+export const SWEEP_TIMEOUT = 240_000;

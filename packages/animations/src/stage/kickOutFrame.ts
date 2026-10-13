@@ -4,6 +4,7 @@ import { cameraLift, fallSink } from '../camera/camera';
 import { ASPHALT } from '../camera/view';
 import { smoothstep, type V3 } from '../math';
 import { bodyDims } from '../motion/fall/body';
+import { boardAt, boardRigOf } from '../motion/fall/boardBody';
 import { hipsAt, kickOutAt, offLineRig, planKickOut, type KickOutPlan, type KickOutSetup } from '../motion/fall/kickOut';
 import { IDENTITY, type Quat } from '../motion/fall/rotation';
 import { travel } from '../motion/grind';
@@ -210,11 +211,11 @@ function ownFrame(stage: StagePlan, t: number, rate: number): StageFrame {
   const touchdown = plan.setup.touchdown;
 
   // The board's wheels turn as its track has them; the mark smears over a displayed frame.
-  const before = kickOutAt(plan, Math.max(plan.takeover, clock - rate / 60));
+  const wheelBefore = boardAt(plan.board, Math.max(plan.takeover, clock - rate / 60)).wheel;
 
   // Dust where the board comes down and where the first foot lands (or everywhere the rolling body hits), left where it was kicked up.
   const boardDown = plan.board.touchdown;
-  const boardSpot = kickOutAt(plan, boardDown).board.center;
+  const boardSpot = boardRigOf(boardAt(plan.board, boardDown)).center;
   const first = plan.run.footfalls[0];
   const puff = (from: number, p: V3, strength: number) => {
     const q = toFrame(p);
@@ -236,7 +237,7 @@ function ownFrame(stage: StagePlan, t: number, rate: number): StageFrame {
     t,
     rig,
     span: null,
-    wheels: { angle: at.wheel, sweep: at.wheel - before.wheel },
+    wheels: { angle: at.wheel, sweep: at.wheel - wheelBefore },
     expression: at.expression,
     gaze: toFrame(at.gaze),
     dust,

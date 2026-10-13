@@ -12,3 +12,9 @@ export const DECK_INCHES = 31;
 /** Stage units per inch and per foot. */
 export const INCH = 96 / DECK_INCHES;
 export const FOOT = 12 * INCH;
+/**
+ * Gravity, 9.8 m/s² (32.2 ft/s²) in stage units a second squared. Everything
+ * that flies falls at this: pops, hops onto and off a rail, drops down a
+ * set, a board kicked away.
+ */
+export const GRAVITY = 32.2 * FOOT;

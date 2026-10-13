@@ -85,9 +85,6 @@ const CLOSE_SWING = 0.6;
 const LAND_EASE = 0.5;
 /** Below about this speed (in √(gravity · leg)) the way the steps go eases from the body's to the run's: still, it has none. */
 const COURSE_EASE = 0.1;
-/** Up off both feet slow enough to stop over them, the rider has stood up this long after (seconds); and how far (in legs) past their soles that can be. */
-const STAND_UP_T = 0.3;
-const STAND_SLACK = 0.04;
 
 export interface Footfall {
   foot: 0 | 1;
@@ -136,9 +133,7 @@ export interface RunOutSetup {
    * takes out (the foot goes that far ahead of the hips: a landing pushes up
    * along the leg, so a foot far ahead of a hard landing stops the body dead).
    */
-  first?: { foot: 0 | 1; earliest: number; brake: number; heading: V3 };
-  /** Or both feet already down at the start (coming up out of a roll), the shoes' middles flat on the ground and the ways their toes point. */
-  planted?: { at: V3; heading: V3 }[];
+  first: { foot: 0 | 1; earliest: number; brake: number; heading: V3 };
   /** Where the hips face at a time (level unit vector): the rider turning to run. */
   facing: (t: number) => V3;
   /** Seconds to run. */
@@ -163,7 +158,6 @@ export function runOut(setup: RunOutSetup): RunOut {
   const dt = 1 / HZ;
   const footfalls: Footfall[] = [];
   const travel = level(setup.velocity);
-  const across = { x: -travel.z, y: 0, z: travel.x };
   const standHeight = ankleHeight + STAND_HEIGHT * leg;
   const runHeight = ankleHeight + RUN_HEIGHT * leg;
   const lowest = ankleHeight + SQUAT * leg;
@@ -335,9 +329,8 @@ export function runOut(setup: RunOutSetup): RunOut {
         v = { ...v, y: Math.max(v.y, 0) };
       }
     }
-    const floor = floorAt(next.t);
-    if (holding(next).length && ground(p.x, p.z) - p.y < floor) {
-      p = { ...p, y: ground(p.x, p.z) - floor };
+    if (holding(next).length && ground(p.x, p.z) - p.y < lowest) {
+      p = { ...p, y: ground(p.x, p.z) - lowest };
       v = { ...v, y: Math.min(v.y, 0) };
     }
     return { t: next.t, p, v };
@@ -433,27 +426,18 @@ export function runOut(setup: RunOutSetup): RunOut {
   const reaches = (l: { fall: Footfall; at0: State }) => heightOf(l.at0) <= ceiling(l.at0, l.fall);
 
   let s: State = { t: setup.start, p: setup.hips, v: setup.velocity };
-  // Coming up out of a crouch with both feet down, the legs can't be lower than they start, at first.
-  const startHeight = heightOf(s);
-  const floorAt = (t: number) => (setup.planted ? Math.min(lowest, startHeight + (lowest - startHeight) * Math.min(1, (t - setup.start) / 0.3)) : lowest);
-  let firstOn = setup.start;
-  if (setup.planted) {
-    // Standing on both: the balance holds the body over them until the first step comes.
-    setup.planted.forEach((foot, i) => footfalls.push({ foot: i as 0 | 1, on: setup.start - 1e-6, off: Infinity, at: foot.at, heading: foot.heading, kind: 'close' }));
-  } else {
-    // The first foot comes down as soon as it reaches the ground, a little ahead of the hips.
-    const first = setup.first!;
-    const firstFall = (on: number) => landing(s, first.foot, on, first.heading, first.brake);
-    firstOn = landingTime(setup, s, ground, g, leg, ankleHeight);
-    let down1 = firstFall(firstOn);
-    // Reaching ahead, the foot is further off the hips than straight under them: it meets the ground once they've come down
-    // that much further (taken any sooner, the leg would have to stretch past its length to stand on it).
-    for (let guard = 0; guard < 300 && !reaches(down1); guard++) {
-      firstOn += dt;
-      down1 = firstFall(firstOn);
-    }
-    footfalls.push(down1.fall);
+  // The first foot comes down as soon as it reaches the ground, a little ahead of the hips.
+  const { first } = setup;
+  const firstFall = (on: number) => landing(s, first.foot, on, first.heading, first.brake);
+  let firstOn = landingTime(setup, s, ground, g, leg, ankleHeight);
+  let down1 = firstFall(firstOn);
+  // Reaching ahead, the foot is further off the hips than straight under them: it meets the ground once they've come down
+  // that much further (taken any sooner, the leg would have to stretch past its length to stand on it).
+  for (let guard = 0; guard < 300 && !reaches(down1); guard++) {
+    firstOn += dt;
+    down1 = firstFall(firstOn);
   }
+  footfalls.push(down1.fall);
   /**
    * The time from one footfall to the next at a speed (world units a second): quicker, the faster, and never so slow the body
    * runs past the planted foot before the next comes down (a step lands at most STEP_AHEAD.max ahead; the foot leaves about as far behind).
@@ -464,26 +448,9 @@ export function runOut(setup: RunOutSetup): RunOut {
   );
 
   // Then each foot in turn, placed as it leaves the ground (the second as soon as the first is planned).
-  // Up from both feet, the one behind steps first, half a step on.
-  const behind = setup.planted && dot3(sub3(setup.planted[0].at, setup.planted[1].at), travel) < 0 ? 0 : 1;
-  let next: 0 | 1 = setup.planted ? behind : setup.first!.foot === 0 ? 1 : 0;
+  let next: 0 | 1 = first.foot === 0 ? 1 : 0;
   let planFrom = s;
-  let on = firstOn + (setup.planted ? 0.5 : 0.6) * period(Math.max(0, dot3(simulate(s, firstOn).v, travel)));
-  if (setup.planted) {
-    // Slow enough to stop over the feet (the capture point, standing, within their soles), the rider just stands up.
-    const capture = add3(s.p, scale3(s.v, 1 / Math.sqrt(g / standHeight)));
-    const inside = within(capture, footfalls.flatMap(soleCorners));
-    if (Math.hypot(inside.x - capture.x, inside.z - capture.z) <= STAND_SLACK * leg) {
-      stopped = setup.start + STAND_UP_T;
-      on = Infinity;
-    } else {
-      // Otherwise a step catches it: the one behind, or falling off to a side, the foot on that side.
-      const off = sub3(capture, scale3(add3(setup.planted[0].at, setup.planted[1].at), 0.5));
-      const sideways = dot3(off, across);
-      if (Math.abs(sideways) > dot3(off, travel)) next = sideways > 0 ? 1 : 0;
-      footfalls[next].off = setup.start + 0.4 * (on - setup.start);
-    }
-  }
+  let on = firstOn + 0.6 * period(Math.max(0, dot3(simulate(s, firstOn).v, travel)));
   for (let guard = 0; guard < 40 && on < setup.start + until; guard++) {
     const other: 0 | 1 = next === 0 ? 1 : 0;
     const stance = footfalls.filter((f) => f.foot === other).pop();
@@ -645,7 +612,7 @@ function landingTime(setup: RunOutSetup, from: State, ground: (x: number, z: num
   const dt = 1 / 1000;
   const shove = setup.shove ?? (() => ({ x: 0, y: 0, z: 0 }));
   while (t < from.t + 3) {
-    if (t >= (setup.first?.earliest ?? from.t) && ground(p.x, p.z) - p.y <= height) return t;
+    if (t >= setup.first.earliest && ground(p.x, p.z) - p.y <= height) return t;
     const nudge = sub3(shove(t + dt), shove(t));
     v = add3(add3(v, { x: 0, y: g * dt, z: 0 }), nudge);
     p = add3(p, scale3(v, dt));

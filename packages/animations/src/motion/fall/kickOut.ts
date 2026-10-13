@@ -403,23 +403,44 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
   const spunTo = (t: number) => turnLevel(heading0, -(yawRate * (Math.min(t, turnFrom) - takeover) * 180) / Math.PI);
   const turnStart = spunTo(turnFrom);
   const signed = Math.atan2(dot3(turnStart, across), dot3(turnStart, travel));
-  const facing = (t: number): V3 => (t <= turnFrom ? spunTo(t) : turnLevel(travel, (signed * (1 - minJerk((t - turnFrom) / TURN_T)) * 180) / Math.PI));
+  // (Kept for the clock it was last asked at: the run asks again for each foot, every step of its simulation.)
+  let facedAt = NaN;
+  let faced = travel;
+  const facing = (t: number): V3 => {
+    if (t !== facedAt) {
+      facedAt = t;
+      faced = t <= turnFrom ? spunTo(t) : turnLevel(travel, (signed * (1 - minJerk((t - turnFrom) / TURN_T)) * 180) / Math.PI);
+    }
+    return faced;
+  };
   // The free foot comes down still near across the way it's going (it's been on the board sideways); the kicking foot is the first stride.
   const freeHeading = level(qrot(start.shoes[free].q, { x: 1, y: 0, z: 0 }));
   const towardTravel = Math.sign(dot3(travel, rightOf(freeHeading))) || 1;
   const firstTurned = turnLevel(freeHeading, towardTravel * FIRST_TURN);
-  const runWith = (dir: V3, push: number) => runOut({
-    body,
-    gravity,
-    ground,
-    start: takeover,
-    hips: start.hips,
-    velocity: rate.hips,
-    shove: shoveOf(dir, push),
-    first: { foot: free, earliest: contact + FIRST_AFTER * PUSH_T, brake: FIRST_BRAKE, heading: firstTurned },
-    facing,
-    until: setup.end - takeover + 0.1,
-  });
+  // Each push's run, kept by the way it goes (the same vector each time it's tried) and how hard: the search comes back to
+  // a push, and the plan keeps the run of the one it settles on.
+  const runs = new Map<V3, Map<number, RunOut>>();
+  const runWith = (dir: V3, push: number): RunOut => {
+    let byPush = runs.get(dir);
+    if (!byPush) runs.set(dir, (byPush = new Map()));
+    let run = byPush.get(push);
+    if (!run) {
+      run = runOut({
+        body,
+        gravity,
+        ground,
+        start: takeover,
+        hips: start.hips,
+        velocity: rate.hips,
+        shove: shoveOf(dir, push),
+        first: { foot: free, earliest: contact + FIRST_AFTER * PUSH_T, brake: FIRST_BRAKE, heading: firstTurned },
+        facing,
+        until: setup.end - takeover + 0.1,
+      });
+      byPush.set(push, run);
+    }
+    return run;
+  };
 
   // As hard a push as clears the board from under every foot coming down by it: the leg over a planted foot, shoe to knee.
   const clears = (track: BoardTrack, falls: Footfall[]) => {
@@ -449,9 +470,13 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
     .every((p) => Math.abs(ground(p.x, p.z) - level0) <= ROLL_ROOM.rise * leg);
   const rolling = flatAhead && rollsOut(runOutAt(still, firstDown.on - still.dt).velocity, gravity, leg);
   const rollBoard = boardRigOf(atContact);
+  // Each run's roll, kept likewise.
+  const rolls = new Map<RunOut, Roll>();
   const rollFrom = (from: RunOut): Roll => {
+    const known = rolls.get(from);
+    if (known) return known;
     const first = from.footfalls[0];
-    return rollOut({
+    const roll = rollOut({
       body,
       gravity,
       ground,
@@ -463,6 +488,8 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
       secondFrom: release + SECOND_AFTER,
       board: rollBoard,
     });
+    rolls.set(from, roll);
+    return roll;
   };
   // The board in the arms, trunk or head, keeping `gap` (a robot's) off them.
   const upperHit = (rig: Rig, b: BoardRig, gap: number) => {
@@ -489,14 +516,16 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
     return hits;
   };
   const clearsRoll = (track: BoardTrack, roll: Roll) => rollHits(track, roll) === 0;
+  // What the plan is whatever the push: each push tried is drawn as a plan of its own, with its board, run and roll.
+  const shared: Omit<KickOutPlan, 'board' | 'push' | 'run' | 'roll'> = {
+    setup, takeover, contact, release, error, kick, contactLocal, travel, facing, start, rate, startShoes, kickShoe,
+    toeDir: rigNow.toeDir, rollIn: null, after: null,
+  };
   // And out of the body as it's drawn, coming down (into a roll, till it starts) and over the first steps: the free leg from
   // the push, the kicking one's thigh (its foot and shin push on the board till it's let go), and arms, trunk and head.
   // Counted in a leg's frames in it, or the rest's (a hundred and twentieth of a second each), up to `enough`.
   const legHits = (track: BoardTrack, run: RunOut, push: number, roll: Roll | null, from: number, until: number, enough = 1) => {
-    const trial: KickOutPlan = {
-      setup, takeover, contact, release, error, board: track, push, run, kick, contactLocal, travel, facing,
-      start, rate, startShoes, kickShoe, toeDir: rigNow.toeDir, roll, rollIn: null, after: null,
-    };
+    const trial: KickOutPlan = { ...shared, board: track, push, run, roll };
     const phase = runPhase(trial);
     const k = body.scale;
     // Further from the hips than a leg, an arm or the head reach, and the board's half, it's nowhere near them.
@@ -534,8 +563,7 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
   const leastFor = (dir: V3) => {
     // Each push shoves the rider into a run of its own; the roll they come down into is much the same whichever (where the
     // kicking foot heads for, coming down), till the push found is checked with their own.
-    const runs = new Map<number, RunOut>();
-    const runFor = (push: number) => runs.get(push) ?? runs.set(push, runWith(dir, push)).get(push)!;
+    const runFor = (push: number) => runWith(dir, push);
     const typical = runFor((PUSH.least + PUSH.most) / 2);
     const roll = rolling ? rollFrom(typical) : null;
     // The legs coming down first: where a push too weak to clear them mostly fails, and cheaply (the board's flight is the
@@ -611,10 +639,7 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
   const board = boardFor(pushDir, push, setup.end + 0.1);
   const run = runWith(pushDir, push);
 
-  const plan: KickOutPlan = {
-    setup, takeover, contact, release, error, board, push, run, kick, contactLocal, travel, facing,
-    start, rate, startShoes, kickShoe, toeDir: rigNow.toeDir, roll: null, rollIn: null, after: null,
-  };
+  const plan: KickOutPlan = { ...shared, board, push, run, roll: null };
   if (!rolling) return plan;
 
   // ----- The roll, and up out of it -----
@@ -838,27 +863,47 @@ function onDeck(plan: KickOutPlan, t: number): ShoePose {
   return { at: add3(at, scale3(UP, hi)), q: plan.kickShoe };
 }
 
+/** Where the kicking foot meets the board and how it's coming down onto it, and where it leaves it and how it's going. */
+interface KickEnds { meet: V3; meetV: V3; leave: V3; leaveV: V3 }
+/**
+ * Each board track's, worked out once: they're the same every frame, and finding where the foot leaves the deck is a
+ * search. (A track is one kick-out's: its push, or the plan's own.)
+ */
+const KICK_ENDS = new WeakMap<BoardTrack, KickEnds>();
+
+function kickEnds(plan: KickOutPlan): KickEnds {
+  const known = KICK_ENDS.get(plan.board);
+  if (known) return known;
+  const { contact, release } = plan;
+  const meetB = boardMotionAt(plan.board, contact);
+  const meetPointV = add3(meetB.velocity, cross3(meetB.spin, qrot(meetB.q, plan.contactLocal)));
+  const leaveB = boardMotionAt(plan.board, release);
+  const leavePointV = add3(leaveB.velocity, cross3(leaveB.spin, qrot(leaveB.q, plan.contactLocal)));
+  const ends: KickEnds = {
+    meet: add3(add3(meetB.center, qrot(meetB.q, plan.contactLocal)), qrot(plan.kickShoe, { x: 0, y: -SHOE_HALF_HEIGHT, z: 0 })),
+    meetV: add3(meetPointV, { x: 0, y: 40, z: 0 }),
+    leave: onDeck(plan, release).at,
+    leaveV: scale3(leavePointV, 0.35),
+  };
+  KICK_ENDS.set(plan.board, ends);
+  return ends;
+}
+
 /** The kicking foot from the takeover until it's down (`land`): onto the board where it will be, pushing it, and off it to the ground. */
 function kickShoeAt(plan: KickOutPlan, t: number, land: { at: V3; q: Quat; on: number }): ShoePose {
   const { takeover, contact, release } = plan;
   const shoe0 = plan.startShoes[plan.kick];
   if (t < contact) {
     // Down onto the board where it will be.
-    const b = boardMotionAt(plan.board, contact);
-    const target = add3(add3(b.center, qrot(b.q, plan.contactLocal)), qrot(plan.kickShoe, { x: 0, y: -SHOE_HALF_HEIGHT, z: 0 }));
-    const r = qrot(b.q, plan.contactLocal);
-    const pointV = add3(b.velocity, cross3(b.spin, r));
+    const { meet, meetV } = kickEnds(plan);
     const s = (t - takeover) / (contact - takeover);
-    return { at: hermite3(shoe0.at, shoe0.velocity, target, add3(pointV, { x: 0, y: 40, z: 0 }), contact - takeover, s), q: qslerp(shoe0.q, plan.kickShoe, minJerk(s)) };
+    return { at: hermite3(shoe0.at, shoe0.velocity, meet, meetV, contact - takeover, s), q: qslerp(shoe0.q, plan.kickShoe, minJerk(s)) };
   }
   if (t < release) return onDeck(plan, t);
   // Off it, and down to the ground.
-  const b = boardMotionAt(plan.board, release);
-  const r = qrot(b.q, plan.contactLocal);
-  const from = onDeck(plan, release).at;
-  const fromV = add3(b.velocity, cross3(b.spin, r));
+  const { leave, leaveV } = kickEnds(plan);
   const s = clamp01((t - release) / (land.on - release));
-  return { at: hermite3(from, scale3(fromV, 0.35), land.at, { x: 0, y: 0, z: 0 }, land.on - release, s), q: qslerp(plan.kickShoe, land.q, minJerk(s)) };
+  return { at: hermite3(leave, leaveV, land.at, { x: 0, y: 0, z: 0 }, land.on - release, s), q: qslerp(plan.kickShoe, land.q, minJerk(s)) };
 }
 
 /** The shoe of foot `i` at `t`, over a run. */

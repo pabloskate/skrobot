@@ -11,6 +11,7 @@ import { landingYaw } from '../elToro/stairs';
 import { SET_SCALE } from '../setScale';
 import { FOOT } from '../../units';
 import { setInfo, setTerrain, setTimeline } from '../sets';
+import { sweep, sweepHz } from '../../testing';
 import { Hollywood3D, HOLLYWOOD_TRAFFIC, HOLLYWOOD_TREES } from './hollywood3d';
 import {
   HOLLYWOOD_BUILDING_FACE, HOLLYWOOD_CHEEK_Z, HOLLYWOOD_CURB_Z, HOLLYWOOD_DROP,
@@ -118,10 +119,10 @@ describe('Hollywood 16: over the fence', () => {
     const failures: string[] = [];
     let board = Infinity;
     let legs = Infinity;
-    for (const base of TRICK_BASES) for (const stance of STANCES) for (const rider of RIDERS) {
+    for (const base of sweep(TRICK_BASES)) for (const stance of STANCES) for (const rider of RIDERS) {
       const stage = fence(base, stance, rider, { skater: 'realistic' });
       const { pop, land } = stage.stairs!;
-      for (let t = pop + 1 / 60; t < land; t += 1 / 45) {
+      for (let t = pop + 1 / 60; t < land; t += 1 / sweepHz(45)) {
         const frame = stageFrame(stage, t, 1);
         const check = (p: V3, below: number, near: number, isLeg: boolean) => {
           const q = inSet(frame, p);

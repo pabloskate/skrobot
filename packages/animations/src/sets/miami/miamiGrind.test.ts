@@ -15,6 +15,7 @@ import type { RiderStance, Stance } from '../../types';
 import { setInfo } from '../sets';
 import { SET_SCALE } from '../setScale';
 import { FOOT } from '../../units';
+import { sweep, sweepHz } from '../../testing';
 import { buildMiamiGeometry, Miami3D } from './miami3d';
 import {
   MIAMI_EDGE_FALL, MIAMI_EDGE_YAW, MIAMI_FOOT as F, MIAMI_GRIND_LOCK, MIAMI_GRIND_SPEED, MIAMI_LEDGES, MIAMI_PLAZA_HALF, MIAMI_PLAZA_Y,
@@ -45,8 +46,15 @@ const COMBOS = [
   'Frontside Boardslide Backside 180 Out',
 ];
 
-const grind = (base: string, stance: Stance = 'regular', riderStance: RiderStance = 'regular', skater: 'robot' | 'realistic' = 'robot'): StagePlan =>
-  planStage({ id: base, name: base, base, stance }, { set: 'miami-triangle', landed: true, riderStance, skater, style, fall: 'slam', shankProgress: 0.65 });
+// The tests sweep the same grinds: each is planned once.
+const planned = new Map<string, StagePlan>();
+const grind = (base: string, stance: Stance = 'regular', riderStance: RiderStance = 'regular', skater: 'robot' | 'realistic' = 'robot'): StagePlan => {
+  const key = `${base}/${stance}/${riderStance}/${skater}`;
+  if (!planned.has(key)) {
+    planned.set(key, planStage({ id: base, name: base, base, stance }, { set: 'miami-triangle', landed: true, riderStance, skater, style, fall: 'slam', shankProgress: 0.65 }));
+  }
+  return planned.get(key)!;
+};
 
 function* everyGrind() {
   for (const base of GRIND_BASES) for (const side of ['Frontside', 'Backside']) {
@@ -54,6 +62,7 @@ function* everyGrind() {
   }
   for (const base of COMBOS) for (const rider of RIDERS) yield { base, rider, stance: 'regular' as Stance };
 }
+const EVERY_GRIND = sweep([...everyGrind()]);
 
 /** A stage length in the set's own units. */
 const set = (units: number) => units / SET_SCALE;
@@ -135,7 +144,7 @@ describe('Miami Triangle: grinding the slab’s edges', () => {
       expect(board.grind!.far, `${stance}/${rider}`).toBe(blunt.grind!.far);
       expect(Math.sign(board.grind!.lock.yaw), `${stance}/${rider}`).toBe(Math.sign(blunt.grind!.lock.yaw));
     }
-    for (const { base, rider, stance } of everyGrind()) {
+    for (const { base, rider, stance } of EVERY_GRIND) {
       const stage = grind(base, stance, rider);
       const edge = stage.rail!.line as 'left' | 'right';
       const g = stage.grind!;
@@ -152,12 +161,12 @@ describe('Miami Triangle: grinding the slab’s edges', () => {
   }, 120_000);
 
   it('pops on the deck short of the rim, at an angle across the tip, and locks on a couple of feet below the apex', () => {
-    for (const { base, rider, stance } of everyGrind()) {
+    for (const { base, rider, stance } of EVERY_GRIND) {
       const stage = grind(base, stance, rider);
       const g = stage.grind!;
       const context = `${base}/${stance}/${rider}`;
       // Rolling in and popping, the board's on the flat deck, its middle well inside the rim.
-      for (let t = 0; t <= g.pop; t += 1 / 30) {
+      for (let t = 0; t <= g.pop; t += 1 / sweepHz(30)) {
         const frame = stageFrame(stage, t, 1);
         const c = inSet(frame, frame.rig.board.center);
         expect(miamiSurface(c.x, c.z), `${context} t=${t.toFixed(2)}`).toBe(0);
@@ -181,11 +190,11 @@ describe('Miami Triangle: grinding the slab’s edges', () => {
 
   it('rests the lock on the edge and the granite behind it, never through it, and clears the rim on the way', () => {
     const failures: string[] = [];
-    for (const { base, rider, stance } of everyGrind()) {
+    for (const { base, rider, stance } of EVERY_GRIND) {
       const stage = grind(base, stance, rider);
       const g = stage.grind!;
       const edge = stage.rail!.line as 'left' | 'right';
-      for (let t = g.pop + 0.05; t <= g.land; t += 1 / 60) {
+      for (let t = g.pop + 0.05; t <= g.land; t += 1 / sweepHz(60)) {
         const frame = stageFrame(stage, t, 1);
         const context = `${base}/${stance}/${rider} t=${(t - g.pop).toFixed(3)}`;
         let lowest = Infinity;
@@ -211,10 +220,10 @@ describe('Miami Triangle: grinding the slab’s edges', () => {
 
   it('keeps the rider’s legs out of the granite and off the deck, a person’s as a robot’s', () => {
     const failures: string[] = [];
-    for (const skater of ['robot', 'realistic'] as const) for (const { base, rider, stance } of everyGrind()) {
+    for (const skater of ['robot', 'realistic'] as const) for (const { base, rider, stance } of EVERY_GRIND) {
       const stage = grind(base, stance, rider, skater);
       const g = stage.grind!;
-      for (let t = g.pop; t <= g.land; t += 1 / 60) {
+      for (let t = g.pop; t <= g.land; t += 1 / sweepHz(60)) {
         const frame = stageFrame(stage, t, 1);
         for (const leg of frame.rig.legs) for (const p of [leg.hip, leg.knee, leg.ankle]) {
           const q = inSet(frame, p);
@@ -236,7 +245,7 @@ describe('Miami Triangle: grinding the slab’s edges', () => {
     const check = (base: string, rider: RiderStance, stance: Stance) => {
       const stage = planStage({ id: base, name: base, base, stance }, { set: 'miami-triangle', landed: true, riderStance: rider, style: popper, fall: 'slam', shankProgress: 0.65 });
       const g = stage.grind!;
-      for (let t = g.pop; t <= g.off - 0.12; t += 1 / 120) {
+      for (let t = g.pop; t <= g.off - 0.12; t += 1 / sweepHz(120)) {
         const rig = stageFrame(stage, t, 1).rig;
         for (const leg of rig.legs) {
           const where = `${leg.side} ${base} ${stance} ${rider} t=${(t - g.pop).toFixed(3)}`;
@@ -246,15 +255,17 @@ describe('Miami Triangle: grinding the slab’s edges', () => {
         }
       }
     };
+    const cases: Array<[string, RiderStance, Stance]> = [];
     for (const rider of RIDERS) {
-      for (const trick of TRICKS) for (const base of GRINDS) check(`${trick} into ${base}`, rider, 'regular');
-      for (const base of GRIND_BASES) for (const side of ['Frontside', 'Backside']) for (const stance of STANCES) check(`${side} ${base}`, rider, stance);
+      for (const trick of TRICKS) for (const base of GRINDS) cases.push([`${trick} into ${base}`, rider, 'regular']);
+      for (const base of GRIND_BASES) for (const side of ['Frontside', 'Backside']) for (const stance of STANCES) cases.push([`${side} ${base}`, rider, stance]);
     }
+    for (const [base, rider, stance] of sweep(cases, 5)) check(base, rider, stance);
     expect(found.slice(0, 8)).toEqual([]);
   }, 300_000);
 
   it('pops off the low corner and lands on the plaza past it, then rides away clear of the pots and beds', () => {
-    for (const { base, rider, stance } of everyGrind()) {
+    for (const { base, rider, stance } of EVERY_GRIND) {
       const stage = grind(base, stance, rider);
       const g = stage.grind!;
       const edge = stage.rail!.line as 'left' | 'right';
@@ -268,7 +279,7 @@ describe('Miami Triangle: grinding the slab’s edges', () => {
         const wheel = inSet(touchdown, touchdown.rig.board.point({ x, y: WHEEL_Y + WHEEL_R, z }));
         expect(Math.abs(wheel.y - MIAMI_PLAZA_Y), context).toBeLessThan(0.1 * F);
       }
-      for (let t = g.land; t <= stage.end; t += 1 / 30) {
+      for (let t = g.land; t <= stage.end; t += 1 / sweepHz(30)) {
         const frame = stageFrame(stage, t, 1);
         const c = inSet(frame, frame.rig.board.center);
         expect(miamiSurface(c.x, c.z), `${context} t=${t.toFixed(2)}`).toBe(MIAMI_PLAZA_Y);
@@ -285,7 +296,8 @@ describe('Miami Triangle: grinding the slab’s edges', () => {
       for (const base of ['Frontside 50-50 Grind', 'Backside 50-50 Grind', 'Frontside Boardslide']) for (const rider of RIDERS) {
         const stage = grind(base, 'regular', rider);
         const g = stage.grind!;
-        const times = [...Array.from({ length: Math.ceil(stage.end * 20) + 1 }, (_, i) => Math.min(stage.end, i / 20)), g.pop, g.lockAt, g.off, g.land];
+        const hz = sweepHz(20);
+        const times = [...Array.from({ length: Math.ceil(stage.end * hz) + 1 }, (_, i) => Math.min(stage.end, i / hz)), g.pop, g.lockAt, g.off, g.land];
         for (const tripod of [null, 'bottom', 'side', 'top'] as (TripodId | null)[]) for (const t of times) {
           const frame = stageFrame(stage, t, 1);
           expect(frame.stairs!.ledge).toBe(stage.rail!.line);
@@ -323,7 +335,7 @@ describe('Miami Triangle: grinding the slab’s edges', () => {
         for (const tripod of ['bottom', 'side', 'top'] as TripodId[]) {
           const from = tripod === 'top' ? 0 : g.pop + 0.15;
           const until = tripod === 'top' ? g.lockAt : g.land + 0.4;
-          for (let t = from; t <= until; t += 1 / 20) {
+          for (let t = from; t <= until; t += 1 / sweepHz(20)) {
             const frame = stageFrame(stage, t, 1);
             const view = spot.view(frame, DEFAULT_SCENE_CAMERA, 1, 1.24, tripod)!;
             const eye = new Vector3(set(view.eye[0] + frame.scroll), set(view.eye[1]), set(view.eye[2] + frame.stairs!.across));

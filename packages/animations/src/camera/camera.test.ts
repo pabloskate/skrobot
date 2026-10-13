@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { computeFrame, specFor, FLIP_T, GROUND, H, LAND_T, ROLL_IN, SKY_PAD, W, X0, TRICK_BASES } from '../motion/trick';
 import { resolveSkateStyle } from '../motion/style';
 import { resolveRiderMechanics } from '../motion/stance';
-import { isFiniteFrame } from '../testing';
+import { isFiniteFrame, sweep as sweepCases } from '../testing';
 import { planStage, stageFrame } from '../stage/stage';
 import { stageView } from './view';
 import type { RiderStance, Stance, Trick } from '../types';
@@ -102,7 +102,7 @@ describe('Scene camera', () => {
     const sweep = frameSweep();
     for (const popHeight of POPS) {
       const style = resolveSkateStyle({ popHeight, rotationSpeed: 1, flickStrength: 1.25 });
-      for (const base of BASES) {
+      for (const base of sweepCases(BASES)) {
         for (const stance of STANCES) {
           const spec = specFor(trickOf(base, stance));
           for (const rider of RIDERS) {
@@ -122,11 +122,12 @@ describe('Scene camera', () => {
 
   it('keeps every landed grind, and tricks into and out of one, in frame from every camera in bounds', () => {
     const sweep = frameSweep();
-    const names = GRIND_BASES.flatMap((grind) => ['Frontside', 'Backside'].flatMap((side) => {
+    // A stride prime to the eight names per grind, so the quick tier keeps every kind of name.
+    const names = sweepCases(GRIND_BASES.flatMap((grind) => ['Frontside', 'Backside'].flatMap((side) => {
       const sided = `${side} ${grind}`;
       const [end] = exitEndsFor(grind);
       return [sided, joinGrindBase('360 Flip', sided), joinGrindExit(sided, 'Bigspin', end), joinGrindBase('Kickflip', joinGrindExit(sided, 'Heelflip', end))];
-    }));
+    })), 7);
     for (const popHeight of POPS) {
       const style = resolveSkateStyle({ popHeight, rotationSpeed: 1, flickStrength: 1.25 });
       for (const name of names) {

@@ -8,6 +8,7 @@ import type { Skater } from '../riders/skaters';
 import type { RiderStance, Stance } from '../types';
 import { sub3, type V3 } from '../math';
 import { solePenetration } from '../board/footContact';
+import { sweep, sweepHz } from '../testing';
 import { planStage, stageFrame } from './stage';
 
 /** The bank landings: Sunset's roof to its bank, and Miami's gap onto the granite triangle, which rolls off a raised edge. */
@@ -23,12 +24,12 @@ describe('bank landing anatomy', () => {
       const shin = skater === 'robot' ? SHIN : HUMAN_SHIN;
       for (const riderStance of ['regular', 'goofy'] as RiderStance[]) {
         for (const stance of ['regular', 'fakie', 'switch', 'nollie'] as Stance[]) {
-          for (const base of TRICK_BASES) {
+          for (const base of sweep(TRICK_BASES)) {
             const plan = planStage({ id: base, name: base, base, stance }, {
               skater, riderStance, set, landed: true,
               style: resolveSkateStyle(), fall: 'slam', shankProgress: 0.65,
             });
-            for (let t = plan.stairs!.land - 0.15; t <= plan.end; t += 1 / 30) {
+            for (let t = plan.stairs!.land - 0.15; t <= plan.end; t += 1 / sweepHz(30)) {
               const { legs } = stageFrame(plan, t, 1).rig;
               for (const leg of legs) {
                 const error = Math.max(Math.abs(distance(leg.hip, leg.knee) - thigh), Math.abs(distance(leg.knee, leg.ankle) - shin));
@@ -45,12 +46,12 @@ describe('bank landing anatomy', () => {
   it('keeps landing knees continuous as ground contact turns on and preserves sole clearance', () => {
     const failures: string[] = [];
     for (const set of BANKS) for (const skater of ['robot', 'realistic'] as Skater[]) for (const riderStance of ['regular', 'goofy'] as RiderStance[]) {
-      for (const base of TRICK_BASES) {
+      for (const base of sweep(TRICK_BASES)) {
         const plan = planStage({ id: base, name: base, base, stance: 'regular' }, {
           skater, riderStance, set, landed: true,
           style: resolveSkateStyle(), fall: 'slam', shankProgress: 0.65,
         });
-        for (let t = plan.stairs!.land; t <= plan.end; t += 1 / 60) {
+        for (let t = plan.stairs!.land; t <= plan.end; t += 1 / sweepHz(60)) {
           const before = stageFrame(plan, t - 1e-5, 1).rig;
           const after = stageFrame(plan, t + 1e-5, 1).rig;
           for (let i = 0; i < 2; i++) {

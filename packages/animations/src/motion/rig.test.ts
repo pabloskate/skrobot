@@ -18,7 +18,7 @@ import {
 } from './trick';
 import { SKATE_STYLE_BOUNDS, resolveSkateStyle } from './style';
 import { flickExtension, orientTrickRotation, resolveRiderMechanics } from './stance';
-import { isFiniteFrame } from '../testing';
+import { isFiniteFrame, sweep } from '../testing';
 import { planStage, stageFrame } from '../stage/stage';
 import type { RiderStance, Robot, Stance, Trick } from '../types';
 import { WHEEL_R, WHEEL_SPIN } from '../board/board';
@@ -63,7 +63,7 @@ describe('Rider on the trick', () => {
     const style = resolveSkateStyle({ popHeight: 1, rotationSpeed: 1, flickStrength: 1.25 });
     // Mid-rotation and catch: where flip, shuv, spin, and flick are all live.
     const phases = [ROLL_IN + FLIP_T * 0.45, ROLL_IN + FLIP_T * 0.9];
-    for (const base of BASES) {
+    for (const base of sweep(BASES, 4)) {
       for (const stance of STANCES) {
         const spec = specFor(trickOf(base, stance));
         for (const rider of RIDERS) {
@@ -90,7 +90,7 @@ describe('Rider on the trick', () => {
 
   it('stages finite geometry for the whole catalog, every outcome', () => {
     const robot = robotWith(1);
-    for (const base of BASES) {
+    for (const base of sweep(BASES, 4)) {
       for (const stance of STANCES) {
         for (const { landed, fall } of OUTCOMES) {
           const stage = stageOf(robot, trickOf(base, stance), landed, fall, 'goofy');
@@ -138,7 +138,7 @@ describe('Rider on the trick', () => {
     let right = -Infinity;
     for (const popHeight of [0.45, 1.15]) {
       const style = resolveSkateStyle({ popHeight, rotationSpeed: 1, flickStrength: 1.25 });
-      for (const base of BASES) {
+      for (const base of sweep(BASES, 4)) {
         for (const stance of STANCES) {
           const spec = specFor(trickOf(base, stance));
           for (const rider of RIDERS) {
@@ -193,7 +193,7 @@ describe('Rider body physics', () => {
   const OUTCOME_LIST: Outcome[] = ['landed', 'slam', 'bail', 'shank'];
 
   it('never stretches a leg: thigh and shin keep their length through the whole catalog', () => {
-    for (const base of BASES) {
+    for (const base of sweep(BASES, 4)) {
       for (const stance of STANCES) {
         for (const outcome of OUTCOME_LIST) {
           const end = ROLL_IN + FLIP_T + (outcome === 'landed' ? LAND_T : FALL_T);
@@ -219,7 +219,7 @@ describe('Rider body physics', () => {
         }
         // An ankle only flexes so far: the shin never lies down along the
         // deck, even in the deepest tuck or landing squat.
-        for (const base of BASES) {
+        for (const base of sweep(BASES, 4)) {
           for (let t = 0; t <= ROLL_IN + FLIP_T + LAND_T; t += 0.04) {
             for (const leg of rigAt(base, stance, rider, 'landed', t).legs) {
               const shin = { x: leg.knee.x - leg.ankle.x, y: leg.knee.y - leg.ankle.y, z: leg.knee.z - leg.ankle.z };
@@ -251,7 +251,7 @@ describe('Rider body physics', () => {
     const axes: V3[] = [{ x: 1, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }, { x: 0, y: 0, z: 1 }];
     for (const rotationSpeed of [SKATE_STYLE_BOUNDS.rotationSpeed.min, 1, SKATE_STYLE_BOUNDS.rotationSpeed.max]) {
       const spinStyle = resolveSkateStyle({ popHeight: 1, rotationSpeed, flickStrength: 1 });
-      for (const base of ['Hardflip', 'Inward Heelflip', '360 Hardflip', '360 Inward Heelflip', 'Ghetto Bird']) {
+      for (const base of sweep(['Hardflip', 'Inward Heelflip', '360 Hardflip', '360 Inward Heelflip', 'Ghetto Bird'])) {
         for (const rider of RIDERS) {
           for (const stance of STANCES) {
             const spec = specFor(trickOf(base, stance));
@@ -359,7 +359,7 @@ describe('Rider body physics', () => {
       ...rig.legs.flatMap((leg) => [leg.hip, leg.knee, leg.ankle]),
       ...rig.arms.flatMap((arm) => [arm.elbow, arm.hand]),
     ];
-    for (const base of ['Kickflip', '360 Flip', 'Backside 180', 'Frontside 360', 'Bigspin', 'Impossible', 'Late Kickflip', 'Ollie North']) {
+    for (const base of sweep(['Kickflip', '360 Flip', 'Backside 180', 'Frontside 360', 'Bigspin', 'Impossible', 'Late Kickflip', 'Ollie North'])) {
       for (const stance of STANCES) {
         for (const outcome of OUTCOME_LIST) {
           const end = ROLL_IN + FLIP_T + (outcome === 'landed' ? LAND_T : FALL_T);
@@ -403,7 +403,7 @@ describe('How each stance is carried', () => {
 
   it('looks the way the board is rolling, rolling in and riding away: over the back shoulder in fakie, and after a 180', () => {
     const off: string[] = [];
-    for (const base of BASES) {
+    for (const base of sweep(BASES, 4)) {
       for (const stance of STANCES) {
         for (const rider of RIDERS) {
           const stage = stageOf(robot, trickOf(base, stance), true, 'slam', rider);
@@ -464,7 +464,7 @@ describe('Wheels', () => {
   const DT = 0.05;
 
   it('rolls the wheels with the ground, and the other way when the board lands turned around', () => {
-    for (const base of BASES) {
+    for (const base of sweep(BASES, 4)) {
       for (const stance of STANCES) {
         const trick = trickOf(base, stance);
         const dir = specFor(trick).dir;

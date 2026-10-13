@@ -893,6 +893,37 @@ export function approachFar(spec: GrindSpec, mechanics: RiderMechanics): 1 | -1 
   return (spec.toesideApproach ? toeDir : -toeDir) as 1 | -1;
 }
 
+/** Ids for the functions a value carries (a handrail's ground and rest): the same rail, the same id. */
+const FUNCTION_IDS = new WeakMap<object, number>();
+let functionCount = 0;
+
+/**
+ * A value's numbers, exactly, as a string, for keeping what's worked out from
+ * them: JSON, with -0, NaN and the infinities kept apart (JSON makes them 0
+ * and null), and functions by id.
+ */
+export function contentKey(value: unknown): string {
+  return JSON.stringify(value, (_, v: unknown) => {
+    if (typeof v === 'function') {
+      let id = FUNCTION_IDS.get(v);
+      if (id == null) FUNCTION_IDS.set(v, (id = ++functionCount));
+      return `\u0000function ${id}`;
+    }
+    if (typeof v === 'number' && (Object.is(v, -0) || !Number.isFinite(v))) return `\u0000${Object.is(v, -0) ? '-0' : String(v)}`;
+    return v;
+  });
+}
+
+/**
+ * The plain grind's lift on its line in (GrindPlan.approachLift), which a
+ * trick into it pops at least as high as. Its spec, rider, style and rail
+ * decide it; whether it's landed, and how it falls, are planned after it. So
+ * it's kept by those, and every trick into the same grind plans it once.
+ */
+const PLAIN_LIFTS = new Map<string, number>();
+/** Plain grinds' lifts kept, at most: past it they start over. */
+const PLAIN_LIFTS_KEPT = 512;
+
 export function planGrind(
   spec: GrindSpec,
   mechanics: RiderMechanics,
@@ -977,7 +1008,8 @@ export function planGrind(
   };
   // A trick in pops at least as high as the plain grind would. Across a gap the takeoff sets the
   // line in, so popping higher wouldn't ease it.
-  const plainLift = spec.entry ? planGrind({ ...spec, entry: null }, mechanics, style, landed, fall, rail).approachLift : 0;
+  const plainKey = contentKey([spec.entry ? { ...spec, entry: null } : spec, mechanics, style, rail]);
+  const plainLift = !spec.entry ? 0 : PLAIN_LIFTS.get(plainKey) ?? planGrind({ ...spec, entry: null }, mechanics, style, landed, fall, rail).approachLift;
   let approachLift = plainLift;
   let on = hopOn(approachLift);
   const highest = (spec.slide ? APPROACH_APEX_SLIDE : APPROACH_APEX) + (spec.entry?.lift ?? 0);
@@ -986,6 +1018,10 @@ export function planGrind(
     if (higher.approach.angle >= on.approach.angle - 0.5 || higher.apex > highest) break;
     on = higher;
     approachLift = extra;
+  }
+  if (!spec.entry) {
+    if (PLAIN_LIFTS.size >= PLAIN_LIFTS_KEPT) PLAIN_LIFTS.clear();
+    PLAIN_LIFTS.set(plainKey, approachLift);
   }
   const { railed, lockCenter, lockRise, apex, upT, g: boardG, approach, spin: spinIn, turnIn } = on;
   const ride = railed ? railed.ride : null;

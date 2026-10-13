@@ -8,6 +8,7 @@ import {
   FALL_SETTLE,
   FALL_SETTLE_CLEAR,
   GRAVITY,
+  contentKey,
   grindFrame,
   grindStreetDist,
   poseDir,
@@ -560,12 +561,12 @@ const ollieFor = (plan: GrindPlan) => specFor({ id: 'ollie', name: 'Ollie', base
 /**
  * The hop onto the bar is ridden exactly as on flatground: roll-in, crouch,
  * pop, and the trick popped into the grind (an ollie for a plain grind) are
- * the flatground rig, carried along the hop's own path. Coming down onto the
- * bar the body hands over to the grind's. `place` puts the body's hips
- * where they fly before the feet stand on the deck under them.
+ * the flatground rig, carried along the hop's own path. This is that rider
+ * at a frame, carried and turned onto the grind's board; null from the lock
+ * on, where the grind's own body stands alone.
  */
-function withHop(rig: Rig, frame: GrindFrame, plan: GrindPlan, mechanics: RiderMechanics, style: SkateStyle, place = (body: Rig) => body): Rig {
-  if (frame.t >= plan.lockAt) return place(rig);
+function hopRider(frame: GrindFrame, plan: GrindPlan, mechanics: RiderMechanics, style: SkateStyle): Rig | null {
+  if (frame.t >= plan.lockAt) return null;
   const tau = frame.t - plan.pop;
   const spec = plan.entry?.trick.spec ?? ollieFor(plan);
   const f = landingOnRail(computeFrame(tau < 0 ? Math.max(0, frame.t) : hopClock(tau, plan.entryRate), spec, true, 'slam', 0.65, style), spec, spunIn(plan.spinIn, tau));
@@ -578,7 +579,26 @@ function withHop(rig: Rig, frame: GrindFrame, plan: GrindPlan, mechanics: RiderM
   // that still face straight ahead, which vertical planting cannot fix.
   // The approach's angle in is the grind's own, not the flatground trick's: the body turns with it too.
   // Turning into the lock, the shoulders come round ahead of the board, as they do on the grind's own body.
-  const flat = twistUpper(turnRig(carried, frame.pose.yaw - frame.heading + frame.approach, frame.ref), (1 - TWIST_HOLD) * frame.lead);
+  return twistUpper(turnRig(carried, frame.pose.yaw - frame.heading + frame.approach, frame.ref), (1 - TWIST_HOLD) * frame.lead);
+}
+
+/**
+ * The grind's own body `rig` with the hop's flatground rider (hopRider)
+ * blended over it: coming down onto the bar the body hands over to the
+ * grind's. `place` puts the body's hips where they fly before the feet stand
+ * on the deck under them.
+ */
+function withHop(
+  rig: Rig,
+  frame: GrindFrame,
+  plan: GrindPlan,
+  mechanics: RiderMechanics,
+  style: SkateStyle,
+  place = (body: Rig) => body,
+  flat = hopRider(frame, plan, mechanics, style),
+): Rig {
+  if (!flat) return place(rig);
+  const tau = frame.t - plan.pop;
   const w = tau < 0 ? 0 : smoothstep((tau / plan.upT - HANDOVER_FROM) / (1 - HANDOVER_FROM));
   // Follow a quicker scoop with the feet, then release them onto their
   // flatground paths as its snap rejoins the shared animation.
@@ -589,6 +609,62 @@ function withHop(rig: Rig, frame: GrindFrame, plan: GrindPlan, mechanics: RiderM
     flickOut: flat.flickOut + (rig.flickOut - flat.flickOut) * w,
     onGrip: (rig.onGrip ?? 0) * w,
   };
+}
+
+// ----- What an attempt measures once -----
+
+/**
+ * What an attempt measures once for a rider (the hops' arcs, the board's
+ * tuck, a slip's sprawl), kept two ways: with the plan, for the lookup every
+ * frame makes, and by what the attempt is (attemptKey), so an attempt planned
+ * again (a stage re-planned for the same trick, a combo planned once more)
+ * finds it too. Each is a pure function of the plan's numbers and the rider
+ * and style playing it, so either way it's the same.
+ */
+interface AttemptCache<T> {
+  byPlan: WeakMap<GrindPlan, Map<string, T>>;
+  byAttempt: Map<string, T>;
+}
+
+const attemptCache = <T>(): AttemptCache<T> => ({ byPlan: new WeakMap(), byAttempt: new Map() });
+
+/** Attempts kept by what they are, at most, as rig.ts keeps its tuck tracks: past it they start over. */
+const ATTEMPTS_KEPT = 512;
+
+/** Content keys → short ids, so a cache's keys stay short. Ids are never reused, so starting over only forgets. */
+const ATTEMPT_IDS = new Map<string, number>();
+const PLAN_IDS = new WeakMap<GrindPlan, number>();
+let attemptCount = 0;
+
+/** What an attempt is: the same id for every plan with the same numbers. */
+function attemptKey(plan: GrindPlan): number {
+  let id = PLAN_IDS.get(plan);
+  if (id != null) return id;
+  const key = contentKey(plan);
+  id = ATTEMPT_IDS.get(key);
+  if (id == null) {
+    if (ATTEMPT_IDS.size >= ATTEMPTS_KEPT) ATTEMPT_IDS.clear();
+    ATTEMPT_IDS.set(key, (id = ++attemptCount));
+  }
+  PLAN_IDS.set(plan, id);
+  return id;
+}
+
+/** `make()`'s value for this attempt and `rider` (the rider and style's content key), made once. */
+function cachedFor<T>(cache: AttemptCache<T>, plan: GrindPlan, rider: string, make: () => T): T {
+  let byRider = cache.byPlan.get(plan);
+  if (!byRider) cache.byPlan.set(plan, (byRider = new Map()));
+  if (byRider.has(rider)) return byRider.get(rider) as T;
+  const key = `${attemptKey(plan)} ${rider}`;
+  let value: T;
+  if (cache.byAttempt.has(key)) value = cache.byAttempt.get(key) as T;
+  else {
+    value = make();
+    if (cache.byAttempt.size >= ATTEMPTS_KEPT) cache.byAttempt.clear();
+    cache.byAttempt.set(key, value);
+  }
+  byRider.set(rider, value);
+  return value;
 }
 
 const hipY = (rig: Rig) => (rig.legs[0].hip.y + rig.legs[1].hip.y) / 2;
@@ -611,15 +687,20 @@ const ARC_SOAK = 0.4;
  */
 interface ArcHop { start: number; end: number; y0: number; rise: number; push: number; from: number; fromV: number; land: number; soak: number }
 
-const ARC_HOPS = new WeakMap<GrindPlan, Map<string, ArcHop[]>>();
+const ARC_HOPS = attemptCache<ArcHop[]>();
 
 function arcHops(plan: GrindPlan, mechanics: RiderMechanics, style: SkateStyle, grow: number): ArcHop[] {
-  let byRider = ARC_HOPS.get(plan);
-  if (!byRider) ARC_HOPS.set(plan, (byRider = new Map()));
-  const key = JSON.stringify([mechanics, style, grow]);
-  const known = byRider.get(key);
-  if (known) return known;
-  const hipAt = (t: number) => grownHipY(untucked(t, plan, mechanics, style), grow);
+  return cachedFor(ARC_HOPS, plan, contentKey([mechanics, style, grow]), () => measureArcHops(plan, mechanics, style, grow));
+}
+
+function measureArcHops(plan: GrindPlan, mechanics: RiderMechanics, style: SkateStyle, grow: number): ArcHop[] {
+  // The fit below asks for the same moments more than once.
+  const hips = new Map<number, number>();
+  const hipAt = (t: number) => {
+    let y = hips.get(t);
+    if (y === undefined) hips.set(t, (y = grownHipY(untucked(t, plan, mechanics, style), grow)));
+    return y;
+  };
   const dt = 1 / 240;
   const spans = [[plan.pop, plan.lockAt], ...(plan.fail == null ? [[plan.off, plan.land]] : [])];
   const hops = spans.map(([start, end], i) => {
@@ -653,12 +734,10 @@ function arcHops(plan: GrindPlan, mechanics: RiderMechanics, style: SkateStyle, 
     const { from, fromV } = pushFrom(push);
     return { start, end, y0, rise, push, from, fromV, land: GRAVITY * span - rise - (hipAt(end + dt) - y1) / dt };
   });
-  const arcs = hops.map((hop, i): ArcHop => {
+  return hops.map((hop, i): ArcHop => {
     const next = hops[i + 1];
     return { ...hop, soak: next == null ? ARC_SOAK : Math.max(0, Math.min(ARC_SOAK, next.start - next.push - hop.end)) };
   });
-  byRider.set(key, arcs);
-  return arcs;
 }
 
 /**
@@ -698,17 +777,37 @@ function arcHipY(rig: Rig, plan: GrindPlan, mechanics: RiderMechanics, style: Sk
   return offset ? grownHipY(rig, grow) + offset : null;
 }
 
+/**
+ * The two bodies a frame's rider is made of: the grind's own, and the hop's
+ * flatground rider over it before the lock (hopRider). Solving a person, the
+ * rig and the person's arc both stand on these, so they're solved once.
+ */
+interface Bodies {
+  frame: GrindFrame;
+  own: Rig;
+  flat: Rig | null;
+}
+
+function bodiesAt(time: number, plan: GrindPlan, mechanics: RiderMechanics, style: SkateStyle, frame = grindFrame(time, plan)): Bodies {
+  return { frame, own: bodyOn(frame, plan, mechanics), flat: hopRider(frame, plan, mechanics, style) };
+}
+
 /** The body untucked, its hips where the arc has them (null: its own), and the feet on the deck under them. */
-function flown(time: number, plan: GrindPlan, mechanics: RiderMechanics, style: SkateStyle): { body: Rig; hipY: number | null } {
-  const frame = grindFrame(time, plan);
+function flown(
+  time: number,
+  plan: GrindPlan,
+  mechanics: RiderMechanics,
+  style: SkateStyle,
+  { frame, own, flat } = bodiesAt(time, plan, mechanics, style),
+): { body: Rig; hipY: number | null } {
   let y: number | null = null;
   // The feet stand on the deck once, under the hips the arc has: a foot the body's own hips had to let up
   // off it (a leg at full stretch) stands on it again once lower ones reach, and a foot lifting for the
   // flick is held to the deck no longer than it is on flatground.
-  const body = withHop(bodyOn(frame, plan, mechanics), frame, plan, mechanics, style, (rig) => {
+  const body = withHop(own, frame, plan, mechanics, style, (rig) => {
     y = arcHipY(rig, plan, mechanics, style, time, 1);
     return y == null ? rig : hipsAt(rig, y);
-  });
+  }, flat);
   return { body, hipY: y };
 }
 
@@ -788,7 +887,7 @@ const TUCK_STEP = 1 / 120;
 /** Seconds before the lock over which a foot comes down into what of the board the lock itself stands it in. */
 const TUCK_ONTO = 0.1;
 
-const HOP_TUCKS = new WeakMap<GrindPlan, Map<string, TuckTrack>>();
+const HOP_TUCKS = attemptCache<TuckTrack>();
 
 /**
  * The rider's legs with each foot (left, right) lifted along its sole's up.
@@ -832,11 +931,10 @@ function tucked(rig: Rig, tuck: Tuck): Rig {
  */
 function hopTuck(plan: GrindPlan, mechanics: RiderMechanics, style: SkateStyle): TuckTrack | null {
   if (!plan.entry && !plan.exit) return null;
-  let byRider = HOP_TUCKS.get(plan);
-  if (!byRider) HOP_TUCKS.set(plan, (byRider = new Map()));
-  const key = JSON.stringify([mechanics, style]);
-  const known = byRider.get(key);
-  if (known) return known;
+  return cachedFor(HOP_TUCKS, plan, contentKey([mechanics, style]), () => measureHopTuck(plan, mechanics, style));
+}
+
+function measureHopTuck(plan: GrindPlan, mechanics: RiderMechanics, style: SkateStyle): TuckTrack {
   // The feet only leave the deck in the air: on the bar, and on the ground, they stand on it.
   const times: number[] = [];
   const within: Array<readonly [number, number]> = [];
@@ -865,14 +963,15 @@ function hopTuck(plan: GrindPlan, mechanics: RiderMechanics, style: SkateStyle):
       for (const i of [0, 1]) track.need[i][k] = Math.max(0, track.need[i][k] - rest[i] * onto);
     });
   }
-  byRider.set(key, track);
   return track;
 }
 
-function untucked(time: number, plan: GrindPlan, mechanics: RiderMechanics, style: SkateStyle): Rig {
-  const frame = grindFrame(time, plan);
-  return withHop(bodyOn(frame, plan, mechanics), frame, plan, mechanics, style);
+function untucked(time: number, plan: GrindPlan, mechanics: RiderMechanics, style: SkateStyle, { frame, own, flat } = bodiesAt(time, plan, mechanics, style)): Rig {
+  return withHop(own, frame, plan, mechanics, style, undefined, flat);
 }
+
+/** How much further in a slip off an edge rail lands (sprawlBack): one rider's, measured once. */
+const SPRAWLS = attemptCache<number>();
 
 /**
  * The rider on the grind at `time`. `grow` is how much bigger than the rig
@@ -880,28 +979,35 @@ function untucked(time: number, plan: GrindPlan, mechanics: RiderMechanics, styl
  * hips fly the hop's arc.
  */
 export function solveGrindRig(time: number, plan: GrindPlan, mechanics: RiderMechanics, style: SkateStyle, grow = 1): GrindRig {
-  if (grow !== 1) {
-    const own = solveGrindRig(time, plan, mechanics, style);
-    const y = own.falling ? null : arcHipY(untucked(time, plan, mechanics, style), plan, mechanics, style, time, grow);
-    return y == null ? own : { ...own, rig: grownOver(own.rig, y, grow) };
-  }
-  if (plan.fail == null || time < plan.fail) {
-    const frame = grindFrame(time, plan);
-    const { body, hipY: y } = flown(time, plan, mechanics, style);
-    const track = hopTuck(plan, mechanics, style);
-    if (!track) return { rig: kneesClear(body), frame, falling: false };
+  if (plan.fail != null && time >= plan.fail) return slipped(time, plan, plan.fail, mechanics, style);
+  const bodies = bodiesAt(time, plan, mechanics, style);
+  const { frame } = bodies;
+  const { body, hipY: y } = flown(time, plan, mechanics, style, bodies);
+  const track = hopTuck(plan, mechanics, style);
+  let feet = body;
+  if (track) {
     // The hips go back onto the arc over wherever the tuck has the feet.
-    const rig = tucked(body, tuckAt(track, time));
-    return { rig: kneesClear(y == null ? rig : hipsAt(rig, y)), frame, falling: false };
+    const lifted = tucked(body, tuckAt(track, time));
+    feet = y == null ? lifted : hipsAt(lifted, y);
   }
-  const u = time - plan.fail;
-  const at = grindFrame(plan.fail, plan);
+  const rig = kneesClear(feet);
+  if (grow === 1) return { rig, frame, falling: false };
+  // A person flies their own arc over the same feet, off the same bodies.
+  const grown = arcHipY(untucked(time, plan, mechanics, style, bodies), plan, mechanics, style, time, grow);
+  return { rig: grown == null ? rig : grownOver(rig, grown, grow), frame, falling: false };
+}
+
+/** The rider at `time`, past the slip off the bar at `fail` (plan.fail): falling to the ground beside it. */
+function slipped(time: number, plan: GrindPlan, fail: number, mechanics: RiderMechanics, style: SkateStyle): GrindRig {
+  const u = time - fail;
+  const at = grindFrame(fail, plan);
   const onBar = bodyOn(at, plan, mechanics);
   // The rider comes down beside the bar, clear of it, on the slip's side.
   const hipZ = (onBar.legs[0].hip.z + onBar.legs[1].hip.z) / 2;
   const side = slipSide(plan);
   const clear = Math.max(FALL_CLEAR, Math.abs(hipZ - BAR_Z));
-  const laneZ = BAR_Z + side * (clear + sprawlBack(plan, mechanics, style, side));
+  const back = cachedFor(SPRAWLS, plan, contentKey([mechanics, style]), () => sprawlBack(plan, mechanics, style, side));
+  const laneZ = BAR_Z + side * (clear + back);
   const settle = sprawlsAway(plan) ? clear - FALL_SETTLE_CLEAR : 0;
   const fallen = (v: number) => {
     const rig = moveRig(flatFall(v, plan, mechanics, style), { x: 0, y: 0, z: laneZ - side * settle * smoothstep(v / FALL_SETTLE) });
@@ -914,7 +1020,7 @@ export function solveGrindRig(time: number, plan: GrindPlan, mechanics: RiderMec
     // come off the grip.
     const w = smoothstep(u / plan.drop);
     // Off a handrail it was already sinking with the rail as it slipped.
-    const dropping = moveRig(onBar, { x: 0, y: 0.5 * GRAVITY * u * u + railSink(plan, plan.fail) * u, z: (laneZ - hipZ) * w });
+    const dropping = moveRig(onBar, { x: 0, y: 0.5 * GRAVITY * u * u + railSink(plan, fail) * u, z: (laneZ - hipZ) * w });
     body = { ...blendRig(dropping, fallen(0), w), onGrip: 1 - w };
   } else {
     body = fallen(u - plan.drop);

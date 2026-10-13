@@ -12,6 +12,7 @@ import type { RiderStance, Stance } from '../../types';
 import { routeHeight } from '../elToro/stairs';
 import { SET_SCALE } from '../setScale';
 import { setInfo, setTerrain, setTimeline, type Obstacle } from '../sets';
+import { sweep, sweepHz } from '../../testing';
 import { buildMiamiGeometry, Miami3D } from './miami3d';
 import { miamiTowerNode, MIAMI_TOWER_HEIGHT, MIAMI_TOWER_NODES } from './miamiGeometry';
 import {
@@ -196,10 +197,10 @@ describe('Miami Triangle: the Challenger Memorial', () => {
       let legs = Infinity;
       let rimBoard = Infinity;
       let crossings = 0;
-      for (const base of TRICK_BASES) for (const stance of STANCES) for (const rider of RIDERS) {
+      for (const base of sweep(TRICK_BASES)) for (const stance of STANCES) for (const rider of RIDERS) {
         const stage = attempt(base, obstacle, stance, rider, { skater: 'realistic' });
         const { pop, land } = stage.stairs!;
-        for (let t = pop + 1 / 60; t < land; t += 1 / 60) {
+        for (let t = pop + 1 / 60; t < land; t += 1 / sweepHz(60)) {
           const frame = stageFrame(stage, t, 1);
           // Onto the slab, the last moments are the touchdown itself, the
           // uphill truck reaching the face: the apex is passed well before.
@@ -260,7 +261,8 @@ describe('Miami Triangle: the Challenger Memorial', () => {
     try {
       for (const obstacle of ['stairs', 'triangle'] as Obstacle[]) for (const rider of RIDERS) {
         const stage = attempt('Kickflip', obstacle, 'regular', rider);
-        const times = [...Array.from({ length: Math.ceil(stage.end * 20) + 1 }, (_, i) => Math.min(stage.end, i / 20)), stage.stairs!.pop, stage.stairs!.land];
+        const hz = sweepHz(20);
+        const times = [...Array.from({ length: Math.ceil(stage.end * hz) + 1 }, (_, i) => Math.min(stage.end, i / hz)), stage.stairs!.pop, stage.stairs!.land];
         for (const tripod of [null, 'bottom', 'side', 'top'] as (TripodId | null)[]) for (const t of times) {
           const frame = stageFrame(stage, t, 1);
           const view = spot.view(frame, DEFAULT_SCENE_CAMERA, 1, 1.24, tripod)!;
@@ -297,7 +299,7 @@ describe('Miami Triangle: the Challenger Memorial', () => {
         for (const tripod of ['bottom', 'side', 'top'] as TripodId[]) {
           const { pop, land } = stage.stairs!;
           const until = tripod === 'top' ? (pop + land) / 2 : land + 0.4;
-          for (let t = pop - 0.4; t <= until; t += 1 / 20) {
+          for (let t = pop - 0.4; t <= until; t += 1 / sweepHz(20)) {
             const frame = stageFrame(stage, t, 1);
             const view = spot.view(frame, DEFAULT_SCENE_CAMERA, 1, 1.24, tripod)!;
             const eye = new Vector3(set(view.eye[0] + frame.scroll), set(view.eye[1]), set(view.eye[2] + frame.stairs!.across));
