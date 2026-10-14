@@ -1,5 +1,5 @@
 import { GROUND, H, SKY_PAD, W, X0 } from '../motion/trick';
-import { DEFAULT_SCENE_CAMERA, clampZoom, craneThrough, makeCamera, zoomedViewBox, type Camera, type SceneCamera, type ViewBox } from './camera';
+import { DEFAULT_SCENE_CAMERA, clampZoom, craneThrough, makeCamera, zoomedViewBox, type Camera, type SceneCamera, type TripodPan, type ViewBox } from './camera';
 import { WHEEL_BOTTOM } from '../board/board';
 import { rad, type V3 } from '../math';
 
@@ -129,9 +129,12 @@ const TRIPOD_CLOSEST = 1.6;
  * smaller as they go, as a camera that stays put sees them. The rider sits
  * centered across the picture and `place` of the way down it: a camera
  * looking up a set holds them high, so the steps fill the frame under them.
+ * A `pan` turns the head off the rider from where it stands: the picture
+ * keeps its lens and size, it just looks somewhere else.
  */
-export function tripodView(eye: Vec3, lift: number, frame: number, place: number, zoom: number, aspect: number): StageView {
-  const view = stageView(lift, craneThrough(fromThree(eye), lift), 1, aspect);
+export function tripodView(eye: Vec3, lift: number, frame: number, place: number, zoom: number, aspect: number, pan?: TripodPan): StageView {
+  const crane = craneThrough(fromThree(eye), lift);
+  const view = stageView(lift, crane, 1, aspect);
   const near = frame / view.distance;
   const magnify = (near / (1 + (near / TRIPOD_CLOSEST) ** 4) ** 0.25) * clampZoom(zoom);
   const { anchor, focal } = view;
@@ -140,6 +143,7 @@ export function tripodView(eye: Vec3, lift: number, frame: number, place: number
   const box = fitViewBox({ x: anchor.x - width / 2, y: anchor.y - place * height, width, height }, aspect);
   return {
     ...view,
+    ...(pan && (pan.yaw || pan.pitch) ? panned(view, crane, pan) : {}),
     box,
     frustum: {
       left: (box.x - anchor.x) / focal,
@@ -147,5 +151,18 @@ export function tripodView(eye: Vec3, lift: number, frame: number, place: number
       top: (anchor.y - box.y) / focal,
       bottom: (anchor.y - box.y - box.height) / focal,
     },
+  };
+}
+
+/** The axes, and the horizon they put on screen, of a tripod's view turned by `pan` about its eye. */
+function panned(view: StageView, crane: SceneCamera, pan: TripodPan): Pick<StageView, 'right' | 'up' | 'back' | 'cam'> {
+  // The orbit swings the eye around the rider; a head turned the other way about the eye looks the same way.
+  const a = rad(crane.yaw - pan.yaw);
+  const b = rad(crane.pitch - pan.pitch);
+  return {
+    right: [Math.cos(a), 0, Math.sin(a)],
+    up: [Math.sin(a) * Math.sin(b), Math.cos(b), -Math.cos(a) * Math.sin(b)],
+    back: [-Math.sin(a) * Math.cos(b), Math.sin(b), Math.cos(a) * Math.cos(b)],
+    cam: { ...view.cam, horizonY: view.cam.horizonY + view.focal * (Math.tan(rad(crane.pitch)) - Math.tan(b)) },
   };
 }

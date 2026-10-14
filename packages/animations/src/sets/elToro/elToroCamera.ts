@@ -1,4 +1,4 @@
-import type { SceneCamera, TripodId } from '../../camera/camera';
+import type { SceneCamera, TripodId, TripodPan } from '../../camera/camera';
 import { SET_FOOT, RISER, STAIR_DROP, STAIR_RUN, TREAD } from './stairs';
 import { EL_TORO_CANOPY } from './elToroCanopy';
 import { BUILDING_FACE, EAVE, RIDER_LANE_Z, WALL_Z, hill } from './elToroLayout';
@@ -60,9 +60,9 @@ export const EL_TORO_TRIPODS: Readonly<Record<TripodId, { u: number; z: number; 
 };
 
 /** El Toro filmed from one of its tripods: the eye stays where the filmer stands while the set slides under the rider. */
-export function elToroTripodView(tripod: TripodId, frame: Pick<StageFrame, 'scroll' | 'lift' | 'stairs'>, zoom: number, aspect: number): StageView {
+export function elToroTripodView(tripod: TripodId, frame: Pick<StageFrame, 'scroll' | 'lift' | 'stairs'>, zoom: number, aspect: number, pan?: TripodPan): StageView {
   const spot = EL_TORO_TRIPODS[tripod];
   const across = frame.stairs?.across ?? LANE_Z;
   const eye: Vec3 = [spot.u * SET_SCALE - frame.scroll, spot.height * SET_SCALE, spot.z * SET_SCALE - across];
-  return tripodView(eye, frame.lift, spot.frame * SET_SCALE, spot.place, zoom, aspect);
+  return tripodView(eye, frame.lift, spot.frame * SET_SCALE, spot.place, zoom, aspect, pan);
 }

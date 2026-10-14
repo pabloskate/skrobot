@@ -5,6 +5,12 @@ import { flushSync } from 'react-dom';
 
 /** Wall-clock seconds the last frame holds before a loop starts over. */
 const LOOP_HOLD = 0.7;
+/**
+ * Wall-clock ms a loop keeps replaying on its own before it rests on the
+ * landing, so a tab nobody is watching stops drawing. Any play, scrub or
+ * rate change restarts the count.
+ */
+const LOOP_FOR = 2 * 60 * 1000;
 /** Longest step one frame may take, so a backgrounded tab doesn't jump to the end. */
 const MAX_STEP = 0.1;
 /**
@@ -42,7 +48,8 @@ export interface Playhead {
 
 /**
  * The explorer's own clock for the trick: plays at `rate`, loops with a
- * short hold on the landing, and can be paused or scrubbed to any moment.
+ * short hold on the landing for a couple of minutes, and can be paused or
+ * scrubbed to any moment.
  * It starts playing from the top on mount; key the owner by trick to restart.
  *
  * Each frame renders synchronously inside the animation frame that asked for
@@ -62,6 +69,7 @@ export function usePlayhead(duration: number, rate: number, loop: boolean): Play
     let last: number | null = null;
     let lastDraw = -Infinity;
     let held = 0;
+    let started: number | null = null;
     // The display's period: the shortest gap seen between animation frames.
     let vsync = Infinity;
     let seen = 0;
@@ -73,6 +81,7 @@ export function usePlayhead(duration: number, rate: number, loop: boolean): Play
     };
     const tick = (now: number) => {
       raf = requestAnimationFrame(tick);
+      started ??= now;
       const gap = last == null ? 0 : now - last;
       const dt = Math.min(MAX_STEP, gap / 1000);
       last = now;
@@ -88,7 +97,7 @@ export function usePlayhead(duration: number, rate: number, loop: boolean): Play
         }
       }
       if (clock.current >= duration) {
-        if (!loop) {
+        if (!loop || now - started >= LOOP_FOR) {
           cancelAnimationFrame(raf);
           setPlaying(false);
           return;

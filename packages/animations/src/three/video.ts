@@ -12,6 +12,8 @@ import {
   getFirstEncodableVideoCodec,
 } from 'mediabunny';
 import type { RiderStance, Robot, Trick } from '../types';
+import type { FallVariant } from '../motion/trick';
+import type { RailBail } from '../motion/fall/railBail';
 import { resolveSkateStyle } from '../motion/style';
 import { DEFAULT_SCENE_CAMERA, type SceneCamera, type TripodId } from '../camera/camera';
 import { setInfo, type Obstacle, type RailChoice, type StageSet } from '../sets/sets';
@@ -28,7 +30,7 @@ import { WaterfrontFarImage } from '../sets/waterfront/waterfrontFar';
 import { canvasRecordingType, recordCanvasVideo } from './canvasRecording';
 
 /**
- * @skrobot/animations/three/video — films a landed attempt to a video file.
+ * @skrobot/animations/three/video — films an attempt, landed or missed, to a video file.
  *
  * TrickScene3D's picture, drawn off screen one frame at a time at a steady
  * frame rate, however fast or slow the device draws, and encoded with
@@ -45,6 +47,12 @@ export interface TrickVideoOptions {
   robot: Robot;
   trick: Pick<Trick, 'id' | 'name' | 'base' | 'stance'>;
   riderStance?: RiderStance;
+  /** Whether the attempt lands, as on the live stage; landed unless given. */
+  landed?: boolean;
+  /** How a missed attempt goes wrong (the explorer's kick-out), as on the live stage. A slam unless given. */
+  fallVariant?: FallVariant;
+  /** A grind kicked out: which way the rider jumps off the rail, as on the live stage. */
+  railBail?: RailBail;
   camera?: SceneCamera;
   /** Film from this tripod instead of the crane, where the set has it (the landmarks). */
   tripod?: TripodId | null;
@@ -102,6 +110,9 @@ export async function recordTrickVideo({
   robot,
   trick,
   riderStance = 'regular',
+  landed = true,
+  fallVariant = 'slam',
+  railBail,
   camera = DEFAULT_SCENE_CAMERA,
   tripod = null,
   zoom = 1,
@@ -136,7 +147,7 @@ export async function recordTrickVideo({
   const ctx = film.getContext('2d');
   if (!ctx) throw new VideoUnsupportedError();
   const style = resolveSkateStyle(robot.skateStyle);
-  const stage = planStage(trick, { landed: true, riderStance, style, fall: 'slam', shankProgress: 0.5, skater, set, rail, obstacle });
+  const stage = planStage(trick, { landed, riderStance, style, fall: fallVariant, shankProgress: 0.5, skater, set, rail, obstacle, railBail });
   const glCanvas = document.createElement('canvas');
   const scene = new SceneRenderer(glCanvas, lookFor(robot, skater), set, quality);
   scene.setSize(width, height, quality === 'cinematic' ? Math.min(1.5, 2560 / width) : 1);
@@ -224,10 +235,10 @@ class FarPainter {
 
 /** Same moment, camera and rig in both export finishes. No encoder or live-stage changes. */
 export async function renderTrickPreview(options: TrickVideoOptions): Promise<{ standard: string; cinematic: string }> {
-  const { robot, trick, skater = 'robot', set = 'plaza', riderStance = 'regular',
+  const { robot, trick, skater = 'robot', set = 'plaza', riderStance = 'regular', landed = true, fallVariant = 'slam', railBail,
     rail = 'center', obstacle = 'stairs', camera = DEFAULT_SCENE_CAMERA, zoom = 1, tripod = null, signal } = options;
-  const stage = planStage(trick, { landed: true, riderStance, style: resolveSkateStyle(robot.skateStyle),
-    fall: 'slam', shankProgress: 0.5, skater, set, rail, obstacle });
+  const stage = planStage(trick, { landed, riderStance, style: resolveSkateStyle(robot.skateStyle),
+    fall: fallVariant, shankProgress: 0.5, skater, set, rail, obstacle, railBail });
   const previewTime = stage.grind ? (stage.grind.lockAt + stage.grind.off) / 2 : stage.end * 0.45;
   const frame = stageFrame(stage, previewTime, options.rate ?? 1);
   const width = 960;

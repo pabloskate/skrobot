@@ -42,10 +42,12 @@ export {
   SCENE_ORBIT_BOUNDS,
   SCENE_ZOOM,
   clampOrbitCamera,
+  clampTripodPan,
   clampZoom,
   wrapOrbitYaw,
   type SceneCamera,
   type TripodId,
+  type TripodPan,
 } from './camera/camera';
 /** The sets (spots) a trick can be staged at, and what each changes: stairs and other obstacles, handrails, tripods. */
 export { STAGE_SETS, hasObstacle, railLineFor, setGrindSpec, setHandrail, setInfo, setTerrain, setTimeline, type Obstacle, type RailChoice, type RailLine, type SetInfo, type SetObstacle, type SetRails, type StageSet } from './sets/sets';

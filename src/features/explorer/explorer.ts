@@ -15,6 +15,7 @@ import {
   setInfo,
   canExitGrind,
   clampOrbitCamera,
+  clampTripodPan,
   clampZoom,
   exitEndsFor,
   grindSpecFor,
@@ -37,6 +38,7 @@ import {
   type Skater,
   type StageSet,
   type TripodId,
+  type TripodPan,
 } from '@skrobot/animations';
 import {
   TRICKS,
@@ -86,6 +88,8 @@ export interface ExplorerState {
   out: GrindOut | null;
   /** A named angle, or a custom one the viewer dragged to. */
   camera: CameraPresetId | SceneCamera;
+  /** On a tripod shot, how far the viewer turned its head off the rider; none keeps it on them. */
+  pan?: TripodPan;
   /** How far in the picture is magnified, whatever the angle: 1 is the stock framing. */
   zoom: number;
   /** The spot the rider skates, with terrain and supported obstacles from the shared set registry. */
@@ -527,6 +531,12 @@ function travelDir(state: ExplorerState): 1 | -1 {
 
 /** The camera the 3D explorer films from. */
 export function sceneCamera(state: ExplorerState): SceneCamera {
+  // A tripod films from where it stands, so dragging turns its head rather than flying the crane.
+  if (sceneTripod(state)) return { ...presetCamera(state), pan: state.pan ?? { yaw: 0, pitch: 0 } };
+  return presetCamera(state);
+}
+
+function presetCamera(state: ExplorerState): SceneCamera {
   if (typeof state.camera !== 'string') return clampOrbitCamera(state.camera);
   const preset = cameraPreset(state.camera);
   // El Toro's angles aim across at the center rail from the stair line; a grind is already on it.
@@ -544,9 +554,29 @@ export function sceneTripod(state: Pick<ExplorerState, 'set' | 'camera'>): Tripo
   return tripod && setInfo(state.set).tripods.includes(tripod) ? tripod : null;
 }
 
-/** Swing freely around the rider, wrapping yaw while keeping pitch in bounds. */
+/**
+ * A tripod's long lens sees a narrow slice of the spot, so turning its head
+ * as far as the crane would swing makes the picture race past the finger.
+ */
+const TRIPOD_TURN = 0.1;
+
+/** Swing freely around the rider, wrapping yaw while keeping pitch in bounds; on a tripod, turn its head instead. */
 export function turnCamera(camera: SceneCamera, yaw: number, pitch: number): SceneCamera {
+  if (camera.pan) {
+    return { ...camera, pan: clampTripodPan({ yaw: camera.pan.yaw + yaw * TRIPOD_TURN, pitch: camera.pan.pitch + pitch * TRIPOD_TURN }) };
+  }
   return clampOrbitCamera({ ...camera, yaw: camera.yaw + yaw, pitch: camera.pitch + pitch });
+}
+
+/** The state looking through `camera`, a turn of the stage's: a tripod keeps its shot and takes the pan. */
+export function withCamera(state: ExplorerState, camera: SceneCamera): ExplorerState {
+  if (camera.pan && sceneTripod(state)) return { ...state, pan: camera.pan.yaw || camera.pan.pitch ? camera.pan : undefined };
+  return { ...state, camera, pan: undefined };
+}
+
+/** The state on a named shot, looking where that shot looks. */
+export function withShot(state: ExplorerState, shot: CameraPresetId): ExplorerState {
+  return { ...state, camera: shot, pan: undefined, zoom: defaultZoomForCamera(shot) };
 }
 
 /** How much a key press, button, or notch of scrolling zooms by. */
@@ -616,18 +646,28 @@ function parseZoom(value: string | null): number {
 
 const round = (n: number, places: number) => Number(n.toFixed(places));
 
+/** A tripod's head turned `yaw_pitch` off the rider; none (or nonsense) keeps it on them. */
+function parsePan(value: string | null): TripodPan | null {
+  const fields = value?.split('_').map(Number) ?? [];
+  if (fields.length !== 2 || fields.some((n) => !Number.isFinite(n))) return null;
+  const pan = clampTripodPan({ yaw: fields[0], pitch: fields[1] });
+  return pan.yaw || pan.pitch ? pan : null;
+}
+
 /** The explorer state a URL query describes; anything missing or unknown keeps its default. */
 export function stateFromSearch(search: string): ExplorerState {
   const params = new URLSearchParams(search);
   const stanceParam = params.get('stance');
   const camera = parseCamera(params.get('cam'));
   const set = STAGE_SETS.find((option) => option.id === params.get('set'))?.id ?? DEFAULT_STATE.set;
+  const pan = parsePan(params.get('pan'));
   const base: ExplorerState = {
     ...DEFAULT_STATE,
     stance: isStance(stanceParam) ? stanceParam : DEFAULT_STATE.stance,
     rider: params.get('rider') === 'goofy' ? 'goofy' : 'regular',
     camera,
     zoom: params.has('zoom') ? parseZoom(params.get('zoom')) : defaultZoomForCamera(camera),
+    ...(pan && sceneTripod({ set, camera }) ? { pan } : {}),
     set,
     rail: params.get('rail') === 'side' && setInfo(set).rails?.sideGrinds !== false ? 'side' : DEFAULT_STATE.rail,
     obstacle: setInfo(set).obstacles?.find((o) => o.id === params.get('obstacle'))?.id ?? DEFAULT_STATE.obstacle,
@@ -685,6 +725,10 @@ export function searchFromState(state: ExplorerState): string {
       if (targetZ !== 0) fields.push(targetZ);
       params.set('cam', fields.join('_'));
     }
+  }
+  if (state.pan && sceneTripod(state)) {
+    const pan = clampTripodPan(state.pan);
+    if (pan.yaw || pan.pitch) params.set('pan', `${round(pan.yaw, 1)}_${round(pan.pitch, 1)}`);
   }
   if (state.zoom !== defaultZoomForCamera(state.camera)) params.set('zoom', String(round(state.zoom, 2)));
   if (state.set !== DEFAULT_STATE.set) params.set('set', state.set);

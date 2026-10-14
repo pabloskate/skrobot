@@ -523,7 +523,7 @@ export class ElToro3D {
   /** Filmed from one of its tripods, or by the crane kept in the walkway between the school and the canopy. */
   view(frame: StageFrame, camera: Readonly<SceneCamera>, zoom: number, aspect: number, tripod: TripodId | null): StageView | null {
     if (!frame.stairs) return null;
-    return tripod ? elToroTripodView(tripod, frame, zoom, aspect) : elToroView(frame.lift, camera, zoom, aspect, frame.stairs.across);
+    return tripod ? elToroTripodView(tripod, frame, zoom, aspect, camera.pan) : elToroView(frame.lift, camera, zoom, aspect, frame.stairs.across);
   }
 
   update(view: StageView, scroll: number, size: { width: number; height: number }, shadow: Texture, shadowOpacity: [number, number, number], frame?: StageFrame) {

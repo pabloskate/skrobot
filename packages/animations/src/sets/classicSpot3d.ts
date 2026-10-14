@@ -184,7 +184,7 @@ export class ClassicSpot3D {
     if (tripod && tripods) {
       const p = tripods[tripod];
       const eye: Vec3 = [p.u * SET_SCALE - frame.scroll, p.height * SET_SCALE, p.z * SET_SCALE - across];
-      return tripodView(eye, frame.lift, p.frame * SET_SCALE, p.place, zoom, aspect);
+      return tripodView(eye, frame.lift, p.frame * SET_SCALE, p.place, zoom, aspect, camera.pan);
     }
     const rad = Math.PI / 180;
     const uphill = Math.max(0, Math.sin(camera.yaw * rad));

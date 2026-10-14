@@ -207,3 +207,7 @@ the exact graph test in `src/architecture.test.ts`.
   same payload.
 - This model may not support image input. Verify UI via `preview_snapshot` /
   `preview_evaluate` rather than asking the user for screenshots.
+- Close every preview tab you opened (`t3_preview_list`, then
+  `t3_preview_close`) before ending your turn. The preview browser draws WebGL
+  on the CPU and never throttles, so a stage left open keeps several cores busy
+  for hours.

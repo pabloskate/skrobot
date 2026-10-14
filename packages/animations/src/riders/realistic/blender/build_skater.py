@@ -17,10 +17,11 @@ Needs Blender 4.2+ with the MPFB extension and the MakeHuman asset packs
 
     blender -b --python build_skater.py -- <assets dir> [skater|alien]
 """
-import bpy, bmesh, os, sys, math, shutil, subprocess, tempfile
+import bpy, bmesh, heapq, os, sys, math, shutil, subprocess, tempfile
 from mathutils.bvhtree import BVHTree
 import numpy as np
 from mathutils import Vector
+from mathutils.kdtree import KDTree
 from bl_ext.user_default.mpfb.services.humanservice import HumanService
 from bl_ext.user_default.mpfb.services.targetservice import TargetService
 from bl_ext.user_default.mpfb.services.locationservice import LocationService
@@ -457,6 +458,164 @@ for v in outfit.data.vertices:
     spread(upper, 1.0 - shin, f"upperleg02.{side}")
     spread(lower, shin, f"lowerleg01.{side}")
 
+# A hip, not an arch either: MakeHuman blends the jeans from the pelvis and lower
+# spine into the thigh over some 20 cm, from above the hip joint to below the
+# crotch, so a hip folding in a crouch bends the top third of the thigh with it,
+# and the leg reads as one long curve from the waist down. Hand the trunk over to
+# the thigh across the hip's own folds instead: sharply at the crease in front,
+# more softly at the fold under the seat, the seat itself staying with the pelvis.
+HIP_FOLD = {"front": (0.02, 0.025), "back": (0.10, 0.05)}  # (centre below the joint, half-width), metres
+TRUNK = ("root", "pelvis", "spine")
+groups = {g.index: g.name for g in outfit.vertex_groups}
+for v in outfit.data.vertices:
+    if on_tee[v.index]:
+        continue
+    side = "L" if v.co.x > 0 else "R"
+    hip = bones[f"upperleg01.{side}"].head_local
+    axis = (bones[f"foot.{side}"].head_local - hip).normalized()
+    s = (v.co - hip).dot(axis)
+    if not -0.06 < s < 0.3:
+        continue
+    radial = v.co - hip - axis * s
+    behind = smooth01(0.3, -0.5, -radial.normalized().y) if radial.length > 1e-6 else 0.5
+    centre = HIP_FOLD["front"][0] + (HIP_FOLD["back"][0] - HIP_FOLD["front"][0]) * behind
+    band = HIP_FOLD["front"][1] + (HIP_FOLD["back"][1] - HIP_FOLD["front"][1]) * behind
+    named = {groups.get(g.group, ""): g for g in v.groups}
+    trunk = {n: g.weight for n, g in named.items() if n.startswith(TRUNK)}
+    thigh = {n: g.weight for n, g in named.items() if n.startswith("upperleg") and n.endswith(side)}
+    total = sum(trunk.values()) + sum(thigh.values())
+    if total < 0.05:
+        continue
+    leg = smooth01(centre - band, centre + band, s)
+    for part, share, default in ((trunk, 1.0 - leg, "root"), (thigh, leg, f"upperleg01.{side}")):
+        weights = part if sum(part.values()) > 1e-6 else {default: 1.0}
+        norm = sum(weights.values())
+        for name, w in weights.items():
+            group = outfit.vertex_groups.get(name) or outfit.vertex_groups.new(name=name)
+            group.add([v.index], total * share * w / norm, 'REPLACE')
+
+# A tee long enough to cover the waistband. MakeHuman's stops level with the
+# jeans' top, and above it at the back; with no body under the clothes, the slit
+# between them opens onto the inside of the suit (see the front of the tee from
+# behind). Lengthen the tee below the chest until its hem hangs TEE_OVERLAP under
+# the jeans' top all the way round, then keep it just outside the denim it now
+# hangs over, every layer of a spot moving together so the folded hem stays folded.
+TEE_OVERLAP = 0.035
+TEE_FROM = 1.17
+TEE_CLEAR = 0.006
+TEE_SEAM_EASE = 0.06
+SECTORS = 24
+
+
+def around(co):
+    """Where round the torso a point is, in sectors (fractional)."""
+    return ((math.atan2(co.x, -(co.y - cy)) + math.pi) / (2 * math.pi) * SECTORS) % SECTORS
+
+
+def at(table, a):
+    i = int(a)
+    f = a - i
+    return table[i % SECTORS] * (1 - f) + table[(i + 1) % SECTORS] * f
+
+
+hem = [math.inf] * SECTORS
+waist = [-math.inf] * SECTORS
+for v in outfit.data.vertices:
+    co = v.co
+    if not 0.8 < co.z < TEE_FROM or Vector((co.x, co.y - cy)).length > 0.3:
+        continue
+    k = int(around(co))
+    if on_tee[v.index]:
+        hem[k] = min(hem[k], co.z)
+    else:
+        waist[k] = max(waist[k], co.z)
+# Behind, where the slit is. At the sides the jeans already rise well under the
+# hem, and in front the thighs come up just under it: a longer tee there would
+# hang on them.
+behind = lambda k: smooth01(-0.3, -0.7, math.cos((k + 0.5) / SECTORS * 2 * math.pi - math.pi))
+drop = [behind(k) * max(0.0, hem[k] - (waist[k] - TEE_OVERLAP)) if math.isfinite(hem[k] + waist[k]) else 0.0 for k in range(SECTORS)]
+# Even it out, so the hem stays a smooth line.
+drop = [(drop[k - 1] + 2 * drop[k] + drop[(k + 1) % SECTORS]) / 4 for k in range(SECTORS)]
+hem = [h if math.isfinite(h) else TEE_FROM for h in hem]
+# The suit tucks the front of the tee's inside into the jeans: those points are
+# sewn to the denim. They stay put, and the lengthening eases in away from them
+# (over the tee's surface), so nothing tucked is pulled out below the hem.
+
+denim = KDTree(len(outfit.data.vertices))
+for v in outfit.data.vertices:
+    if not on_tee[v.index]:
+        denim.insert(v.co, v.index)
+denim.balance()
+sewn_to = [False] * len(outfit.data.vertices)
+for v in outfit.data.vertices:
+    if on_tee[v.index] and denim.find(v.co)[2] < 0.001:
+        sewn_to[v.index] = True
+tee_links = [[] for _ in outfit.data.vertices]
+for e in outfit.data.edges:
+    a, b = e.vertices
+    if on_tee[a] and on_tee[b]:
+        d = (outfit.data.vertices[a].co - outfit.data.vertices[b].co).length
+        tee_links[a].append((b, d))
+        tee_links[b].append((a, d))
+from_seam = [0.0 if s else math.inf for s in sewn_to]
+queue = [(0.0, i) for i, s in enumerate(sewn_to) if s]
+heapq.heapify(queue)
+while queue:
+    d, i = heapq.heappop(queue)
+    if d > from_seam[i]:
+        continue
+    for j, w in tee_links[i]:
+        if d + w < from_seam[j]:
+            from_seam[j] = d + w
+            heapq.heappush(queue, (d + w, j))
+free = lambda v: smooth01(0.0, TEE_SEAM_EASE, from_seam[v.index])
+lengthened = []
+for v in outfit.data.vertices:
+    if not on_tee[v.index] or v.co.z >= TEE_FROM:
+        continue
+    arm = sum(g.weight for g in v.groups if groups.get(g.group, "").startswith(("upperarm", "shoulder01")))
+    if arm > 0.3:
+        continue
+    a = around(v.co) - 0.5
+    reach = TEE_FROM - at(hem, a)
+    w = min(1.0, (TEE_FROM - v.co.z) / reach) if reach > 1e-6 else 1.0
+    v.co.z -= at(drop, a) * w * free(v)
+    lengthened.append(v)
+# Outside the denim: per spot round the torso and down it, the most any of the
+# tee there is inside the jeans (measured from outside in) moves all of it out.
+jeans_mesh = bmesh.new()
+jeans_mesh.from_mesh(outfit.data)
+bmesh.ops.delete(jeans_mesh, geom=[f for f in jeans_mesh.faces if any(on_tee[v.index] for v in f.verts)], context='FACES_ONLY')
+jeans_tree = BVHTree.FromBMesh(jeans_mesh)
+jeans_mesh.free()
+ROUND, SLICE_Z = 64, 0.01
+spot = lambda co: (int(around(co) / SECTORS * ROUND), int(co.z / SLICE_Z))
+push = {}
+for v in lengthened:
+    d = Vector((v.co.x, v.co.y - cy, 0.0))
+    r = d.length
+    if r < 1e-6:
+        continue
+    d.normalize()
+    start = Vector((0.0, cy, v.co.z)) + d * (r + 0.15)
+    hit = jeans_tree.ray_cast(start, -d, 0.15 + r)
+    if hit[0] is None:
+        continue
+    outside = Vector((hit[0].x, hit[0].y - cy)).length + TEE_CLEAR
+    key = spot(v.co)
+    push[key] = max(push.get(key, 0.0), outside - r)
+pushed_out = 0
+for v in lengthened:
+    p = push.get(spot(v.co), 0.0)
+    if p <= 0:
+        continue
+    d = Vector((v.co.x, v.co.y - cy)).normalized()
+    v.co.x += d.x * p
+    v.co.y += d.y * p
+    pushed_out += 1
+outfit.data.update()
+print("TEE lengthened", len(lengthened), "max drop", round(max(drop), 3), "pushed out over the jeans", pushed_out)
+
 # The jeans' waistband and belt loops sit under the tee: tuck whatever the tee
 # covers well inside it, so a bend never pushes denim out through the cotton.
 tee_mesh = bmesh.new()
@@ -485,7 +644,6 @@ print("JEANS tucked under the tee", tucked)
 # from any skin that shows, it's dropped; the strip left near the hems sits a few
 # millimetres deeper, so a sleeve or collar bent a little differently from the
 # arm under it can't let skin show through.
-import heapq
 cloth = BVHTree.FromObject(parts["outfit"], bpy.context.evaluated_depsgraph_get())
 COVER = 0.05     # metres of cloth over the skin that count as covering it
 KEEP = 0.03      # covered skin kept within this far (over the skin) of skin that shows

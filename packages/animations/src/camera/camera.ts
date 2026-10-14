@@ -50,7 +50,18 @@ export interface SceneCamera {
   lens: number;
   /** Optional lateral framing in world units; 0 keeps the orbit on the rider. */
   targetZ?: number;
+  /** Filming from a tripod, how far its head is turned off the rider; the crane ignores it. */
+  pan?: TripodPan;
 }
+
+/** A tripod head turned off the rider, in degrees: positive yaw turns it left, positive pitch tilts it up. */
+export interface TripodPan {
+  yaw: number;
+  pitch: number;
+}
+
+/** How far a tripod head tilts up or down off the rider. */
+export const TRIPOD_PAN_PITCH = 60;
 
 /**
  * Tripods stand still in the spot and pan to keep the rider in shot, rather
@@ -169,6 +180,13 @@ export function clampOrbitCamera(camera: Partial<SceneCamera>): SceneCamera {
     lens: within(camera.lens, DEFAULT_SCENE_CAMERA.lens, SCENE_ORBIT_BOUNDS.lens),
     ...(targetZ === 0 ? {} : { targetZ }),
   };
+}
+
+/** A tripod head turned any way around, but tilted no further than straight-ish up or down. */
+export function clampTripodPan(pan: Partial<TripodPan>): TripodPan {
+  const yaw = Number.isFinite(pan.yaw) ? wrapOrbitYaw(pan.yaw) : 0;
+  const pitch = Number.isFinite(pan.pitch) ? Math.max(-TRIPOD_PAN_PITCH, Math.min(TRIPOD_PAN_PITCH, pan.pitch as number)) : 0;
+  return { yaw, pitch: pitch === 0 ? 0 : pitch };
 }
 
 export interface Proj extends P2 {

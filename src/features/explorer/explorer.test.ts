@@ -30,6 +30,8 @@ import {
   railLine,
   trickSteps,
   turnCamera,
+  withCamera,
+  withShot,
   videoFilename,
   withGrind,
   withMode,
@@ -297,8 +299,14 @@ describe('Trick Explorer camera', () => {
       expect(stateFromSearch(searchFromState({ ...stairs, camera: preset.id }))).toEqual({ ...stairs, camera: preset.id });
       // Elsewhere there is no tripod to stand at: the crane films from roughly where it would stand.
       expect(sceneTripod(flatState({ set: 'plaza', camera: preset.id }))).toBeNull();
-      // Dragging takes over as a crane angle from there.
-      expect(sceneTripod({ ...stairs, camera: turnCamera(sceneCamera({ ...stairs, camera: preset.id }), 5, 0) })).toBeNull();
+      // Dragging turns the tripod's head where it stands, and the link keeps the turn.
+      const panned = withCamera({ ...stairs, camera: preset.id }, turnCamera(sceneCamera({ ...stairs, camera: preset.id }), 50, -20));
+      expect(sceneTripod(panned)).toBe(preset.tripod);
+      expect(panned.pan).toEqual({ yaw: 5, pitch: -2 });
+      expect(sceneCamera(panned).pan).toEqual({ yaw: 5, pitch: -2 });
+      expect(stateFromSearch(searchFromState(panned))).toEqual(panned);
+      // Picking the shot again looks back at the rider.
+      expect(withShot(panned, preset.id).pan).toBeUndefined();
     }
     expect(sceneTripod(stairs)).toBeNull();
     expect(cameraPresetsFor(DEFAULT_STATE).some((preset) => preset.tripod)).toBe(false);

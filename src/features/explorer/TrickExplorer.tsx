@@ -11,6 +11,7 @@ import {
   picksObstacle,
   railLine,
   sceneCamera,
+  withCamera,
   sceneTripod,
   searchFromState,
   stageTrick,
@@ -22,6 +23,7 @@ import {
   ZOOM_RANGE,
   type ExplorerState,
   outcomeOf,
+  stageOutcome,
 } from './explorer';
 import CameraDial from './CameraDial';
 import ExplorerStage from './ExplorerStage';
@@ -106,7 +108,7 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
         </div>
         <div className="explorer-actions">
           <VideoButton
-            video={{ robot: RIDER, trick, riderStance: state.rider, camera, tripod, zoom: state.zoom, set: state.set, rail: state.rail, obstacle: state.obstacle, skater: state.skater, rate, sound }}
+            video={{ robot: RIDER, trick, riderStance: state.rider, ...stageOutcome(fall), camera, tripod, zoom: state.zoom, set: state.set, rail: state.rail, obstacle: state.obstacle, skater: state.skater, rate, sound }}
           />
           <button type="button" className="explorer-share" onClick={share}>
             {shared ? <TbCheck aria-hidden /> : <TbShare aria-hidden />}
@@ -135,8 +137,8 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
             customCamera={preset == null}
             rate={rate}
             loop={loop}
-            onCamera={(next) => setState({ ...state, camera: next })}
-            onResetCamera={() => setState({ ...state, camera: 'classic' })}
+            onCamera={(next) => setState(withCamera(state, next))}
+            onResetCamera={() => setState({ ...state, camera: 'classic', pan: undefined })}
             onZoom={(zoom) => setState({ ...state, zoom })}
             onRate={setRate}
             onLoop={setLoop}
@@ -161,7 +163,7 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
                     role="radio"
                     aria-checked={active}
                     className={`explorer-cam ${active ? 'active' : ''}`}
-                    onClick={() => setState({ ...state, camera: option.id, zoom: option.zoom ?? state.zoom })}
+                    onClick={() => setState({ ...state, camera: option.id, pan: undefined, zoom: option.zoom ?? state.zoom })}
                   >
                     <CameraDial camera={sceneCamera({ ...state, camera: option.id })} size={30} />
                     <span>{option.label}</span>

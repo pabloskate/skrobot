@@ -6410,7 +6410,7 @@ main:has(.rps-arena) > .screen {
 }
 
 /* ---------- Dream Tricks (/dream-tricks) ----------
-   The explorer's stage for players: the spot first, then the trick, on repeat. */
+   The explorer's stage for players: the video on one side, every setting on the other. */
 
 @media (min-width: 960px) {
   .dream .explorer-header {
@@ -6438,9 +6438,15 @@ main:has(.rps-arena) > .screen {
     width: min(1180px, 100%);
     margin: 0 auto;
     padding: 24px 24px 0;
-    grid-template-columns: minmax(0, 1.45fr) minmax(340px, 1fr);
+    grid-template-columns: minmax(0, 1.6fr) minmax(360px, 1fr);
     align-items: start;
     gap: 24px;
+  }
+
+  /* The video stays in view while the settings scroll past it. */
+  .dream-main {
+    position: sticky;
+    top: 16px;
   }
 }
 
@@ -6466,7 +6472,7 @@ main:has(.rps-arena) > .screen {
   text-align: right;
 }
 
-/* Spots: big cards, each in its own colors, with the spot in profile. */
+/* Spots: small cards, each in its own colors, with the spot in profile. */
 
 .dream-spots .dream-heading {
   margin-bottom: 10px;
@@ -6474,27 +6480,13 @@ main:has(.rps-arena) > .screen {
 
 .dream-spot-list {
   display: grid;
-  grid-auto-columns: 150px;
-  grid-auto-flow: column;
-  gap: 10px;
-  margin: 0 -12px;
-  padding: 4px 12px 6px;
-  overflow-x: auto;
-  scroll-snap-type: x proximity;
-  scrollbar-width: none;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
 }
 
-.dream-spot-list::-webkit-scrollbar {
-  display: none;
-}
-
-@media (min-width: 640px) {
+@media (min-width: 480px) {
   .dream-spot-list {
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    grid-auto-flow: row;
-    margin: 0;
-    padding: 4px 0 6px;
-    overflow: visible;
   }
 }
 
@@ -6502,11 +6494,11 @@ main:has(.rps-arena) > .screen {
   position: relative;
   display: grid;
   align-content: end;
-  min-height: 112px;
-  padding: 12px;
+  min-height: 80px;
+  padding: 8px 10px;
   overflow: hidden;
   border: none;
-  border-radius: 18px;
+  border-radius: 14px;
   color: #fff;
   background: var(--spot-bg, var(--purple));
   box-shadow: 0 4px 14px rgba(34, 26, 78, 0.16);
@@ -6540,15 +6532,15 @@ main:has(.rps-arena) > .screen {
 
 .dream-spot-art {
   position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 72px;
-  height: 40px;
+  top: 8px;
+  right: 8px;
+  width: 52px;
+  height: 29px;
   opacity: 0.95;
 }
 
 .dream-spot-name {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 800;
   line-height: 1.15;
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.18);
@@ -6559,8 +6551,17 @@ main:has(.rps-arena) > .screen {
 .dream-lines {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
   margin-top: 12px;
+}
+
+/* Named like "Pick a spot" above, so it reads as the next step, not as tags. */
+.dream-lines-label {
+  flex-basis: 100%;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .dream-line {
@@ -6707,29 +6708,12 @@ main:has(.rps-arena) > .screen {
 
 /* Camera shots: where the filmer stands, drawn from above. */
 
+/* However many shots the spot has, side by side in one row. */
 .dream-shot-list {
   display: grid;
-  grid-auto-columns: 92px;
+  grid-auto-columns: minmax(0, 1fr);
   grid-auto-flow: column;
-  gap: 8px;
-  margin: 0 -12px;
-  padding: 2px 12px 6px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.dream-shot-list::-webkit-scrollbar {
-  display: none;
-}
-
-@media (min-width: 640px) {
-  .dream-shot-list {
-    grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
-    grid-auto-flow: row;
-    margin: 0;
-    padding: 2px 0 6px;
-    overflow: visible;
-  }
+  gap: 6px;
 }
 
 .dream-shot {
@@ -6737,12 +6721,12 @@ main:has(.rps-arena) > .screen {
   justify-items: center;
   align-content: start;
   gap: 2px;
-  padding: 6px 4px 10px;
-  border: 1.5px solid transparent;
-  border-radius: 16px;
+  min-width: 0;
+  padding: 4px 2px 8px;
+  border: 1.5px solid var(--explorer-line);
+  border-radius: 14px;
   color: var(--purple-dark);
-  background: var(--card);
-  box-shadow: var(--shadow);
+  background: #fff;
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease, transform 0.08s ease;
 }
@@ -6762,7 +6746,7 @@ main:has(.rps-arena) > .screen {
 
 .dream-shot span {
   color: var(--ink);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
   line-height: 1.2;
   text-align: center;
@@ -6770,9 +6754,11 @@ main:has(.rps-arena) > .screen {
 
 .dream-shot-icon {
   display: block;
+  width: 44px;
+  height: 44px;
 }
 
-/* Trick: stance right above the list it names. */
+/* Trick: one dropdown, then the ways to change it. */
 
 .dream-trick {
   display: grid;
@@ -6805,13 +6791,12 @@ main:has(.rps-arena) > .screen {
   min-width: 0;
 }
 
-.dream-trick .explorer-tier h3 {
-  margin-top: 4px;
-}
-
-.dream-trick-list {
+/* Side and outcome: tweaks to the trick, so they come after it. */
+.dream-tweaks {
   display: grid;
-  gap: 12px;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--explorer-line);
 }
 
 .dream-combo {
@@ -6835,6 +6820,7 @@ main:has(.rps-arena) > .screen {
   text-transform: uppercase;
 }
 
+.dream-trick-select,
 .dream-select select {
   width: 100%;
   height: 42px;
@@ -6848,51 +6834,37 @@ main:has(.rps-arena) > .screen {
   font-weight: 700;
 }
 
+/* The pick itself, so a size up from the flip-in and flip-out lists. */
+.dream-trick-select {
+  height: 48px;
+  padding: 0 12px;
+  font-size: 16px;
+  font-weight: 800;
+}
+
 /* Skater */
 
+/* One row, set once: the same segmented control as footing below it. */
 .dream-skaters {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
   margin-top: 12px;
 }
 
-.dream-skater {
-  display: flex;
-  flex-direction: column;
+.dream-skaters button {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  min-height: 72px;
-  border: 1.5px solid var(--explorer-line);
-  border-radius: 16px;
-  color: var(--ink);
-  background: #fff;
-  font-size: 14px;
-  font-weight: 800;
-  cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease, transform 0.08s ease;
+  gap: 6px;
 }
 
-.dream-skater svg {
-  width: 26px;
-  height: 26px;
-}
-
-.dream-skater:active {
-  transform: scale(0.97);
-}
-
-.dream-skater.active {
-  border-color: var(--purple);
-  color: var(--purple-dark);
-  background: var(--purple-soft);
+.dream-skaters svg {
+  width: 18px;
+  height: 18px;
 }
 
 .dream-footing {
   display: grid;
   gap: 8px;
-  margin-top: 16px;
+  margin-top: 12px;
 }
 
 
