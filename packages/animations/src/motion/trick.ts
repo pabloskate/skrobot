@@ -76,12 +76,14 @@ const COUNTER_SHUV_CATCH = 0.6;
  * turn round them, is caught a bit past a quarter turn round in the world.
  */
 const COUNTER_SHUV_TURNED = 0.4;
-/** How far a hardflip or inward heelflip's spin axis leans off vertical. */
+/** How far a hardflip's spin axis leans off vertical. */
 const HARDFLIP_TILT = 55;
+/** The heel flick keeps an inward heel's shuv much flatter than a hardflip. */
+const INWARD_HEEL_TILT = 20;
 /** A 360 hardflip's lean: its whole turn stands the deck on end twice. */
 const HARDFLIP_360_TILT = 40;
 /** A 360 inward heelflip's: the heel's flatter flick keeps more of it level. */
-const INWARD_HEEL_360_TILT = 20;
+const INWARD_HEEL_360_TILT = 10;
 /**
  * Share of the flight a tilted trick's pop pitch fades over. It must be gone
  * by the earliest catch (0.85 / the fastest rotationSpeed): the rig hands a
@@ -111,7 +113,7 @@ const TRICK_MOTIONS: Readonly<Record<string, TrickMotion>> = {
   'Dolphin Flip': { flips: 1, yaw: 180, flipDir: 1, spinDir: 1, forwardFlip: true },
   'Varial Heelflip': { flips: 1, yaw: 180, flipDir: -1, spinDir: -1 },
   'Pressure Flip': { flips: 1, yaw: 180, flipDir: -1, spinDir: 1 },
-  'Inward Heelflip': { flips: 1, yaw: 180, flipDir: -1, spinDir: 1, tilt: HARDFLIP_TILT },
+  'Inward Heelflip': { flips: 1, yaw: 180, flipDir: -1, spinDir: 1, tilt: INWARD_HEEL_TILT },
   '360 Flip': { flips: 1, yaw: 360, flipDir: 1, spinDir: 1 },
   '360 Double Kickflip': { flips: 2, yaw: 360, flipDir: 1, spinDir: 1 },
   'Laser Flip': { flips: 1, yaw: 360, flipDir: -1, spinDir: -1 },
@@ -458,8 +460,8 @@ function feetForFlip(
         y: baselineY - lift * 17 * flickStrength,
       },
     );
-  } else if (spec.flips && spec.yaw) {
-    // Tre-flip style (and dolphin): back-foot scoop, front foot out of the way.
+  } else if ((spec.flips && spec.yaw) || (spec.yaw === 360 && !spec.bodyYaw && !spec.late)) {
+    // Tre flips, full pop shuvs and dolphins: back-foot scoop, front foot out of the way.
     // For 360 flips the front/flick foot stamps the catch while the scooping
     // foot stays tucked a beat longer.
     const scoop = p < 0.3 ? 20 * Math.sin((p / 0.3) * Math.PI) : 0;
@@ -677,12 +679,10 @@ function computeFrame(
     const rawSpinP = spec.late
       ? clamp01((p - 0.38) / (0.30 / skateStyle.rotationSpeed))
       : catchP;
-    // Pure shuvits (no flip, no body rotation) decelerate into the catch
-    // instead of snapping to a dead stop mid-air — flip/bigspin families keep
-    // the linear clock since their sy/pitch curves already read fine at
-    // constant angular speed.
-    const shuvitFamily = spec.yaw > 0 && !spec.bodyYaw && !spec.flips && !spec.forwardFlip;
-    const spinP = shuvitFamily ? easeOutCubic(rawSpinP) : rawSpinP;
+    // Full shuvs use the tre flip's immediate, linear scoop clock.
+    // Only 180 shuvs retain the eased spin into their catch.
+    const easedShuv = spec.yaw === 180 && !spec.bodyYaw && !spec.flips && !spec.forwardFlip;
+    const spinP = easedShuv ? easeOutCubic(rawSpinP) : rawSpinP;
     rotationProgress = spinP;
     
     // Shank: the trick dies mid-rotation. Flip and body spin (yaw) share the

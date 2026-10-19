@@ -252,8 +252,8 @@ export const poseDir = (pose: BoardPose) => (local: V3): V3 => {
   return pose.fall ? rotZ(turned, pose.fall) : turned;
 };
 
-/** A tre-style entry (a flip with a 360 shuv, no body spin): its pop is a scoop off the tail. */
-const scoops = (entry: HopPlan | null) => entry != null && entry.trick.spec.flips === 1 && entry.trick.spec.yaw === 360 && entry.trick.spec.bodyYaw === 0;
+/** A tre-style entry (360 shuv with or without a flip, no body spin): scoop off the tail. */
+const scoops = (entry: HopPlan | null) => entry != null && entry.trick.spec.flips <= 1 && entry.trick.spec.yaw === 360 && entry.trick.spec.bodyYaw === 0;
 
 /** Lowest solid point of a scooping deck, including the tilted wheel rims. */
 function entryBottom(pose: BoardPose, spin: TrickSpin): number {

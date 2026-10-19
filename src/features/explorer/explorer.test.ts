@@ -387,6 +387,7 @@ describe('Trick Explorer links', () => {
       flatState({ trick: 'Kickflip', set: 'plaza' }),
       grindState({ grind: 'Crooked Grind', set: 'waterfront', camera: 'follow' }),
       flatState({ trick: 'Kickflip', skater: 'realistic', rider: 'goofy', set: 'sunset-car-wash' }),
+      flatState({ trick: 'Ollie', skater: 'realistic', stance: 'switch', rider: 'goofy', set: 'uc-davis-gap', camera: 'tripod-top' }),
       grindState({ grind: 'Crooked Grind', skater: 'realistic', into: 'Kickflip', out: { base: 'Heelflip', end: 'nose' } }),
       grindState({ grind: 'Lipslide', side: 'Backside', skater: 'realistic', set: 'plaza' }),
       flatState({ trick: 'Kickflip', skater: 'realistic', set: 'el-toro', rider: 'goofy', stance: 'fakie' }),
@@ -511,7 +512,7 @@ describe('Trick Explorer video', () => {
 
 describe('classic spot selection', () => {
   it('opens gap-only landmarks on gap tricks, including old grind URLs', () => {
-    for (const set of ['wallenberg', 'sunset-car-wash', 'lyon-25', 'leap-of-faith'] as const) {
+    for (const set of ['wallenberg', 'sunset-car-wash', 'lyon-25', 'leap-of-faith', 'uc-davis-gap'] as const) {
       expect(withSet(grindState(), set)).toMatchObject({ set, mode: 'flatground' });
       expect(withMode(flatState({ set }), 'grinds').mode).toBe('flatground');
       expect(stateFromSearch(`?set=${set}`).mode).toBe('flatground');
@@ -537,7 +538,7 @@ describe('classic spot selection', () => {
     // Grinds ride the rail; spots with one way down offer no choice.
     expect(picksObstacle({ ...over, mode: 'grinds' })).toBe(false);
     expect(searchFromState({ ...grindState({ set: 'hollywood-high' }), obstacle: 'fence' })).not.toMatch(/obstacle=/);
-    for (const set of ['el-toro', 'wallenberg', 'waterfront', 'lyon-25', 'leap-of-faith'] as const) {
+    for (const set of ['el-toro', 'wallenberg', 'waterfront', 'lyon-25', 'leap-of-faith', 'uc-davis-gap'] as const) {
       expect(picksObstacle(flatState({ set }))).toBe(false);
       expect(withSet(over, set).obstacle).toBe('stairs');
       expect(stateFromSearch(`?trick=kickflip&set=${set}&obstacle=fence`).obstacle).toBe('stairs');
@@ -565,7 +566,7 @@ describe('classic spot selection', () => {
   });
 
   it('shares all new spots and offers their stationary filmers', () => {
-    for (const set of ['hollywood-high', 'wallenberg', 'sunset-car-wash', 'lyon-25', 'leap-of-faith', 'miami-triangle'] as const) {
+    for (const set of ['hollywood-high', 'wallenberg', 'sunset-car-wash', 'lyon-25', 'leap-of-faith', 'miami-triangle', 'uc-davis-gap'] as const) {
       const state = flatState({ set, camera: 'tripod-side', rider: 'goofy', stance: 'fakie' });
       expect(stateFromSearch(searchFromState(state))).toEqual(state);
       expect(cameraPresetsFor(state).filter(p => p.tripod)).toHaveLength(3);

@@ -82,11 +82,12 @@ export function hopTrickFor(base: string, stance: Stance): HopTrick | null {
   // A 180 or 360 carries the board round under planted feet; only a flip or
   // a shuv past the rider's own spin turns it out from under them.
   const underFeet = spec.flips > 0 || spec.yaw !== spec.bodyYaw;
+  const fullShuv = spec.yaw === 360 && spec.bodyYaw === 0 && !spec.late;
   return {
     base: name,
     spec,
-    lift: spec.flips * 36 + (spec.yaw / 180) * 16,
-    feetLift: spec.flips > 0 ? 18 : underFeet ? 6 : 0,
+    lift: Math.max(spec.flips, fullShuv ? 1 : 0) * 36 + (spec.yaw / 180) * 16,
+    feetLift: spec.flips > 0 || fullShuv ? 18 : underFeet ? 6 : 0,
     reverses: spec.bodyYaw % 360 === 180,
   };
 }

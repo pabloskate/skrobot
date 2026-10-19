@@ -10,7 +10,7 @@
  * names and descriptions from tricks.
  *
  * Dream Tricks at /dream-tricks is the same stage for players: a landmark
- * spot first, what to hit there, the trick, and who rides it, on repeat.
+ * spot first, avatar cards to pick a skater, then what to hit and the trick, on repeat.
  */
 export { default as TrickExplorer } from './TrickExplorer';
 export { default as DreamTricks } from './DreamTricks';

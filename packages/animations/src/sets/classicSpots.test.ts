@@ -17,7 +17,7 @@ import { SET_SCALE } from './setScale';
 /** The set's layout (set units) as the stage has it. */
 const K = SET_SCALE;
 
-const SPOTS: StageSet[] = ['hollywood-high', 'wallenberg', 'sunset-car-wash', 'lyon-25', 'leap-of-faith', 'miami-triangle'];
+const SPOTS: StageSet[] = ['hollywood-high', 'wallenberg', 'sunset-car-wash', 'lyon-25', 'leap-of-faith', 'miami-triangle', 'uc-davis-gap'];
 const plan = (set: StageSet, base = 'Kickflip', stance: Stance = 'regular', riderStance: RiderStance = 'regular', popHeight = 1) =>
   planStage({ id: base, name: base, base, stance }, {
     set, landed: true, riderStance, style: resolveSkateStyle({ popHeight, rotationSpeed: 1, flickStrength: 1 }), fall: 'slam', shankProgress: 0.65,

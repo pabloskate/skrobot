@@ -244,7 +244,8 @@ describe('Rider body physics', () => {
       return (Math.asin(Math.abs(nose.y)) * 180) / Math.PI;
     };
     for (const base of ['Varial Kickflip', 'Varial Heelflip']) expect(noseUp(base), base).toBeLessThan(15);
-    for (const base of ['Hardflip', 'Inward Heelflip']) expect(noseUp(base), base).toBeGreaterThan(45);
+    expect(noseUp('Hardflip')).toBeGreaterThan(45);
+    expect(noseUp('Inward Heelflip')).toBeLessThan(30);
   });
 
   it('catches a tilted spin as the deck a flat one leaves: no jump where the lean hands back', () => {

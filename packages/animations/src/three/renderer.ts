@@ -37,6 +37,7 @@ import { Sunset3D } from '../sets/sunset/sunset3d';
 import { Lyon3D } from '../sets/lyon/lyon3d';
 import { LeapOfFaith3D } from '../sets/leapOfFaith/leapOfFaith3d';
 import { Miami3D } from '../sets/miami/miami3d';
+import { UcDavis3D } from '../sets/ucDavis/ucDavis3d';
 import { Plaza3D } from '../sets/plaza3d';
 import { setInfo, type StageSet } from '../sets/sets';
 import { SET_SCALE } from '../sets/setScale';
@@ -96,6 +97,7 @@ const SET_PIECES: Record<StageSet, () => SetPiece> = {
   'lyon-25': () => new Lyon3D(),
   'leap-of-faith': () => new LeapOfFaith3D(),
   'miami-triangle': () => new Miami3D(),
+  'uc-davis-gap': () => new UcDavis3D(),
 };
 
 /** Each skater's body, and the board they ride. */

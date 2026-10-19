@@ -24,6 +24,7 @@ interface Props extends StageScene {
   onZoom: (zoom: number) => void;
   onResetView: () => void;
   onRate: (rate: number) => void;
+  onOpenCamera: () => void;
 }
 
 /**
@@ -31,7 +32,7 @@ interface Props extends StageScene {
  * name, play and pause, slow motion, sound, and a way back to the shot after
  * dragging the camera. Key it by trick so a new trick starts from the top.
  */
-export default function DreamStage({ duration, caption, rate, moved, onCamera, onZoom, onResetView, onRate, ...scene }: Props) {
+export default function DreamStage({ duration, caption, rate, moved, onCamera, onZoom, onResetView, onRate, onOpenCamera, ...scene }: Props) {
   const playhead = usePlayhead(duration, rate, true);
   const sound = useSoundEffects();
   const speedIndex = Math.max(0, SPEEDS.findIndex((s) => s.rate === rate));
@@ -61,6 +62,14 @@ export default function DreamStage({ duration, caption, rate, moved, onCamera, o
             {playhead.playing ? <TbPlayerPauseFilled aria-hidden /> : <TbPlayerPlayFilled aria-hidden />}
           </button>
           <span className="dream-stage-spacer" />
+          <button
+            type="button"
+            className="dream-stage-btn dream-camera"
+            aria-haspopup="dialog"
+            onClick={onOpenCamera}
+          >
+            Camera angle
+          </button>
           <button
             type="button"
             className={`dream-stage-btn dream-speed ${rate < 1 ? 'active' : ''}`}

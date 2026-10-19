@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { TbAlien, TbArrowLeft, TbCheck, TbDice5, TbRobot, TbShare, TbUser } from 'react-icons/tb';
+import { TbArrowLeft, TbCheck, TbDice5, TbShare } from 'react-icons/tb';
 import { useSoundEffects, type Skater } from '@skrobot/animations';
 import { ROBOT_BY_ID, ROBOTS } from '@/features/robots';
 import {
@@ -41,17 +41,18 @@ import {
 } from './dream';
 import { OutcomeField } from './TrickBuilder';
 import DreamStage from './DreamStage';
-import ShotIcon from './ShotIcon';
+import CameraAngleDialog from './CameraAngleDialog';
 import SpotArt from './SpotArt';
 import VideoButton from './VideoButton';
 
-/** Swivel supplies the shared skating style for both riders. */
+/** Swivel supplies the shared skating style for every skater. */
 const RIDER = ROBOT_BY_ID.get('shifty') ?? ROBOTS[0];
 
-const SKATERS: ReadonlyArray<{ id: Skater; label: string; icon: typeof TbRobot }> = [
-  { id: 'robot', label: 'Robot', icon: TbRobot },
-  { id: 'realistic', label: 'Realistic', icon: TbUser },
-  { id: 'alien', label: 'Alien', icon: TbAlien },
+/** Static portraits exported from the stage's actual rider meshes. */
+const SKATERS: ReadonlyArray<{ id: Skater; label: string }> = [
+  { id: 'robot', label: 'Robot' },
+  { id: 'realistic', label: 'Realistic' },
+  { id: 'alien', label: 'Alien' },
 ];
 
 /** Wait for the camera to settle before writing it into the address bar. */
@@ -88,7 +89,7 @@ function Choice<T extends string>({ label, options, value, onChange, name = capi
 }
 
 /**
- * Dream Tricks: pick a famous spot, what to hit there, and a trick, and
+ * Dream Tricks: pick a famous spot, a skater, what to hit there and a trick, and
  * watch it land or kick out on repeat, from where a filmer would stand.
  * Everything an animator would tune (scrubbing, zoom, the plaza and
  * waterfront) stays in the Trick Explorer; the link still describes
@@ -98,6 +99,7 @@ export default function DreamTricks({ initialSearch = '' }: { initialSearch?: st
   const [state, setState] = useState<ExplorerState>(() => dreamStateFromSearch(initialSearch));
   const [rate, setRate] = useState(1);
   const [shared, setShared] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const sound = useSoundEffects();
 
   const set = (patch: Partial<ExplorerState>) => setState({ ...state, ...patch });
@@ -192,7 +194,11 @@ export default function DreamTricks({ initialSearch = '' }: { initialSearch?: st
             onZoom={(zoom) => set({ zoom })}
             onResetView={() => setState(withShot(state, shot ?? (DREAM_DEFAULT.camera as CameraPresetId)))}
             onRate={setRate}
+            onOpenCamera={() => setCameraOpen(true)}
           />
+          <section className="explorer-card dream-outcome" aria-label="Animation outcome">
+            <OutcomeField state={state} set={set} />
+          </section>
         </div>
 
         {/* Every setting on one side, in the order you'd pick them. */}
@@ -217,26 +223,34 @@ export default function DreamTricks({ initialSearch = '' }: { initialSearch?: st
                 );
               })}
             </div>
-            {spot.lines.length > 1 && (
-              <div className="dream-lines" role="radiogroup" aria-labelledby="dream-line-title">
-                <span id="dream-line-title" className="dream-lines-label">What to hit</span>
-                {spot.lines.map((option) => {
-                  const active = option.id === line.id;
-                  return (
-                    <button
-                      key={option.id}
-                      type="button"
-                      role="radio"
-                      aria-checked={active}
-                      className={`dream-line ${active ? 'active' : ''}`}
-                      onClick={() => setState(withDreamLine(state, option))}
-                    >
-                      {option.label}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+          </section>
+
+          <section className="explorer-card dream-rider" aria-labelledby="dream-rider-title">
+            <h2 id="dream-rider-title" className="dream-heading">Pick a skater</h2>
+            <div className="dream-skater-list" role="radiogroup" aria-labelledby="dream-rider-title">
+              {SKATERS.map(({ id, label }) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="radio"
+                  aria-checked={state.skater === id}
+                  className={`dream-skater dream-skater-${id} ${state.skater === id ? 'active' : ''}`}
+                  onClick={() => set({ skater: id })}
+                >
+                  <span className="dream-skater-portrait" aria-hidden="true">
+                    <img src={`/skaters/${id}.webp`} alt="" width={320} height={384} />
+                  </span>
+                  <span className="dream-skater-name">{label}</span>
+                  {state.skater === id && <TbCheck className="dream-skater-check" aria-hidden />}
+                </button>
+              ))}
+            </div>
+            <div className="dream-footing">
+              <span className="explorer-field-label">
+                Footing <small>{state.rider === 'goofy' ? 'right foot forward' : 'left foot forward'}</small>
+              </span>
+              <Choice label="Footing" options={RIDERS} value={state.rider} onChange={(rider) => set({ rider })} />
+            </div>
           </section>
 
           <section className="explorer-card dream-trick" aria-labelledby="dream-trick-title">
@@ -248,30 +262,55 @@ export default function DreamTricks({ initialSearch = '' }: { initialSearch?: st
               </button>
             </div>
 
+            {spot.lines.length > 1 && (
+              <label className="dream-lines">
+                <span id="dream-line-title" className="dream-lines-label">What to hit</span>
+                <select
+                  className="dream-trick-select"
+                  aria-labelledby="dream-line-title"
+                  value={line.id}
+                  onChange={(event) => {
+                    const next = spot.lines.find((option) => option.id === event.target.value);
+                    if (next) setState(withDreamLine(state, next));
+                  }}
+                >
+                  {spot.lines.map((option) => (
+                    <option key={option.id} value={option.id}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+
             {/* Stance first: it renames the tricks in the list below it. */}
-            <Choice label="Stance" options={STANCES} value={state.stance} onChange={(stance) => set({ stance })} />
+            <div className="dream-labeled-field">
+              <span className="dream-field-label">Stance</span>
+              <Choice label="Stance" options={STANCES} value={state.stance} onChange={(stance) => set({ stance })} />
+            </div>
 
             {/* One list, grouped like the explorer's tiers, so it reads as a single pick. */}
-            <select
-              className="dream-trick-select"
-              aria-labelledby="dream-trick-title"
-              value={picked}
-              onChange={(event) => pick(event.target.value)}
-            >
-              {tiers.map((tier) => (
-                <optgroup key={tier.label} label={tier.label}>
-                  {tier.bases.map((base) => (
-                    <option key={base} value={base}>
-                      {grinding ? base : flatgroundTrick(base, state.stance).name}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
+            <label className="dream-labeled-field">
+              <span id="dream-trick-select-label" className="dream-field-label">{grinding ? 'Grind' : 'Trick'}</span>
+              <select
+                className="dream-trick-select"
+                aria-labelledby="dream-trick-select-label"
+                value={picked}
+                onChange={(event) => pick(event.target.value)}
+              >
+                {tiers.map((tier) => (
+                  <optgroup key={tier.label} label={tier.label}>
+                    {tier.bases.map((base) => (
+                      <option key={base} value={base}>
+                        {grinding ? base : flatgroundTrick(base, state.stance).name}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </label>
 
             {/* The ways to change the trick, after the trick itself. */}
-            <div className="dream-tweaks">
-              {grinding && (
+            {grinding && (
+              <div className="dream-tweaks">
                 <Choice
                   label="Grind side"
                   options={GRIND_SIDES}
@@ -279,9 +318,8 @@ export default function DreamTricks({ initialSearch = '' }: { initialSearch?: st
                   onChange={(side) => set({ side })}
                   name={(side) => side}
                 />
-              )}
-              <OutcomeField state={state} set={set} />
-            </div>
+              </div>
+            )}
 
             {grinding && (
               <div className="dream-combo">
@@ -305,60 +343,19 @@ export default function DreamTricks({ initialSearch = '' }: { initialSearch?: st
               </div>
             )}
           </section>
-
-          <section className="explorer-card dream-shots" aria-labelledby="dream-shot-title">
-            <div className="dream-heading-row">
-              <h2 id="dream-shot-title" className="dream-heading">Camera</h2>
-              <span className="dream-hint">or drag the video to look around</span>
-            </div>
-            <div className="dream-shot-list" role="radiogroup" aria-labelledby="dream-shot-title">
-              {shots.map((option) => {
-                const active = shot === option.id;
-                const preset = cameraPreset(option.id);
-                return (
-                  <button
-                    key={option.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    className={`dream-shot ${active ? 'active' : ''}`}
-                    onClick={() => setState(withShot(state, option.id))}
-                    title={option.hint}
-                  >
-                    <ShotIcon camera={sceneCamera({ ...state, camera: option.id })} tripod={preset.tripod != null} />
-                    <span>{option.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-
-          <section className="explorer-card dream-rider" aria-labelledby="dream-rider-title">
-            <h2 id="dream-rider-title" className="dream-heading">Skater</h2>
-            <div className="explorer-segmented dream-skaters" role="radiogroup" aria-labelledby="dream-rider-title">
-              {SKATERS.map(({ id, label, icon: Icon }) => (
-                <button
-                  key={id}
-                  type="button"
-                  role="radio"
-                  aria-checked={state.skater === id}
-                  className={state.skater === id ? 'active' : ''}
-                  onClick={() => set({ skater: id })}
-                >
-                  <Icon aria-hidden />
-                  {label}
-                </button>
-              ))}
-            </div>
-            <div className="dream-footing">
-              <span className="explorer-field-label">
-                Footing <small>{state.rider === 'goofy' ? 'right foot forward' : 'left foot forward'}</small>
-              </span>
-              <Choice label="Footing" options={RIDERS} value={state.rider} onChange={(rider) => set({ rider })} />
-            </div>
-          </section>
         </div>
       </div>
+      {cameraOpen && (
+        <CameraAngleDialog
+          shots={shots}
+          selected={shot}
+          onClose={() => setCameraOpen(false)}
+          onChoose={(next) => {
+            setState(withShot(state, next));
+            setCameraOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -219,6 +219,27 @@ describe('specFor', () => {
     expect(pressure.spinDir).toBe(-varialHeel.spinDir);
   });
 
+  it.each(['360 Shuvit', 'Frontside 360 Shuvit'])('%s follows a tre flip scoop without the flip', (base) => {
+    for (const stance of STANCES) {
+      const spec = specFor(trick(base, stance));
+      const tre = specFor(trick('360 Flip', stance));
+      for (const rotationSpeed of [0.65, 1, 1.4]) {
+        const style = resolveSkateStyle({ ...DEFAULT_SKATE_STYLE, rotationSpeed });
+        for (let p = 0.02; p < 1; p += 0.04) {
+          const t = ROLL_IN + flightTime(style) * p;
+          const shuv = computeFrame(t, spec, true, 'slam', 0.65, style);
+          const flip = computeFrame(t, tre, true, 'slam', 0.65, style);
+          expect(Math.abs(shuv.spin3d.yawDeg)).toBeCloseTo(Math.abs(flip.spin3d.yawDeg));
+          expect(shuv.motion.rotation).toBe(flip.motion.rotation);
+          expect(shuv.board.y).toBe(flip.board.y);
+          expect(shuv.footL).toEqual(flip.footL);
+          expect(shuv.footR).toEqual(flip.footR);
+          expect(shuv.spin3d.flipDeg).toBe(0);
+        }
+      }
+    }
+  });
+
   // Mirror pairs must be identical specs up to the mirrored signs — anything
   // else means the two directions of the "same" trick have quietly diverged.
   // Three families: kick/heel pairs mirror the flip only, FS/BS pairs mirror
@@ -242,12 +263,11 @@ describe('specFor', () => {
   ];
   const fullMirrors: Array<[string, string]> = [
     ['Varial Kickflip', 'Varial Heelflip'],
-    ['Hardflip', 'Inward Heelflip'],
     ['360 Flip', 'Laser Flip'],
   ];
-  // Mirrors in every way but the lean: a 360 inward heelflip stays flatter
-  // than the 360 hardflip it mirrors.
+  // Mirrors in every way but the lean: inward heels stay flatter than hardflips.
   const leanApart: Array<[string, string]> = [
+    ['Hardflip', 'Inward Heelflip'],
     ['360 Hardflip', '360 Inward Heelflip'],
   ];
 

@@ -14,8 +14,8 @@ import {
 
 /**
  * Dream Tricks: the Trick Explorer cut down for someone who just wants to
- * see a trick at a famous spot. The spot comes first, then what to hit
- * there (its stairs, its rail, the fence), the trick, and who rides it. The
+ * see a trick at a famous spot. Pick the spot and skater, then what to hit
+ * there (its stairs, its rail, the fence) within the trick section. The
  * same explorer state and shareable link underneath, so nothing is lost.
  */
 
@@ -55,6 +55,7 @@ export const DREAM_SPOTS: readonly DreamSpot[] = [
   { id: 'lyon-25', name: 'Lyon 25', where: 'Lyon, France', feature: '25 stairs · 14.76 ft down, 21.29 ft across', lines: [gap('25 stairs')] },
   { id: 'leap-of-faith', name: 'Leap of Faith', where: 'Point Loma High · San Diego', feature: 'Over the rail · 14.3 ft courtyard drop', lines: [gap('Over the rail')] },
   { id: 'miami-triangle', name: 'Miami Triangle', where: 'Bayfront Park · Miami', feature: 'Gap to the granite triangle, or its edges', lines: [gap('Gap to bank'), gap('Over the triangle', 'triangle'), rail('Down an edge')] },
+  { id: 'uc-davis-gap', name: 'UC Davis Gap', where: 'Roessler Hall · UC Davis', feature: 'Ivy gap · approx. 24 ft 4 in across, 10 ft down', lines: [gap('Over the ivy')] },
 ];
 
 const SPOT_BY_ID = new Map(DREAM_SPOTS.map((spot) => [spot.id, spot]));

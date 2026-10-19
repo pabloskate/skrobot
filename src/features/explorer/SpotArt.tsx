@@ -69,6 +69,16 @@ const PROFILES: Partial<Record<StageSet, { ground: string; strokeWidth?: number;
       </>
     ),
   },
+  'uc-davis-gap': {
+    // The campus walkway above a long ivy bank, with Roessler Hall behind it.
+    ground: `M0 14 H15 L68 ${GROUND} H72`,
+    extra: (
+      <>
+        <path d="M1 14 V3 H11 V14 M1 7 H11 M4 3 V14 M8 3 V14" strokeWidth={1.1} strokeOpacity={0.7} />
+        <path d="M19 19 l3 2 3 -1 M29 23 l3 2 3 -1 M39 27 l3 2 3 -1 M49 31 l3 2 3 -1 M26 29 l3 2 3 -1 M38 34 l3 2 3 -1" strokeWidth={1.1} strokeOpacity={0.7} />
+      </>
+    ),
+  },
 };
 
 /** A spot's silhouette for its card. Decorative; the card names the spot. */

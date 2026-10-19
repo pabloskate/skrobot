@@ -13,6 +13,7 @@ import { SUNSET_DROP, SUNSET_LAND_X, SUNSET_LANE_Z, SUNSET_POP_X, SUNSET_POP_Z, 
 import { LYON_TERRAIN } from './lyon/lyonLayout';
 import { LEAP_OF_FAITH_TERRAIN } from './leapOfFaith/leapOfFaithLayout';
 import { MIAMI_BANK_TERRAIN, MIAMI_GAP_TERRAIN, MIAMI_LEDGES } from './miami/miamiLayout';
+import { UC_DAVIS_TERRAIN } from './ucDavis/ucDavisLayout';
 
 /**
  * The sets a trick can be staged at (the explorer calls them spots), and
@@ -28,7 +29,7 @@ import { MIAMI_BANK_TERRAIN, MIAMI_GAP_TERRAIN, MIAMI_LEDGES } from './miami/mia
  * are scaled as they're registered.
  */
 
-export type StageSet = 'plaza' | 'waterfront' | 'el-toro' | 'hollywood-high' | 'wallenberg' | 'sunset-car-wash' | 'lyon-25' | 'leap-of-faith' | 'miami-triangle';
+export type StageSet = 'plaza' | 'waterfront' | 'el-toro' | 'hollywood-high' | 'wallenberg' | 'sunset-car-wash' | 'lyon-25' | 'leap-of-faith' | 'miami-triangle' | 'uc-davis-gap';
 
 /**
  * Which handrail a grind rides where a set has several: the center one, or
@@ -190,6 +191,12 @@ export const STAGE_SETS: readonly SetInfo[] = [
       { id: 'triangle', label: 'Over', hint: 'over the whole triangle to the plaza', terrain: stageTerrain(MIAMI_GAP_TERRAIN) },
     ],
     rails: null, ledges: stageLedges(MIAMI_LEDGES), farPanorama: false, tripods: ['bottom', 'side', 'top'],
+  },
+  {
+    id: 'uc-davis-gap', label: 'UC Davis Gap', grinds: false,
+    description: 'Roessler Hall, UC Davis · Over the ivy bank beside the round planter. Estimated 24 ft 4 in across and 10 ft down in the classic filmed layout.',
+    terrain: stageTerrain(UC_DAVIS_TERRAIN),
+    rails: null, farPanorama: false, tripods: ['bottom', 'side', 'top'],
   },
 ];
 
