@@ -5187,6 +5187,60 @@ main:has(.rps-arena) > .screen {
   background: var(--bg);
 }
 
+.explorer-notice {
+  margin: 28px auto 0;
+  padding: 0 20px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.explorer-notice p {
+  margin: 0;
+}
+
+.explorer-notice a,
+.location-about a {
+  color: var(--purple);
+  text-underline-offset: 3px;
+}
+
+.location-about {
+  max-width: 640px;
+  padding-top: calc(32px + var(--app-safe-area-top));
+  padding-bottom: calc(48px + env(safe-area-inset-bottom));
+  line-height: 1.7;
+}
+
+.location-about h1 {
+  margin: 6px 0 20px;
+  font-size: clamp(30px, 8vw, 44px);
+  line-height: 1.12;
+  letter-spacing: -0.035em;
+}
+
+.location-about section {
+  margin: 28px 0;
+  padding-top: 20px;
+  border-top: 1px solid #e4e1ee;
+}
+
+.location-about h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.location-about-back {
+  display: inline-block;
+  margin-bottom: 24px;
+}
+
+.location-about a:focus-visible {
+  outline: 3px solid var(--purple);
+  outline-offset: 4px;
+}
+
 .explorer button {
   font-family: inherit;
 }
@@ -6569,6 +6623,48 @@ main:has(.rps-arena) > .screen {
   box-shadow: 0 14px 36px rgba(34, 26, 78, 0.2);
 }
 
+/* Camera angle lives above the picture, not pinned to it: it's the one
+   control for framing the shot, so it reads as primary instead of hiding
+   among the transport pills on top of the animation. */
+.dream-stage-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--explorer-line);
+  background: var(--card);
+}
+
+.dream-camera-top {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--purple);
+  box-shadow: 0 4px 14px rgba(100, 49, 216, 0.38);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 0.08s ease, background 0.15s ease;
+}
+
+.dream-camera-top:hover {
+  background: var(--purple-dark);
+}
+
+.dream-camera-top:active {
+  transform: scale(0.96);
+}
+
+.dream-camera-top svg {
+  width: 18px;
+  height: 18px;
+}
+
 .explorer-stage-overlay {
   position: absolute;
   inset: 0;
@@ -6688,6 +6784,8 @@ main:has(.rps-arena) > .screen {
 .dream-camera-dialog .dream-shot-list { grid-auto-flow: row; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .dream-camera-dialog .dream-shot { padding: 12px 6px; }
 .dream-camera-dialog button:focus-visible { outline: 3px solid var(--purple); outline-offset: 3px; }
+.dream-camera-side { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--explorer-line); }
+.dream-camera-side-label { color: var(--muted); font-size: 13px; font-weight: 700; }
 
 .dream-reset {
   position: absolute;

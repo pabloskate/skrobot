@@ -1,5 +1,11 @@
 # Miami Triangle reference notes
 
+## Current presentation
+
+The shipped scene is now **Triangle Bank**, a redesigned skate setting. The memorial tower, inscriptions, emblem and artist lettering have been removed. The deck has a rectangular rear with a pointed takeoff and low garden seating; the bank keeps its established riding dimensions. These notes preserve historical research provenance, not a claim that the current scene reproduces the memorial.
+
+See [Location presentation](LOCATION_PRESENTATION.md) for the public names, links and location notice.
+
 Researched October 8, 2026. This set depicts the classic skateable version of
 the Miami Triangle at Bayfront Park, downtown Miami: the gap from the tip of the
 Challenger Memorial's raised terrace onto the tilted granite triangle at its

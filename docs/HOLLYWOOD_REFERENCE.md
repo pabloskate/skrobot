@@ -1,5 +1,11 @@
 # Hollywood High 16 reference notes
 
+## Current presentation
+
+The auditorium wall in the shipped scene is plain. The portrait-mural recreation has been removed; the reference notes below remain as provenance for the earlier scene.
+
+See [Location presentation](LOCATION_PRESENTATION.md) for the public names, links and location notice.
+
 The recreation depicts the classic open sixteen-stair on the south end of the
 Hollywood High auditorium walkway. Research and image inspection: October 5,
 2026. It is an architectural interpretation at the sets' 29 units per foot
@@ -65,17 +71,25 @@ street: never more than 45° off the stairs, because the run-up is a walkway
 along them and the gap is out and down, not sideways. It pops at the lip three
 feet street-side of the center rail's first post, passes over the side rail a
 few steps down where it has dropped to the run-up's level, and lands about seven
-feet past the fence after a 24 ft flight (about 19 ft/s). A landed rider carves
+feet past the fence after a 24 ft flight (14 to 16 mph). A landed rider carves
 back to riding along the sidewalk; a fall slides on along the line.
 
-The fence takes a real pop whoever rides it: the terrain's `pop` (1.4, a 2.8 ft
-ollie) is the least pop used for the arc, while each rider's own trick motion
-is unchanged. Spinning boards sweep their ends back over the fence late in the
-flight, which is what set the flight length and that pop (lines were scored
-against every trick; `hollywoodFence.test.ts` guards the clearances). The
-crane stays at the run-up's height and tilts down after the rider (up to 40°)
-rather than sinking behind the pickets, as the filmer at the top does; the
-fence has its own tripods.
+The rail and the spear tips are about level with the run-up, so the line is
+fast and low: each trick is popped just high enough for its board to clear them
+(`fencePop`, the terrain's `trickPop`), the same whoever rides it, while each
+rider's own trick motion is unchanged. A board that stays pointing down the
+line (ollies, flips, late shuvs) peaks 1.4 ft over the run-up, and a plain
+ollie's deck passes about 1.5 ft over the rail and the fence; one the trick
+turns across the line swings its ends wide, back over the rail late, and peaks
+at 1.9 ft; an impossible's, wrapping round the back foot, swings its free end
+down past the sole and peaks at 2.2 ft.
+The side rail is the tight one: it's crossed near the top, while the board is
+still tail-down off the pop. Lowered at the user's request (October 21, 2026)
+from a 2.8 ft pop for every trick, which cleared them by about 3 ft;
+`hollywoodFence.test.ts` guards both the clearances and that no trick is
+popped much over what it needs. The crane stays at the run-up's height and
+tilts down after the rider (up to 40°) rather than sinking behind the pickets,
+as the filmer at the top does; the fence has its own tripods.
 
 ## Coordinate and rendering contract
 

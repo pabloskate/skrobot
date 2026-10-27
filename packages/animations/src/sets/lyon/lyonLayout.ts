@@ -1,8 +1,8 @@
 import type { DropTerrain } from '../elToro/stairs';
 import { SET_FOOT } from '../setScale';
 
-/** Lyon's Cité Internationale. Exact gap dimensions supplied by the user;
- * architecture follows the photographs and film in docs/LYON_REFERENCE.md. */
+/** The 25 Stair. Exact gap dimensions supplied by the user; historical
+ * research in docs/LYON_REFERENCE.md. The surrounding buildings are original. */
 export const LYON_FOOT = SET_FOOT;
 const F = LYON_FOOT;
 export const LYON_STEPS = 25;
@@ -18,7 +18,6 @@ export const LYON_LEFT_Z = -LYON_WIDTH / 2;
 export const LYON_RIGHT_Z = LYON_WIDTH / 2;
 export const LYON_LANE_Z = 0;
 export const LYON_BUILDING_FACE = LYON_RIGHT_Z;
-export const LYON_BUILDING_TOP = 39 * F;
 export const LYON_WALL_TOP = 0.65 * F;
 export const LYON_PROMENADE_Y = 12 * F;
 export const LYON_PROMENADE_Z = LYON_LEFT_Z - 24 * F;

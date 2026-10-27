@@ -54,6 +54,8 @@ export const SHOE_TOESIDE = 1;
 export const ANKLE_LIFT = 6.5;
 /** Shoe center ahead of the ankle, toward the toe. */
 export const TOE_REACH = 3.6;
+/** How far round toward the nose each foot's toes point (deg): the front foot angled, the back nearly across. */
+export const FOOT_RAKE = { nose: 24, tail: 8 } as const;
 /** The physics' foot point stands this far over the sole. */
 export const FOOT_OVER_SOLE = 2;
 /** Shoe box half extents, so soles sit on the grip. */

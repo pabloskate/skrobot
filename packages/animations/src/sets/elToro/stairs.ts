@@ -67,7 +67,7 @@ export interface StairPlan {
   rollout: readonly number[] | null;
   /**
    * The deck's height at each rollout position: on the bank, or in the air
-   * where it rolls off a raised lower edge (Miami's granite slab) and drops
+   * where it rolls off a raised lower edge (Miami's concrete slab) and drops
    * to the ground beyond it.
    */
   rolloutLift: readonly number[] | null;
@@ -139,6 +139,15 @@ export interface DropTerrain {
    * on flatground. Their own trick is unchanged; the arc carrying it grows.
    */
   pop?: number;
+  /**
+   * The pop each trick takes, whoever rides it (as a style's popHeight, in
+   * place of both theirs and `pop`): over obstacles about level with the
+   * takeoff (Hollywood's side rail and fence) a skater pops just what the
+   * trick needs to clear them, not as high as they can; over Leap of Faith's
+   * stair rail an impossible's wrap needs more than the rest. Given the
+   * trick's base; without one, the most any trick takes.
+   */
+  trickPop?: (base?: string) => number;
   /** Signed height gradient. Omitted for discrete stairs with a flat landing. */
   slope?: (u: number) => number;
 }
@@ -168,8 +177,9 @@ function takeoffFor(terrain: DropTerrain, stance: Stance): { x: number; z: numbe
   return { x: from.x - back * Math.cos(yaw), z: from.z - back * Math.sin(yaw) };
 }
 
-export function planStairs(style: Pick<SkateStyle, 'popHeight'>, landed: boolean, terrain: DropTerrain, stance: Stance = 'regular'): StairPlan {
-  const rise = Math.sqrt(2 * GRAVITY * POP_RISE * Math.max(style.popHeight, terrain.pop ?? 0));
+export function planStairs(style: Pick<SkateStyle, 'popHeight'>, landed: boolean, terrain: DropTerrain, stance: Stance = 'regular', base?: string): StairPlan {
+  const popHeight = terrain.trickPop ? terrain.trickPop(base) : Math.max(style.popHeight, terrain.pop ?? 0);
+  const rise = Math.sqrt(2 * GRAVITY * POP_RISE * popHeight);
   const landingX = terrain.run + terrain.landPast;
   const drop = -terrain.ground(landingX);
   const flight = (rise + Math.sqrt(rise * rise + 2 * GRAVITY * drop)) / GRAVITY;
@@ -564,16 +574,21 @@ export const EL_TORO_RAIL: Handrail = {
   radius: RAIL_R,
   ground: stairGround,
   rest: (u) => Math.max(-STAIR_DROP, Math.min(0, nosingLine(u))),
-  // A good roll for a rail: well under the speed it takes to jump the set.
-  speed: 13 * SET_FOOT,
+  // A good roll for a rail: under the speed it takes to jump the set (20.6 feet a second), but not by much: the rail
+  // is steep and the grind gains on it, so a skater comes off the bottom faster than the gap's flight.
+  speed: 15 * SET_FOOT,
 };
 
 /** A drop's moments; the catch is where the flatground trick is caught, on the stretched clock. */
 export type StairTimeline = AttemptTimeline;
 
-/** The moments of a trick down a drop (stage units), for a robot's style (its pop sets the hang time) and the trick's stance (which end it pops). */
-export function stairTimeline(style: SkateStyle | undefined, landed: boolean, terrain: DropTerrain, stance: Stance = 'regular'): StairTimeline {
-  const plan = planStairs(resolveSkateStyle(style), landed, terrain, stance);
+/**
+ * The moments of a trick down a drop (stage units), for a robot's style (its
+ * pop sets the hang time), the trick's stance (which end it pops) and its
+ * base (where the drop sets each trick's pop).
+ */
+export function stairTimeline(style: SkateStyle | undefined, landed: boolean, terrain: DropTerrain, stance: Stance = 'regular', base?: string): StairTimeline {
+  const plan = planStairs(resolveSkateStyle(style), landed, terrain, stance, base);
   return {
     pop: plan.pop,
     peak: plan.pop + plan.rise / GRAVITY,

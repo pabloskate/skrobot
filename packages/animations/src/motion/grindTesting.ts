@@ -6,13 +6,14 @@ import { QUICK_SWEEP, sweepHz } from '../testing';
 import { planStage } from '../stage/stage';
 import type { RiderStance, SkateStyle, Stance } from '../types';
 import { HANGER_BOTTOM, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z } from '../board/board';
-import { deckBottomY } from '../board/deck';
+import { deckBottomY, halfWidth } from '../board/deck';
 import { DEFAULT_SCENE_CAMERA, fallSink, makeCamera } from '../camera/camera';
 import { barSpan, grindCameraLift, grindCameraTrack, planGrind, type GrindFrame, type GrindPlan, type Handrail } from './grind';
 import { BAR_HALF, BAR_TOP_Y, BAR_Z, GRIND_BASES, exitEndsFor, grindSpecFor, joinGrindBase, joinGrindExit, type GrindSide, type PopEnd } from './grindDefinitions';
 import { solveGrindRig, type GrindRig } from './grindRig';
+import { GRIND_EXIT_TRICKS } from './grindTricks';
 import { add3, dot3, scale3, sub3, type V3 } from '../math';
-import { DECK_HALF_WIDTH, type Rig } from './skeleton';
+import type { Rig } from './skeleton';
 import { GRAVITY } from '../units';
 
 /**
@@ -122,8 +123,8 @@ export const stepOf = (step: number) => (QUICK_SWEEP ? Math.max(step, 1 / sweepH
 
 // ----- Tricks popped into and out of a grind -----
 
-/** Board-only tricks into a grind: a flip, a shuv, both, and the longest combinations. */
-export const ENTRY_TRICKS = ['Kickflip', 'Heelflip', 'Pop Shuvit', 'Frontside Shuvit', 'Hardflip', '360 Flip', 'Double Kickflip'];
+/** Board-only tricks into a grind: a flip, a shuv, both, the longest combinations, and an impossible's board wrapped round the back foot. */
+export const ENTRY_TRICKS = ['Kickflip', 'Heelflip', 'Pop Shuvit', 'Frontside Shuvit', 'Hardflip', '360 Flip', 'Double Kickflip', 'Impossible'];
 /** One of each way of riding the bar, for a trick into it: on both trucks, one truck, a slide, a kick, a blunt. */
 export const ENTRY_GRINDS = ['50-50 Grind', 'Nosegrind', 'Smith Grind', 'Boardslide', 'Lipslide', 'Noseslide', 'Bluntslide'];
 
@@ -181,11 +182,8 @@ export function everySpin(stances: Stance[] = STANCES) {
 
 export const spinPlan = entryPlan;
 
-/** Board-only tricks out of a grind (a flip, a shuv, both), the rider's own half turn, a flip on it, and a bigspin's of both. */
-export const EXIT_TRICKS = [
-  'Kickflip', 'Heelflip', 'Pop Shuvit', 'Frontside Shuvit', '360 Flip', 'Backside 180', 'Frontside 180',
-  'Backside Flip', 'Frontside Flip', 'Backside Heelflip', 'Frontside Heelflip', 'Bigspin', 'FS Bigspin',
-];
+/** The tricks out of a grind the package offers, every one swept (GRIND_EXIT_TRICKS). */
+export const EXIT_TRICKS: string[] = [...GRIND_EXIT_TRICKS];
 /** One of each way of riding the bar, for a trick out of it: both trucks, a truck at each end, a slide, a kick at each end, a blunt. */
 export const EXIT_GRINDS = ['50-50 Grind', '5-0 Grind', 'Crooked Grind', 'Boardslide', 'Tailslide', 'Noseslide', 'Bluntslide'];
 
@@ -273,11 +271,12 @@ export function toBoard(rig: Rig, p: V3): V3 {
   };
 }
 
-/** Samples over the board's solid parts: deck underside, hangers, and wheel rims. */
+/** Samples over the board's solid parts: deck underside (its rounded ends as the deck has them), hangers, and wheel rims. */
 export function boardSamples(rig: Rig): V3[] {
   const pts: V3[] = [];
   for (let x = -46; x <= 46; x += 4) {
-    for (const z of [-DECK_HALF_WIDTH + 1, 0, DECK_HALF_WIDTH - 1]) pts.push(rig.board.point({ x, y: deckBottomY(x) - 0.4, z }));
+    const edge = Math.max(0, halfWidth(x) - 1);
+    for (const z of [-edge, 0, edge]) pts.push(rig.board.point({ x, y: deckBottomY(x) - 0.4, z }));
   }
   for (const tx of [-WHEEL_X, WHEEL_X]) {
     for (let z = -5; z <= 5; z += 2.5) pts.push(rig.board.point({ x: tx, y: HANGER_BOTTOM, z }));

@@ -1,8 +1,9 @@
 import { SET_FOOT, SET_SCALE } from '../setScale';
 
 /**
- * Sunset Car Wash, its skateable 2019 appearance. Dimensions are photo-based
- * reconstruction estimates, not a survey; see docs/SUNSET_REFERENCE.md.
+ * Roof to Bank: the skateable roof and bank. Dimensions are photo-based
+ * reconstruction estimates, not a survey; historical research in
+ * docs/SUNSET_REFERENCE.md.
  * +x runs downhill toward Sunset Boulevard. Facing the wash from the street,
  * -z is right: the rider follows -z along the roof, then turns downhill.
  */

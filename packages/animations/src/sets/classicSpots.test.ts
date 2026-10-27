@@ -44,7 +44,7 @@ describe('classic spots use their actual terrain', () => {
     const flights = new Set<number>();
     for (const set of SPOTS) {
       const stage = plan(set);
-      const timeline = setTimeline(set, stage.style)!;
+      const timeline = setTimeline(set, stage.style, true, 'stairs', 'regular', 'Kickflip')!;
       expect(timeline.land).toBe(stage.stairs!.land);
       expect(timeline.end).toBe(stage.end);
       flights.add(stage.stairs!.flight);

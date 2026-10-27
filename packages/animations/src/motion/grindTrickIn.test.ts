@@ -6,7 +6,10 @@ import { stageFrame } from '../stage/stage';
 import { WHEEL_BOTTOM, deckTopY } from '../board/board';
 import { TIP_X, deckBottomY } from '../board/deck';
 import { EL_TORO_RAIL } from '../sets/elToro/stairs';
-import { grindTimelineFor } from './grind';
+import { HOLLYWOOD_RAIL } from '../sets/hollywood/hollywoodLayout';
+import { stageHandrail } from '../sets/setScale';
+import { INCH } from '../units';
+import { grindFrame, grindTimelineFor, railTopY } from './grind';
 import { BAR_Z, grindSpecFor, joinGrindBase, splitGrindBase } from './grindDefinitions';
 import { canEnterGrind } from './grindTricks';
 import { solveGrindRig } from './grindRig';
@@ -16,6 +19,7 @@ import {
   ENTRY_TRICKS,
   NEUTRAL,
   RIDERS,
+  SPIN_TRICKS,
   STANCES,
   boardSamples,
   covering,
@@ -78,8 +82,8 @@ describe('Trick into grind', () => {
     expect(grindSpecFor({ base: 'Backside Smith Grind', stance: 'regular' })?.entry).toBeNull();
 
     for (const entry of ENTRIES) expect(canEnterGrind(entry), entry).toBe(true);
-    // Dolphin flips and impossibles pitch the board end over end.
-    for (const entry of ['Ollie', 'Impossible', 'Dolphin Flip', 'Not A Trick']) {
+    // Dolphin flips pitch the board end over end.
+    for (const entry of ['Ollie', 'Dolphin Flip', 'Not A Trick']) {
       expect(canEnterGrind(entry), entry).toBe(false);
       expect(grindSpecFor({ base: joinGrindBase(entry, 'Frontside Lipslide'), stance: 'regular' }), entry).toBeNull();
     }
@@ -107,13 +111,14 @@ describe('Trick into grind', () => {
     for (const { entry, base, side, rider, stance, label } of entryCombos(everyEntry())) {
       const { plan, mechanics } = entryPlan(entry, base, side, stance, rider, null);
       const flips = /flip|Double/i.test(entry);
-      const shuvs = /Shuvit|Hardflip|360 Flip/.test(entry);
+      // An impossible's turn is its wrap about the back foot, not a shuv.
+      const shuvs = /Shuvit|Hardflip|360 Flip|Impossible/.test(entry);
       let flipReach = 0;
       let yawReach = 0;
       for (let t = plan.pop; t <= plan.lockAt; t += 0.01) {
         const { rig, frame } = solveGrindRig(t, plan, mechanics, NEUTRAL);
         flipReach = Math.max(flipReach, Math.abs(frame.spin.flip));
-        yawReach = Math.max(yawReach, Math.abs(frame.spin.yaw));
+        yawReach = Math.max(yawReach, Math.abs(frame.spin.yaw + (frame.spin.wrap?.deg ?? 0)));
         expect(rig.board.flipDeg, label).toBeCloseTo(frame.pose.roll + frame.spin.flip, 6);
       }
       if (flips) expect(flipReach, label).toBeGreaterThan(300);
@@ -188,6 +193,38 @@ describe('Trick into grind', () => {
     }
     sweep.verify();
   }, SWEEP_TIMEOUT);
+
+  it('pops as an ollie is, and catches the trick only a few inches over the bar or the rail, not up in the air', () => {
+    const SWIVEL = resolveSkateStyle({ popHeight: 0.5, rotationSpeed: 1.16, flickStrength: 0.88 });
+    const rails = [['El Toro rail', stageHandrail(EL_TORO_RAIL)], ['Hollywood rail', stageHandrail(HOLLYWOOD_RAIL)]] as const;
+    for (const [styleName, style] of [['neutral', NEUTRAL], ['swivel', SWIVEL]] as const) {
+      for (const [where, onto] of [['bar', null], ...rails] as const) {
+        // How far over the lock's seat the board is `t` seconds after the pop: a rail's seat falls away as it rides down.
+        const heightOver = (plan: ReturnType<typeof grindPlan>['plan'], t: number) => {
+          const frame = grindFrame(plan.pop + t, plan);
+          const ride = plan.handrail;
+          if (!ride) return GROUND - frame.center.y - plan.lockRise;
+          return railTopY(ride.rail, ride.popS + ride.speed * t) - (railTopY(ride.rail, ride.lockS) - plan.lockCenter.y) - frame.center.y;
+        };
+        const peakOver = (plan: ReturnType<typeof grindPlan>['plan']) => {
+          let peak = -Infinity;
+          for (let t = 0; t <= plan.upT; t += 1 / 240) peak = Math.max(peak, heightOver(plan, t));
+          return peak;
+        };
+        const plain = grindPlan('Frontside 50-50 Grind', 'regular', 'regular', null, style, onto).plan;
+        for (const entry of [...ENTRIES, ...SPIN_TRICKS]) {
+          const label = `${entry} into 50-50 Grind, ${where}, ${styleName}`;
+          const { plan } = grindPlan(joinGrindBase(entry, 'Frontside 50-50 Grind'), 'regular', 'regular', null, style, onto);
+          // Caught as the board comes down to its bar: the feet land on it a few inches up, and the catch and
+          // the touch of the bar are nearly one event, not a trick caught high up and dropped onto the bar.
+          expect(heightOver(plan, plan.entryCaught) / INCH, label).toBeLessThan(7);
+          expect(plan.entryCaught / plan.upT, label).toBeGreaterThan(0.8);
+          // And popped as an ollie is, only the room the trick turns in more than the plain grind's hop.
+          expect((peakOver(plan) - peakOver(plain)) / INCH, label).toBeLessThan(6);
+        }
+      }
+    }
+  });
 
   it('pushes up into the pop once, however the trick sets up', () => {
     const combos = [...everyEntry()].filter(({ rider, stance }) => rider === 'regular' && stance !== 'fakie' && stance !== 'switch');

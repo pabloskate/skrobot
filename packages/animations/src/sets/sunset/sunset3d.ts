@@ -33,7 +33,7 @@ const STRUCTURE: Ink = { id: 85, priority: 4, width: 0.16, kind: INK_PROP, solid
 const PAINT: Ink = { id: 99, priority: 4, width: 0.13, kind: INK_PROP, solid: 11 };
 const SC = {
   bank: '#aeb6b5', roof: '#b2aca0', sidewalk: '#c0bbac', asphalt: '#777971',
-  blue: '#27789e', blueDark: '#1e5977', orange: '#d5753f', trim: '#c9cfca',
+  sage: '#64776b', sageDark: '#43574e', cream: '#c6b797', trim: '#dedbd0',
 };
 
 function horizontal(bake: Bake, x0: number, x1: number, z0: number, z1: number, y: number, color: string) {
@@ -41,9 +41,9 @@ function horizontal(bake: Bake, x0: number, x1: number, z0: number, z1: number, 
 }
 
 /**
- * Canonical, real-world-oriented geometry. The empty landing bank is the
- * skateable pre-2021 version, with the 2019 blue/orange canopy. Photographic
- * sources and explicitly estimated dimensions: docs/SUNSET_REFERENCE.md.
+ * Roof to Bank: the established riding surfaces with an unbranded sage and
+ * cream canopy. Historical research for the trick dimensions remains in
+ * docs/SUNSET_REFERENCE.md; business signs and badges are not reproduced.
  */
 export function buildSunsetGeometry() {
   const ground = new Bake();
@@ -160,49 +160,30 @@ export function buildSunsetGeometry() {
     horizontal(ground, x, x + 1.1, z, z + 2.1, 0.2, '#cecab9');
   }
 
-  // Blue fascia wraps the long open canopy and its end. Silver roof-edge
-  // flashing and the orange drip band match the 2019 cover photo.
+  // Sage fascia wraps the long open canopy and its end, with silver
+  // roof-edge flashing and a cream drip band.
   props.box([SUNSET_ROOF_BACK, -11, SUNSET_ROOF_Z0], [0, -0.6, SUNSET_ROOF_Z1], '#b7bdb6', '#c9ccc1', STRUCTURE, 'bfkle');
-  props.box([-8, -79, SUNSET_ROOF_Z0], [-0.4, -10, SUNSET_ROOF_Z1], SC.blue, SC.blue, PAINT);
-  props.box([SUNSET_ROOF_BACK, -79, SUNSET_ROOF_Z0], [-1, -10, SUNSET_ROOF_Z0 + 8], SC.blue, SC.blue, PAINT);
-  props.box([-9, -85, SUNSET_ROOF_Z0 - 1], [0.3, -79, SUNSET_ROOF_Z1 + 1], SC.orange, '#e49667', PAINT);
-  props.box([SUNSET_ROOF_BACK, -85, SUNSET_ROOF_Z0 - 1], [0, -79, SUNSET_ROOF_Z0 + 9], SC.orange, '#e49667', PAINT);
+  props.box([-8, -79, SUNSET_ROOF_Z0], [-0.4, -10, SUNSET_ROOF_Z1], SC.sage, SC.sage, PAINT);
+  props.box([SUNSET_ROOF_BACK, -79, SUNSET_ROOF_Z0], [-1, -10, SUNSET_ROOF_Z0 + 8], SC.sage, SC.sage, PAINT);
+  props.box([-9, -85, SUNSET_ROOF_Z0 - 1], [0.3, -79, SUNSET_ROOF_Z1 + 1], SC.cream, '#d8cdb0', PAINT);
+  props.box([SUNSET_ROOF_BACK, -85, SUNSET_ROOF_Z0 - 1], [0, -79, SUNSET_ROOF_Z0 + 9], SC.cream, '#d8cdb0', PAINT);
   props.box([-9, -12, SUNSET_ROOF_Z0 - 1], [0.2, -8, SUNSET_ROOF_Z1 + 1], SC.trim, '#d7d9cb', PAINT);
   props.box([SUNSET_ROOF_BACK, -12, SUNSET_ROOF_Z0 - 1], [0, -8, SUNSET_ROOF_Z0 + 9], SC.trim, '#d7d9cb', PAINT);
   for (let z = SUNSET_ROOF_Z0; z < SUNSET_ROOF_Z1; z += 250) {
-    props.box([-0.1, -78, z], [0.05, -13, z + 0.7], SC.blueDark, SC.blueDark, null);
+    props.box([-0.1, -78, z], [0.05, -13, z + 0.7], SC.sageDark, SC.sageDark, null);
     for (const y of [-16, -74]) props.box([0.1, y, z + 3], [0.3, y + 1, z + 4], '#bac2b4', '#bac2b4', null);
   }
-  // Anchor signs at their right edge; each facade keeps readable lettering
-  // after moving the short canopy end to the right side of the frontage.
+  // Lettering anchored at its right edge (the billboard's, below).
   const sign = (text: string, end: Vec3, right: Vec3, scale: number, color = '#f3ede0') => {
     const width = (text.length * 6 - 1) * scale;
     const start: Vec3 = [end[0] - right[0] * width, end[1], end[2] - right[2] * width];
     sunsetLettering(props, text, start, right, scale, color);
   };
-  sign('SUNSET CAR WASH', [0.5, -25, -55], [0, 0, -1], 5.7);
-  sign('100% HAND WASH', [0.5, -33, 590], [0, 0, -1], 3.8, '#eee4c5');
-  sign('SUNSET CAR WASH', [-855, -28, SUNSET_ROOF_Z0 - 0.5], [-1, 0, 0], 6);
-  // Circular Sunset badge at the canopy's corner, built in its vertical plane.
-  const logo = (cx: number, cy: number, cz: number, axis: 'x' | 'z') => {
-    const point = (r: number, a: number): Vec3 => axis === 'x' ? [cx, cy + Math.sin(a) * r, cz + Math.cos(a) * r] : [cx + Math.cos(a) * r, cy + Math.sin(a) * r, cz];
-    const n: Vec3 = axis === 'x' ? [1, 0, 0] : [0, 0, -1];
-    for (const [r, color] of [[25, '#e0b87b'], [21, '#d2c9a5'], [17, '#bf704a']] as const) {
-      for (let k = 0; k < 36; k++) props.triangle([cx, cy, cz], point(r, k * Math.PI / 18), point(r, (k + 1) * Math.PI / 18), n, { color }, NO_INK);
-      // Each concentric face needs its own tiny offset toward the viewer.
-      if (axis === 'x') cx += 0.03; else cz -= 0.03;
-    }
-  };
-  logo(0.65, -45, -126, 'x');
-  logo(-60, -45, SUNSET_ROOF_Z0 - 0.65, 'z');
-  sign('SUNSET', [0.8, -35, -146], [0, 0, -1], 1.2);
-  sign('CAR WASH', [0.8, -49, -152], [0, 0, -1], 1.1);
-  sign('SUNSET', [-80, -35, SUNSET_ROOF_Z0 - 0.8], [-1, 0, 0], 1.2);
-  sign('CAR WASH', [-85, -49, SUNSET_ROOF_Z0 - 0.8], [-1, 0, 0], 1.1);
+  // Plain fascia: no business name, slogan, or circular brand badges.
 
   // Open wash bays: columns, joists, strip lights, interior pipes, guide rail.
   for (let z = SUNSET_ROOF_Z0 + 80; z < SUNSET_ROOF_Z1; z += 250) {
-    props.box([-55, -194, z - 3], [-48, -79, z + 3], SC.blueDark, SC.blue, PAINT);
+    props.box([-55, -194, z - 3], [-48, -79, z + 3], SC.sageDark, SC.sage, PAINT);
     props.box([SUNSET_ROOF_BACK + 90, -194, z - 4], [SUNSET_ROOF_BACK + 100, -10, z + 4], '#8e978e', '#bcc0b3', STRUCTURE);
     props.box([SUNSET_ROOF_BACK + 45, -21, z - 4], [-8, -12, z + 4], '#6c766e', '#9eaa9e', STRUCTURE);
     props.box([-130, -20, z - 63], [-104, -18, z + 63], '#f0dfb3', '#fff0cb', null);

@@ -17,4 +17,7 @@ const nextConfig: NextConfig = {
 export default nextConfig;
 
 // Makes getCloudflareContext() (bindings, .dev.vars) work inside `next dev`.
-initOpenNextCloudflareForDev();
+// Bindings stay local: dev shows the magic link instead of emailing it, so the
+// remote EMAIL binding (for `npm run preview`) would only open an unused
+// Cloudflare connection.
+initOpenNextCloudflareForDev({ remoteBindings: false });

@@ -62,7 +62,7 @@ export { grindTimelineFor, type GrindTimeline, type Handrail } from './motion/gr
 export { RAIL_BAIL_OPTIONS, railBailTimelineFor, type RailBail, type RailBailTimeline } from './motion/fall/railBail';
 /**
  * Grind names. Flatground tricks can be popped into a grind ("Kickflip into
- * Frontside Lipslide", "Backside 180 into Frontside Nosegrind") and out of it
+ * Frontside Lipslide", "Backside 180 into Backside Nosegrind") and out of it
  * off an end the grind rides ("Backside 5-0 Grind Kickflip Out", "Crooked
  * Grind Nollie Kickflip Out"; see exitEndsFor).
  */
@@ -77,7 +77,7 @@ export {
   type GrindSide,
   type PopEnd,
 } from './motion/grindDefinitions';
-export { canEnterGrind, canExitGrind } from './motion/grindTricks';
+export { GRIND_EXIT_TRICKS, canEnterGrind, canExitGrind } from './motion/grindTricks';
 export { default as RobotAvatar } from './ui/RobotAvatar';
 export { default as PushOffAnimation } from './ui/PushOffAnimation';
 export { readableAccent } from './ui/robotColors';

@@ -3,6 +3,7 @@ import { DEFAULT_SCENE_CAMERA, FLIP_T, FOOT, LAND_T, ROLL_IN, SCENE_ORBIT_BOUNDS
 import { TRICK_BY_ID } from '@/features/tricks';
 import {
   CAMERA_PRESETS,
+  CAMERA_SIDES,
   DEFAULT_STATE,
   FLATGROUND_BASES,
   FLATGROUND_TIERS,
@@ -15,6 +16,7 @@ import {
   STANCES,
   ZOOM_RANGE,
   ZOOM_STEP,
+  cameraHasSides,
   cameraPresetsFor,
   grindMatchesSearch,
   outEndsFor,
@@ -31,6 +33,7 @@ import {
   trickSteps,
   turnCamera,
   withCamera,
+  withCameraSide,
   withShot,
   videoFilename,
   withGrind,
@@ -211,7 +214,7 @@ describe('Trick Explorer spots', () => {
     expect(trickSteps(boardslide('Backside', { rail: 'side' })).map((step) => step.detail).join(' ')).toMatch(/left rail on your heelside/);
   });
 
-  it('grinds one of the Miami triangle’s edges, the one the trick comes in toward', () => {
+  it('grinds one of Triangle Bank’s edges, the one the trick comes in toward', () => {
     const at = (grind: string, side: 'Frontside' | 'Backside', patch: Partial<ExplorerState> = {}) =>
       grindState({ set: 'miami-triangle', grind, side, ...patch });
     expect(stateFromSearch('?grind=boardslide&set=miami-triangle')).toMatchObject({ mode: 'grinds', set: 'miami-triangle' });
@@ -312,6 +315,51 @@ describe('Trick Explorer camera', () => {
     expect(cameraPresetsFor(DEFAULT_STATE).some((preset) => preset.tripod)).toBe(false);
   });
 
+  it('lets a side-on shot film from the other side of the rider', () => {
+    // Only the side-on crane and the side tripod have two sides.
+    expect(CAMERA_PRESETS.filter((preset) => preset.sides).map((preset) => preset.id)).toEqual(['tripod-side', 'side']);
+    expect(cameraHasSides('side')).toBe(true);
+    expect(cameraHasSides('tripod-side')).toBe(true);
+    expect(cameraHasSides('classic')).toBe(false);
+    expect(cameraHasSides({ yaw: 0, pitch: 3, lens: 1.25 })).toBe(false);
+    expect(CAMERA_SIDES.map((side) => side.id)).toEqual(['left', 'right']);
+
+    // The stock shot is unchanged: the right side is what every preset already filmed.
+    const right = flatState({ camera: 'side' });
+    expect(right.cameraSide).toBe('right');
+    expect(sceneCamera(right)).toEqual(sceneCamera(flatState({ camera: 'side' })));
+    expect(sceneCamera(right).yaw).toBe(0);
+
+    // The crane swings round behind the rider, keeping the same pitch, lens and target.
+    const left = withCameraSide(right, 'left');
+    expect(sceneCamera(left)).toEqual({ ...sceneCamera(right), yaw: -180 });
+
+    // A tripod stands across the rider's line, so it keeps its angle and reports the side.
+    const sideTripod = withCameraSide(flatState({ set: 'el-toro', camera: 'tripod-side' }), 'left');
+    const tripodRight = sceneCamera(flatState({ set: 'el-toro', camera: 'tripod-side' }));
+    expect(sceneCamera(sideTripod)).toEqual({ ...tripodRight, side: 'left' });
+    expect(sceneCamera(sideTripod).yaw).toBe(tripodRight.yaw);
+
+    // The side lives in the link, and only on a shot that offers one.
+    expect(searchFromState(left)).toContain('from=left');
+    expect(searchFromState(right)).not.toContain('from=');
+    expect(stateFromSearch(searchFromState(left))).toEqual(left);
+    expect(stateFromSearch(searchFromState(sideTripod))).toEqual(sideTripod);
+    const linked = stateFromSearch('?cam=side&from=left');
+    expect(linked.cameraSide).toBe('left');
+    expect(sceneCamera(linked).yaw).toBe(-180);
+    expect(stateFromSearch('?cam=classic&from=left').cameraSide).toBe('right');
+
+    // A nonsided shot forgets the side; a sided one keeps it.
+    expect(withShot(left, 'classic').cameraSide).toBe('right');
+    expect(withShot(left, 'tripod-side').cameraSide).toBe('left');
+    expect(withShot(left, 'tripod-top').cameraSide).toBe('right');
+
+    // Dragging a crane bakes the side into its yaw, and switching sides re-aims the tripod.
+    expect(withCamera(left, turnCamera(sceneCamera(left), 20, 0)).cameraSide).toBe('right');
+    expect(withCameraSide({ ...right, pan: { yaw: 5, pitch: 0 } }, 'left').pan).toBeUndefined();
+  });
+
   it('offers the bottom angles at El Toro and keeps a selected one when changing spots', () => {
     expect(cameraPresetsFor(DEFAULT_STATE).map((preset) => preset.id)).not.toContain('bottom-center');
     const stairs = flatState({ set: 'el-toro' });
@@ -346,12 +394,12 @@ describe('Trick Explorer camera', () => {
     const camera = sceneCamera(flatState({ set: 'el-toro', camera: 'bottom-center' }));
     const dragged = turnCamera(camera, -40, 7);
     expect(dragged).toEqual({ yaw: -130, pitch: 13, lens: 1, targetZ: -6 * FOOT });
-    const state = flatState({ set: 'el-toro', camera: dragged });
+    const state = flatState({ set: 'el-toro', camera: dragged, zoom: 1 });
     expect(searchFromState(state)).toBe('?trick=kickflip&cam=-130_13_1_-223&set=el-toro');
     expect(stateFromSearch(searchFromState(state))).toEqual(state);
     expect(stateFromSearch('?trick=kickflip&cam=-130_13_1_-999').camera).toEqual(dragged);
     expect(stateFromSearch('?cam=-130_13_1_NaN').camera).toBe(DEFAULT_STATE.camera);
-    expect(searchFromState(flatState({ camera: { ...DEFAULT_SCENE_CAMERA, targetZ: 0 } }))).toBe('?trick=kickflip&cam=-26_9_1');
+    expect(searchFromState(flatState({ camera: { ...DEFAULT_SCENE_CAMERA, targetZ: 0 }, zoom: 1 }))).toBe('?trick=kickflip&cam=-26_9_1');
   });
 });
 
@@ -456,19 +504,31 @@ describe('Trick Explorer links', () => {
     expect(stateFromSearch('?trick=moonwalk')).toEqual(DEFAULT_STATE);
   });
 
-  it('keeps a zoom from a link in range, and reads a missing or junk one as 1×', () => {
+  it('opens Classic pulled back a little from the stock framing', () => {
+    const classic = CAMERA_PRESETS.find((preset) => preset.id === 'classic');
+    expect(classic?.zoom).toBe(DEFAULT_STATE.zoom);
+    expect(DEFAULT_STATE.zoom).toBeLessThan(1);
+    expect(stateFromSearch('?trick=heelflip').zoom).toBe(DEFAULT_STATE.zoom);
+    // A named angle opens on its own framing, and other shots keep the stock 1×.
+    expect(stateFromSearch('?trick=heelflip&cam=side').zoom).toBe(1);
+  });
+
+  it('keeps a zoom from a link in range, and reads a missing or junk one as the shot’s framing', () => {
     expect(stateFromSearch('?zoom=99').zoom).toBe(SCENE_ZOOM.max);
     expect(stateFromSearch('?zoom=0').zoom).toBe(SCENE_ZOOM.min);
     expect(stateFromSearch('?zoom=abc').zoom).toBe(1);
     expect(stateFromSearch('?zoom=').zoom).toBe(1);
-    expect(stateFromSearch('?trick=heelflip').zoom).toBe(1);
-    // Links written before zoom existed keep opening exactly as they did.
-    expect(stateFromSearch('?trick=heelflip&cam=-30_12_1')).toEqual(flatState({ trick: 'Heelflip', camera: { yaw: -30, pitch: 12, lens: 1 } }));
+    // Junk stays stock 1×, not the classic pull-back.
+    expect(stateFromSearch('?trick=heelflip&zoom=abc').zoom).toBe(1);
+    // A named shot with no zoom opens on its own framing.
+    expect(stateFromSearch('?cam=bottom-center&set=el-toro').zoom).toBe(0.6);
+    // Links written before zoom existed open exactly as they did: a custom angle is the stock 1×.
+    expect(stateFromSearch('?trick=heelflip&cam=-30_12_1')).toEqual(flatState({ trick: 'Heelflip', camera: { yaw: -30, pitch: 12, lens: 1 }, zoom: 1 }));
   });
 
   it('serializes equivalent full-circle angles to one stable share URL, including rounding at the seam', () => {
     for (const yaw of [180, -180, 540, -540, 179.98, -179.98]) {
-      const search = searchFromState(flatState({ set: 'el-toro', camera: { yaw, pitch: 9, lens: 1 } }));
+      const search = searchFromState(flatState({ set: 'el-toro', camera: { yaw, pitch: 9, lens: 1 }, zoom: 1 }));
       expect(search).toBe('?trick=kickflip&cam=-180_9_1&set=el-toro');
       expect(searchFromState(stateFromSearch(search))).toBe(search);
     }
@@ -499,9 +559,27 @@ describe('Trick Explorer links', () => {
   });
 });
 
+describe('neutral spot links', () => {
+  it.each([
+    ['sunset-car-wash', 'roof-to-bank'],
+    ['lyon-25', '25-stair'],
+    ['miami-triangle', 'triangle-bank'],
+  ] as const)('opens legacy %s links and shares the neutral %s name', (legacy, neutral) => {
+    const old = stateFromSearch(`?trick=kickflip&set=${legacy}&rider=goofy&cam=tripod-side`);
+    const current = stateFromSearch(`?trick=kickflip&set=${neutral}&rider=goofy&cam=tripod-side`);
+    expect(current).toEqual(old);
+    expect(current.set).toBe(legacy);
+    expect(new URLSearchParams(searchFromState(old)).get('set')).toBe(neutral);
+    expect(stateFromSearch(searchFromState(old))).toEqual(old);
+  });
+});
+
 describe('Trick Explorer video', () => {
-  it('names the download after the trick, with its speed when slowed down', () => {
+  it('names the download after the trick and the spot’s public name, with its speed when slowed down', () => {
     expect(videoFilename('Kickflip', 1)).toBe('kickflip.mp4');
+    expect(videoFilename('Kickflip', 1, 'video/mp4', 'sunset-car-wash')).toBe('kickflip-roof-to-bank.mp4');
+    expect(videoFilename('Kickflip', 0.5, 'video/webm', 'lyon-25')).toBe('kickflip-25-stair-0.5x.webm');
+    expect(videoFilename('Kickflip', 1, 'video/mp4', 'miami-triangle')).toBe('kickflip-triangle-bank.mp4');
     expect(videoFilename('Fakie Hardflip', 0.25)).toBe('fakie-hardflip-0.25x.mp4');
     expect(videoFilename(stageTrick(grindState()).name, 0.5)).toMatch(/^[a-z0-9]+(-[a-z0-9.]+)*\.mp4$/);
     expect(videoFilename('???', 1)).toBe('trick.mp4');
@@ -532,8 +610,9 @@ describe('classic spot selection', () => {
     // Down the stairs is the default, and left out of links.
     expect(DEFAULT_STATE.obstacle).toBe('stairs');
     expect(searchFromState({ ...over, obstacle: 'stairs' })).not.toMatch(/obstacle=/);
-    // The fence's flight is its own.
-    expect(timelineFor(over, undefined).duration).toBe(setTimeline('hollywood-high', undefined, true, 'fence')!.end);
+    // The fence's flight is its own, and the trick's: it's popped as high as the trick needs.
+    expect(timelineFor(over, undefined).duration).toBe(setTimeline('hollywood-high', undefined, true, 'fence', over.stance, stageTrick(over).base)!.end);
+    expect(timelineFor(over, undefined).duration).not.toBe(timelineFor({ ...over, trick: 'Impossible' }, undefined).duration);
     expect(timelineFor(over, undefined).duration).not.toBe(timelineFor({ ...over, obstacle: 'stairs' }, undefined).duration);
     // Grinds ride the rail; spots with one way down offer no choice.
     expect(picksObstacle({ ...over, mode: 'grinds' })).toBe(false);

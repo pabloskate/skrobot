@@ -69,7 +69,7 @@ export default function VideoButton({ video }: { video: Omit<TrickVideoOptions, 
         onProgress: (progress) => setStatus({ kind: 'filming', progress }),
       });
       controller.signal.throwIfAborted();
-      const filename = videoFilename(capturedVideo.trick.name, capturedVideo.rate ?? 1, blob.type);
+      const filename = videoFilename(capturedVideo.trick.name, capturedVideo.rate ?? 1, blob.type, capturedVideo.set);
       saveFile(blob, quality === 'cinematic' ? filename.replace(/\.(mp4|webm)$/, '-cinematic.$1') : filename);
       setStatus({ kind: 'saved' });
     } catch (error) {

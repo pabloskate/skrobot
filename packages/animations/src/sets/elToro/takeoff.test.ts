@@ -60,8 +60,8 @@ describe('drop takeoff', () => {
     for (const drop of DROPS) {
       const terrain = setTerrain(drop.set, drop.obstacle)!;
       const style = resolveSkateStyle(undefined);
-      // The plan a drop had before stances took part in it.
-      const before = planStairs(style, true, terrain);
+      // The plan a drop had before stances took part in it (the same trick: Hollywood's fence pops each its own).
+      const before = planStairs(style, true, terrain, 'regular', 'Kickflip');
       for (const stance of STANCES.filter((s) => !popsFromNose(s))) {
         expect(plan(drop, 'Kickflip', stance).stairs, `${drop.set} ${drop.obstacle} ${stance}`).toEqual(before);
       }
@@ -112,7 +112,7 @@ describe('drop takeoff', () => {
   it('times a drop by the same plan the stage plays, in every stance', () => {
     for (const drop of DROPS) for (const stance of STANCES) {
       const stairs = plan(drop, 'Ollie', stance).stairs!;
-      const timeline = setTimeline(drop.set, undefined, true, drop.obstacle, stance);
+      const timeline = setTimeline(drop.set, undefined, true, drop.obstacle, stance, 'Ollie');
       expect(timeline.pop).toBe(stairs.pop);
       expect(timeline.land).toBe(stairs.land);
       expect(timeline.end).toBe(stairs.end);

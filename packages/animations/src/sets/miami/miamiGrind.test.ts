@@ -29,7 +29,7 @@ import {
  * edge the one with the slab past the side the trick names. These pin what
  * the clips show and what a skater would check: the pop is on the deck short
  * of the rim, the board comes down on the edge a little below the apex and
- * rests on the granite rather than through it, it pops off the low corner
+ * rests on the slab rather than through it, it pops off the low corner
  * onto the plaza, and the filmers stand clear of the line in.
  */
 
@@ -79,7 +79,7 @@ function onEdge(line: 'left' | 'right', q: V3) {
   return { s, out: side * across, over: q.y + MIAMI_EDGE_FALL * s };
 }
 
-/** Board-local points that can't go into the granite: the deck, its underside, the hangers, the wheels' rims. */
+/** Board-local points that can't go into the slab: the deck, its underside, the hangers, the wheels' rims. */
 const BOARD: V3[] = (() => {
   const pts: V3[] = [...TOP_LOCAL, ...BOTTOM_LOCAL];
   for (const x of [-WHEEL_X, WHEEL_X]) {
@@ -92,7 +92,7 @@ const BOARD: V3[] = (() => {
   return pts;
 })();
 
-/** How far a set point is over the granite's top (negative, into it), or null where it isn't over the slab. */
+/** How far a set point is over the slab's top (negative, into it), or null where it isn't over the slab. */
 function overSlab(q: V3): number | null {
   if (!onMiamiSlab(q.x, q.z)) return null;
   const top = miamiSlabTop(q.x);
@@ -100,7 +100,7 @@ function overSlab(q: V3): number | null {
   return q.y < top - MIAMI_SLAB_THICK ? null : q.y - top;
 }
 
-describe('Miami Triangle: grinding the slab’s edges', () => {
+describe('Triangle Bank: grinding the slab’s edges', () => {
   it('lays each edge from the apex to a low corner, a ledge whose top falls away behind it', () => {
     for (const line of ['left', 'right'] as const) {
       const { handrail, x, z, yaw } = MIAMI_LEDGES[line];
@@ -188,7 +188,7 @@ describe('Miami Triangle: grinding the slab’s edges', () => {
     }
   }, 120_000);
 
-  it('rests the lock on the edge and the granite behind it, never through it, and clears the rim on the way', () => {
+  it('rests the lock on the edge and the slab behind it, never through it, and clears the rim on the way', () => {
     const failures: string[] = [];
     for (const { base, rider, stance } of EVERY_GRIND) {
       const stage = grind(base, stance, rider);
@@ -218,7 +218,7 @@ describe('Miami Triangle: grinding the slab’s edges', () => {
     expect(failures.slice(0, 12)).toEqual([]);
   }, 240_000);
 
-  it('keeps the rider’s legs out of the granite and off the deck, a person’s as a robot’s', () => {
+  it('keeps the rider’s legs out of the slab and off the deck, a person’s as a robot’s', () => {
     const failures: string[] = [];
     for (const skater of ['robot', 'realistic'] as const) for (const { base, rider, stance } of EVERY_GRIND) {
       const stage = grind(base, stance, rider, skater);
@@ -237,7 +237,7 @@ describe('Miami Triangle: grinding the slab’s edges', () => {
 
   it('never puts the board through the legs on the way onto the edge or along it, tricks in included', () => {
     // As riderClearance.test.ts checks bars and handrails: the hop across the gap is longer, so a trick
-    // in plays at its own pace over it, and a lock resting on the granite still keeps clear of the shins.
+    // in plays at its own pace over it, and a lock resting on the slab still keeps clear of the shins.
     const popper = resolveSkateStyle({ popHeight: 1, rotationSpeed: 1, flickStrength: 1 });
     const TRICKS = ['Kickflip', 'Heelflip', '360 Flip', 'Hardflip', 'Varial Heelflip', 'Bigspin Flip', 'Backside Flip', '360 Shuvit'];
     const GRINDS = ['Frontside 50-50 Grind', 'Backside 5-0 Grind', 'Backside Smith Grind', 'Frontside Feeble Grind', 'Frontside Boardslide', 'Backside Lipslide', 'Frontside Noseslide'];

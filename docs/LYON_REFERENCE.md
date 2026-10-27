@@ -1,5 +1,11 @@
 # Lyon 25 reference
 
+## Current presentation
+
+The shipped scene is now **25 Stair**. The stair dimensions remain; the terracotta convention-centre facade, gallery, cantilever, rear crosswall and spiral stair have been replaced with original low-rise courtyard buildings and a low seat wall. The notes below document the earlier reference research.
+
+See [Location presentation](LOCATION_PRESENTATION.md) for the public names, links and location notice.
+
 ## References inspected
 
 - The user's dimensions, October 2026: **14.76 feet high, 21.29 feet long**. These are the authoritative gameplay dimensions: **4.498848 m down, 6.489192 m horizontally**. Length is treated as horizontal nosing-to-last-riser distance, consistent with the existing landmark layouts, not the diagonal staircase length.

@@ -293,7 +293,7 @@ export default function App() {
     [currentTrick, discipline, fallVariant, landed, selectedRiderStance, skateStyle, stageSet],
   );
   // Every landmark's timeline follows its own drop and landing geometry; flat ground, the robot's own pop.
-  const attempt = setTimeline(discipline === 'flatground' ? stageSet : 'plaza', skateStyle, landed !== false, 'stairs', currentTrick?.stance);
+  const attempt = setTimeline(discipline === 'flatground' ? stageSet : 'plaza', skateStyle, landed !== false, 'stairs', currentTrick?.stance, currentTrick?.base);
   const duration = grind?.end ?? attempt.end;
   const phases = grind
     ? [
@@ -504,7 +504,7 @@ export default function App() {
           </select>
           {grindSpec?.reversed && <p className={styles.styleNote}>
             Spins them round: they roll in with the bar on the {grindSpec.toesideApproach ? 'toeside' : 'heelside'} and
-            ride the {grindSide.toLowerCase()} {selectedGrind.toLowerCase()} fakie
+            ride the {selectedGrind.toLowerCase()} fakie, with it on their {grindSpec.toesideApproach ? 'heelside' : 'toeside'}
           </p>}
         </div>}
 

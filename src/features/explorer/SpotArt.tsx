@@ -34,14 +34,13 @@ const PROFILES: Partial<Record<StageSet, { ground: string; strokeWidth?: number;
     extra: <path d="M4 10 V4 H22 V10" strokeOpacity={0.7} />,
   },
   'lyon-25': {
-    // The full unbroken 25-step flight, with the orange building's balcony above.
-    // No center rails: the actual handrail is bracketed to the side wall.
+    // The full 25-step flight beside the redesigned low-rise courtyard.
     ground: `M0 12.25 H16${stairs(16, 12.25, 25, 1.36, 0.95)} H72`,
     strokeWidth: 0.8,
     extra: (
       <>
-        <path d="M0 2 H22 V8 H16 V12.25 M0 8 H22" strokeWidth={1.4} />
-        <path d="M3 2 V8 M7 2 V8 M11 2 V8 M15 2 V8 M19 2 V8" strokeOpacity={0.6} />
+        <path d="M0 12 V3 H9 V6 H16 V12" strokeWidth={1.4} />
+        <path d="M3 6 H6 V9 H3 Z M11 8 H13 V10 H11 Z" strokeOpacity={0.6} />
       </>
     ),
   },
@@ -58,7 +57,7 @@ const PROFILES: Partial<Record<StageSet, { ground: string; strokeWidth?: number;
   },
   'miami-triangle': {
     // At 4.2 units a foot: the terrace tip 5 ft over the plaza with its 3 in rim curving up at the edge,
-    // the low planter wall 2 ft out, then the granite slab, its apex level with the deck 5.5 ft from the tip,
+    // the low planter wall 2 ft out, then the concrete slab, its apex level with the deck 5.5 ft from the tip,
     // tilted down about 24 degrees to a foot-thick low edge 1.75 ft up, on a pedestal.
     ground: `M0 15 H9 Q10.5 15 10.5 13.95 H12 V${GROUND} H20.4 V29.7 H22.9 V${GROUND} H72`,
     strokeWidth: 1.5,

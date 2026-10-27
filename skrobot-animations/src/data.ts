@@ -119,8 +119,8 @@ export { GRIND_BASES, exitEndsFor, type PopEnd };
 export const GRIND_ENTRY_BASES = FLATGROUND_BASES.filter(canEnterGrind);
 
 /**
- * Tricks offered out of a grind: a few flips, shuvs, 180s, and bigspins rather
- * than the whole catalog. Each pops off the tail, or off the nose as a nollie trick;
+ * Tricks offered out of a grind: a few flips, shuvs, an impossible, 180s, and
+ * bigspins rather than the whole catalog. Each pops off the tail, or off the nose as a nollie trick;
  * the grind decides which ends are free (see exitEndsFor).
  */
 export const GRIND_EXIT_BASES = [
@@ -129,6 +129,7 @@ export const GRIND_EXIT_BASES = [
   'Pop Shuvit',
   'Frontside Shuvit',
   '360 Flip',
+  'Impossible',
   'Frontside 180',
   'Backside 180',
   'Bigspin',

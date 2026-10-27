@@ -476,7 +476,7 @@ const DESCRIPTIONS: Record<string, string> = {
   'Late Kickflip': 'Pop the board and wait, then flick a kickflip late in the air just before the catch.',
   'Bigspin Flip': 'A bigspin with a kickflip mixed in — flipping while spinning a full 360°.',
   'Dolphin Flip': 'A front-foot flip that rolls the board end over end like a leaping dolphin.',
-  Impossible: 'Wrap the board vertically around your back foot in a full end-over-end loop.',
+  Impossible: 'A 360 shuvit stood up on end, wrapped all the way around your back foot.',
   'Double Heelflip': 'A heelflip spun with enough flick to flip the board over twice.',
   'FS Bigspin Flip': 'A frontside bigspin with a kickflip folded in.',
   'BS Bigspin Heelflip': 'A backside bigspin paired with a heelflip instead of a kickflip — elite tech.',

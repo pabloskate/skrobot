@@ -9,6 +9,7 @@ import {
   FOOT_OVER_SOLE,
   SHOE_HALF_HEIGHT,
   SHOE_HALF_LENGTH,
+  SHOE_HALF_WIDTH,
   DECK_HALF_WIDTH,
   SHOULDER,
   UPPER_ARM,
@@ -33,9 +34,9 @@ import {
   HEAD_OFF_NECK,
   NECK_TOP,
   TORSO_ORIGIN,
+  type Frame3,
   type LegRig,
   type ArmRig,
-  type Frame3,
   type Rig,
   frameOf,
   moveFrame,
@@ -48,6 +49,7 @@ import {
   ARM_BRACE,
   mixPose,
   armDirs,
+  FOOT_RAKE,
 } from './skeleton';
 import type { SkateStyle } from '../types';
 import { CROUCH_HOLD, extendTime, extending, flightLegs, flightSpeeds, rideAway } from './dynamics';
@@ -70,9 +72,9 @@ import {
   type Pt,
   type Spec,
 } from './trick';
-import { add3, clamp01, cross3, dot3, rad, rotX, rotY, rotZ, scale3, smoothstep, sub3, type V3 } from '../math';
+import { add3, clamp01, dot3, rad, rotX, rotY, rotZ, scale3, smoothstep, sub3, turnAbout, type V3 } from '../math';
 import { legInBoard, soleClearance } from './boardClearance';
-import { kickY } from '../board/deck';
+import { TIP_X, deckTopY } from '../board/deck';
 
 /**
  * Physics frame → world-space skeleton.
@@ -100,8 +102,9 @@ import { kickY } from '../board/deck';
  *   ahead of the moment a popped, rolling, or spinning board would pass
  *   through it, then set back down. The hips rise to give the legs that
  *   room, so a flip is ridden with the knees tucked up;
- * - an impossible wraps around the scooping foot (wrapBoard) instead of
- *   turning end over end through the legs.
+ * - an impossible's scooping foot holds the spot on the tail it popped from
+ *   as the board comes round, its sole on the grip, carrying the board
+ *   within the leg's reach, and lets go to come back for it at the catch.
  */
 
 /** Fall rotation pivots near the feet, like the 2D body transform. */
@@ -183,19 +186,38 @@ const RIDE_TURN = 50;
 
 // ----- Impossible wrap -----
 
-/** How far (deg) the scooping toes dip, tilting the wrap off vertical so
- *  the nose comes up outside the legs and goes round under the heels. */
-const WRAP_TILT = 38;
-/** Distance from the wrap's axis (along the scooping foot) to the deck. */
-const WRAP_RADIUS = 8.6;
-/** How far the board slides out toward the toes as it wraps, so it goes
- *  round the forefoot and clear of the shin. */
-const WRAP_TOE_SHIFT = 13;
-/** The wrap pose is all in by the time the board has come this far round
- *  (sine of half its pitch: 0.35 is about 40 degrees, early in the strike). */
-const WRAP_IN = 0.35;
-/** Knee aim (deg from the nose toward the toes) while the board wraps. */
-const WRAP_KNEE_AIM = 10;
+/** Share of an impossible's turn over which the scooping foot lets go of the
+ *  end it has been following round, to come back for it at the catch. */
+const WRAP_LET_GO = [0.85, 1] as const;
+/** How far (world units) from the hip the scooping foot holds the board's
+ *  end: the leg all but straight, its ankle a little over the sole. Past
+ *  where it eases in, the board's free turn would carry that end away from
+ *  the foot, so the foot carries it. */
+const WRAP_REACH = 60;
+const WRAP_REACH_EASE = 8;
+/** How far (world units) the scooping foot drives the end it holds in under
+ *  the rider (WRAP_SCOOP) and down (WRAP_SCOOP_DOWN) through the middle of
+ *  the wrap, pulling it back for the catch: the scoop is forward and down. */
+const WRAP_SCOOP = 8;
+const WRAP_SCOOP_DOWN = 12;
+/** How steeply (height per unit out) the grip falls away past the deck's
+ *  rail, for a shoe set on it: a toe hanging off the rail isn't standing on
+ *  the deck, and one just over it is on the rail's round. */
+const DECK_EDGE_FALL = 4;
+
+/** How firmly an impossible's scooping foot holds the end it popped: 1 off
+ *  the pop, letting go to 0 over WRAP_LET_GO. */
+function wrapHold(spec: Spec, f: Frame): number {
+  if (!spec.wrap || f.motion.flight < 0 || f.motion.flight >= 1) return 0;
+  return wrapLetGo(f.motion.rotation);
+}
+
+/** 1 → 0: how firmly the scooping foot holds on `rotation` (0 → 1) of the way round (WRAP_LET_GO). */
+export const wrapLetGo = (rotation: number) => 1 - smoothstep((rotation - WRAP_LET_GO[0]) / (WRAP_LET_GO[1] - WRAP_LET_GO[0]));
+
+/** How far the scooping foot has driven the end it holds `rotation` (0 → 1) of the way round: `forward`, in under the rider, and down (WRAP_SCOOP). */
+export const wrapScoop = (rotation: number, forward: V3): V3 =>
+  scale3(add3(scale3(forward, WRAP_SCOOP), { x: 0, y: WRAP_SCOOP_DOWN, z: 0 }), Math.sin(Math.PI * rotation) ** 2);
 
 // ----- Hip trajectory -----
 
@@ -209,7 +231,7 @@ interface FlightArc {
 }
 
 function flightArc(spec: Spec): FlightArc {
-  const complexity = spec.flips * 0.5 + (spec.yaw / 180) * 0.3 + (spec.roll ? 0.5 : 0);
+  const complexity = spec.flips * 0.5 + (spec.yaw / 180) * 0.3;
   const load = (22 + complexity * 8) * (spec.stance === 'nollie' ? 1.4 : 1);
   return {
     pop: POP_HEIGHT,
@@ -298,12 +320,11 @@ function softCap(x: number, knee: number, max: number): number {
 /**
  * The board's pitch in the air. The physics snaps a pop from flat to its
  * full angle between two frames; here the tail strike tips it up over the
- * first POP_RISE seconds instead, and no further than POP_PITCH_MAX. An
- * impossible's pitch is its wrap and is only eased in.
+ * first POP_RISE seconds instead, and no further than POP_PITCH_MAX.
  */
-function popPitch(f: Frame, spec: Spec): number {
+function popPitch(f: Frame): number {
   if (f.motion.flight < 0 || f.motion.flight >= 1) return f.board.rot;
-  const pitch = spec.roll ? f.board.rot : softCap(f.board.rot, POP_PITCH_KNEE, POP_PITCH_MAX);
+  const pitch = softCap(f.board.rot, POP_PITCH_KNEE, POP_PITCH_MAX);
   return pitch * smoothstep((f.t - ROLL_IN) / POP_RISE);
 }
 
@@ -360,13 +381,12 @@ const TUCK_TRACKS = new Map<string, TuckTrack>();
  * moment is posed again with the tuck it actually gets, and wherever the
  * shoe is still in the board, or the leg is, that foot lifts further. Extra
  * lift for a leg that never comes clear is dropped: it would only look
- * worse. A foot that isn't `free` is left where it is, and one may stand
- * `allowed[i][k]` into the board at times[k] (a sole resting on a kick).
+ * worse. A foot may stand `allowed[i][k]` into the board at times[k] (a
+ * sole resting on a kick).
  */
 export function measureTuck(
   times: number[],
   pose: (k: number, tuck: Tuck) => Rig,
-  free: (leg: LegRig) => boolean = () => true,
   within?: TuckTrack['within'],
   allowed?: [number[], number[]],
 ): TuckTrack {
@@ -382,7 +402,6 @@ export function measureTuck(
       const tuck = tuckAt(track, t);
       const rig = pose(k, tuck);
       rig.legs.forEach((leg, i) => {
-        if (!free(leg)) return;
         const rests = allowed?.[i][k] ?? 0;
         const left = soleClearance(rig.board, leg.shoe, leg.shoe.up) - rests;
         legStuck[k][i] = left <= TUCK_SLACK && !rests && legInBoard(rig.board, leg);
@@ -401,8 +420,7 @@ export function measureTuck(
 
 /**
  * Measure, once per trick, where the flight would put the board through
- * each foot (measureTuck). The wrap foot of an impossible is left out: the
- * board is posed around it (wrapBoard), so it clears it by construction.
+ * each foot (measureTuck).
  */
 function tuckTrack(spec: Spec, mechanics: RiderMechanics, style: SkateStyle, outcome: Outcome): TuckTrack {
   // Regular and goofy are mirror images, and a slam or bail flies the same
@@ -420,10 +438,15 @@ function tuckTrack(spec: Spec, mechanics: RiderMechanics, style: SkateStyle, out
     times.push(t);
     frames.push(computeFrame(t, spec, landed, landed ? 'slam' : outcome, 0.65, style));
   }
+  // An impossible's scooping foot stays down on the board while it holds it
+  // (poseRig keeps its sole on the grip): only the free foot clears it.
+  const holding = frames.map((f) => (wrapHold(spec, f) > 0.5 ? Infinity : 0));
+  const loose = frames.map(() => 0);
   const track = measureTuck(
     times,
     (k, tuck) => poseRig(frames[k], spec, mechanics, style, landed ? 'landed' : outcome, tuck),
-    (leg) => spec.roll === 0 || leg.side !== mechanics.popFoot,
+    undefined,
+    spec.wrap ? (mechanics.popFoot === 'left' ? [holding, loose] : [loose, holding]) : undefined,
   );
   // Store nose foot first.
   if (mechanics.noseFoot !== 'left') track.need.reverse();
@@ -458,11 +481,23 @@ export function tuckAt(track: TuckTrack, t: number, lead = TUCK_LEAD, lag = TUCK
   return [lift(track.need[0]), lift(track.need[1])];
 }
 
-/** `v` turned by `deg` about the unit axis `n` (rotZ's sense about +z). */
-function turnAbout(v: V3, n: V3, deg: number): V3 {
-  const c = Math.cos(rad(deg));
-  const s = Math.sin(rad(deg));
-  return add3(add3(scale3(v, c), scale3(cross3(n, v), s)), scale3(n, dot3(n, v) * (1 - c)));
+/** The whole flip and shuv a trick turns the deck through, as `mechanics` rides it. */
+const doneTurn = (spec: Spec, mechanics: RiderMechanics) => orientTrickRotation(mechanics, {
+  flipDeg: spec.flipDir * spec.flips * 360,
+  yawDeg: (spec.spinDir || 1) * spec.yaw,
+  bodyYawDeg: 0,
+});
+
+/**
+ * A tilted trick's spin axis (see tiltFor): leaned `tilt` off vertical
+ * toward the pitch axis, the way that lifts the end the pop leaves in the
+ * air. A grind's impossible turns about it too (grindTricks.ts).
+ */
+export function tiltAxis(spec: Spec, mechanics: RiderMechanics): V3 {
+  // A tail pop raises the nose: rotZ's negative sense. A nose pop the tail.
+  const lift = spec.nollie ? 1 : -1;
+  const lean = Math.sign(doneTurn(spec, mechanics).yawDeg) * lift;
+  return { x: 0, y: Math.cos(rad(spec.tilt)), z: lean * Math.sin(rad(spec.tilt)) };
 }
 
 /** A tilted trick's spin axis, and the share of its flick the deck rolls. */
@@ -491,16 +526,10 @@ interface Tilt {
  */
 function tiltFor(spec: Spec, mechanics: RiderMechanics, yawDeg: number): Tilt | null {
   if (!spec.tilt) return null;
-  const done = orientTrickRotation(mechanics, {
-    flipDeg: spec.flipDir * spec.flips * 360,
-    yawDeg: (spec.spinDir || 1) * spec.yaw,
-    bodyYawDeg: 0,
-  });
+  const done = doneTurn(spec, mechanics);
   if (Math.abs(yawDeg) >= Math.abs(done.yawDeg)) return null;
-  // A tail pop raises the nose: rotZ's negative sense. A nose pop the tail.
-  const lift = spec.nollie ? 1 : -1;
-  const lean = Math.sign(done.yawDeg) * lift;
-  const axis: V3 = { x: 0, y: Math.cos(rad(spec.tilt)), z: lean * Math.sin(rad(spec.tilt)) };
+  const axis = tiltAxis(spec, mechanics);
+  const lean = Math.sign(axis.z);
   const rolled = Math.round(Math.abs(done.yawDeg) / 180) % 2 ? 2 * spec.tilt * lean : 0;
   const roll = rolled + 360 * Math.round((done.flipDeg - rolled) / 360);
   return { axis, rollShare: done.flipDeg ? roll / done.flipDeg : 1 };
@@ -551,7 +580,7 @@ function poseRig(
   const spinP = f.motion.rotation;
   const flight = f.motion.flight;
   const airborne = flight >= 0 && flight < 1;
-  const boardPitch = popPitch(f, spec);
+  const boardPitch = popPitch(f);
   // A forward flip's nose dips through the middle of the flip, once the pop's own pitch has let go.
   const pitchDeg = boardPitch + (spec.forwardFlip ? Math.sin(spinP * Math.PI) ** 2 * 42 : 0);
   const yawDeg = oriented.yawDeg;
@@ -559,11 +588,6 @@ function poseRig(
   const shuvDeg = spin.shuvDeg === undefined
     ? yawDeg
     : orientTrickRotation(mechanics, { flipDeg: 0, yawDeg: spin.shuvDeg, bodyYawDeg: 0, shuvDeg: spin.shuvDeg }).yawDeg;
-  // 0 → 1: how far an impossible's board has come round from flat — the
-  // share of the wrap pose (tilt, toe shift, radius) it is ridden in.
-  const wrap = spec.roll !== 0 ? smoothstep(Math.abs(Math.sin(rad(pitchDeg) / 2)) / WRAP_IN) : 0;
-  // The scooping toes dip with the wrap, tilting it off vertical.
-  const wrapRoll = -toeDir * WRAP_TILT * wrap;
   const center: V3 = { x: f.board.x, y: f.board.y, z: 0 };
   // The feet stand on the board through the tail strike and ride its pitch
   // about the board's middle as the front foot levels it (trick.ts popLeft).
@@ -571,8 +595,62 @@ function poseRig(
   // board spins away under them in a shuv. (A flip's front foot slides up the
   // deck as it flicks, so a roll doesn't stop the ride.)
   const underFeet = (deg: number) => 1 - smoothstep(Math.abs(deg) / RIDE_TURN);
-  const riding = spec.roll !== 0 || !airborne ? 0
+  const riding = !airborne ? 0
     : smoothstep(popLeft(spec, flight, flightTime(skateStyle)) / RIDE_UNTIL) * underFeet(yawDeg - oriented.bodyYawDeg);
+
+  // ----- Board -----
+  const tilt = tiltFor(spec, mechanics, shuvDeg);
+  const boardDir = tilt
+    ? (local: V3) => rotY(turnAbout(rotZ(rotX(local, flipDeg * tilt.rollShare), pitchDeg), tilt.axis, shuvDeg), yawDeg - shuvDeg)
+    : (local: V3) => rotY(rotZ(rotX(local, flipDeg), pitchDeg), yawDeg);
+  // Where the feet stood on the board before the pop.
+  const stand = computeFrame(ROLL_IN - 1e-4, spec, landed, landed ? 'slam' : outcome, 0.65, skateStyle);
+  const popAtNose = mechanics.popFoot === mechanics.noseFoot;
+  // An impossible's scooping foot holds the spot it popped from as the
+  // board comes round, until it lets go (WRAP_LET_GO). The board turns as a
+  // tilted shuv does, but about that spot; where the leg can't reach where
+  // that takes it, the foot keeps hold of it, carrying the board with it.
+  const wrapping = wrapHold(spec, f);
+  const popSpot = popAtNose ? stand.footR : stand.footL;
+  const wrapSpot: V3 = { x: popSpot.x + stand.body.x - stand.board.x, y: popSpot.y + stand.body.y - stand.board.y, z: toeDir * SHOE_TOESIDE };
+  // It turns about that spot under the sole, not about its own middle: the
+  // end stays under the foot and the rest of the deck swings round the leg.
+  const pivot: V3 = { x: wrapSpot.x, y: 0, z: wrapSpot.z };
+  const unspun = (local: V3) => rotY(rotZ(rotX(local, flipDeg * (tilt?.rollShare ?? 1)), pitchDeg), yawDeg - shuvDeg);
+  // The foot scoops it in toward the board's middle, under the rider.
+  const scoop = wrapScoop(spinP, unspun({ x: -Math.sign(pivot.x), y: 0, z: 0 }));
+  const swung: V3 = spec.wrap && tilt ? add3(sub3(unspun(pivot), boardDir(pivot)), scoop) : { x: 0, y: 0, z: 0 };
+  let held: V3 = { x: 0, y: 0, z: 0 };
+  if (wrapping > 0) {
+    const spot = add3(add3(center, swung), boardDir(wrapSpot));
+    const hipLocal: V3 = { x: 0, y: 0, z: mechanics.popFoot === 'left' ? -HIP_Z : HIP_Z };
+    const hipAt = add3({ x: f.body.x, y: f.board.y - hipState(f, spec, skateStyle, 0, jumpUp).overDeck, z: 0 }, rotY(hipLocal, bodyYawDeg));
+    const out = sub3(spot, hipAt);
+    const len = Math.hypot(out.x, out.y, out.z);
+    // Taken up as the tail strike tips the board up (popPitch), not snapped to off the ground.
+    const taken = smoothstep((f.t - ROLL_IN) / POP_RISE);
+    held = scale3(out, (softCap(len, WRAP_REACH - WRAP_REACH_EASE, WRAP_REACH) / len - 1) * wrapping * taken);
+  }
+  const boardPoint = (local: V3): V3 => add3(add3(add3(center, swung), held), boardDir(local));
+  // The scooping shoe, holding the board: set on the grip, its lowest point
+  // over the deck touching it.
+  const onGrip = (shoe: Frame3, ankle: V3): { shoe: Frame3; ankle: V3 } => {
+    const grip = boardDir({ x: 0, y: -1, z: 0 });
+    const origin = boardPoint({ x: 0, y: 0, z: 0 });
+    const axes = [boardDir({ x: 1, y: 0, z: 0 }), boardDir({ x: 0, y: 1, z: 0 }), boardDir({ x: 0, y: 0, z: 1 })];
+    let over = Infinity;
+    for (const along of [-SHOE_HALF_LENGTH, 0, SHOE_HALF_LENGTH]) {
+      for (const across of [-SHOE_HALF_WIDTH, 0, SHOE_HALF_WIDTH]) {
+        const p = sub3(shoe.at(along, -SHOE_HALF_HEIGHT, across), origin);
+        const [x, y, z] = axes.map((a) => dot3(p, a));
+        over = Math.min(over, deckTopY(x) - y + (Math.max(0, Math.abs(z) - DECK_HALF_WIDTH) + Math.max(0, Math.abs(x) - TIP_X)) * DECK_EDGE_FALL);
+      }
+    }
+    // Out of the deck while it holds on, easing off as it lets go for the
+    // tuck to take over; down onto it as firmly as it holds.
+    const by = scale3(grip, -over * (over < 0 ? smoothstep(wrapping) : wrapping));
+    return { shoe: moveFrame(shoe, by), ankle: add3(ankle, by) };
+  };
 
   // ----- Feet (board space, straight from the physics) -----
   const fallTurn = (p: V3): V3 => {
@@ -585,6 +663,11 @@ function poseRig(
   const boardSpaceDir = (d: V3) => rotY(rotZ(rotY(d, -restingBodyYaw), f.body.rot), bodyYawDeg);
   const feetAnchor: V3 = { x: f.body.x, y: f.body.y, z: 0 };
   const fromBoard = (p: V3) => add3(feetAnchor, rotY(fallTurn(rotY(p, -restingBodyYaw)), bodyYawDeg));
+  const toBoard = (w: V3) => {
+    const q = rotY(sub3(w, feetAnchor), -bodyYawDeg);
+    const r = rotZ({ x: q.x, y: q.y - BODY_PIVOT_Y, z: q.z }, -f.body.rot);
+    return rotY({ x: r.x, y: r.y + BODY_PIVOT_Y, z: r.z }, restingBodyYaw);
+  };
 
   // Kickflip (flipDir 1) flicks off the heelside rail, heelflip off the
   // toeside rail, whichever way the rider faces.
@@ -623,7 +706,6 @@ function poseRig(
   // flight marks between two frames. They leave from where they stood.
   const takeoffK = airborne ? 1 - smoothstep(flight / TAKEOFF_END) : 0;
   if (takeoffK > 0) {
-    const stand = computeFrame(ROLL_IN - 1e-4, spec, landed, landed ? 'slam' : outcome, 0.65, skateStyle);
     footR = toward(footR, stand, stand.footR, takeoffK);
     footL = toward(footL, stand, stand.footL, takeoffK);
   }
@@ -637,7 +719,6 @@ function poseRig(
   // down; the foot over the rising end is lifted clear by the tuck instead.
   // (Carried up and in along the rising end, the leg folds past where the
   // knee can follow.)
-  const popAtNose = mechanics.popFoot === mechanics.noseFoot;
   const onDeck = (p: Pt, popping: boolean): Pt => {
     const physics = carried ? turnPt(p, glue, f.board.rot) : p;
     if (!riding || !(carried || popping)) return physics;
@@ -651,13 +732,11 @@ function poseRig(
 
   const footPlan = (side: 'left' | 'right') => {
     const isNose = mechanics.noseFoot === side;
-    const foot = isNose ? noseChannel : tailChannel;
     const flicking = mechanics.flickFoot === side;
     // Shoe-local x runs heel → toe across the deck toward toeside, raked
     // toward the nose; shoe-local z runs along the board.
     const toeAt = (rake: number) => rotY({ x: 0, y: 0, z: toeDir }, toeDir * rake);
-    // Front foot angles toward the nose, back foot sits nearly across.
-    const restRake = isNose ? 24 : 8;
+    const restRake = isNose ? FOOT_RAKE.nose : FOOT_RAKE.tail;
     // The ankle's lane across the deck that centers its shoe at SHOE_TOESIDE.
     // Setting up a flip, the flicking foot shuffles out before the pop: the
     // heel hangs off the heelside for a kickflip, the toes off the toeside
@@ -675,67 +754,39 @@ function poseRig(
       const reach = DECK_HALF_WIDTH - flickDir * trailZ + FLICK_STYLE_REACH * skateStyle.flickStrength;
       flick = flickDir * flickOut * reach;
     }
-    const laneZ = restLane + flick;
-    // An impossible's scooping foot squares up across the board and its
-    // toes dip with the wrap, turning on the ankle, so the board can go
-    // round it.
-    const wrapped = spec.roll !== 0 && mechanics.popFoot === side;
-    const rake = (restRake + fullTurn * flickOut) * (wrapped ? 1 - wrap : 1);
-    const dip = wrapped ? wrapRoll : 0;
-    const toe = rotX(toeAt(rake), dip);
-    const down = rotX({ x: 0, y: 1, z: 0 }, dip);
-    const along = rotX(rotY({ x: 1, y: 0, z: 0 }, toeDir * rake), dip);
+    let laneZ = restLane + flick;
+    let foot = isNose ? noseChannel : tailChannel;
+    // An impossible's scooping foot stands on the spot it popped from while
+    // it holds it, then comes back for the board at the catch.
+    if (wrapping > 0 && mechanics.popFoot === side) {
+      const ridden = toBoard(boardPoint(wrapSpot));
+      foot = { x: foot.x + (ridden.x - foot.x) * wrapping, y: foot.y + (ridden.y - foot.y) * wrapping };
+      laneZ += (ridden.z - wrapSpot.z) * wrapping;
+    }
+    const rake = restRake + fullTurn * flickOut;
+    const toe = toeAt(rake);
+    const down: V3 = { x: 0, y: 1, z: 0 };
+    const along = rotY({ x: 1, y: 0, z: 0 }, toeDir * rake);
     const ankle: V3 = { x: foot.x, y: foot.y - ANKLE_LIFT, z: laneZ };
     // The ankle sits over the heel end, so the shoe reaches forward from it.
-    const shoeCenter = add3(ankle, rotX(sub3({
-      x: foot.x + toeAt(rake).x * TOE_REACH,
+    const shoeCenter: V3 = {
+      x: foot.x + toe.x * TOE_REACH,
       y: foot.y + FOOT_OVER_SOLE - SHOE_HALF_HEIGHT,
-      z: laneZ + toeAt(rake).z * TOE_REACH,
-    }, ankle), dip));
+      z: laneZ + toe.z * TOE_REACH,
+    };
     const placed = frameOf(fromBoard(shoeCenter), (d) => sub3(
       fromBoard(add3(shoeCenter, add3(add3(scale3(toe, d.x), scale3(down, d.y)), scale3(along, d.z)))),
       fromBoard(shoeCenter),
     ));
+    const held = wrapping > 0 && mechanics.popFoot === side
+      ? onGrip(placed, fromBoard(ankle))
+      : { shoe: placed, ankle: fromBoard(ankle) };
     // The board's tuck lifts the whole foot clear.
-    const by = scale3(placed.up, tuck[side === 'left' ? 0 : 1]);
+    const by = scale3(held.shoe.up, tuck[side === 'left' ? 0 : 1]);
     const hipLocal: V3 = { x: 0, y: 0, z: side === 'left' ? -HIP_Z : HIP_Z };
-    return { side, isNose, flicking, shoe: moveFrame(placed, by), hipLocal, ankle: add3(fromBoard(ankle), by) };
+    return { side, isNose, flicking, shoe: moveFrame(held.shoe, by), hipLocal, ankle: add3(held.ankle, by) };
   };
   const plans = [footPlan('left'), footPlan('right')] as const;
-
-  // ----- Board -----
-  const tilt = tiltFor(spec, mechanics, shuvDeg);
-  let boardDir = tilt
-    ? (local: V3) => rotY(turnAbout(rotZ(rotX(local, flipDeg * tilt.rollShare), pitchDeg), tilt.axis, shuvDeg), yawDeg - shuvDeg)
-    : (local: V3) => rotY(rotZ(rotX(local, flipDeg), pitchDeg), yawDeg);
-  let boardPoint = (local: V3): V3 => add3(center, boardDir(local));
-  if (spec.roll !== 0) ({ dir: boardDir, point: boardPoint } = wrapBoard(plans[mechanics.popFoot === 'left' ? 0 : 1].shoe));
-
-  /**
-   * An impossible wraps around the scooping foot: the board turns about an
-   * axis running heel to toe along that shoe, grip toward the foot, and
-   * slides from the tail toward the middle as the physics' scoop does.
-   * The toes dip, so the axis is tilted off level and the wrap off
-   * vertical: the nose comes up outside the legs and goes round under the
-   * heels. The board leans with the foot, its width along the axis, and
-   * sits WRAP_RADIUS out from it and shifted toward the toes, so it goes
-   * round the forefoot instead of through the shoe and shin.
-   */
-  function wrapBoard(shoe: Frame3): { dir: (local: V3) => V3; point: (local: V3) => V3 } {
-    const pivot = shoe.origin;
-    // The axis across the board, tilted with the dipping toes (signed +z so
-    // a pitch turns the board as rotZ does), and the way out to the deck.
-    const axis = rotX({ x: 0, y: 0, z: 1 }, wrapRoll);
-    const out = rotX({ x: 0, y: 1, z: 0 }, wrapRoll);
-    // The board's center before the wrap turns it: where the physics has
-    // it, eased onto the wrap's radius and toward the toes.
-    const rel = sub3(center, pivot);
-    const across = dot3(rel, axis) + toeDir * WRAP_TOE_SHIFT * wrap;
-    const radius = dot3(rel, out) + (WRAP_RADIUS - kickY(0) - dot3(rel, out)) * wrap;
-    const rest = add3({ x: rel.x, y: 0, z: 0 }, add3(scale3(axis, across), scale3(out, radius)));
-    const dir = (local: V3) => turnAbout(rotX(local, wrapRoll), axis, pitchDeg);
-    return { dir, point: (local) => add3(pivot, turnAbout(add3(rest, rotX(local, wrapRoll)), axis, pitchDeg)) };
-  }
 
   // ----- Hips -----
   // The hips ride between the feet along the board.
@@ -786,13 +837,12 @@ function poseRig(
   const leg = (plan: (typeof plans)[number]): LegRig => {
     const hipJoint = bodyPoint(plan.hipLocal);
     // Knees track over the toes, the back one pinched in toward the front
-    // foot, like a real stance. Through an impossible's wrap the scooping
-    // knee comes up and forward instead, out of the way of a board going
-    // round its toes.
-    const wrapped = spec.roll !== 0 && plan.side === mechanics.popFoot ? wrap : 0;
-    const kneeAim = rad((plan.isNose ? KNEE_AIM_FRONT : KNEE_AIM_BACK) * (1 - wrapped) + WRAP_KNEE_AIM * wrapped);
+    // foot, like a real stance.
+    const kneeAim = rad(plan.isNose ? KNEE_AIM_FRONT : KNEE_AIM_BACK);
     const pole = boardSpaceDir({ x: Math.cos(kneeAim), y: -0.12, z: toeDir * Math.sin(kneeAim) });
-    const solved = solveLeg(hipJoint, plan.ankle, pole, plan.shoe.up);
+    // An impossible's scooping leg sweeps its foot forward and round with
+    // the board: its knee leans softly rather than flipping sides.
+    const solved = solveLeg(hipJoint, plan.ankle, pole, plan.shoe.up, spec.wrap && mechanics.popFoot === plan.side);
     return {
       side: plan.side,
       hip: hipJoint,
@@ -845,7 +895,7 @@ function poseRig(
   // ----- Head -----
   // The head rides on the leaning torso but only takes part of the lean, and
   // nods down to watch the board while it's in the air.
-  const lookDown = (spec.flips || spec.yaw || spec.roll ? LOOK_DOWN_TRICK : LOOK_DOWN_OLLIE) * hip.air + LOOK_DOWN_IMPACT * impact;
+  const lookDown = (spec.flips || spec.yaw ? LOOK_DOWN_TRICK : LOOK_DOWN_OLLIE) * hip.air + LOOK_DOWN_IMPACT * impact;
   const headLean = leanX * (1 - HEAD_STEADY);
   const headRelYaw = headYawDeg - oriented.bodyYawDeg - restingBodyYaw;
   const headDir = (d: V3) =>

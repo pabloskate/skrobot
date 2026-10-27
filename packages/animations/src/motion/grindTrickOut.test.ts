@@ -96,7 +96,7 @@ describe('Trick out of grind', () => {
     });
 
     for (const exit of EXITS) expect(canExitGrind(exit), exit).toBe(true);
-    for (const exit of ['Ollie', 'Impossible', 'Dolphin Flip', 'Not A Trick']) {
+    for (const exit of ['Ollie', 'Dolphin Flip', 'Not A Trick']) {
       expect(canExitGrind(exit), exit).toBe(false);
       expect(grindSpecFor({ base: joinGrindExit('Frontside 50-50 Grind', exit, 'tail'), stance: 'regular' }), exit).toBeNull();
     }
@@ -201,23 +201,25 @@ describe('Trick out of grind', () => {
     for (const { exit, end, base, side, rider, stance, label } of exitCombos(everyExit(['regular', 'switch']))) {
       const { plan, mechanics } = exitPlan(exit, end, base, side, stance, rider, null);
       const flips = /flip/i.test(exit);
-      const shuvs = /Shuvit|360 Flip|Bigspin/.test(exit);
+      // An impossible's turn is its wrap about the back foot, not a shuv.
+      const shuvs = /Shuvit|360 Flip|Bigspin|Impossible/.test(exit);
       let flipReach = 0;
       let yawReach = 0;
       for (let t = plan.off; t <= plan.land; t += 0.01) {
         const { frame } = solveGrindRig(t, plan, mechanics, NEUTRAL);
         flipReach = Math.max(flipReach, Math.abs(frame.spin.flip));
-        yawReach = Math.max(yawReach, Math.abs(frame.spin.yaw));
+        yawReach = Math.max(yawReach, Math.abs(frame.spin.yaw + (frame.spin.wrap?.deg ?? 0)));
       }
       if (flips) expect(flipReach, label).toBeGreaterThan(300);
       if (shuvs) expect(yawReach, label).toBeGreaterThan(170);
       expect(Math.abs(plan.endHeading), label).toBe(TURNS.test(exit) ? 180 : 0);
-      for (const t of [plan.land + 0.01, plan.end]) {
+      for (const t of [plan.land + 0.01, plan.land + plan.turnOut.finishT, plan.end]) {
         const { rig, frame } = solveGrindRig(t, plan, mechanics, NEUTRAL);
         expect(rig.board.center.y, `${label} t=${t}`).toBeCloseTo(GROUND, 6);
         expect(rig.board.pitchDeg, `${label} t=${t}`).toBe(0);
         expect(halfTurns(rig.board.flipDeg) % 2, `${label} t=${t} flip=${rig.board.flipDeg}`).toBe(0);
-        expect(Number.isNaN(halfTurns(rig.board.yawDeg)), `${label} t=${t} yaw=${rig.board.yawDeg}`).toBe(false);
+        // The wheels finish turning it out of the lock as they bite (TurnOut): straight once they have.
+        if (t >= plan.land + plan.turnOut.finishT) expect(Number.isNaN(halfTurns(rig.board.yawDeg)), `${label} t=${t} yaw=${rig.board.yawDeg}`).toBe(false);
         expect(frame.heading, label).toBe(plan.endHeading);
       }
       const start = solveGrindRig(0, plan, mechanics, NEUTRAL);

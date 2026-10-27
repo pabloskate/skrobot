@@ -183,7 +183,9 @@ export class ClassicSpot3D {
       ?? (frame.stairs.obstacle && this.config.obstacleTripods?.[frame.stairs.obstacle]) ?? this.config.tripods;
     if (tripod && tripods) {
       const p = tripods[tripod];
-      const eye: Vec3 = [p.u * SET_SCALE - frame.scroll, p.height * SET_SCALE, p.z * SET_SCALE - across];
+      // The other side of a side-on shot: the filmer stands across the rider's line.
+      const behind = p.z * SET_SCALE - across;
+      const eye: Vec3 = [p.u * SET_SCALE - frame.scroll, p.height * SET_SCALE, camera.side === 'left' ? -behind : behind];
       return tripodView(eye, frame.lift, p.frame * SET_SCALE, p.place, zoom, aspect, camera.pan);
     }
     const rad = Math.PI / 180;

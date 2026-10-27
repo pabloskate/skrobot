@@ -201,11 +201,17 @@ describe('specFor', () => {
     }
   });
 
-  it('impossible roll flips only for nollie; fakie keeps the tail wrap', () => {
-    expect(specFor(trick('Impossible', 'regular')).roll).toBe(-360);
-    expect(specFor(trick('Impossible', 'switch')).roll).toBe(-360);
-    expect(specFor(trick('Impossible', 'fakie')).roll).toBe(-360);
-    expect(specFor(trick('Impossible', 'nollie')).roll).toBe(360);
+  it('an impossible is a 360 shuv stood on end round the scooping foot, in every stance', () => {
+    for (const stance of STANCES) {
+      const shuv = specFor(trick('360 Shuvit', stance));
+      const impossible = specFor(trick('Impossible', stance));
+      expect(impossible.yaw).toBe(shuv.yaw);
+      expect(impossible.spinDir).toBe(shuv.spinDir);
+      expect(impossible.flips).toBe(0);
+      expect(impossible.tilt).toBeGreaterThan(0);
+      expect(impossible.wrap).toBe(true);
+      expect(shuv.wrap).toBe(false);
+    }
   });
 
   it('pressure flip rotates like an inward heelflip, not a varial heelflip', () => {

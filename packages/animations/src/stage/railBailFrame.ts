@@ -123,6 +123,8 @@ function setupFor(stage: StagePlan): KickOutSetup {
     end: stage.end,
     jump: { x: jump.x + UP.x * up, y: UP.y * up, z: jump.z },
     boardGround,
+    // A rail's top falls away downhill: a board riding it goes on down it, not stopped as on level ground.
+    boardSlope: grind.handrail && !grind.handrail.rail.ledge ? (x: number, z: number, y: number) => (railTop(grind, x, z, y) < ground(x, z) ? grind.handrail!.rail.slope : 0) : undefined,
     rollAbove: ROLL_ABOVE,
   };
 }

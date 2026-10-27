@@ -6,7 +6,7 @@ import {
   LYON_RUN, LYON_STEPS, LYON_TREAD, LYON_WALL_TOP, lyonGround,
 } from './lyonLayout';
 
-describe('Lyon 25 measured flight and photographed courtyard', () => {
+describe('25 Stair: measured flight and redesigned courtyard', () => {
   it('preserves the supplied feet exactly, with 25 risers and 24 treads', () => {
     expect(LYON_DROP).toBe(14.76 * F);
     expect(LYON_RUN).toBe(21.29 * F);
@@ -68,7 +68,7 @@ describe('Lyon 25 measured flight and photographed courtyard', () => {
     } finally { material.dispose(); built.ground.dispose(); built.props.dispose(); }
   });
 
-  it('stays finite and merges the detailed facade, pavers and volumetric trees within the mobile budget', () => {
+  it('stays finite and merges the low-rise blocks, pavers and volumetric trees within the mobile budget', () => {
     const built = buildLyonGeometry();
     try {
       let vertices = 0;

@@ -62,10 +62,12 @@ rail), angled 35° toward the undercroft (user request, Oct 8). It crosses that
 rail about 3.4 ft down the flight, where its top has dropped about 2 ft, passes
 the walkway corner and lands 11 ft out, about 5.3 ft in front of the
 undercroft. Both stances share the same route and terrain. The
-minimum ballistic pop is 2.0 in the existing style units (lowered from 2.5 when
-the user found the bot popped too high). It is the lowest value that keeps every
-flipping, spinning and wrapping board 0.2 ft clear of the rail; at 1.8–1.9 some
-fakie kickflips and impossibles clip. Popping right at the center pipe's top
+ballistic pop is 2.0 in the existing style units for every style (lowered from
+2.5 when the user found the bot popped too high). It is the lowest value that
+keeps every flipping and spinning board 0.2 ft clear of the rail; at 1.8–1.9
+some fakie kickflips clip. An impossible pops 2.5 (`leapOfFaithPop`): its board
+wraps round the back foot, its middle swinging out toward the rail and its free
+end down past the sole, and at 2.0 it hits the rail. Popping right at the center pipe's top
 end instead lands the rider's legs on that pipe. This is a playable trick-clearance choice, not a measurement of
 Thomas's ollie. The rail remains scenery rather than a selectable grind.
 

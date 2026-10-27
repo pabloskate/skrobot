@@ -3,20 +3,23 @@
 import { useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { TbX } from 'react-icons/tb';
-import { cameraPreset, type CameraPresetId } from './explorer';
+import { cameraPreset, CAMERA_SIDES, type CameraPresetId, type CameraSide } from './explorer';
 import type { DreamShot } from './dream';
 import ShotIcon from './ShotIcon';
 
 interface Props {
   shots: readonly DreamShot[];
   selected: CameraPresetId | null;
+  side: CameraSide;
   onChoose: (shot: CameraPresetId) => void;
+  onSideChange: (side: CameraSide) => void;
   onClose: () => void;
 }
 
-export default function CameraAngleDialog({ shots, selected, onChoose, onClose }: Props) {
+export default function CameraAngleDialog({ shots, selected, side, onChoose, onSideChange, onClose }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const title = useId();
+  const sideOn = selected != null && cameraPreset(selected).sides === true;
 
   useEffect(() => {
     const el = dialog.current;
@@ -63,6 +66,25 @@ export default function CameraAngleDialog({ shots, selected, onChoose, onClose }
           </button>
         ))}
       </div>
+      {sideOn && (
+        <div className="dream-camera-side">
+          <span className="dream-camera-side-label">Film from</span>
+          <div className="explorer-segmented explorer-segmented-compact" role="radiogroup" aria-label="Which side to film from">
+            {CAMERA_SIDES.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                role="radio"
+                aria-checked={side === option.id}
+                className={side === option.id ? 'active' : ''}
+                onClick={() => onSideChange(option.id)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </dialog>,
     document.body,
   );

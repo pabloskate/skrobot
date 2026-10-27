@@ -4,10 +4,10 @@ import { Bake, NO_INK, type Ink, type Paint } from '../../three/bake';
 import { INK_PROP } from '../../three/materials';
 import { hash2 } from '../setKit';
 import {
-  LYON_BUILDING_FACE, LYON_BUILDING_TOP, LYON_DROP, LYON_FOOT as F,
+  LYON_BUILDING_FACE, LYON_DROP, LYON_FOOT as F,
   LYON_GRADE, LYON_LEFT_Z, LYON_PROMENADE_Y, LYON_PROMENADE_Z,
   LYON_REAR_X, LYON_RIGHT_Z, LYON_RISER, LYON_RUN, LYON_STEPS,
-  LYON_TREAD, LYON_WALL_TOP, lyonGround,
+  LYON_TREAD, LYON_WALL_TOP,
 } from './lyonLayout';
 
 const up: Vec3 = [0, 1, 0];
@@ -34,7 +34,7 @@ function tube(b: Bake, spine: Vec3[], radius = 1.5, color = '#596864', cast?: Se
   if (cast) for (let i = 1; i < spine.length; i++) cast.push({ a: spine[i - 1], b: spine[i], radius });
 }
 
-/** The fixed, unmirrored 25 and its sunken convention-centre courtyard.
+/** The fixed 25-step challenge in an original low-rise courtyard setting.
  * Two merged meshes; no photographic textures or hundreds of separate meshes. */
 export function buildLyonGeometry() {
   const ground = new Bake();
@@ -81,10 +81,10 @@ export function buildLyonGeometry() {
     flat(props, LYON_RUN + 1, LYON_RUN + 76 * F, z, z + 0.32 * F, lower + 0.12, '#626c65');
   }
   buildRetainingWall(ground, props);
-  buildConventionCentre(props, shadowBoxes);
+  buildCourtyardBuildings(props, shadowBoxes);
   buildCourtyard(props);
 
-  // The only rail beside the actual flight is bracketed to the orange wall.
+  // The only rail beside the flight is bracketed to the plain courtyard wall.
   // No center rail, no freestanding pair, and no invented grind obstacle.
   const railZ = LYON_RIGHT_Z - 0.7 * F;
   const a: Vec3 = [-0.5 * F, 3 * F + 0.5 * F * LYON_GRADE, railZ];
@@ -148,90 +148,32 @@ function railing(b: Bake, x0: number, x1: number, z: number, y: number) {
   for (let x = x0; x <= x1; x += 5 * F) tube(b, [[x, y, z], [x, y + 3.4 * F, z]], 1.4);
 }
 
-function buildConventionCentre(props: Bake, shadows: ShadowBox[]) {
+/** Plain, stepped low-rise blocks: no terracotta rainscreen, gallery or cantilever. */
+function buildCourtyardBuildings(props: Bake, shadows: ShadowBox[]) {
   const z = LYON_BUILDING_FACE;
-  const x0 = -112 * F, x1 = 126 * F;
-  const min: Vec3 = [x0, lower - F, z];
-  const max: Vec3 = [x1, LYON_BUILDING_TOP, z + 25 * F];
-  props.box(min, max, '#965e43', '#b2ab91', WALL);
-  shadows.push({ min, max });
-  const tiles = ['#b96f4a', '#c67e53', '#bc7650', '#bb714b', '#c48259'];
-  // Renzo Piano's terracotta rainscreen uses long HORIZONTAL slabs, not
-  // conventional brick bonds. Thin grey uprights and deeper horizontal
-  // channels break it into repeated bays, as the close photographs show.
-  for (let row = 0; lower + row * 1.12 * F < LYON_BUILDING_TOP; row++) {
-    const y = lower + row * 1.12 * F;
-    for (let col = 0; x0 + col * 4.5 * F < x1; col++) {
-      const x = x0 + col * 4.5 * F;
-      wall(props, x + 0.6, Math.min(x + 4.5 * F - 0.6, x1), y + 0.7, Math.min(y + 1.12 * F - 0.7, LYON_BUILDING_TOP), z - 0.08, tiles[Math.floor(hash2(row, col, 62) * tiles.length)]);
+  const blocks = [
+    [-112, -42, 15, '#b5b8ac'],
+    [-42, 32, 20, '#bdc2b6'],
+    [32, 126, 12, '#aeb9b2'],
+  ] as const;
+  for (const [start, end, height, color] of blocks) {
+    const min: Vec3 = [start * F, lower - F, z];
+    const max: Vec3 = [end * F, height * F, z + 22 * F];
+    props.box(min, max, color, '#d4d4c7', WALL);
+    shadows.push({ min, max });
+    // A simple flush coping and widely spaced square windows.
+    props.box([min[0], max[1] - 0.3 * F, z - 0.15 * F], [max[0], max[1], z + 22 * F], '#9ca69c', '#d4d4c7', NO_INK);
+    for (let x = (start + 8) * F; x + 4 * F < end * F; x += 16 * F) {
+      const floor = x < 0 ? 0 : lower;
+      wall(props, x, x + 4 * F, floor + 5 * F, floor + 9 * F, z - 0.12, '#657b79');
     }
   }
-  for (let x = x0; x < x1; x += 18 * F) {
-    props.box([x - 0.055 * F, lower, z - 0.14 * F], [x + 0.055 * F, LYON_BUILDING_TOP, z + 0.1], '#697973', '#859086', NO_INK);
-  }
-  // Ground-floor glass entries lie along the upper courtyard and beyond
-  // the foot; the face right beside the staircase itself is solid orange.
-  for (const x of [-72, -54, -36, -18, 38, 56, 74, 92]) {
-    const a = x * F, b = (x + 12) * F;
-    const base = x < 0 ? 0 : lower;
-    glazing(props, a, b, base + 0.2 * F, base + 15.5 * F, z - 0.19 * F);
-    // Terracotta piers project proud of the window grid.
-    props.box([a - 1.1 * F, base, z - 0.8 * F], [a, base + 16.2 * F, z + 0.1], '#ab694b', '#ca8760', NO_INK);
-  }
-  // Continuous upper gallery and its gray four-bar guardrail.
-  const galleryY = 16.5 * F;
-  props.box([x0, galleryY - 0.6 * F, z - 4.4 * F], [x1, galleryY, z], '#929784', '#adb09c', WALL);
-  railing(props, x0, x1, z - 4.1 * F, galleryY);
-  for (let x = x0 + 4 * F; x < x1; x += 18 * F) glazing(props, x, x + 13 * F, galleryY + 0.2 * F, 26 * F, z - 0.22 * F);
-  // Projecting upper rooms create the recognizable white soffit, orange
-  // block above and dark steel fascia in the bottom-up video shots.
-  const soffit = 27 * F;
-  const projectedZ = z - 7.5 * F;
-  props.box([x0, soffit, projectedZ], [x1, LYON_BUILDING_TOP, z + 25 * F], '#b7734e', '#b2b29f', WALL);
-  props.box([x0, soffit - 0.22 * F, projectedZ], [x1, soffit, z + 0.1], '#d0cebc', '#d0cebc', NO_INK);
-  props.box([x0, soffit, projectedZ - 0.08 * F], [x1, soffit + 0.35 * F, projectedZ], '#51625e', '#6f7e71', NO_INK);
-  for (let row = 0; soffit + row * 1.12 * F < LYON_BUILDING_TOP; row++) {
-    const y = soffit + row * 1.12 * F;
-    for (let x = x0; x < x1; x += 4.5 * F) wall(props, x + 0.6, Math.min(x + 4.5 * F - 0.6, x1), y + 0.7, Math.min(y + 1.12 * F - 0.7, LYON_BUILDING_TOP), projectedZ - 0.1, tiles[row % tiles.length]);
-  }
-  shadows.push({ min: [x0, soffit, projectedZ], max: [x1, LYON_BUILDING_TOP, z] });
-  // Small service plates and hose connections beside the wall handrail.
-  for (const x of [-3 * F, LYON_RUN + 2.4 * F]) {
-    const y = lyonGround(x) + 3.1 * F;
-    wall(props, x - 1.6 * F, x + 1.6 * F, y, y + 0.8 * F, z - 0.3 * F, '#aeb4a8');
-    for (const offset of [-0.8, 0.8]) tube(props, [[x + offset * F, y + 0.4 * F, z - 0.5 * F], [x + offset * F, y + 0.4 * F, z - 0.9 * F]], 2.6, '#8c5345');
-  }
-}
-
-function glazing(props: Bake, x0: number, x1: number, y0: number, y1: number, z: number) {
-  wall(props, x0, x1, y0, y1, z, '#3e504c');
-  const split = y0 + (y1 - y0) * 0.43;
-  wall(props, x0 + 1, x1 - 1, split, y1 - 1, z - 0.08, '#687772');
-  // Muted reflections of the pale facing bank, not transparent openings
-  // onto an empty shell or fake indoor scenery.
-  wall(props, x0 + 1, x1 - 1, split + F, split + 2.7 * F, z - 0.09, '#989b86');
-  for (let x = x0; x <= x1 + 0.1; x += (x1 - x0) / 4) props.box([x - 0.06 * F, y0, z - 0.13 * F], [x + 0.06 * F, y1, z], '#7c8b82', '#9aa497', NO_INK);
-  for (const y of [y0, split, y1]) props.box([x0, y - 0.065 * F, z - 0.13 * F], [x1, y + 0.065 * F, z], '#7c8b82', '#9aa497', NO_INK);
 }
 
 function buildCourtyard(props: Bake) {
-  // Far end of the upper run-up: orange crosswall, recessed doorway and
-  // small steel spiral escape stair. These fix the scale in the old footage.
-  props.box([LYON_REAR_X - 2 * F, -F, LYON_LEFT_Z], [LYON_REAR_X, LYON_PROMENADE_Y, LYON_RIGHT_Z], '#b47b5a', '#c5a583', WALL);
-  const nx: Vec3 = [1, 0, 0];
-  props.quad([LYON_REAR_X + 0.1, 0, 4 * F], [LYON_REAR_X + 0.1, 0, 11 * F], [LYON_REAR_X + 0.1, 9 * F, 11 * F], [LYON_REAR_X + 0.1, 9 * F, 4 * F], nx, lit('#38443e', nx), NO_INK);
-  const cx = LYON_REAR_X + 4 * F, cz = LYON_RIGHT_Z - 5 * F;
-  tube(props, [[cx, 0, cz], [cx, 15 * F, cz]], 2.1);
-  const outer: Vec3[] = [];
-  for (let i = 0; i < 26; i++) {
-    const a = i * Math.PI / 10;
-    const y = i / 25 * LYON_PROMENADE_Y;
-    const p: Vec3 = [cx + 3 * F * Math.cos(a), y, cz + 3 * F * Math.sin(a)];
-    props.triangle([cx, y, cz], p, [cx + 3 * F * Math.cos(a + 0.29), y, cz + 3 * F * Math.sin(a + 0.29)], up, lit('#818b80', up), NO_INK);
-    tube(props, [p, [p[0], y + 3 * F, p[2]]], 0.65);
-    outer.push([p[0], y + 3 * F, p[2]]);
-  }
-  tube(props, outer, 1);
+  // An open courtyard end with a low seat wall, rather than a replica
+  // crosswall, doorway and spiral escape stair.
+  props.box([LYON_REAR_X - 2 * F, 0, LYON_LEFT_Z], [LYON_REAR_X, 1.6 * F, LYON_RIGHT_Z], '#abb2a4', '#d0cbbb', WALL);
   // Benches along the bank, behind the takeoff rather than in the runout.
   for (const x of [-58 * F, -38 * F]) {
     const z = LYON_LEFT_Z + 3.2 * F;
@@ -239,7 +181,7 @@ function buildCourtyard(props: Bake) {
     for (const px of [x + 0.8 * F, x + 5.2 * F]) tube(props, [[px, 0, z], [px, 3 * F, z]], 1.3);
     props.box([x, 2.2 * F, z - 0.75 * F], [x + 6 * F, 2.8 * F, z - 0.58 * F], '#77775f', '#a49a76', NO_INK);
   }
-  // Real park trees above the sloped bank, with a small planted bed in the
+  // Trees above the sloped bank, with a small planted bed in the
   // rear courtyard. Leaf clusters are volumes, never camera-facing cards.
   for (let i = 0; i < 8; i++) tree(props, (-102 + i * 29) * F, LYON_PROMENADE_Y, LYON_PROMENADE_Z - (9 + (i % 3) * 5) * F, i + 4, 1);
   props.box([-74 * F, 0, -4 * F], [-63 * F, 0.25 * F, 5 * F], '#66774f', '#64784b', NO_INK);

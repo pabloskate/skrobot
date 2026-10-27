@@ -209,11 +209,17 @@ describe('Grind physics', () => {
     for (const { base, side, rider, stance, label } of plainCombos()) {
       const { plan, mechanics } = planFor(base, side, stance, rider, null);
       const at = (t: number) => solveGrindRig(t, plan, mechanics, NEUTRAL).rig.board;
-      for (const t of [0, plan.pop - 0.01, plan.land + 0.01, plan.end]) {
+      const straight = plan.land + plan.turnOut.finishT;
+      for (const t of [0, plan.pop - 0.01, plan.land + 0.01, straight, plan.end]) {
         const board = at(t);
         expect(board.center.y, `${label} t=${t}`).toBeCloseTo(GROUND, 6);
         expect(Math.abs(board.pitchDeg) + Math.abs(board.flipDeg), `${label} t=${t}`).toBeLessThan(1e-6);
-        // Carving onto the approach's angle (rider and all), on it by the pop; away straight along the bar.
+        // Carving onto the approach's angle (rider and all), on it by the pop; away straight along the
+        // bar once the wheels have finished turning it out of the lock (TurnOut), a few degrees at most.
+        if (t > plan.land && t < straight) {
+          expect(Math.abs(board.yawDeg), `${label} t=${t}`).toBeLessThan(10);
+          continue;
+        }
         expect(board.yawDeg, `${label} t=${t}`).toBeCloseTo(t < plan.pop ? plan.approachYaw * carve(t, plan.pop, plan.carveTight).share : 0, 6);
       }
     }

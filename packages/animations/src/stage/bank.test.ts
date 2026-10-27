@@ -11,7 +11,7 @@ import { solePenetration } from '../board/footContact';
 import { sweep, sweepHz } from '../testing';
 import { planStage, stageFrame } from './stage';
 
-/** The bank landings: Sunset's roof to its bank, and Miami's gap onto the granite triangle, which rolls off a raised edge. */
+/** The bank landings: Sunset's roof to its bank, and Miami's gap onto the triangular bank, which rolls off a raised edge. */
 const BANKS: StageSet[] = ['sunset-car-wash', 'miami-triangle'];
 
 const distance = (a: V3, b: V3) => { const d = sub3(a, b); return Math.hypot(d.x, d.y, d.z); };
@@ -73,7 +73,7 @@ describe('bank landing anatomy', () => {
     const sunset = plan('sunset-car-wash');
     expect(sunset.ledges).toHaveLength(0);
     sunset.rollout!.forEach((x, i) => expect(sunset.rolloutLift![i]).toBeCloseTo(sunset.terrain.ground(x), 6));
-    // Miami's granite slab ends 1¼ ft over the plaza: off its edge, the deck
+    // Miami's concrete slab ends 1¼ ft over the plaza: off its edge, the deck
     // carries on along the face's slope, falls, and touches down once.
     const miami = plan('miami-triangle');
     expect(miami.ledges).toHaveLength(1);

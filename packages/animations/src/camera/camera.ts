@@ -52,6 +52,12 @@ export interface SceneCamera {
   targetZ?: number;
   /** Filming from a tripod, how far its head is turned off the rider; the crane ignores it. */
   pan?: TripodPan;
+  /**
+   * On a side-on shot, the side of the rider the filmer stands: `left` is
+   * the mirror of the preset's own side. The crane already carries its side
+   * in `yaw`; a tripod uses this to stand across the rider's line instead.
+   */
+  side?: 'left' | 'right';
 }
 
 /** A tripod head turned off the rider, in degrees: positive yaw turns it left, positive pitch tilts it up. */

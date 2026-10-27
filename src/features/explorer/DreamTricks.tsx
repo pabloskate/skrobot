@@ -21,6 +21,7 @@ import {
   stageTrick,
   timelineFor,
   withCamera,
+  withCameraSide,
   withShot,
   type CameraPresetId,
   type ExplorerState,
@@ -44,6 +45,7 @@ import DreamStage from './DreamStage';
 import CameraAngleDialog from './CameraAngleDialog';
 import SpotArt from './SpotArt';
 import VideoButton from './VideoButton';
+import LocationNotice from './LocationNotice';
 
 /** Swivel supplies the shared skating style for every skater. */
 const RIDER = ROBOT_BY_ID.get('shifty') ?? ROBOTS[0];
@@ -345,15 +347,19 @@ export default function DreamTricks({ initialSearch = '' }: { initialSearch?: st
           </section>
         </div>
       </div>
+      <LocationNotice />
       {cameraOpen && (
         <CameraAngleDialog
           shots={shots}
           selected={shot}
+          side={state.cameraSide}
           onClose={() => setCameraOpen(false)}
           onChoose={(next) => {
             setState(withShot(state, next));
-            setCameraOpen(false);
+            // A side-on shot opens up the side choice in place; other shots are done.
+            if (!cameraPreset(next).sides) setCameraOpen(false);
           }}
+          onSideChange={(cameraSide) => setState(withCameraSide(state, cameraSide))}
         />
       )}
     </div>

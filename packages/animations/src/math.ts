@@ -69,6 +69,12 @@ export const rotZ = (p: V3, deg: number): V3 => {
   const s = Math.sin(rad(deg));
   return { x: p.x * c - p.y * s, y: p.x * s + p.y * c, z: p.z };
 };
+/** `v` turned by `deg` about the unit axis `n` (rotZ's sense about +z). */
+export function turnAbout(v: V3, n: V3, deg: number): V3 {
+  const c = Math.cos(rad(deg));
+  const s = Math.sin(rad(deg));
+  return add3(add3(scale3(v, c), scale3(cross3(n, v), s)), scale3(n, dot3(n, v) * (1 - c)));
+}
 
 /** Convex hull (monotone chain). The projected hull of a convex solid's
  *  sample points is its exact silhouette, which is how every rounded part of

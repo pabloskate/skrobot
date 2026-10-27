@@ -49,6 +49,11 @@ const SINK_SLOP = 0.08;
 const PASSES = 8;
 /** Air drag on the spin, per second: a tumbling deck slows a little in the air; much more on the ground, where wood and grip scuff (a deck left rocking on its kicks settles). */
 const SPIN_DRAG = 0.15;
+/**
+ * The fastest a board turns (radians a second, about 16 turns a second): a kick sends one spinning at a few. The free
+ * turn below is stepped forward, and a board tumbling about its middle axis can feed on the steps until its spin blows up.
+ */
+const SPIN_MAX = 100;
 const GROUND_SPIN_DRAG = 3;
 /** A board on the ground this slow (units/s, radians/s) for SLEEP_AFTER seconds has come to rest, and stays there. */
 const SLEEP = { speed: 10, spin: 0.7 } as const;
@@ -129,6 +134,12 @@ interface BoardSimOptions {
   pushes?: Push[];
   /** Whether the trucks' hangers meet the ground too: a board left on a rail (whose `ground` has the rail's top in it). */
   hangers?: boolean;
+  /**
+   * How far the ground under a point falls (y, down) for each unit along x, where it's a slope the board rides down: a
+   * handrail's. A board on it is held to the rail's own fall, not to a level one, so it goes on down the rail the way it
+   * came rather than being stopped dead on it.
+   */
+  slope?: (x: number, z: number, y: number) => number;
 }
 
 /**
@@ -146,7 +157,7 @@ export function simulateBoard(start: BoardMotion, t0: number, t1: number, option
  * start of what's been followed. Each is the track simulateBoard gives.
  */
 export function boardSimulation(start: BoardMotion, t0: number, options: BoardSimOptions): (t1: number) => BoardTrack {
-  const { gravity, ground, pushes = [] } = options;
+  const { gravity, ground, slope, pushes = [] } = options;
   const contacts = options.hangers ? HANGER_CONTACTS : CONTACTS;
   const dt = 1 / SIM_HZ;
   let q = start.q;
@@ -185,18 +196,21 @@ export function boardSimulation(start: BoardMotion, t0: number, options: BoardSi
       const L = inertiaTimes(q, w, false);
       w = add3(w, scale3(inertiaTimes(q, cross3(L, w), true), dt));
       w = scale3(w, 1 - SPIN_DRAG * dt);
+      const spin = Math.hypot(w.x, w.y, w.z);
+      if (spin > SPIN_MAX) w = scale3(w, SPIN_MAX / spin);
 
       // The ground: impulses at every point in it, moving into it.
       // Impulses so far at each contact: along the ground's normal, and along the roll and across it (a wheel), or x and z (the deck).
-      const touching: Array<{ c: Contact; r: V3; depth: number; approach: number; normal: number; along: number; across: number; k: number[] }> = [];
+      const touching: Array<{ c: Contact; r: V3; depth: number; fall: number; approach: number; normal: number; along: number; across: number; k: number[] }> = [];
       for (const c of contacts) {
         const r = qrot(q, sub3(c.local, COM_LOCAL));
         const p = add3(com, r);
         const depth = p.y - ground(p.x, p.z, p.y);
         if (depth < -0.05) continue;
         const vp = add3(v, cross3(w, r));
-        // Normal is up: -y.
-        touching.push({ c, r, depth, approach: vp.y, normal: 0, along: 0, across: 0, k: [] });
+        // Normal is up: -y. On a slope the ground itself is falling away under a point going along it.
+        const fall = slope ? slope(p.x, p.z, p.y) : 0;
+        touching.push({ c, r, depth, fall, approach: vp.y - fall * vp.x, normal: 0, along: 0, across: 0, k: [] });
       }
       if (touching.length) {
         if (touchdownStep < 0) touchdownStep = i;
@@ -221,7 +235,7 @@ export function boardSimulation(start: BoardMotion, t0: number, options: BoardSi
             const { c, r } = contact;
             const vp = add3(v, cross3(w, r));
             // Normal: stop the approach, or bounce off a fast one.
-            const vn = -vp.y;
+            const vn = -(vp.y - contact.fall * vp.x);
             // A point sunk into the ground is eased back out, a little each step, rather than lifted at once (which would feed a rocking board).
             const bounce = Math.max(
               contact.approach > BOUNCE_FROM ? (c.kind === 'wheel' ? BOUNCE.wheel : BOUNCE.deck) * contact.approach : 0,

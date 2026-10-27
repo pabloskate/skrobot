@@ -226,39 +226,7 @@ function buildSchool(props: Bake, shadows: HollywoodShadowBox[]) {
   }
   props.box([towerX0 - 15, towerTop - 22, towerFace - 12], [towerX1 + 15, towerTop - 10, depth + 20 * F], '#b6b5a1', '#d2cfba', ink(85, 8));
 
-  // A restrained painted portrait panel evokes the real auditorium mural.
-  // It is not a textured copy or an attribution to an invented person.
-  const muralX = towerX1 + 0.4, z0 = towerFace + 12, z1 = depth + 12 * F;
-  props.quad([muralX, top + 15, z0], [muralX, top + 15, z1], [muralX, towerTop - 27, z1], [muralX, towerTop - 27, z0], [1, 0, 0], lit('#4d7775', [1, 0, 0]), NO_INK);
-  const portrait = (z: number, y: number, scale: number, skin: string, jacket: string) => {
-    const n: Vec3 = [1, 0, 0];
-    props.quad([muralX + 0.2, y - 103 * scale, z - 69 * scale], [muralX + 0.2, y - 103 * scale, z + 73 * scale], [muralX + 0.2, y - 23 * scale, z + 31 * scale], [muralX + 0.2, y - 23 * scale, z - 35 * scale], n, lit(jacket, n), NO_INK);
-    ellipseOnX(props, muralX + 0.35, y + 13 * scale, z, 35 * scale, 49 * scale, skin);
-    ellipseOnX(props, muralX + 0.5, y + 47 * scale, z - 4 * scale, 39 * scale, 20 * scale, '#4b4f43');
-    // Broad tonal shapes keep the mural readable as painted faces instead
-    // of featureless ovals when the orbit looks back toward the auditorium.
-    const patch = (points: Array<[number, number]>, color: string) => {
-      for (let i = 1; i + 1 < points.length; i++) {
-        const p = [points[0], points[i], points[i + 1]].map(([zz, yy]): Vec3 => [muralX + 0.62, y + yy * scale, z + zz * scale]);
-        props.triangle(p[0], p[1], p[2], n, lit(color, n), NO_INK);
-      }
-    };
-    patch([[-32, 21], [-21, 8], [-17, -19], [-7, -30], [-22, -24], [-33, -2]], '#998564');
-    patch([[21, 21], [31, 24], [30, -4], [20, -24], [7, -32], [11, -17]], '#af996e');
-    patch([[-31, 30], [-22, 24], [-10, 26], [-6, 23], [-9, 29], [-25, 32]], '#635d49');
-    patch([[7, 28], [23, 30], [28, 24], [20, 25], [9, 24]], '#635d49');
-    patch([[1, 24], [-3, 3], [-9, -2], [3, -6], [8, -2], [2, 0]], '#9e8763');
-    patch([[-15, -15], [-2, -13], [13, -16], [3, -19], [-8, -18]], '#876e54');
-    for (const eye of [-18, 17]) {
-      ellipseOnX(props, muralX + 0.72, y + 20 * scale, z + eye * scale, 8.5 * scale, 2.7 * scale, '#b9ac88');
-      ellipseOnX(props, muralX + 0.82, y + 20 * scale, z + (eye - 2) * scale, 2.9 * scale, 3.1 * scale, '#4c5547');
-    }
-    patch([[-22, -33], [-8, -44], [0, -62], [-26, -51], [-35, -39]], '#c3b796');
-    patch([[22, -33], [8, -44], [0, -62], [26, -51], [35, -39]], '#a49c7f');
-  };
-  portrait(z0 + 98, top + 280, 1.42, '#cdb581', '#76807b');
-  portrait(z0 + 280, top + 142, 1.2, '#b59168', '#343f3e');
-  portrait(z0 + 424, top + 330, 1.12, '#d0bf99', '#728c7c');
+  // The auditorium wall stays plain; the real portrait mural is not reproduced.
 
   // The campus goes on down the block past the auditorium: a two-story
   // Streamline classroom wing behind a hedge, set well back from the landing.
@@ -685,14 +653,6 @@ function seam(bake: Bake, points: Array<[number, number]>, y: number, width: num
     const length = Math.hypot(x1 - x0, z1 - z0) || 1;
     const nx = -(z1 - z0) / length * width / 2, nz = (x1 - x0) / length * width / 2;
     bake.quad([x0 + nx, y, z0 + nz], [x1 + nx, y, z1 + nz], [x1 - nx, y, z1 - nz], [x0 - nx, y, z0 - nz], up, lit(color, up), NO_INK);
-  }
-}
-
-function ellipseOnX(props: Bake, x: number, y: number, z: number, rz: number, ry: number, color: string) {
-  const n: Vec3 = [1, 0, 0];
-  for (let i = 0; i < 20; i++) {
-    const a = i * Math.PI / 10, b = (i + 1) * Math.PI / 10;
-    props.triangle([x, y, z], [x, y + Math.sin(a) * ry, z + Math.cos(a) * rz], [x, y + Math.sin(b) * ry, z + Math.cos(b) * rz], n, lit(color, n), NO_INK);
   }
 }
 

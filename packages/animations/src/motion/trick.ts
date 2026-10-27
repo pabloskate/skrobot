@@ -23,8 +23,12 @@ interface Spec {
   yaw: number;
   /** Skater spin degrees — independent of the board (180 on 180s AND bigspins). */
   bodyYaw: number;
-  /** In-plane end-over-end degrees (impossible). */
-  roll: number;
+  /**
+   * The board wraps round the scooping foot (an impossible): the foot stays
+   * on the end it popped, following it round and holding it within reach
+   * (the rig's wrap), instead of tucking up out of its way.
+   */
+  wrap: boolean;
   /** Dolphin/forward flip: front foot drives the nose down through a forward pitch. */
   forwardFlip: boolean;
   /** Nollie pops the nose, so the feet mirror (front foot pops, back foot flicks). */
@@ -85,14 +89,24 @@ const HARDFLIP_360_TILT = 40;
 /** A 360 inward heelflip's: the heel's flatter flick keeps more of it level. */
 const INWARD_HEEL_360_TILT = 10;
 /**
+ * An impossible's: a 360 shuv stood a little further on end. The nose comes
+ * up as it swings out in front of the rider, and the deck goes up on its edge
+ * in front of the scooping foot, grip toward the rider: half way round, 60°
+ * up. A hop onto or off a bar stands it less (grindTricks.ts HOP_WRAP_TILT).
+ */
+const IMPOSSIBLE_TILT = 30;
+/**
  * Share of the flight a tilted trick's pop pitch fades over. It must be gone
  * by the earliest catch (0.85 / the fastest rotationSpeed): the rig hands a
  * finished spin back to the plain turn, which only matches a level deck.
  */
 const TILT_POP_FADE = 0.5;
+/** An impossible's, sooner: it turns about the scooping foot, so the pop's
+ *  pitch levers the free end up the whole board's length. */
+const WRAP_POP_FADE = 0.3;
 
-/** How each flatground trick moves, over a plain pop. A function for one whose motion depends on its stance. */
-type TrickMotion = Partial<Spec> | ((stance: Trick['stance']) => Partial<Spec>);
+/** How each flatground trick moves, over a plain pop. */
+type TrickMotion = Partial<Spec>;
 
 const BIGSPIN_HEELFLIP: Partial<Spec> = { flips: 1, yaw: 360, bodyYaw: 180, flipDir: -1, spinDir: 1 };
 const BACKSIDE_180: Partial<Spec> = { yaw: 180, bodyYaw: 180, spinDir: 1 };
@@ -149,9 +163,10 @@ const TRICK_MOTIONS: Readonly<Record<string, TrickMotion>> = {
   'Backside 360 Kickflip': { flips: 1, yaw: 360, bodyYaw: 360, flipDir: 1, spinDir: 1 },
   'Backside 360 Heelflip': { flips: 1, yaw: 360, bodyYaw: 360, flipDir: -1, spinDir: 1 },
   'Frontside 360 Kickflip': { flips: 1, yaw: 360, bodyYaw: 360, flipDir: 1, spinDir: -1 },
-  // Nollie wraps the other way because it pops the nose; fakie only
-  // reverses travel and still scoops the tail, so it keeps regular's sign.
-  'Impossible': (stance) => ({ roll: stance === 'nollie' ? 360 : -360 }),
+  // A backside 360 shuv stood a little on end, the scooping foot following
+  // the tail round. A nollie wraps round the nose foot (stance.ts mirrors
+  // the scoop).
+  'Impossible': { yaw: 360, spinDir: 1, tilt: IMPOSSIBLE_TILT, wrap: true },
 };
 
 /** Every flatground trick base the motion animates (aliases included): what the motion sweeps test. */
@@ -163,7 +178,7 @@ function specFor(trick: Trick): Spec {
     flipDir: 0,
     yaw: 0,
     bodyYaw: 0,
-    roll: 0,
+    wrap: false,
     forwardFlip: false,
     nollie: trick.stance === 'nollie',
     ollieNorth: false,
@@ -175,8 +190,7 @@ function specFor(trick: Trick): Spec {
     counterShuv: false,
     tilt: 0,
   };
-  const motion = TRICK_MOTIONS[trick.base];
-  const spec = { ...base, ...(typeof motion === 'function' ? motion(trick.stance) : motion) };
+  const spec = { ...base, ...TRICK_MOTIONS[trick.base] };
   return { ...spec, bodySpinDir: spec.bodySpinDir || spec.spinDir };
 }
 
@@ -389,16 +403,17 @@ interface Feet {
 
 /** Board and feet stay glued: ollies, grinds/stalls, and 180s (board and body turn together). */
 function boardGlued(spec: Spec): boolean {
-  return !spec.flips && !spec.roll && spec.yaw === spec.bodyYaw;
+  return !spec.flips && spec.yaw === spec.bodyYaw;
 }
 
 /**
  * Shuvits and tre/laser-style 360 flips spin the board under the feet — the
  * readable catch is a front-foot stamp while the back foot stays tucked a beat
- * longer. Body-rotation combos (bigspins, FS/BS flips) keep a two-footed catch.
+ * longer. Body-rotation combos (bigspins, FS/BS flips) keep a two-footed catch,
+ * and an impossible's scooping foot never left the board.
  */
 function wantsFrontFootCatch(spec: Spec): boolean {
-  if (spec.bodyYaw || spec.roll || spec.forwardFlip) return false;
+  if (spec.bodyYaw || spec.wrap || spec.forwardFlip) return false;
   if (spec.yaw > 0 && !spec.flips) return true;
   if (spec.flips > 0 && spec.yaw >= 360) return true;
   return false;
@@ -444,7 +459,19 @@ function feetForFlip(
       : { footR: reachableFlick, footL: pop };
   };
 
-  if (spec.flips && spec.yaw && !spec.forwardFlip && spec.yaw < 360) {
+  if (spec.wrap) {
+    // Impossible: the scooping foot stays down on the end it popped (the rig
+    // has it turn about that end), and the free foot lifts straight off the
+    // pop, up and in toward the middle where the deck swings lowest, coming
+    // back down over the bolts only once the board has wrapped all the way
+    // round.
+    const up = smoothstep(clamp01(p / 0.15));
+    const down = smoothstep(clamp01((p - 0.7) / 0.3));
+    return fromPopAndFlick(
+      { x: popBaseX, y: baselineY - lift * 6 },
+      { x: flickBaseX + flickOutward * 6 * up * (1 - down), y: baselineY - 30 * up * (1 - down) },
+    );
+  } else if (spec.flips && spec.yaw && !spec.forwardFlip && spec.yaw < 360) {
     // Varial / hardflip: kickflip-style flick + mild scoop. Dolphin keeps the
     // tre-style path below (it still has forwardFlip), so we only change
     // true 180-shuv flip combos here.
@@ -493,34 +520,6 @@ function feetForFlip(
         y: baselineY - lift * flickY * flickStrength,
       },
     );
-  } else if (spec.roll) {
-    // Impossible: the popping foot guides the wrap; the free foot tucks to
-    // clear the board. Drive the tuck off an ease that rises and releases
-    // without stalling at the apex (sin(πp) zeroed out mid-flight and read
-    // as a pause).
-    const wrapP = Math.min(1, p / 0.95);
-    const tuck = Math.sin(Math.min(1, wrapP / 0.55) * Math.PI * 0.5);
-    const release = smoothstep(clamp01((wrapP - 0.72) / 0.28));
-    const tuckAmt = tuck * (1 - release);
-    if (spec.nollie) {
-      // Nollie pops the nose: front foot (footR) is the scooping foot.
-      const scoopX = 25 - tuckAmt * 10;
-      const scoopY = -tuckAmt * 8;
-
-      return {
-        footR: { x: scoopX, y: FOOT_Y - bodyYOffset - 4 + scoopY },
-        footL: { x: -15, y: FOOT_Y - bodyYOffset - 4 - tuckAmt * 27 },
-      };
-    }
-
-    // Regular: back foot (footL) is the scooping foot.
-    const scoopX = -25 + tuckAmt * 10;
-    const scoopY = -tuckAmt * 8;
-
-    return {
-      footL: { x: scoopX, y: FOOT_Y - bodyYOffset - 4 + scoopY },
-      footR: { x: 15, y: FOOT_Y - bodyYOffset - 4 - tuckAmt * 27 },
-    };
   } else if (boardGlued(spec)) {
     // Ollie family: the feet ride the rotated deck — front foot up the nose
     // on the pop, back foot down on the tail. popAngle already encodes the
@@ -593,6 +592,8 @@ function computeFrame(
   /** Fraction of the trick that completes on a shank (flip + body spin). */
   shankProgress = 0.65,
   skateStyle: Readonly<SkateStyle> = DEFAULT_SKATE_STYLE,
+  /** Turn a 180 shuv at one speed to its catch, as a hop onto or off a bar does, instead of easing into it. */
+  evenShuv = false,
 ): Frame {
   let boardX = X0;
   let boardY = GROUND;
@@ -626,7 +627,7 @@ function computeFrame(
     // forward. A shallow rest pose leaves the trailing leg near-straight, which
     // reads as the two knees bending in opposite directions.
     // Scale compression by trick difficulty (more flips/spins = deeper crouch)
-    const complexity = (spec.flips * 0.5) + (spec.yaw / 180 * 0.3) + (spec.roll ? 0.5 : 0);
+    const complexity = (spec.flips * 0.5) + (spec.yaw / 180 * 0.3);
     // Nollie keeps its exaggerated load. Switch uses natural depth.
     const stanceLoad = spec.stance === 'nollie' ? 1.4 : 1;
     const crouchDepth = (22 + (complexity * 8)) * stanceLoad;
@@ -680,8 +681,10 @@ function computeFrame(
       ? clamp01((p - 0.38) / (0.30 / skateStyle.rotationSpeed))
       : catchP;
     // Full shuvs use the tre flip's immediate, linear scoop clock.
-    // Only 180 shuvs retain the eased spin into their catch.
-    const easedShuv = spec.yaw === 180 && !spec.bodyYaw && !spec.flips && !spec.forwardFlip;
+    // Only 180 shuvs retain the eased spin into their catch, on flatground: a
+    // hop onto or off a bar plays the trick in a shorter flight, where the
+    // ease would whip the board round off the pop and hang it, done, in the air.
+    const easedShuv = !evenShuv && spec.yaw === 180 && !spec.bodyYaw && !spec.flips && !spec.forwardFlip;
     const spinP = easedShuv ? easeOutCubic(rawSpinP) : rawSpinP;
     rotationProgress = spinP;
     
@@ -692,7 +695,6 @@ function computeFrame(
     const shankFlipScale = shankScale;
     const shankYawScale = shankScale;
     const shankBodyScale = shankScale;
-    const shankRollScale = shankScale;
     
     boardY = GROUND - 4 * boardRise(spec, skateStyle) * p * (1 - p);
     // Lateral drift mid-spin: the board arcs toward the toes (frontside, -1)
@@ -726,19 +728,7 @@ function computeFrame(
     shuvDeg = (spec.spinDir || 1) * spec.yaw * spinP * shankYawScale;
     forwardPitchDeg = spec.forwardFlip ? spec.dir * spinP * 180 * shankYawScale : 0;
     bodyYawDeg = (spec.bodySpinDir || 1) * bodyP * spec.bodyYaw * shankBodyScale;
-    // Impossible: one continuous wrap from the popped angle through a full
-    // end-over-end revolution. A separate pop-taper + linear roll used to
-    // nearly cancel mid-flight (board almost stops rotating, then restarts),
-    // which read as two disjoint moves with a pause in the middle. Ease the
-    // whole 360 across nearly the full hang time so it also doesn't finish
-    // early and hang flat before the catch.
-    if (spec.roll) {
-      // A relaxed style still completes the wrap in flight instead of snapping
-      // from an unfinished impossible to the landed pose at touchdown.
-      const wrapEnd = Math.min(0.98, 0.95 / skateStyle.rotationSpeed);
-      const wrapP = easeOutCubic(Math.min(1, p / wrapEnd));
-      boardRot = popAngle + (spec.roll - popAngle) * wrapP * shankRollScale;
-    } else if (spec.late) {
+    if (spec.late) {
       // Late tricks: board stays flat after the pop (no wobble). Shuvits
       // add a scoop dip as the back foot whips the tail around mid-flight;
       // late flips skip the dip — the flip itself comes from sy + pitch.
@@ -758,7 +748,7 @@ function computeFrame(
       // from the start (the popping foot rides the strike, not a held
       // pitch) and arrives at zero with zero slope, by the catch at the
       // latest (a counter shuv's comes early).
-      const fade = Math.min(TILT_POP_FADE, caughtAt);
+      const fade = Math.min(spec.wrap ? WRAP_POP_FADE : TILT_POP_FADE, caughtAt);
       boardRot = popAngle * (1 - clamp01(p / fade)) ** 2;
     } else if (p < POP_LEVEL) {
       // The pop's pitch, held through the strike and levelled by the top of
@@ -879,7 +869,7 @@ function computeFrame(
     rotationProgress = 1;
     // Compress on the catch, then ride away. After a 180/bigspin the skater
     // stays turned around (rides away switch).
-    const complexity = (spec.flips * 0.5) + (spec.yaw / 180 * 0.3) + (spec.roll ? 0.5 : 0);
+    const complexity = (spec.flips * 0.5) + (spec.yaw / 180 * 0.3);
     const stanceLoad = spec.stance === 'nollie' ? 1.2 : 1;
     const landingCompression = (12 + (complexity * 6)) * stanceLoad;
     
@@ -1015,7 +1005,7 @@ function computeFrame(
       // those back to 0 made failed 180s slowly unwind to the start on the
       // ground. Only the crooked landing tilt (pitch) settles flat.
       const tiltSettle = Math.exp(-2.2 * u);
-      boardRot = spec.roll ? spec.roll * shankProgress : 32 * tiltSettle;
+      boardRot = 32 * tiltSettle;
       const shankAngle = spec.flips * 360 * shankProgress;
       sy = spec.flips ? Math.cos(rad(shankAngle)) : 1;
       if (spec.yaw) {

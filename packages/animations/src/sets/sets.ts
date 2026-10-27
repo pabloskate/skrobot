@@ -46,7 +46,7 @@ export type RailLine = 'center' | 'left' | 'right';
 /**
  * What a gap trick goes over where a spot has more than one way down: its
  * stairs (the spot's main line, whatever it is: Miami's is the gap onto the
- * granite triangle), or (Hollywood) the picket fence beside them, onto the
+ * triangular bank), or (Hollywood) the picket fence beside them, onto the
  * sidewalk, or (Miami) clear over the whole triangle to the plaza.
  */
 export type Obstacle = 'stairs' | 'fence' | 'triangle';
@@ -161,8 +161,8 @@ export const STAGE_SETS: readonly SetInfo[] = [
     rails: null, farPanorama: false, tripods: ['bottom', 'side', 'top'],
   },
   {
-    id: 'sunset-car-wash', label: 'Sunset Car Wash', grinds: false,
-    description: 'Sunset Boulevard, Los Angeles · Along the roof, a quarter-turn into the bank, then downhill.',
+    id: 'sunset-car-wash', label: 'Roof to Bank', grinds: false,
+    description: 'An unbranded roof-to-bank setting. Along the roof, a quarter-turn into the bank, then downhill.',
     terrain: stageTerrain({
       drop: SUNSET_DROP, run: SUNSET_LAND_X, landPast: 0, laneZ: SUNSET_LANE_Z,
       ground: sunsetGround, slope: sunsetSlope, surface: sunsetSurface,
@@ -171,8 +171,8 @@ export const STAGE_SETS: readonly SetInfo[] = [
     rails: null, farPanorama: false, tripods: ['bottom', 'side', 'top'],
   },
   {
-    id: 'lyon-25', label: 'Lyon 25', grinds: false,
-    description: 'Cité internationale, Lyon · 25 stairs, 14.76 feet down and 21.29 feet across, beside the terracotta buildings.',
+    id: 'lyon-25', label: '25 Stair', grinds: false,
+    description: '25 stairs, 14.76 feet down and 21.29 feet across, in a redesigned courtyard.',
     terrain: stageTerrain(LYON_TERRAIN),
     rails: null, farPanorama: false, tripods: ['bottom', 'side', 'top'],
   },
@@ -183,11 +183,11 @@ export const STAGE_SETS: readonly SetInfo[] = [
     rails: null, farPanorama: false, tripods: ['bottom', 'side', 'top'],
   },
   {
-    id: 'miami-triangle', label: 'Miami Triangle', grinds: true,
-    description: 'Bayfront Park, Miami · Off the tip of the Challenger Memorial terrace onto the tilted granite triangle, over it to the plaza, or down one of its edges.',
+    id: 'miami-triangle', label: 'Triangle Bank', grinds: true,
+    description: 'A redesigned park setting. Gap from the raised deck onto a plain triangular bank, clear it to the plaza, or grind an edge.',
     terrain: MIAMI_BANK,
     obstacles: [
-      { id: 'stairs', label: 'Bank', hint: 'off the terrace tip onto the granite triangle, then down it', terrain: MIAMI_BANK },
+      { id: 'stairs', label: 'Bank', hint: 'off the deck onto the triangular bank, then down it', terrain: MIAMI_BANK },
       { id: 'triangle', label: 'Over', hint: 'over the whole triangle to the plaza', terrain: stageTerrain(MIAMI_GAP_TERRAIN) },
     ],
     rails: null, ledges: stageLedges(MIAMI_LEDGES), farPanorama: false, tripods: ['bottom', 'side', 'top'],
@@ -215,9 +215,9 @@ export function setTerrain(set: StageSet, obstacle: Obstacle = 'stairs'): DropTe
 }
 
 /** A trick's moments at a set, from the very same geometry the stage and renderer use: down its drop, or on flat ground. */
-export function setTimeline(set: StageSet, style: SkateStyle | undefined, landed = true, obstacle: Obstacle = 'stairs', stance: Stance = 'regular'): AttemptTimeline {
+export function setTimeline(set: StageSet, style: SkateStyle | undefined, landed = true, obstacle: Obstacle = 'stairs', stance: Stance = 'regular', base?: string): AttemptTimeline {
   const terrain = setTerrain(set, obstacle);
-  return terrain ? stairTimeline(style, landed, terrain, stance) : flatTimeline(style, landed);
+  return terrain ? stairTimeline(style, landed, terrain, stance, base) : flatTimeline(style, landed);
 }
 
 /**

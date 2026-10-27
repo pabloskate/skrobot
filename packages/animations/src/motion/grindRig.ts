@@ -26,7 +26,7 @@ import {
   type GrindPlan,
 } from './grind';
 import { BAR_Z } from './grindDefinitions';
-import { NO_SPIN, SHANK_AT, flatHop, hopClock, ollieSpec, type TrickSpin } from './grindTricks';
+import { NO_SPIN, SHANK_AT, flatHop, ollieSpec, riderClock, spinTurn, type TrickSpin } from './grindTricks';
 import {
   add3,
   clamp01,
@@ -55,6 +55,7 @@ import {
   ARM_LOAD,
   ARM_RIDE,
   FOOT_OVER_SOLE,
+  FOOT_RAKE,
   FOREARM,
   HEAD_STEADY,
   HIP_BACK,
@@ -136,22 +137,44 @@ const RAIL_LOOK = 0.5;
 
 /**
  * The board at a pose, with its deck optionally turned about its own axes
- * (a flip or shuv popped into or out of the grind). The turn is inside the
- * pose, so the deck spins on the attitude it is riding at.
+ * (a flip or shuv popped into or out of the grind), or wrapped round the
+ * scooping foot (an impossible's: spinTurn). The turn is inside the pose, so
+ * the deck spins on the attitude it is riding at. `center` is where the pose
+ * has the board; a wrap carries the deck's own middle off it.
  */
 export function boardRigAt(center: V3, pose: BoardPose, spin: TrickSpin = NO_SPIN): BoardRig {
   const attitude = poseDir(pose);
-  const dir = spin === NO_SPIN || (spin.flip === 0 && spin.yaw === 0)
-    ? attitude
-    : (local: V3) => attitude(rotY(rotX(local, spin.flip), spin.yaw));
+  const turn = spin === NO_SPIN || (spin.flip === 0 && spin.yaw === 0 && !spin.rest && !spin.wrap) ? null : spinTurn(spin);
+  const dir = turn ? (local: V3) => attitude(turn.dir(local)) : attitude;
+  const point = turn ? (local: V3) => add3(center, attitude(turn.point(local))) : (local: V3) => add3(center, attitude(local));
   return {
-    center,
-    point: (local) => add3(center, dir(local)),
+    center: point({ x: 0, y: 0, z: 0 }),
+    point,
     dir,
     flipDeg: pose.roll + spin.flip,
-    yawDeg: pose.yaw + spin.yaw,
+    yawDeg: pose.yaw + spin.yaw + (spin.wrap?.deg ?? 0),
     pitchDeg: pose.pitch,
   };
+}
+
+/**
+ * An impossible's scooping foot keeps the spot it holds under its sole, as
+ * on flatground (rig.ts): the deck goes where the foot takes that spot, as
+ * firmly as it holds it. On the hop on the foot is the flatground rider's,
+ * holding the flatground board; off the bar it's the grind's own.
+ */
+function heldBoard(rig: Rig, frame: GrindFrame, plan: GrindPlan): Rig {
+  const wrap = frame.spin.wrap;
+  const trick = frame.t < plan.off ? plan.entry : plan.exit;
+  if (!wrap || wrap.hold <= 0 || !trick) return rig;
+  const leg = rig.legs[trick.mechanics.popFoot === 'left' ? 0 : 1];
+  const sole = leg.shoe.at(0, -SHOE_HALF_HEIGHT, 0);
+  // The spot is the pivot on the deck's top, in the rider's axes (whatever the deck rests turned by):
+  // the wrap leaves it where the scoop has it, turning the deck's top about it.
+  const wrapped = spinTurn({ ...frame.spin, flip: 0, yaw: 0, rest: 0 });
+  const under = add3(frame.center, poseDir(frame.pose)(wrapped.point({ x: wrap.pivot.x, y: deckTopY(wrap.pivot.x), z: wrap.pivot.z })));
+  const by = scale3(sub3(sole, under), wrap.hold);
+  return { ...rig, board: boardRigAt(add3(frame.center, by), frame.pose, frame.spin) };
 }
 
 /** 0 → 1: how far an exit flip's flicking foot has set up on the bar: in
@@ -173,6 +196,28 @@ function rolling(g: GrindFrame, plan: GrindPlan): number {
   return tailFirst(tailFirst(from, plan.heading, plan.heading), plan.endHeading - plan.heading, spun - plan.heading);
 }
 
+/**
+ * Where along the board (its yaw's x) the hips sit over a deck pitched
+ * `pitch` along its length, down to the end on the bar, from `level`, where
+ * they sit over a level one; and how much lower (physics y) that puts them.
+ * The rider sinks back over that end, toward the lower foot, as far as both
+ * legs then bend alike, `overDeck` over the deck under them: centered over a
+ * blunt's 35 degrees, the leg down to the tail hangs straight and the other
+ * folds up under the raised nose.
+ */
+function tippedHips(noseX: number, tailX: number, pitch: number, overDeck: number, level: number): { along: number; down: number } {
+  if (!pitch) return { along: level, down: 0 };
+  // The hips as far from one ankle as the other, `overDeck` over the deck pitched `p`.
+  const even = (p: number) => {
+    const ankle = (x: number) => rotZ({ x, y: deckTopY(x) - FOOT_OVER_SOLE - ANKLE_LIFT, z: 0 }, p);
+    const n = ankle(noseX), t = ankle(tailX);
+    const slope = Math.tan(rad(p));
+    return (n.x * n.x + n.y * n.y - t.x * t.x - t.y * t.y + 2 * overDeck * (n.y - t.y)) / (2 * (n.x - t.x + slope * (n.y - t.y)));
+  };
+  const along = level + even(pitch) - even(0);
+  return { along, down: along * Math.tan(rad(pitch)) };
+}
+
 function bodyOn(g: GrindFrame, plan: GrindPlan, mechanics: RiderMechanics): Rig {
   const toeDir = mechanics.orientationSign;
   // The feet stand on the board's attitude; a deck flipping under them is
@@ -182,6 +227,10 @@ function bodyOn(g: GrindFrame, plan: GrindPlan, mechanics: RiderMechanics): Rig 
   // off, then the one popped out of it, flicked by its own foot.
   const trick = g.t < plan.off ? plan.entry : plan.exit;
   const feetLift = trick ? trick.trick.feetLift * g.offDeck : 0;
+  // An impossible's scooping foot stays down on the spot it holds, driving it
+  // round (heldBoard keeps the deck under it); the other comes up off it.
+  const wrap = g.spin.wrap;
+  const holding = (side: 'left' | 'right') => (wrap && trick?.mechanics.popFoot === side ? wrap.hold : 0);
   // A kickflip flicks off the heelside rail, a heelflip off the toeside one.
   const flickDir = trick ? -trick.trick.spec.flipDir * toeDir : 0;
   const flickReach = trick ? DECK_HALF_WIDTH + 5 + FLICK_STYLE_REACH * trick.style.flickStrength : 0;
@@ -200,10 +249,12 @@ function bodyOn(g: GrindFrame, plan: GrindPlan, mechanics: RiderMechanics): Rig 
   // ----- Feet: soles on the grip, wherever the board is -----
   const footPlan = (side: 'left' | 'right') => {
     const isNose = mechanics.noseFoot === side;
-    const x = isNose ? g.noseFoot : g.tailFoot;
+    const held = holding(side);
+    const scoop = held && wrap ? wrap.scoop : { x: 0, y: 0, z: 0 };
+    const x = (isNose ? g.noseFoot : g.tailFoot) + scoop.x * held;
     // Same stance on the deck as the flatground rig: toes across toward
     // toeside, the front foot raked toward the nose.
-    const rake = isNose ? 24 : 8;
+    const rake = isNose ? FOOT_RAKE.nose : FOOT_RAKE.tail;
     const toe = rotY({ x: 0, y: 0, z: toeDir }, toeDir * rake);
     const along = rotY({ x: 1, y: 0, z: 0 }, toeDir * rake);
     const flicking = trick != null && trick.mechanics.flickFoot === side;
@@ -217,7 +268,7 @@ function bodyOn(g: GrindFrame, plan: GrindPlan, mechanics: RiderMechanics): Rig 
     const lane = toeDir * SHOE_TOESIDE - toe.z * TOE_REACH + (Math.abs(setup) > Math.abs(flick) ? setup : flick);
     // The sole sits FOOT_OVER_SOLE below the foot point (as solveRig places the shoe), on
     // the deck where the shoe's center is, which the toe reaches past the foot.
-    const footY = deckTopY(x + toe.x * TOE_REACH) - FOOT_OVER_SOLE - feetLift;
+    const footY = deckTopY(x + toe.x * TOE_REACH) - FOOT_OVER_SOLE - feetLift * (1 - held) + scoop.y * held;
     const center: V3 = { x: x + toe.x * TOE_REACH, y: footY + FOOT_OVER_SOLE - SHOE_HALF_HEIGHT, z: lane + toe.z * TOE_REACH };
     const shoe = frameOf(board.point(center), (d) =>
       board.dir({ x: toe.x * d.x + along.x * d.z, y: d.y, z: toe.z * d.x + along.z * d.z }));
@@ -228,12 +279,17 @@ function bodyOn(g: GrindFrame, plan: GrindPlan, mechanics: RiderMechanics): Rig 
 
   // ----- Hips: between the feet, sliding back over the heels as they sink -----
   const squat = clamp01((RIDE_HEIGHT - g.overDeck) / (RIDE_HEIGHT - SQUAT_FLOOR));
-  const shift = heading({ x: (HIP_CENTER * (g.noseFoot + g.tailFoot)) / 2, y: 0, z: -toeDir * HIP_BACK * squat });
+  // Over a deck tipped down to the end on the bar (a blunt's tail, a 5-0's) the hips sink back over that
+  // end; one hanging its other end down beside the bar (a smith's, a willy's) is stood on over the truck.
+  const stand = g.stand ?? g.pose.pitch;
+  const onLowEnd = Math.sign(plan.spec.contact.at.x) === Math.sign(stand);
+  const tipped = tippedHips(g.noseFoot, g.tailFoot, onLowEnd ? stand : 0, g.overDeck, (HIP_CENTER * (g.noseFoot + g.tailFoot)) / 2);
+  const shift = heading({ x: tipped.along, y: 0, z: -toeDir * HIP_BACK * squat });
   // Leaning down a handrail carries the hips ahead of the board, square to what the rider feels.
   if (g.lean) shift.x += Math.sin(rad(g.lean)) * g.overDeck;
   // The hips ride the un-snapped board, so a pop's snap is taken by the legs,
   // but never higher than both legs can still reach their feet from.
-  let hipY = g.ref.y - g.overDeck;
+  let hipY = g.ref.y - g.overDeck + tipped.down * (g.sunk ?? 1);
   for (const plan of plans) {
     const hip = add3({ x: g.ref.x + shift.x, y: 0, z: g.ref.z + shift.z }, rotY(plan.hipLocal, bodyYawDeg));
     const across = Math.hypot(plan.ankle.x - hip.x, plan.ankle.z - hip.z);
@@ -456,7 +512,12 @@ export interface GrindRig {
 /** Seconds before the pop off the bar that an exit flip starts setting up. */
 const EXIT_SETUP_LEAD = 0.45;
 
-/** Share of the hop onto the bar after which the flatground rider hands over to the grind's. */
+/**
+ * Share of the hop onto the bar after which the flatground rider hands over
+ * to the grind's, done by the lock; with a trick in, the share of the way to
+ * its catch, done by then: the feet come down on the deck where the lock has
+ * them, and the grind's body takes the board down onto the bar from there.
+ */
 const HANDOVER_FROM = 0.55;
 
 /**
@@ -514,7 +575,7 @@ function hopRider(frame: GrindFrame, plan: GrindPlan, mechanics: RiderMechanics,
   if (frame.t >= plan.lockAt) return null;
   const tau = frame.t - plan.pop;
   const spec = plan.entry?.trick.spec ?? ollieFor(plan);
-  const { f, rig } = flatHop(spec, tau < 0 ? Math.max(0, frame.t) : hopClock(style, tau, plan.entryRate), spunIn(plan.spinIn, tau), mechanics, style);
+  const { f, rig } = flatHop(spec, tau < 0 ? Math.max(0, frame.t) : riderClock(style, tau, plan.entryRate), spunIn(plan.spinIn, tau), mechanics, style);
   // Carried by its board: the flatground board drifts ahead of X0 through the flight,
   // and the feet were tucked around it there, so they keep their place on it.
   const carried = shiftRig(rig, { x: frame.ref.x - f.board.x, y: frame.ref.y - f.board.y, z: frame.ref.z });
@@ -544,7 +605,7 @@ function withHop(
 ): Rig {
   if (!flat) return place(rig);
   const tau = frame.t - plan.pop;
-  const w = tau < 0 ? 0 : smoothstep((tau / plan.upT - HANDOVER_FROM) / (1 - HANDOVER_FROM));
+  const w = tau < 0 ? 0 : smoothstep((tau / (plan.entry ? plan.entryCaught : plan.upT) - HANDOVER_FROM) / (1 - HANDOVER_FROM));
   // Follow a quicker scoop with the feet, then release them onto their
   // flatground paths as its snap rejoins the shared animation.
   const body = planted(place(blendRig(flat, rig, w, true)), boardRigAt(frame.center, frame.pose), 1 - frame.offDeck, liftAllowed(plan, tau));
@@ -754,7 +815,7 @@ function flown(
     y = arcHipY(rig, plan, mechanics, style, time, 1);
     return y == null ? rig : hipsAt(rig, y);
   }, flat);
-  return { body, hipY: y };
+  return { body: heldBoard(body, frame, plan), hipY: y };
 }
 
 /** World units over which a person's hips ease into the most their legs reach, held there by the robot's feet. */
@@ -909,8 +970,13 @@ function measureHopTuck(plan: GrindPlan, mechanics: RiderMechanics, style: Skate
     allow(plan.off, caught, plan.off, (t) => smoothstep(1 - (t - plan.off) / TUCK_OFF));
     allow(plan.off, caught, caught, (t) => smoothstep(1 - (caught - t) / TUCK_ONTO));
   }
+  // An impossible's scooping foot stands on the spot it holds (heldBoard): only the other foot clears the deck.
+  times.forEach((t, k) => {
+    const trick = t < plan.off ? plan.entry : plan.exit;
+    if (trick && (grindFrame(t, plan).spin.wrap?.hold ?? 0) > 0.5) allowed[trick.mechanics.popFoot === 'left' ? 0 : 1][k] = Infinity;
+  });
   const rigs = times.map((t) => flown(t, plan, mechanics, style).body);
-  return measureTuck(times, (k, tuck) => tucked(rigs[k], tuck), undefined, within, allowed);
+  return measureTuck(times, (k, tuck) => tucked(rigs[k], tuck), within, allowed);
 }
 
 function untucked(time: number, plan: GrindPlan, mechanics: RiderMechanics, style: SkateStyle, { frame, own, flat } = bodiesAt(time, plan, mechanics, style)): Rig {

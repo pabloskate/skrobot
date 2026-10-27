@@ -14,11 +14,10 @@ import { SET_SCALE } from '../setScale';
 import { setInfo, setTerrain, setTimeline, type Obstacle } from '../sets';
 import { sweep, sweepHz } from '../../testing';
 import { buildMiamiGeometry, Miami3D } from './miami3d';
-import { miamiTowerNode, MIAMI_TOWER_HEIGHT, MIAMI_TOWER_NODES } from './miamiGeometry';
 import {
   MIAMI_BANK_LAND_X, MIAMI_BANK_TERRAIN, MIAMI_DROP, MIAMI_FOOT as F, MIAMI_GAP_LAND_X, MIAMI_GAP_TERRAIN,
   MIAMI_PLAZA_HALF, MIAMI_PLAZA_Y, MIAMI_POP_X, MIAMI_RIM_HEIGHT, MIAMI_RIM_WIDTH, MIAMI_SLAB_APEX_X, MIAMI_SLAB_APEX_Y,
-  MIAMI_SLAB_GRADE, MIAMI_SLAB_LIP_X, MIAMI_SLAB_LIP_Y, MIAMI_SLAB_SIDE, MIAMI_SLAB_THICK, MIAMI_TERRACE_BACK, MIAMI_TOWER_X,
+  MIAMI_SLAB_GRADE, MIAMI_SLAB_LIP_X, MIAMI_SLAB_LIP_Y, MIAMI_SLAB_SIDE, MIAMI_SLAB_THICK, MIAMI_TERRACE_BACK,
   MIAMI_WALL_THICK, MIAMI_WALL_TOP, MIAMI_WALL_X,
   miamiGround, miamiSlabHalf, miamiSlabTop, miamiSlope, miamiSurface, miamiTerraceHalf, miamiTerraceInset, onMiamiSlab,
 } from './miamiLayout';
@@ -43,8 +42,8 @@ const trucks = (frame: StageFrame) => [-WHEEL_X, WHEEL_X]
   .sort((a, b) => a.x - b.x)
   .map((p) => p.y - miamiSurface(p.x, p.z));
 
-describe('Miami Triangle: the Challenger Memorial', () => {
-  it('measures the gap off the Berrics overlay and the plan off the aerials', () => {
+describe('Triangle Bank: the established riding challenge', () => {
+  it('preserves the gap and bank dimensions in the redesigned setting', () => {
     // The box 5 ft over the plaza, the slab's apex level with it, 5½ ft out from the tip.
     expect(MIAMI_DROP / F).toBe(5);
     expect(MIAMI_PLAZA_Y).toBe(-MIAMI_DROP);
@@ -60,9 +59,9 @@ describe('Miami Triangle: the Challenger Memorial', () => {
     // About 24°: steep, as the clips show.
     expect(Math.atan(MIAMI_SLAB_GRADE) * 180 / Math.PI).toBeGreaterThan(22);
     expect(Math.atan(MIAMI_SLAB_GRADE) * 180 / Math.PI).toBeLessThan(28);
-    // The terrace is an 88 ft equilateral triangle; the tower stands at its middle, about 51 ft behind the tip.
-    expect(miamiTerraceHalf(MIAMI_TERRACE_BACK) * 2 / F).toBeCloseTo(88, 6);
-    expect(-MIAMI_TOWER_X / F).toBeCloseTo(50.8, 1);
+    // The rear of the original deck is rectangular, with a 40 ft width.
+    expect(miamiTerraceHalf(MIAMI_TERRACE_BACK) * 2 / F).toBeCloseTo(40, 6);
+    expect(miamiTerraceHalf(-60 * F)).toBe(miamiTerraceHalf(-50 * F));
   });
 
   it('raises a curved rim round the deck, which along the line starts a foot and a half behind the tip', () => {
@@ -317,7 +316,7 @@ describe('Miami Triangle: the Challenger Memorial', () => {
   });
 });
 
-describe('Miami Triangle: the scenery', () => {
+describe('Triangle Bank: the scenery', () => {
   it('builds one floor under every point (the plaza shows under the slab too), where the rider and the shadows meet it', () => {
     const built = buildMiamiGeometry();
     const material = new MeshBasicMaterial({ side: DoubleSide });
@@ -326,10 +325,11 @@ describe('Miami Triangle: the scenery', () => {
       .intersectObject(mesh).filter((hit) => hit.face!.normal.y > 0.5).map((hit) => hit.point.y);
     try {
       const samples: Array<[number, number, number]> = [
-        // The deck, out to the tip and back toward the tower.
-        [-0.31 * F, 0.07 * F, 0.5], [-1.2 * F, 0.04 * F, 0.5], [-6.3 * F, 2.1 * F, 0.5], [-24.7 * F, -9.3 * F, 0.5], [-70.1 * F, 33.3 * F, 0.5],
+        // The deck, out to the tip and across its narrowed rectangular rear.
+        [-0.31 * F, 0.07 * F, 0.5], [-1.2 * F, 0.04 * F, 0.5], [-6.3 * F, 2.1 * F, 0.5], [-24.7 * F, -9.3 * F, 0.5], [-70.1 * F, 13.3 * F, 0.5],
+        [-55.3 * F, 19.8 * F, 0.5], [-55.3 * F, 20.4 * F, 0.5], [-35.1 * F, -19.4 * F, 0.5],
         // Across the rim's curve and its top, and at a back corner's mitre.
-        [-30.2 * F, miamiTerraceHalf(-30.2 * F) - 0.55 * F, 0.5], [-30.2 * F, -miamiTerraceHalf(-30.2 * F) + 0.2 * F, 0.5], [MIAMI_TERRACE_BACK + 0.3 * F, 43.1 * F, 0.5],
+        [-30.2 * F, miamiTerraceHalf(-30.2 * F) - 0.55 * F, 0.5], [-30.2 * F, -miamiTerraceHalf(-30.2 * F) + 0.2 * F, 0.5], [MIAMI_TERRACE_BACK + 0.3 * F, 19.7 * F, 0.5], [MIAMI_TERRACE_BACK + 0.3 * F, -19.7 * F, 0.5],
         // The gap: the lawn strip in front of the tip, the wall's top, the plaza.
         [0.71 * F, 0.13 * F, 0.5], [MIAMI_WALL_X - 0.27 * F, 0.4 * F, 0.5], [MIAMI_WALL_X + 1.3 * F, 0.17 * F, 0.5],
         // The slab's face, apex to low edge.
@@ -349,17 +349,16 @@ describe('Miami Triangle: the scenery', () => {
     } finally { material.dispose(); built.ground.dispose(); built.props.dispose(); }
   });
 
-  it('builds the tower as Noguchi’s tetrahelix: 31 regular tetrahedra, about 100 ft tall', () => {
-    expect(MIAMI_TOWER_NODES - 3).toBe(31);
-    const edge = Math.hypot(...[0, 1, 2].map((k) => miamiTowerNode(1)[k] - miamiTowerNode(0)[k]));
-    for (let i = 0; i < MIAMI_TOWER_NODES; i++) for (let step = 1; step <= 3; step++) {
-      if (i + step >= MIAMI_TOWER_NODES) continue;
-      const a = miamiTowerNode(i), b = miamiTowerNode(i + step);
-      expect(Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) / edge, `edge ${i}–${i + step}`).toBeCloseTo(1, 9);
-    }
-    expect(miamiTowerNode(MIAMI_TOWER_NODES - 1)[1]).toBeCloseTo(MIAMI_TOWER_HEIGHT, 6);
-    expect(edge / F).toBeGreaterThan(9);
-    expect(edge / F).toBeLessThan(10.5);
+  it('leaves the middle of the rear deck open where a memorial tower stood', () => {
+    const built = buildMiamiGeometry();
+    const material = new MeshBasicMaterial({ side: DoubleSide });
+    const props = new Mesh(built.props, material);
+    try {
+      for (const x of [-54, -51, -48]) for (const z of [-2, 0, 2]) {
+        const hits = new Raycaster(new Vector3(x * F, 110 * F, z * F), new Vector3(0, -1, 0)).intersectObject(props);
+        expect(hits.filter(hit => hit.point.y > 4 * F)).toHaveLength(0);
+      }
+    } finally { material.dispose(); built.ground.dispose(); built.props.dispose(); }
   });
 
   it('stays finite and inside the mobile budget', () => {

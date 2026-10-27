@@ -1,7 +1,7 @@
 import { HUMAN_SHIN, HUMAN_THIGH } from '../../riders/human/humanProportions';
 import { FOOT, GRAVITY } from '../../units';
 import { WHEEL_BOTTOM } from '../../board/board';
-import { grindTimeline, handrailHeight, planGrind, railTrack, travel, type GrindPlan, type GrindTimeline, type Handrail } from '../grind';
+import { grindTimeline, handrailHeight, planGrind, railTopY, railTrack, travel, type GrindPlan, type GrindTimeline, type Handrail } from '../grind';
 import { BAR_Z, grindSpecFor } from '../grindDefinitions';
 import { resolveRiderMechanics } from '../stance';
 import { resolveSkateStyle } from '../style';
@@ -60,6 +60,12 @@ const HIPS_OVER_DECK = 0.8;
 const HIPS_LANDING = 0.9;
 /** Down past a rail's end, the hips come down at least this far beyond it (world units): the legs clear its last post. */
 const PAST_END = 1.5 * FOOT;
+/**
+ * Forward past a handrail's end, the hips are this high over its top (in legs) where they pass it, and for this far (in
+ * legs) either side: the feet, a leg below them, clear its last post. Coming off near the bottom of a fast grind they
+ * would otherwise skim it.
+ */
+const OVER_END = { high: 1, span: 0.6 } as const;
 /** The ground a roll needs from where the feet come down: this far back and on (legs), level to within this much (world units). */
 const LEVEL_ROOM = { back: 0.4, ahead: 3.4, rise: 1.5 } as const;
 
@@ -100,6 +106,28 @@ const acrossOf = (plan: GrindPlan) => (plan.handrail && plan.spec.dir === -1 ? -
 
 /** Where the rail ends along the way of travel. */
 const railEnd = (plan: GrindPlan) => (plan.handrail ? plan.handrail.rail.end : plan.barEnd);
+
+/** Whether the hips, jumping at `at` with the legs' throw along it and up, pass over a handrail's end high enough for the feet to clear it. */
+function overEnd(plan: GrindPlan, at: number, along: number, up: number): boolean {
+  const ride = plan.handrail;
+  if (!ride || ride.rail.ledge) return true;
+  const h = 1 / 240;
+  const a = boardOnPath(plan, at - h);
+  const b = boardOnPath(plan, at + h);
+  const now = boardOnPath(plan, at);
+  const va = (b.along - a.along) / (2 * h) + along;
+  const vy = (b.y - a.y) / (2 * h) - up;
+  const y0 = now.y - HIPS_OVER_DECK * LEG;
+  const end = ride.rail.end;
+  const top = railTopY(ride.rail, end);
+  for (let tau = 0; tau < 3; tau += 1 / 240) {
+    const x = now.along + va * tau;
+    if (x > end + OVER_END.span * LEG) break;
+    if (x < end - OVER_END.span * LEG) continue;
+    if (y0 + vy * tau + 0.5 * GRAVITY * tau * tau > top - OVER_END.high * LEG) return false;
+  }
+  return true;
+}
 
 /** Where along the hips come down, and when, jumping at `at` with the legs' throw along it, up, and out to the side. */
 function landingFrom(plan: GrindPlan, at: number, along: number, up: number, out: number): { along: number; across: number; t: number } {
@@ -148,7 +176,7 @@ export function planRailBail(plan: GrindPlan, bail: RailBail): RailBailPlan {
   const fits = (at: number) => {
     const land = landingFrom(plan, at, throwOf.along, throwOf.up, throwOf.out);
     if (!levelRoom(plan, land.along, land.across)) return null;
-    if (bail === 'forward' && land.along < railEnd(plan) + PAST_END) return null;
+    if (bail === 'forward' && (land.along < railEnd(plan) + PAST_END || !overEnd(plan, at, throwOf.along, throwOf.up))) return null;
     return land;
   };
   let at = last;

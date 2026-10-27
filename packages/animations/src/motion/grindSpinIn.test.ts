@@ -3,7 +3,7 @@ import { SWEEP_TIMEOUT } from '../testing';
 import type { Stance } from '../types';
 import { EL_TORO_RAIL } from '../sets/elToro/stairs';
 import { grindFrame } from './grind';
-import { BAR_Z, grindSpecFor, joinGrindBase } from './grindDefinitions';
+import { BAR_Z, grindSpecFor, joinGrindBase, type GrindSide } from './grindDefinitions';
 import { canEnterGrind } from './grindTricks';
 import { solveGrindRig } from './grindRig';
 import { rotX, rotY } from '../math';
@@ -22,51 +22,68 @@ import {
 /**
  * A body spin popped into a grind (180s, 360s, bigspins): the rider spins at
  * one speed down onto the bar, the bar finishes the turn, and from the lock
- * on it's the plain grind as the rider rides it after the spin. The body's
+ * on it's the plain grind as the rider rides it after the spin. The grind is
+ * named for the side it rolls in on, as a plain one is. The body's
  * sweep is in grindSpinInSweep.test.ts, to run alongside.
  */
 
 describe('Spin into grind', () => {
   const SPINS = SPIN_TRICKS;
   const HALF = HALF_SPINS;
+  /** Slides with the board across the bar, which a half turn leaves across it the same way. */
+  const ACROSS = new Set(['Boardslide', 'Tailslide', 'Bluntslide']);
   const AFTER_HALF: Record<Stance, Stance> = { regular: 'fakie', nollie: 'fakie', fakie: 'regular', switch: 'switch' };
+  const OTHER_SIDE: Record<GrindSide, GrindSide> = { frontside: 'backside', backside: 'frontside' };
 
-  it('accepts 180s, 360s, and bigspins, and names the grind as the rider rides it after the spin', () => {
+  it('accepts 180s, 360s, and bigspins, and names the grind for the side it rolls in on', () => {
     for (const entry of SPINS) expect(canEnterGrind(entry), entry).toBe(true);
     const spec = grindSpecFor({ base: 'Backside 180 into Frontside Nosegrind', stance: 'regular' });
     expect(spec?.entry?.base).toBe('Backside 180');
     expect(spec?.base).toBe('Nosegrind');
     expect(spec?.side).toBe('frontside');
-    // Spun round, the rider rides it frontside, so they rolled in with the bar on the heelside.
+    // Frontside rolls in with the bar on the toeside, spun round or not.
     expect(spec?.reversed).toBe(true);
-    expect(spec?.toesideApproach).toBe(false);
+    expect(spec?.toesideApproach).toBe(true);
     expect(grindSpecFor({ base: 'Backside 360 into Frontside Nosegrind', stance: 'regular' })?.toesideApproach).toBe(true);
   });
 
-  it('rolls in with the bar on the other side of the rider after a half turn, and the named side after a full one', () => {
+  it('rolls in with the bar on the side the grind names, spun round or not', () => {
     for (const { entry, base, side, rider, stance, label } of everySpin()) {
       const { plan } = spinPlan(entry, base, side, stance, rider, null);
       const barToward = Math.sign(BAR_Z - plan.laneZ);
-      const onToeside = (side === 'frontside') !== HALF.has(entry);
-      expect(barToward, label).toBe(onToeside ? plan.toeDir : -plan.toeDir);
+      expect(barToward, label).toBe(side === 'frontside' ? plan.toeDir : -plan.toeDir);
     }
   });
 
-  it('locks in exactly as the grind the spin leaves them riding: fakie after a 180 or a bigspin, turned to face the way they travel', () => {
+  it('locks in exactly as the grind the spin leaves them riding: fakie with the bar on their other side after a 180 or a bigspin, turned to face the way they travel', () => {
     for (const { entry, base, side, rider, stance, label } of everySpin()) {
       const { plan } = spinPlan(entry, base, side, stance, rider, null);
       const half = HALF.has(entry);
       expect(Math.abs(plan.heading), label).toBe(half ? 180 : 360);
-      // The plain grind from the stance they land in. Fakie only reverses travel,
-      // so its toeside matches; switch stays switch and just rides backwards.
+      // The plain grind from the stance they land in, with the bar on the side it's on then. Fakie
+      // only reverses travel, so its toeside matches; switch stays switch and just rides backwards.
       const after = half ? AFTER_HALF[stance] : stance;
-      const plain = planFor(base, side, after, rider, null).plan;
+      const plain = planFor(base, half ? OTHER_SIDE[side] : side, after, rider, null).plan;
       expect(plan.lock.yaw - plan.heading, label).toBeCloseTo(plain.lock.yaw, 9);
       expect(plan.lock.pitch, label).toBe(plain.lock.pitch);
       expect(plan.lock.roll, label).toBeCloseTo(plain.lock.roll, 9);
       // Turned half way round about the bar, the board sits across it the other way.
       expect(plan.lockCenter.y, label).toBeCloseTo(plain.lockCenter.y, 9);
       expect(plan.lockCenter.z - BAR_Z, label).toBeCloseTo((half ? -1 : 1) * (plain.lockCenter.z - BAR_Z), 9);
+    }
+  });
+
+  it('comes out the plain slide after a half turn into a slide across the bar: rolled in and locked the same', () => {
+    const wrap = (deg: number) => ((deg % 360) + 360) % 360;
+    for (const { entry, base, side, rider, stance, label } of everySpin()) {
+      if (!HALF.has(entry) || !ACROSS.has(base)) continue;
+      const { plan } = spinPlan(entry, base, side, stance, rider, null);
+      const plain = planFor(base, side, stance, rider, null).plan;
+      expect(Math.sign(plan.laneZ - BAR_Z), label).toBe(Math.sign(plain.laneZ - BAR_Z));
+      expect(wrap(plan.lock.yaw), label).toBeCloseTo(wrap(plain.lock.yaw), 9);
+      expect(plan.lock.pitch, label).toBe(plain.lock.pitch);
+      expect(plan.lock.roll, label).toBeCloseTo(plain.lock.roll, 9);
+      expect(plan.lockCenter.z, label).toBeCloseTo(plain.lockCenter.z, 9);
     }
   });
 
@@ -123,7 +140,9 @@ describe('Spin into grind', () => {
         const unwinding = Math.abs(plan.lock.yaw - plan.approachYaw) / Math.abs(plan.lock.yaw);
         expect(short, label).toBeGreaterThan(0.5 * Math.min(spec.railFinish, 0.3 * Math.abs(plan.lock.yaw)));
         expect(short, label).toBeLessThan(1.01 * spec.railFinish * unwinding);
-        expect(rate(plan.lockAt) / steady, label).toBeGreaterThan(0.85);
+        // A quick spin (a 360 popped as an ollie is, in a short hop) has only the few degrees the bar
+        // lets pivot to give up, so it's stopped in two or three frames: still most of its speed in the first.
+        expect(rate(plan.lockAt) / steady, label).toBeGreaterThan(0.8);
         const settled = plan.lockAt + plan.spinIn!.finishT;
         expect(grindFrame(settled, plan).heading, label).toBeCloseTo(plan.heading, 6);
         // Only the balance wobble left (WOBBLE_SLIDE at most).

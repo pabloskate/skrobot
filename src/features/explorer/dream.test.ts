@@ -18,6 +18,7 @@ describe('Dream Tricks', () => {
     for (const spot of DREAM_SPOTS) {
       const info = setInfo(spot.id);
       expect(info.terrain, spot.id).not.toBeNull();
+      expect(spot.name, spot.id).toBe(info.label);
       for (const line of spot.lines) {
         if (line.mode === 'grinds') {
           expect(info.grinds, `${spot.id} ${line.id}`).toBe(true);
@@ -122,5 +123,13 @@ describe('Dream Tricks', () => {
     expect(dreamStateFromSearch('?trick=kickflip').camera).toBe('tripod-bottom');
     expect(dreamStateFromSearch('?trick=kickflip&cam=classic').camera).toBe('tripod-bottom');
     expect(dreamStateFromSearch('?trick=kickflip&cam=follow').camera).toBe('follow');
+  });
+
+  it('keeps the filmer-at-the-bottom framing instead of the explorer\'s classic pull-back', () => {
+    expect(DREAM_DEFAULT.zoom).toBe(1);
+    expect(dreamStateFromSearch('').zoom).toBe(1);
+    expect(dreamStateFromSearch('?cam=classic').zoom).toBe(1);
+    // A link that asks for a zoom still keeps it.
+    expect(dreamStateFromSearch('?cam=classic&zoom=1.4').zoom).toBe(1.4);
   });
 });

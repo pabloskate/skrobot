@@ -69,7 +69,7 @@ describe('board and rider', () => {
     // the grind doesn't draw, and the hop off the grind's own feet: both are
     // tucked again against the board as drawn (grindRig.ts hopTuck).
     const style = resolveSkateStyle({ popHeight: 1, rotationSpeed: 1, flickStrength: 1 });
-    const TRICKS = ['Kickflip', 'Heelflip', '360 Flip', 'Hardflip', 'Varial Heelflip', 'Bigspin Flip', 'Backside Flip', '360 Shuvit'];
+    const TRICKS = ['Kickflip', 'Heelflip', '360 Flip', 'Hardflip', 'Varial Heelflip', 'Bigspin Flip', 'Backside Flip', '360 Shuvit', 'Impossible'];
     const GRINDS = ['Frontside 50-50 Grind', 'Backside 5-0 Grind', 'Backside Smith Grind', 'Frontside Feeble Grind', 'Frontside Boardslide', 'Backside Lipslide', 'Frontside Noseslide'];
     const found: string[] = [];
     for (const set of ['plaza', 'el-toro'] as const) {

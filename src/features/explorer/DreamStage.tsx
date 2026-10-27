@@ -1,6 +1,6 @@
 'use client';
 
-import { TbPlayerPauseFilled, TbPlayerPlayFilled, TbRefresh, TbVolume, TbVolumeOff } from 'react-icons/tb';
+import { TbCamera, TbPlayerPauseFilled, TbPlayerPlayFilled, TbRefresh, TbVolume, TbVolumeOff } from 'react-icons/tb';
 import { setSoundEffects, useSoundEffects, type SceneCamera } from '@skrobot/animations';
 import { usePlayhead } from './usePlayhead';
 import StageViewport, { type StageScene } from './StageViewport';
@@ -28,9 +28,10 @@ interface Props extends StageScene {
 }
 
 /**
- * The trick on repeat, with only what someone playing needs over it: its
- * name, play and pause, slow motion, sound, and a way back to the shot after
- * dragging the camera. Key it by trick so a new trick starts from the top.
+ * The trick on repeat, with only what someone playing needs: its name, a
+ * camera-angle pick above the picture, play and pause, slow motion, sound,
+ * and a way back to the shot after dragging the camera. Key it by trick so
+ * a new trick starts from the top.
  */
 export default function DreamStage({ duration, caption, rate, moved, onCamera, onZoom, onResetView, onRate, onOpenCamera, ...scene }: Props) {
   const playhead = usePlayhead(duration, rate, true);
@@ -41,6 +42,17 @@ export default function DreamStage({ duration, caption, rate, moved, onCamera, o
 
   return (
     <section className="dream-stage-card" aria-label="Trick stage">
+      <div className="dream-stage-topbar">
+        <button
+          type="button"
+          className="dream-camera-top"
+          aria-haspopup="dialog"
+          onClick={onOpenCamera}
+        >
+          <TbCamera aria-hidden />
+          Camera angle
+        </button>
+      </div>
       <StageViewport scene={scene} playhead={playhead} rate={rate} onCamera={onCamera} onZoom={onZoom} hint="Drag to look around">
         <div className="dream-stage-title">
           <h2>{scene.trick.name}</h2>
@@ -62,14 +74,6 @@ export default function DreamStage({ duration, caption, rate, moved, onCamera, o
             {playhead.playing ? <TbPlayerPauseFilled aria-hidden /> : <TbPlayerPlayFilled aria-hidden />}
           </button>
           <span className="dream-stage-spacer" />
-          <button
-            type="button"
-            className="dream-stage-btn dream-camera"
-            aria-haspopup="dialog"
-            onClick={onOpenCamera}
-          >
-            Camera angle
-          </button>
           <button
             type="button"
             className={`dream-stage-btn dream-speed ${rate < 1 ? 'active' : ''}`}

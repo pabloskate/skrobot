@@ -2,20 +2,11 @@ import type { Handrail } from '../../motion/grind';
 import { SET_FOOT, type DropTerrain } from '../elToro/stairs';
 
 /**
- * The Miami triangle gap: the Challenger Memorial in Bayfront Park, on
- * Biscayne Boulevard. Off the sharp corner of the raised triangular terrace
- * under Isamu Noguchi's tower, over a short gap onto the tilted granite
- * triangle that carries the astronauts' names, down its face and off its low
- * edge onto the plaza; or clear the triangle entirely. The plan is measured
- * off aerial imagery, the plaza and lawn levels off the county's lidar, and
- * the slab's height and the gap off The Berrics' measured overlay, checked
- * against riders in the clips; see
- * docs/MIAMI_TRIANGLE_REFERENCE.md for which is which.
- *
- * +x runs from the terrace's tip down the slab's fall line and out across
- * the plaza (about south-west); y = 0 is the terrace top. Looking down the
- * line, −z is left (south-east, toward the park's south drive) and +z right
- * (north-west, toward Biscayne Boulevard).
+ * Triangle Bank: the established gap and sloping-bank challenge in a
+ * redesigned park. The deck has a pointed nose and a rectangular rear;
+ * no memorial tower, inscriptions or artist attribution are reproduced.
+ * Historical dimension research remains in docs/MIAMI_TRIANGLE_REFERENCE.md.
+ * +x runs from the deck's tip down the bank; y = 0 is the deck top.
  */
 export const MIAMI_FOOT = SET_FOOT;
 const F = SET_FOOT;
@@ -41,12 +32,12 @@ export const MIAMI_WALL_TOP = MIAMI_PLAZA_Y + 1.5 * F;
 export const MIAMI_WALL_THICK = 0.6 * F;
 export const MIAMI_PLAZA_HALF = 59.5 * F;
 
-/** The raised terrace: an equilateral triangle with the tower at its middle, one corner the tip. */
-export const MIAMI_TERRACE_SIDE = 88 * F;
-export const MIAMI_TERRACE_BACK = -MIAMI_TERRACE_SIDE * Math.sqrt(3) / 2;
-export const MIAMI_TOWER_X = MIAMI_TERRACE_BACK * 2 / 3;
-/** Half the terrace's width `x` behind its tip (x ≤ 0). */
-export const miamiTerraceHalf = (x: number) => -x * TAN30;
+/** Original deck plan: a 40 ft-wide rear with a pointed nose for the existing takeoff. */
+export const MIAMI_TERRACE_HALF = 20 * F;
+export const MIAMI_TERRACE_BACK = -76 * F;
+export const MIAMI_TERRACE_SHOULDER = -MIAMI_TERRACE_HALF / TAN30;
+/** Half the deck's width behind its tip (x ≤ 0). */
+export const miamiTerraceHalf = (x: number) => Math.min(-x * TAN30, MIAMI_TERRACE_HALF);
 
 /**
  * The deck's raised rim: the box's top edge is a curb of the same white
@@ -59,7 +50,7 @@ export const MIAMI_RIM_HEIGHT = 0.25 * F;
 /** How much of the rim's width, on its inner side, curves up out of the deck. */
 export const MIAMI_RIM_CURVE = 0.35 * F;
 /** How far a point on the terrace is in from its nearest edge. */
-export const miamiTerraceInset = (x: number, z: number) => Math.min(-x / 2 - Math.abs(z) * COS30, x - MIAMI_TERRACE_BACK);
+export const miamiTerraceInset = (x: number, z: number) => Math.min(-x / 2 - Math.abs(z) * COS30, MIAMI_TERRACE_HALF - Math.abs(z), x - MIAMI_TERRACE_BACK);
 /** The rim's height `d` in from the edge: flat on top, then curving down into the deck. */
 export function miamiRim(d: number): number {
   const s = Math.min(1, Math.max(0, (MIAMI_RIM_WIDTH - d) / MIAMI_RIM_CURVE));
@@ -79,7 +70,7 @@ export const MIAMI_LAWN_Y = MIAMI_PLAZA_Y + 3.1 * F;
 const LAWN_RISE = 12 * F;
 
 /**
- * The granite slab, as seen from above: an equilateral triangle 8½ feet a
+ * The concrete slab, as seen from above: an equilateral triangle 8½ feet a
  * side (aerial), its apex pointing back at the tip, 5½ ft out from it (the
  * Berrics' overlay). It tilts down along the line, about 24°, from the apex
  * (5 ft up) to the middle of its far side (1¾ ft up). That low edge is a
@@ -101,7 +92,7 @@ export const MIAMI_PEDESTAL_X0 = MIAMI_SLAB_APEX_X + 2.2 * F;
 export const MIAMI_PEDESTAL_X1 = MIAMI_SLAB_LIP_X - 1.8 * F;
 export const MIAMI_PEDESTAL_HALF = 1.1 * F;
 
-/** The slab's polished face `x` down the line. */
+/** The slab's face `x` down the line. */
 export const miamiSlabTop = (x: number) => MIAMI_SLAB_APEX_Y - MIAMI_SLAB_GRADE * (x - MIAMI_SLAB_APEX_X);
 /** Half the slab's width `x` down the line, on its face. */
 export const miamiSlabHalf = (x: number) => (x - MIAMI_SLAB_APEX_X) * TAN30;
@@ -150,7 +141,7 @@ export const miamiSlope = (u: number) => (onMiamiSlab(u, 0) ? -MIAMI_SLAB_GRADE 
 /**
  * Grinding the slab. Its two upper edges run from the apex down to the low
  * corners, 30° either side of the line, falling 3¼ ft over their 8½: plumb
- * granite ledges with the slab's face behind them. Skaters (Jamie Foy, Chad
+ * concrete ledges with the slab's face behind them. Skaters (Jamie Foy, Chad
  * Muska) roll along the deck parallel to the edge they'll take, so beside
  * the terrace's other side, carve in a little and pop off near the tip, and
  * come down onto that edge from outside it a couple of feet below the apex;
@@ -171,7 +162,7 @@ export const MIAMI_GRIND_POP = { x: -4.5 * F, z: -0.6 * F };
 export const MIAMI_GRIND_SPEED = 16 * F;
 /** The least hop off the deck brings the board's center down this far along the edge from the apex. */
 export const MIAMI_GRIND_LOCK = 1.75 * F;
-/** A granite edge, barely rounded. */
+/** A concrete edge, barely rounded. */
 const EDGE_RADIUS = 1;
 
 /** One of the slab's edges as a grind rides it, and where its line runs in the set. */

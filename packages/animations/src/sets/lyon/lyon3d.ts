@@ -13,7 +13,7 @@ export class Lyon3D extends ClassicSpot3D {
       build: buildLyonGeometry,
       laneZ: LYON_LANE_Z, ground: lyonGround,
       grade: LYON_GRADE, run: LYON_RUN, drop: LYON_DROP,
-      // Keep the crane in the open canyon, clear of the projecting gallery
+      // Keep the crane in the open courtyard, clear of the low-rise blocks
       // and of the full-height retaining wall on the park side.
       cameraZ: [LYON_LEFT_Z + 2 * F, LYON_RIGHT_Z - 8 * F],
       tripods: {

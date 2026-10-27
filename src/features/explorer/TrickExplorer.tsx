@@ -5,6 +5,7 @@ import { TbArrowLeft, TbCheck, TbShare } from 'react-icons/tb';
 import { STAGE_SETS, setInfo, useSoundEffects, type RailChoice } from '@skrobot/animations';
 import { ROBOT_BY_ID, ROBOTS } from '@/features/robots';
 import {
+  CAMERA_SIDES,
   cameraLabel,
   cameraPreset,
   cameraPresetsFor,
@@ -12,6 +13,8 @@ import {
   railLine,
   sceneCamera,
   withCamera,
+  withCameraSide,
+  withShot,
   sceneTripod,
   searchFromState,
   stageTrick,
@@ -29,6 +32,7 @@ import CameraDial from './CameraDial';
 import ExplorerStage from './ExplorerStage';
 import TrickBuilder from './TrickBuilder';
 import VideoButton from './VideoButton';
+import LocationNotice from './LocationNotice';
 
 /** Swivel supplies the shared skating style for all three explorer riders. */
 const RIDER = ROBOT_BY_ID.get('shifty') ?? ROBOTS[0];
@@ -82,7 +86,7 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
     const url = `${window.location.origin}${window.location.pathname}${search}`;
     if (navigator.share) {
       try {
-        await navigator.share({ title: `${trick.name} · Trick Explorer`, url });
+        await navigator.share({ title: `${trick.name} at ${setInfo(state.set).label} · Trick Explorer`, url });
       } catch {
         // Dismissing the share sheet is not an error worth surfacing.
       }
@@ -138,7 +142,7 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
             rate={rate}
             loop={loop}
             onCamera={(next) => setState(withCamera(state, next))}
-            onResetCamera={() => setState({ ...state, camera: 'classic', pan: undefined })}
+            onResetCamera={() => setState({ ...withShot(state, 'classic'), zoom: state.zoom })}
             onZoom={(zoom) => setState({ ...state, zoom })}
             onRate={setRate}
             onLoop={setLoop}
@@ -163,7 +167,8 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
                     role="radio"
                     aria-checked={active}
                     className={`explorer-cam ${active ? 'active' : ''}`}
-                    onClick={() => setState({ ...state, camera: option.id, pan: undefined, zoom: option.zoom ?? state.zoom })}
+                    // Keeps the viewer's zoom unless the shot has its own framing.
+                    onClick={() => setState({ ...withShot(state, option.id), zoom: option.zoom ?? state.zoom })}
                   >
                     <CameraDial camera={sceneCamera({ ...state, camera: option.id })} size={30} />
                     <span>{option.label}</span>
@@ -171,6 +176,25 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
                 );
               })}
             </div>
+            {preset?.sides && (
+              <div className="explorer-field explorer-field-inline">
+                <span className="explorer-field-label" id="explorer-side-label">Filming from</span>
+                <div className="explorer-segmented explorer-segmented-compact" role="radiogroup" aria-labelledby="explorer-side-label">
+                  {CAMERA_SIDES.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={state.cameraSide === option.id}
+                      className={state.cameraSide === option.id ? 'active' : ''}
+                      onClick={() => setState(withCameraSide(state, option.id))}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <label className="explorer-zoom">
               <span className="explorer-field-label">Zoom</span>
               <span className="explorer-zoom-end">Out</span>
@@ -269,6 +293,7 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
           )}
         </div>
       </div>
+      <LocationNotice />
     </div>
   );
 }

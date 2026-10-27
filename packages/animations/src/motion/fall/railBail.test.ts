@@ -62,13 +62,15 @@ const SYMMETRIC = SPOTS.filter((s) => s.rail === 'center' && s.set !== 'miami-tr
 /**
  * How far a regular rider's hips may be from a goofy one's mirror in the air (world units). The grind they leave is
  * already a little off its mirror (the hips 0.2 to 0.4 at the jump on the flat bar and El Toro), and that grows a little
- * through the jump: measured, 1.02 at the most (a person off El Toro's), nothing at all down Hollywood. (The flat bar's
+ * through the jump, along the rail only (the hips that much further on for one stance, a couple of units a second faster
+ * off the faster ride; the same push, the same flight): measured, 1.26 at the most, at the foot's coming down (a person
+ * off El Toro's side), nothing at all down Hollywood. (The flat bar's
  * backside boardslide is left out: the grind's own pose has the feet 1.4 units further along for both riders, so which
  * foot is ahead, and kicks the board, isn't each other's mirror.) Once the board's hit something its contacts are solved
  * one by one in a fixed order and its path goes its own way, as a kick-out's does off the flat (16 units): the board after
  * the kick, and the rider's roll and run, aren't held to the mirror.
  */
-const MIRRORED = 1.25;
+const MIRRORED = 1.5;
 
 const CASES: Case[] = SPOTS.flatMap((spot, i) => (['forward', 'side'] as const).flatMap((bail) => (['regular', 'goofy'] as const).map((rider) => {
   const skater = (i + (bail === 'side' ? 1 : 0)) % 2 === 0 ? 'realistic' : 'robot';

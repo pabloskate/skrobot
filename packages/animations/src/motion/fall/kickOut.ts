@@ -1,7 +1,7 @@
 import { add3, bisect, clamp01, cross3, dot3, norm3, scale3, smoothstep, sub3, type V3 } from '../../math';
 import type { Expression } from '../../riders/look';
 import type { SkateStyle } from '../../types';
-import { SHOE_HALF_HEIGHT, SHOE_HALF_LENGTH, armDirs, moveFrame, type ArmPose, type BoardRig, type LegRig, type Rig } from '../skeleton';
+import { SHOE_HALF_HEIGHT, SHOE_HALF_LENGTH, SHOE_HALF_WIDTH, armDirs, moveFrame, type ArmPose, type BoardRig, type LegRig, type Rig } from '../skeleton';
 import { TIP_X, deckBottomY, deckTopY } from '../../board/deck';
 import { FOOT } from '../../units';
 import { BOARD_WIDTH_SCALE } from '../../board/boardDimensions';
@@ -120,6 +120,8 @@ export interface KickOutSetup {
   jump?: V3;
   /** What the board meets, if not the rider's `ground`: with the rail it was left on, over it (`y`, a point's height). Its hangers meet it too. */
   boardGround?: (x: number, z: number, y: number) => number;
+  /** How far `boardGround` falls (y, down) for each unit along x under a point, where it's a handrail's slope the board rides down. */
+  boardSlope?: (x: number, z: number, y: number) => number;
   /**
    * Rolls it out on level ground coming down faster than this, all told (in sqrt(g * leg)), rather than only past the
    * hard limits of a ridden fall (rollOut.ts): off a rail the feet come down still across the way the body's going.
@@ -295,7 +297,7 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
     return qrot(qconj(m.q), m.spin);
   };
   const ownSpin = ownSpinAt(takeover - 1 / 120);
-  // Which axis it turns about most, signed the way it turns: a flip (or an impossible) under-rotates about it, a shuv over-rotates.
+  // Which axis it turns about most, signed the way it turns: a flip under-rotates about it, a shuv (an impossible too) over-rotates.
   const ax = Math.abs(ownSpin.x);
   const ay = Math.abs(ownSpin.y);
   const az = Math.abs(ownSpin.z);
@@ -362,7 +364,7 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
   // Where the foot finds the board: the highest point of the deck's cross-section under it, when it gets there.
   const boardGround = setup.boardGround ?? ground;
   const hangers = setup.boardGround != null;
-  const freeTrack = simulateBoard(atTakeover, takeover, contact + 0.05, { gravity, ground: boardGround, hangers });
+  const freeTrack = simulateBoard(atTakeover, takeover, contact + 0.05, { gravity, ground: boardGround, hangers, slope: setup.boardSlope });
   const atContact = boardAt(freeTrack, contact);
   const toLocal = (p: V3) => qrot(qconj(atTakeover.q), sub3(p, atTakeover.center));
   const footX = Math.max(-26, Math.min(26, toLocal(start.shoes[kick].at).x));
@@ -401,6 +403,7 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
         gravity,
         ground: boardGround,
         hangers,
+        slope: setup.boardSlope,
         pushes: [{ from: contact, until: release, at: contactLocal, impulse: scale3(dir, push) }],
       });
       sims.set(key, sim);
@@ -920,11 +923,26 @@ function kickShoeAt(plan: KickOutPlan, t: number, land: { at: V3; q: Quat; on: n
     return { at: hermite3(shoe0.at, shoe0.velocity, meet, meetV, contact - takeover, s), q: qslerp(shoe0.q, plan.kickShoe, minJerk(s)) };
   }
   if (t < release) return onDeck(plan, t);
-  // Off it, and down to the ground.
+  // Off it, and down to the ground: up over the rail it jumped from, not through it.
   const { leave, leaveV } = kickEnds(plan);
+  const path = (s: number): ShoePose => ({
+    at: hermite3(leave, leaveV, land.at, { x: 0, y: 0, z: 0 }, land.on - release, s),
+    q: qslerp(plan.kickShoe, land.q, minJerk(s)),
+  });
   const s = clamp01((t - release) / (land.on - release));
-  return { at: hermite3(leave, leaveV, land.at, { x: 0, y: 0, z: 0 }, land.on - release, s), q: qslerp(plan.kickShoe, land.q, minJerk(s)) };
+  const shoe = path(s);
+  const rail = plan.setup.boardGround;
+  if (!rail) return shoe;
+  let byLand = KICK_OVER.get(plan);
+  if (!byLand) KICK_OVER.set(plan, (byLand = new Map()));
+  const key = `${land.on} ${land.at.x} ${land.at.y} ${land.at.z}`;
+  let over = byLand.get(key);
+  if (!over) byLand.set(key, (over = humpOver(path, rail, plan.setup.body.scale, true)));
+  return over.most ? { at: add3(shoe.at, scale3(UP, over.most * overShape(s, over.a))), q: shoe.q } : shoe;
 }
+
+/** A kicking foot's lift over the rail it jumped from (KickOutPlan.setup.boardGround), by where it comes down. */
+const KICK_OVER = new WeakMap<KickOutPlan, Map<string, { most: number; a: number }>>();
 
 /** A shoe where it stood on the board at the takeover, carried with the board at `t`. */
 function onBoard(plan: KickOutPlan, shoe0: { at: V3; q: Quat }, t: number): ShoePose {
@@ -1005,17 +1023,29 @@ function swingOver(plan: KickOutPlan, next: Footfall, from: ShoePose, to: ShoePo
   const known = SWING_OVER.get(next);
   if (known) return known;
   const g = plan.setup.ground;
-  const k = plan.setup.body.scale;
-  const half = SHOE_HALF_LENGTH * k;
-  // How far the sole is into the ground (y is down), the most of heel, middle and toe.
-  const into = (s: number) => {
+  const over = humpOver((s) => {
     const m = minJerk(s);
-    const at = add3(add3(from.at, scale3(sub3(to.at, from.at), m)), scale3(UP, lift(s)));
-    const q = qslerp(from.q, to.q, m);
-    return Math.max(...[-half, 0, half].map((x) => {
-      const p = add3(at, qrot(q, { x, y: SHOE_HALF_HEIGHT, z: 0 }));
-      return p.y - g(p.x, p.z);
-    }));
+    return { at: add3(add3(from.at, scale3(sub3(to.at, from.at), m)), scale3(UP, lift(s))), q: qslerp(from.q, to.q, m) };
+  }, (x, z) => g(x, z), plan.setup.body.scale);
+  SWING_OVER.set(next, over);
+  return over;
+}
+
+/**
+ * The least hump (overShape's) that keeps a sole swung along `path` out of what's under it (`under`, a point's height
+ * under it; y is down): as deep as the sole goes below the line between where it starts and ends, past SWING_GAP, its
+ * top where it's deepest. `wide` takes the sole's edges as well as its middle, for a rail narrower than a shoe.
+ */
+function humpOver(path: (s: number) => ShoePose, under: (x: number, z: number, y: number) => number, k: number, wide = false): { most: number; a: number } {
+  const half = SHOE_HALF_LENGTH * k;
+  const sides = wide ? [-SHOE_HALF_WIDTH * k, 0, SHOE_HALF_WIDTH * k] : [0];
+  // How far the sole is into what's under it, the most of heel, middle and toe (and its edges).
+  const into = (s: number) => {
+    const { at, q } = path(s);
+    return Math.max(...[-half, 0, half].flatMap((x) => sides.map((z) => {
+      const p = add3(at, qrot(q, { x, y: SHOE_HALF_HEIGHT, z }));
+      return p.y - under(p.x, p.z, p.y);
+    })));
   };
   const start = into(0);
   const end = into(1);
@@ -1033,7 +1063,6 @@ function swingOver(plan: KickOutPlan, next: Footfall, from: ShoePose, to: ShoePo
       if (!over.most || most < over.most) over = { most, a };
     }
   }
-  SWING_OVER.set(next, over);
   return over;
 }
 

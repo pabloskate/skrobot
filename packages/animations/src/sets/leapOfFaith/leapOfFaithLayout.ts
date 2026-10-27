@@ -135,6 +135,20 @@ export function leapOfFaithSurface(x: number, z: number): number {
 /** Heights on the diagonal jump line; rollout remains on the open courtyard. */
 export const leapOfFaithGround = (x: number) => leapOfFaithSurface(x, leapOfFaithLineZ(x));
 
+/**
+ * The stair rail is part of the real gap, so every style pops over it (as a
+ * style's popHeight, in place of any style's own, all lower): 2 is the lowest pop that keeps
+ * every flip and spin 0.2 ft clear. An impossible's board wraps round the
+ * back foot, its middle swinging out toward the rail and its free end down
+ * past the sole as it comes round: it takes 2.5.
+ */
+const LEAP_OF_FAITH_POP = 2;
+const LEAP_OF_FAITH_POP_WRAP = 2.5;
+/** A trick's pop over the stair rail; without one, the most any takes. */
+function leapOfFaithPop(base?: string): number {
+  return base === undefined || base === 'Impossible' ? LEAP_OF_FAITH_POP_WRAP : LEAP_OF_FAITH_POP;
+}
+
 export const LEAP_OF_FAITH_TERRAIN: DropTerrain = {
   drop: LEAP_OF_FAITH_DROP,
   run: LEAP_OF_FAITH_RUN,
@@ -144,7 +158,5 @@ export const LEAP_OF_FAITH_TERRAIN: DropTerrain = {
   surface: leapOfFaithSurface,
   entry: { x: LEAP_OF_FAITH_POP_X, z: LEAP_OF_FAITH_POP_Z, yaw: LEAP_OF_FAITH_YAW, hold: true },
   runUp: 0.35,
-  // The stair rail is part of the real gap. All styles must pop over it;
-  // this is the lowest pop that keeps every flip and spin 0.2 ft clear.
-  pop: 2,
+  trickPop: leapOfFaithPop,
 };

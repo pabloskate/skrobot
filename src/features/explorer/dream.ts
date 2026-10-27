@@ -1,6 +1,7 @@
-import type { Obstacle, PopEnd, RailChoice, StageSet } from '@skrobot/animations';
+import { setInfo, type Obstacle, type PopEnd, type RailChoice, type StageSet } from '@skrobot/animations';
 import {
   DEFAULT_STATE,
+  cameraPreset,
   cameraPresetsFor,
   outEndsFor,
   stateFromSearch,
@@ -48,14 +49,14 @@ const rail = (label: string, choice: RailChoice = 'center'): DreamLine => ({
 
 /** The landmark spots, the only ones this page offers (the plaza and waterfront stay in the explorer). */
 export const DREAM_SPOTS: readonly DreamSpot[] = [
-  { id: 'el-toro', name: 'El Toro', where: 'Lake Forest, CA', feature: '20 stair and handrails', lines: [gap('20 stair'), rail('Center rail'), rail('Side rail', 'side')] },
-  { id: 'hollywood-high', name: 'Hollywood 16', where: 'Los Angeles', feature: '16 stair, rail, and fence', lines: [gap('16 stair'), rail('Handrail'), gap('Over the fence', 'fence')] },
-  { id: 'wallenberg', name: 'Wallenberg', where: 'San Francisco', feature: 'The four block gap', lines: [gap('Four block')] },
-  { id: 'sunset-car-wash', name: 'Sunset Car Wash', where: 'Los Angeles', feature: 'Off the roof into the bank', lines: [gap('Roof to bank')] },
-  { id: 'lyon-25', name: 'Lyon 25', where: 'Lyon, France', feature: '25 stairs · 14.76 ft down, 21.29 ft across', lines: [gap('25 stairs')] },
-  { id: 'leap-of-faith', name: 'Leap of Faith', where: 'Point Loma High · San Diego', feature: 'Over the rail · 14.3 ft courtyard drop', lines: [gap('Over the rail')] },
-  { id: 'miami-triangle', name: 'Miami Triangle', where: 'Bayfront Park · Miami', feature: 'Gap to the granite triangle, or its edges', lines: [gap('Gap to bank'), gap('Over the triangle', 'triangle'), rail('Down an edge')] },
-  { id: 'uc-davis-gap', name: 'UC Davis Gap', where: 'Roessler Hall · UC Davis', feature: 'Ivy gap · approx. 24 ft 4 in across, 10 ft down', lines: [gap('Over the ivy')] },
+  { id: 'el-toro', name: setInfo('el-toro').label, where: 'Lake Forest, CA', feature: '20 stair and handrails', lines: [gap('20 stair'), rail('Center rail'), rail('Side rail', 'side')] },
+  { id: 'hollywood-high', name: setInfo('hollywood-high').label, where: 'Los Angeles', feature: '16 stair, rail, and fence', lines: [gap('16 stair'), rail('Handrail'), gap('Over the fence', 'fence')] },
+  { id: 'wallenberg', name: setInfo('wallenberg').label, where: 'San Francisco', feature: 'The four block gap', lines: [gap('Four block')] },
+  { id: 'sunset-car-wash', name: setInfo('sunset-car-wash').label, where: 'Redesigned setting', feature: 'Off the roof into the bank', lines: [gap('Roof to bank')] },
+  { id: 'lyon-25', name: setInfo('lyon-25').label, where: 'Redesigned courtyard', feature: '25 stairs · 14.76 ft down, 21.29 ft across', lines: [gap('25 stairs')] },
+  { id: 'leap-of-faith', name: setInfo('leap-of-faith').label, where: 'Point Loma High · San Diego', feature: 'Over the rail · 14.3 ft courtyard drop', lines: [gap('Over the rail')] },
+  { id: 'miami-triangle', name: setInfo('miami-triangle').label, where: 'Redesigned park', feature: 'Gap to the triangular bank, or its edges', lines: [gap('Gap to bank'), gap('Over the triangle', 'triangle'), rail('Down an edge')] },
+  { id: 'uc-davis-gap', name: setInfo('uc-davis-gap').label, where: 'Roessler Hall · UC Davis', feature: 'Ivy gap · approx. 24 ft 4 in across, 10 ft down', lines: [gap('Over the ivy')] },
 ];
 
 const SPOT_BY_ID = new Map(DREAM_SPOTS.map((spot) => [spot.id, spot]));
@@ -96,8 +97,11 @@ export function withDreamGrind(state: ExplorerState, grind: string): ExplorerSta
  */
 const CLASSIC_SHOT: CameraPresetId = 'tripod-bottom';
 
+/** The framing that shot opens on, so the explorer's classic pull-back doesn't follow the link over here. */
+const CLASSIC_SHOT_ZOOM = cameraPreset(CLASSIC_SHOT).zoom ?? 1;
+
 /** A first visit: a kickflip down El Toro, filmed from the bottom. */
-export const DREAM_DEFAULT: Readonly<ExplorerState> = Object.freeze({ ...DEFAULT_STATE, mode: 'flatground', trick: 'Kickflip', set: 'el-toro', camera: CLASSIC_SHOT });
+export const DREAM_DEFAULT: Readonly<ExplorerState> = Object.freeze({ ...DEFAULT_STATE, mode: 'flatground', trick: 'Kickflip', set: 'el-toro', camera: CLASSIC_SHOT, zoom: CLASSIC_SHOT_ZOOM });
 
 /** The state a link opens on this page: any explorer link works, moved to a landmark if it was elsewhere, the crane's classic shot to this page's. */
 export function dreamStateFromSearch(search: string): ExplorerState {
@@ -105,7 +109,7 @@ export function dreamStateFromSearch(search: string): ExplorerState {
   let state = stateFromSearch(search);
   if (!params.get('trick') && !params.get('grind')) state = { ...state, mode: 'flatground', trick: DREAM_DEFAULT.trick };
   if (!SPOT_BY_ID.has(state.set)) state = withSet(state, DREAM_DEFAULT.set);
-  if (state.camera === 'classic') state = { ...state, camera: CLASSIC_SHOT };
+  if (state.camera === 'classic') state = { ...state, camera: CLASSIC_SHOT, zoom: params.has('zoom') ? state.zoom : CLASSIC_SHOT_ZOOM };
   return state;
 }
 

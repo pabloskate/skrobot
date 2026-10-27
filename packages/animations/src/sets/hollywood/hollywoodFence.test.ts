@@ -19,7 +19,7 @@ import {
   HOLLYWOOD_FENCE_YAW, HOLLYWOOD_FENCE_Z, HOLLYWOOD_FOOT, HOLLYWOOD_LANE_WIDTH,
   HOLLYWOOD_LEFT_Z, HOLLYWOOD_RAIL_END, HOLLYWOOD_RAIL_HEIGHT, HOLLYWOOD_RAIL_RADIUS,
   HOLLYWOOD_RAIL_START, HOLLYWOOD_ROAD_Y, HOLLYWOOD_SIDE_RAIL_Z,
-  hollywoodNosing, hollywoodSurface,
+  fencePop, hollywoodNosing, hollywoodSurface,
 } from './hollywoodLayout';
 
 const F = HOLLYWOOD_FOOT;
@@ -39,6 +39,23 @@ const set = (units: number) => units / SET_SCALE;
 const inSet = (frame: StageFrame, p: V3) => ({ x: set(frame.scroll + p.x - X0), y: set(ASPHALT - p.y), z: set(frame.stairs!.across + p.z) });
 /** The top of the side rail's pipe over the top landing, `x` down the stairs. */
 const railTop = (x: number) => hollywoodNosing(x) + HOLLYWOOD_RAIL_HEIGHT + HOLLYWOOD_RAIL_RADIUS;
+
+/** How far the board (its wheels and deck) and the legs (knees and ankles) are over the side rail's pipe and the fence's spear tips; Infinity where they're over neither. */
+function clearance(frame: StageFrame): { board: number; legs: number } {
+  let board = Infinity;
+  let legs = Infinity;
+  const check = (p: V3, below: number, near: number, isLeg: boolean) => {
+    const q = inSet(frame, p);
+    const overRail = Math.abs(q.z - HOLLYWOOD_SIDE_RAIL_Z) < HOLLYWOOD_RAIL_RADIUS + near && q.x > HOLLYWOOD_RAIL_START ? q.y - below - railTop(q.x) : Infinity;
+    const overFence = Math.abs(q.z - HOLLYWOOD_FENCE_Z) < near + 1 ? q.y - below - HOLLYWOOD_FENCE_TIPS : Infinity;
+    if (isLeg) legs = Math.min(legs, overRail, overFence);
+    else board = Math.min(board, overRail, overFence);
+  };
+  for (const x of [-WHEEL_X, WHEEL_X]) for (const z of [-WHEEL_Z, WHEEL_Z]) check(frame.rig.board.point({ x, y: WHEEL_Y, z }), set(WHEEL_R), 1.5, false);
+  for (const x of [-42, 0, 42]) for (const z of [-10, 10]) check(frame.rig.board.point({ x, y: 0, z }), 0, 1.5, false);
+  for (const leg of frame.rig.legs) for (const p of [leg.knee, leg.ankle]) check(p, 0, 5, true);
+  return { board, legs };
+}
 
 describe('Hollywood 16: over the fence', () => {
   it('keeps the stairs as the way down unless the fence is picked', () => {
@@ -117,41 +134,62 @@ describe('Hollywood 16: over the fence', () => {
 
   it('clears the side rail and the fence with the board and the legs, every trick, both ways round', () => {
     const failures: string[] = [];
-    let board = Infinity;
-    let legs = Infinity;
     for (const base of sweep(TRICK_BASES)) for (const stance of STANCES) for (const rider of RIDERS) {
       const stage = fence(base, stance, rider, { skater: 'realistic' });
       const { pop, land } = stage.stairs!;
       for (let t = pop + 1 / 60; t < land; t += 1 / sweepHz(45)) {
-        const frame = stageFrame(stage, t, 1);
-        const check = (p: V3, below: number, near: number, isLeg: boolean) => {
-          const q = inSet(frame, p);
-          const overRail = Math.abs(q.z - HOLLYWOOD_SIDE_RAIL_Z) < HOLLYWOOD_RAIL_RADIUS + near && q.x > HOLLYWOOD_RAIL_START ? q.y - below - railTop(q.x) : Infinity;
-          const overFence = Math.abs(q.z - HOLLYWOOD_FENCE_Z) < near + 1 ? q.y - below - HOLLYWOOD_FENCE_TIPS : Infinity;
-          const clearance = Math.min(overRail, overFence);
-          if (isLeg) legs = Math.min(legs, clearance);
-          else board = Math.min(board, clearance);
-          if (clearance < (isLeg ? F : 0.4 * F)) failures.push(`${base}/${stance}/${rider} t=${t.toFixed(2)} ${isLeg ? 'leg' : 'board'} ${(clearance / F).toFixed(2)} ft`);
-        };
-        for (const x of [-WHEEL_X, WHEEL_X]) for (const z of [-WHEEL_Z, WHEEL_Z]) check(frame.rig.board.point({ x, y: WHEEL_Y, z }), set(WHEEL_R), 1.5, false);
-        for (const x of [-42, 0, 42]) for (const z of [-10, 10]) check(frame.rig.board.point({ x, y: 0, z }), 0, 1.5, false);
-        for (const leg of frame.rig.legs) for (const p of [leg.knee, leg.ankle]) check(p, 0, 5, true);
+        const { board, legs } = clearance(stageFrame(stage, t, 1));
+        // Five inches under the board, a foot under the legs.
+        if (board < 0.4 * F) failures.push(`${base}/${stance}/${rider} t=${t.toFixed(2)} board ${(board / F).toFixed(2)} ft`);
+        if (legs < F) failures.push(`${base}/${stance}/${rider} t=${t.toFixed(2)} leg ${(legs / F).toFixed(2)} ft`);
       }
     }
     expect(failures.slice(0, 12)).toEqual([]);
-    // The worst of them still has room to spare (~0.75 ft over the rail, a foot over the fence).
-    expect(board / F).toBeGreaterThan(0.5);
-    expect(legs / F).toBeGreaterThan(1.5);
   }, 120_000);
+
+  it('pops each trick just over them: a plain ollie skims over, a spin goes higher, an impossible higher still', () => {
+    expect(fencePop('Ollie')).toBeLessThan(fencePop('Backside 180'));
+    // An impossible's board wraps round the back foot, its free end swinging down past the sole: it needs more than a spin.
+    expect(fencePop('Backside 180')).toBeLessThan(fencePop('Impossible'));
+    // Without a trick, the most any takes.
+    expect(fencePop()).toBe(Math.max(...TRICK_BASES.map((base) => fencePop(base))));
+    for (const base of ['Ollie', 'Kickflip', 'Heelflip', 'Late Backside Shuvit', 'Pop Shuvit', 'Frontside Flip', 'Backside 180', '360 Flip', 'Backside 360', 'Impossible']) {
+      // Some stance's board comes within a foot of the rail or the spear tips: not popped much over what it needs.
+      let closest = Infinity;
+      for (const stance of STANCES) for (const rider of RIDERS) {
+        const stage = fence(base, stance, rider);
+        for (let t = stage.stairs!.pop; t < stage.stairs!.land; t += 1 / 120) closest = Math.min(closest, clearance(stageFrame(stage, t, 1)).board);
+      }
+      expect(closest / F, base).toBeLessThan(1);
+    }
+    // A plain ollie's deck passes about a foot and a half over both, not the three it once did.
+    const ollie = fence('Ollie');
+    let overRail = Infinity;
+    let overFence = Infinity;
+    for (let t = ollie.stairs!.pop; t < ollie.stairs!.land; t += 1 / 240) {
+      const frame = stageFrame(ollie, t, 1);
+      const deck = inSet(frame, frame.rig.board.center);
+      if (Math.abs(deck.z - HOLLYWOOD_SIDE_RAIL_Z) < 0.2 * F) overRail = Math.min(overRail, deck.y - railTop(deck.x));
+      if (Math.abs(deck.z - HOLLYWOOD_FENCE_Z) < 0.2 * F) overFence = Math.min(overFence, deck.y - HOLLYWOOD_FENCE_TIPS);
+    }
+    expect(overRail / F).toBeGreaterThan(1);
+    expect(overRail / F).toBeLessThan(1.75);
+    expect(overFence / F).toBeGreaterThan(1);
+    expect(overFence / F).toBeLessThan(1.75);
+  });
 
   it('pops the same over the fence whatever the rider pops on flatground', () => {
     const low = fence('Kickflip', 'regular', 'regular', { popHeight: 0.45 }).stairs!;
     const high = fence('Kickflip', 'regular', 'regular', { popHeight: 1.15 }).stairs!;
     expect(low.rise).toBeCloseTo(high.rise, 6);
     expect(low.speed).toBeCloseTo(high.speed, 6);
-    // About nineteen feet a second over a twenty-four foot flight.
-    expect(low.speed / FOOT).toBeGreaterThan(15);
-    expect(low.speed / FOOT).toBeLessThan(21);
+    // Fast and low: 14 to 16 mph over a twenty-four foot flight, the lowest pops the fastest.
+    for (const base of TRICK_BASES) for (const stance of STANCES) {
+      const { speed } = fence(base, stance).stairs!;
+      expect(speed / FOOT, `${base}/${stance}`).toBeGreaterThan(20);
+      expect(speed / FOOT, `${base}/${stance}`).toBeLessThan(24);
+    }
+    expect(fence('Ollie').stairs!.speed).toBeGreaterThan(fence('Impossible').stairs!.speed);
     // The stairs still go by each rider's own pop.
     const stairs = (popHeight: number) => planStage({ id: 'k', name: 'k', base: 'Kickflip', stance: 'regular' }, {
       set: 'hollywood-high', landed: true, riderStance: 'regular', style: resolveSkateStyle({ popHeight, rotationSpeed: 1, flickStrength: 1 }), fall: 'slam', shankProgress: 0.65,
@@ -171,7 +209,8 @@ describe('Hollywood 16: over the fence', () => {
         const frame = stageFrame(stage, t, 1);
         const z = set(frame.stairs!.across);
         expect(z, `${context} at ${t.toFixed(2)}`).toBeLessThan(HOLLYWOOD_CHEEK_Z - 3 * F);
-        expect(z, `${context} at ${t.toFixed(2)}`).toBeGreaterThan(HOLLYWOOD_CURB_Z + 2.5 * F);
+        // A slam slides on along the line, the further the faster it came: still short of the curb.
+        expect(z, `${context} at ${t.toFixed(2)}`).toBeGreaterThan(HOLLYWOOD_CURB_Z + 2 * F);
         for (const { at } of HOLLYWOOD_TREES) expect(Math.hypot(set(frame.scroll) - at[0], z - at[2]), context).toBeGreaterThan(4 * F);
       }
       const end = stageFrame(stage, stage.end, 1);
@@ -207,11 +246,14 @@ describe('Hollywood 16: over the fence', () => {
 
   it('keeps the explorer timeline in step with the stage', () => {
     const stage = fence('Kickflip');
-    const timeline = setTimeline('hollywood-high', stage.style, true, 'fence')!;
+    const timeline = setTimeline('hollywood-high', stage.style, true, 'fence', 'regular', 'Kickflip')!;
     expect(timeline.pop).toBe(stage.stairs!.pop);
     expect(timeline.land).toBe(stage.stairs!.land);
     expect(timeline.end).toBe(stage.end);
     expect(setTimeline('hollywood-high', stage.style)!.land).not.toBe(timeline.land);
+    // Each trick's own pop sets its flight.
+    expect(setTimeline('hollywood-high', stage.style, true, 'fence', 'regular', 'Impossible')!.land).toBe(fence('Impossible').stairs!.land);
+    expect(fence('Impossible').stairs!.land).not.toBe(timeline.land);
   });
 
   it('films it in frame from the crane, and the crane stays up top rather than sinking behind the fence', () => {

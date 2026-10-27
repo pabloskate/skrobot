@@ -70,6 +70,12 @@ export default function SettingsScreen({ onSignIn, voiceVisible = true, children
           <div className="settings-account">{accountContent}</div>
         </section>
       )}
+      <section className="settings-section" aria-labelledby="settings-about-title">
+        <div className="settings-section-heading">
+          <h2 id="settings-about-title">About</h2>
+          <p><a href="/about">About Skate Robot &amp; location notice</a></p>
+        </div>
+      </section>
     </div>
   );
 }

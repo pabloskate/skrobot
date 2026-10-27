@@ -355,10 +355,9 @@ export function grindSpecFor(trick: Pick<Trick, 'base' | 'stance'>, options: { l
     // before the pop: frontside comes in with the bar on the toeside,
     // boardslides included, so a frontside boardslide turns like a frontside
     // noseslide or bluntslide (nose over, back to the way down) and a
-    // frontside lipslide like a frontside tailslide. After a 180 the side is
-    // the one the rider rides it on, so they rolled in with the bar on the
-    // other side.
-    toesideApproach: (side === 'frontside') !== reversed,
+    // frontside lipslide like a frontside tailslide. A 180 into it is named
+    // the same way, for the side it rolls in on.
+    toesideApproach: side === 'frontside',
     reversed,
     popNose: trick.stance === 'nollie',
     railFinish: RAIL_FINISH[def.contact],

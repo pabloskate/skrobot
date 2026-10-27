@@ -1,5 +1,11 @@
 # Sunset Car Wash reference and reconstruction
 
+## Current presentation
+
+The shipped scene is now **Roof to Bank**. The business name, slogan and circular badges have been removed and the canopy uses a sage-and-cream palette. The riding surfaces retain their established dimensions. The notes below preserve the historical reference research.
+
+See [Location presentation](LOCATION_PRESENTATION.md) for the public names, links and location notice.
+
 The scene reconstructs the **skateable 2019 version** of the roof-to-bank at
 7955 Sunset Boulevard, Los Angeles. It uses the blue canopy, orange lower trim,
 large white lettering and gray bank visible in Milton Martinez's cover photo.
