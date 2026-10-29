@@ -45,12 +45,15 @@ export {
   clampTripodPan,
   clampZoom,
   wrapOrbitYaw,
+  type CameraSide,
   type SceneCamera,
   type TripodId,
   type TripodPan,
 } from './camera/camera';
+/** The landmarks' filmers, and which side of the rider's line each stands on. */
+export { tripodSide, type FilmedLine } from './sets/tripods';
 /** The sets (spots) a trick can be staged at, and what each changes: stairs and other obstacles, handrails, tripods. */
-export { STAGE_SETS, hasObstacle, railLineFor, setGrindSpec, setHandrail, setInfo, setTerrain, setTimeline, type Obstacle, type RailChoice, type RailLine, type SetInfo, type SetObstacle, type SetRails, type StageSet } from './sets/sets';
+export { STAGE_SETS, hasObstacle, railApproachAllowed, railLineFor, setGrindSpec, setHandrail, setInfo, setLocation, setFlights, setTerrain, setTimeline, type Obstacle, type RailChoice, type RailLine, type SetInfo, type SetObstacle, type SetRails, type StageSet } from './sets/sets';
 /** The stage's yardstick (the 31-inch deck) and gravity, and the moments of a trick down a drop. */
 export { FOOT, GRAVITY, INCH } from './units';
 export { stairTimeline, type StairTimeline } from './sets/elToro/stairs';

@@ -297,11 +297,7 @@ export class Sunset3D extends ClassicSpot3D {
       drop: layout.SUNSET_DROP,
       framing: 0.82,
       streetProps: SUNSET_STREET_PROPS,
-      tripods: {
-        bottom: { u: (SUNSET_BANK_END + 22 * SET_FOOT) * SCALE, z: -12 * SET_FOOT * SCALE, height: (-SUNSET_DROP + 3 * SET_FOOT) * SCALE, frame: 24 * SET_FOOT, place: 0.44 },
-        side: { u: 13 * SET_FOOT * SCALE, z: -32 * SET_FOOT * SCALE, height: (-SUNSET_DROP + 6 * SET_FOOT) * SCALE, frame: 27 * SET_FOOT, place: 0.48 },
-        top: { u: -4 * SET_FOOT * SCALE, z: -9 * SET_FOOT * SCALE, height: 8 * SET_FOOT * SCALE, frame: 22 * SET_FOOT, place: 0.48 },
-      },
+      filmers: layout.SUNSET_FILMERS,
     });
   }
 }

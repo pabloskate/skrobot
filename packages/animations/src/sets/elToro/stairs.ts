@@ -7,6 +7,7 @@ import { WHEEL_X } from '../../board/board';
 import { TIP_X } from '../../board/deck';
 import { FOOT, GRAVITY, INCH } from '../../units';
 import { SET_FOOT } from '../setScale';
+import { STEP_OFF_T, stepOffAt } from '../../motion/fall/stepOff';
 
 /**
  * El Toro: the 20 stair at El Toro High School (Lake Forest, California),
@@ -84,6 +85,8 @@ export interface StairPlan {
   clockFlight: number;
   /** Clock time the attempt ends at. */
   end: number;
+  /** A landing with nowhere to ride it out (terrain.runout): when the rider hops off the board; null otherwise. */
+  stepOff: number | null;
   /** World units a second along the route (down the stairs, or a held line's angle): the approach, the flight, and the ride away. */
   speed: number;
   /** Horizontal airborne velocity; a side entry also crosses the spot in z. */
@@ -150,6 +153,14 @@ export interface DropTerrain {
   trickPop?: (base?: string) => number;
   /** Signed height gradient. Omitted for discrete stairs with a flat landing. */
   slope?: (u: number) => number;
+  /**
+   * How far down the route (`u`) a landing can be ridden: past it there's no
+   * room (Emage's river bank), so a landed rider steps off the board before
+   * it and runs it out on their feet (motion/fall/stepOff.ts).
+   */
+  runout?: number;
+  /** Brush on the ground at (u, z): how fast it slows a rider or a board going through it (a share of the speed a second). */
+  brush?: (u: number, z: number) => number;
 }
 
 export const EL_TORO_TERRAIN: DropTerrain = {
@@ -243,6 +254,9 @@ export function planStairs(style: Pick<SkateStyle, 'popHeight'>, landed: boolean
       rolloutLift.push(y);
     }
   }
+  // No room past the landing (Emage's river): the rider hops off before the runout ends (motion/fall/stepOff.ts).
+  const stepOff = landed && terrain.runout != null && !rollout && !terrain.entry?.hold
+    ? stepOffAt(land, land, landingX, speed, terrain.runout) : null;
   return {
     terrain,
     rollout,
@@ -253,7 +267,8 @@ export function planStairs(style: Pick<SkateStyle, 'popHeight'>, landed: boolean
     land,
     flight,
     clockFlight: flightTime(style),
-    end: land + (landed ? LAND_T : FALL_T),
+    end: stepOff != null ? stepOff + STEP_OFF_T : land + (landed ? LAND_T : FALL_T),
+    stepOff,
     speed,
     velocity,
     rise,

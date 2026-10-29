@@ -279,16 +279,16 @@ export function skinMaterial(albedo: Texture, normal: Texture, hair: Texture, ha
   `, { uAlbedo: { value: albedo }, uNormal: { value: normal }, uHair: { value: hair }, uHairColor: { value: new Color(hairColor) } }, shadow, 245);
 }
 
-/** The alien's hide: its green, and the deeper green of its lips. sRGB. */
+/** The alien's skin and slightly deeper lip color. sRGB. */
 export interface AlienSkin {
   skin: string;
   lips: string;
 }
 
 /**
- * The alien's skin: a green hide, lit like skin (light scattered under it,
+ * The alien's skin: a soft green, lit like skin (light scattered under it,
  * here coming out yellow-green) with a softer sheen. The skater's map only
- * lends it detail: its reddest parts (the lips) turn deep green, and its
+ * lends it detail: its reddest parts (the lips) turn a slightly deeper green, and its
  * fine grain, the map over its own blur, shows; its painted stubble and
  * shading don't.
  */
@@ -305,15 +305,15 @@ export function alienSkinMaterial(albedo: Texture, normal: Texture, look: AlienS
       // the detail borrowed from the maps fades out there.
       float uvRate = max(length(dFdx(vUv)), length(dFdy(vUv))) * 2048.0;
       float seam = smoothstep(32.0, 128.0, uvRate);
-      vec3 n = mapNormal(geo, texture(uNormal, vUv).xyz * 2.0 - 1.0, 0.3 * (1.0 - seam));
+      vec3 n = mapNormal(geo, texture(uNormal, vUv).xyz * 2.0 - 1.0, 0.1 * (1.0 - seam));
       vec3 tex = texture(uAlbedo, vUv).rgb;
       vec3 blur = textureLod(uAlbedo, vUv, 4.0).rgb;
       const vec3 LUM = vec3(0.3, 0.59, 0.11);
-      float grain = mix(clamp(dot(tex, LUM) / max(dot(blur, LUM), 1e-3), 0.8, 1.15), 1.0, seam);
+      float grain = mix(clamp(dot(tex, LUM) / max(dot(blur, LUM), 1e-3), 0.92, 1.06), 1.0, seam);
       float lips = smoothstep(0.36, 0.24, tex.g / max(tex.r, 1e-3)) * (1.0 - seam);
-      // A mottled hide, drifting a little yellower and bluer across the body.
+      // Quiet color variation keeps the bare head soft at close range.
       float mottle = noise3(vRest * 0.18) * 0.6 + noise3(vRest * 0.5) * 0.4;
-      vec3 base = uSkin * mix(0.88, 1.08, mottle) * mix(vec3(1.05, 1.0, 0.85), vec3(0.94, 1.0, 1.1), noise3(vRest * 0.09 + 3.0));
+      vec3 base = uSkin * mix(0.96, 1.04, mottle) * mix(vec3(1.02, 1.0, 0.96), vec3(0.98, 1.0, 1.03), noise3(vRest * 0.09 + 3.0));
       base = mix(base, uLips, lips * 0.85) * grain;
       vec3 v = normalize(cameraPosition - vWorld);
       float nv = max(0.0, dot(n, v));
@@ -341,20 +341,28 @@ export function alienSkinMaterial(albedo: Texture, normal: Texture, look: AlienS
   `, { uAlbedo: { value: albedo }, uNormal: { value: normal }, uSkin: { value: new Color(look.skin) }, uLips: { value: new Color(look.lips) } }, shadow, 245);
 }
 
-/** The alien's eyes: solid black and wet, mirroring the sky, with the sun's glint. */
+/** Deep jade eyes, with large pupils and a soft sky reflection. */
 export function alienEyeMaterial(shadow: SunShadow): ShaderMaterial {
   return material(/* glsl */ `
     void main() {
-      // The cornea over the iris (the disc in the texture's corner) isn't drawn: the eye is one smooth black lens.
+      // Keep one smooth lens; the separate cornea maps to the texture's corner.
       if (distance(vUv, vec2(0.934, 0.934)) < 0.08) discard;
       vec3 n = surfaceNormal();
       vec3 v = normalize(cameraPosition - vWorld);
       float nv = max(0.0, dot(n, v));
       float nl = max(0.0, dot(n, SUN_DIR)) * sunlit(n);
-      vec3 color = vec3(0.006, 0.009, 0.008) * (ambientLight(n) + nl * SUN_RGB);
-      color += ambientLight(reflect(-v, n)) * (0.04 + 0.96 * pow(1.0 - nv, 5.0));
+      // The shared eye mesh has one UV island per eye. A broad jade iris and
+      // round pupil give the head's gaze a readable focus, without human whites.
+      float irisRadius = min(distance(vUv, vec2(0.293, 0.707)), distance(vUv, vec2(0.707, 0.293)));
+      float aa = max(fwidth(irisRadius), 0.001);
+      float iris = 1.0 - smoothstep(0.18 - aa, 0.18 + aa, irisRadius);
+      float pupil = 1.0 - smoothstep(0.09 - aa, 0.09 + aa, irisRadius);
+      vec3 base = mix(vec3(0.065, 0.1, 0.075), vec3(0.035, 0.14, 0.105), iris);
+      base = mix(base, vec3(0.004, 0.009, 0.007), pupil);
+      vec3 color = base * (ambientLight(n) + nl * SUN_RGB);
+      color += ambientLight(reflect(-v, n)) * (0.07 + 0.7 * pow(1.0 - nv, 5.0));
       vec3 h = normalize(v + SUN_DIR);
-      color += SUN_RGB * ggx(max(0.0, dot(n, h)), 0.12) * 0.03 * nl;
+      color += SUN_RGB * ggx(max(0.0, dot(n, h)), 0.2) * 0.04 * nl;
       outColor = vec4(display(color), 1.0);
       outInfo = uInfo;
     }

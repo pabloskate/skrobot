@@ -1,4 +1,5 @@
 import { SET_FOOT, type DropTerrain } from '../elToro/stairs';
+import type { SpotFilmers } from '../tripods';
 
 /** Point Loma High's original 1997 courtyard gap. The requested 14.3 ft is
  * authoritative here; secondary reports disagree. See docs/LEAP_OF_FAITH_REFERENCE.md. */
@@ -159,4 +160,25 @@ export const LEAP_OF_FAITH_TERRAIN: DropTerrain = {
   entry: { x: LEAP_OF_FAITH_POP_X, z: LEAP_OF_FAITH_POP_Z, yaw: LEAP_OF_FAITH_YAW, hold: true },
   runUp: 0.35,
   trickPop: leapOfFaithPop,
+};
+
+const F = SET_FOOT;
+const FLOOR = -LEAP_OF_FAITH_DROP;
+
+/** Where the filmers stand (tripods.ts), either side of the line it takes, angled over the rail. */
+export const LEAP_OF_FAITH_FILMERS: SpotFilmers = {
+  stairs: {
+    line: leapOfFaithLineZ,
+    stands: {
+      // Out in front of the undercroft, as in the archival footage; the
+      // stair block stands on +z and would hide the drop from there.
+      bottom: { u: 28 * F, z: -20 * F, height: FLOOR + 3 * F, frame: 22 * F, place: 0.58 },
+      side: { u: 12 * F, z: -34 * F, height: FLOOR + 5 * F, frame: 24 * F, place: 0.56 },
+      top: { u: -0.5 * F, z: -6.5 * F, height: 5 * F, frame: 8 * F, place: 0.6 },
+    },
+    across: {
+      // The stair block fills the line's right side: across the courtyard past its foot.
+      side: { u: 34 * F, z: 8 * F, height: FLOOR + 5 * F, frame: 24 * F, place: 0.56 },
+    },
+  },
 };

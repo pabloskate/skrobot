@@ -76,6 +76,9 @@ export const NECK_TOP = { x: 0, y: -60, z: 0 } as const;
 export const HEAD_OFF_NECK = { x: 4, y: 0, z: 0 } as const;
 /** The legs' round thickness at the hip, knee, and ankle, as Robot3D draws them. */
 export const LEG_RADII = { hip: 6.5, knee: 5.2, ankle: 4.3 } as const;
+/** The arms' round thickness at the shoulder, elbow, and wrist, and the ball of the hand, as Robot3D draws them. */
+export const ARM_RADII = { shoulder: 5, elbow: 4.4, wrist: 4 } as const;
+export const HAND_RADIUS = 5.8;
 
 // ----- Body physics -----
 

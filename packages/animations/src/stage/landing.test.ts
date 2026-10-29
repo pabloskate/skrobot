@@ -36,7 +36,8 @@ describe('rolling away', () => {
         for (const base of GAPS) for (const rider of RIDERS) {
           const stage = plan(base, set, rider);
           const stairs = stage.stairs!;
-          for (let t = stairs.land + 0.05; t <= stage.end; t += 0.1) {
+          // With no room to ride it out (Emage's river), up to the hop off the board.
+          for (let t = stairs.land + 0.05; t <= (stage.stepOff?.at ?? stage.end); t += 0.1) {
             const frame = stageFrame(stage, t, 1);
             // Rolling off a raised edge (Miami's slab), the deck is in the air for a moment, as planned.
             if (routeHeight(stairs, frame.scroll) > terrainSurface(info.terrain!, frame.scroll, frame.stairs!.across) + 0.5) continue;
@@ -52,7 +53,7 @@ describe('rolling away', () => {
         for (const base of GRINDS) for (const rider of RIDERS) {
           const stage = plan(base, set, rider);
           const grind = stage.grind!;
-          for (let t = grind.land + 0.02; t <= stage.end; t += 0.1) {
+          for (let t = grind.land + 0.02; t <= (stage.stepOff?.at ?? stage.end); t += 0.1) {
             const gap = wheelGap(stageFrame(stage, t, 1), (u) => rail.ground(u), 1);
             expect(gap, `${base} ${rider} at ${t.toFixed(2)}`).toBeLessThan(0.5);
           }

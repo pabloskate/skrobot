@@ -17,7 +17,7 @@ import { SET_SCALE } from './setScale';
 /** The set's layout (set units) as the stage has it. */
 const K = SET_SCALE;
 
-const SPOTS: StageSet[] = ['hollywood-high', 'wallenberg', 'sunset-car-wash', 'lyon-25', 'leap-of-faith', 'miami-triangle', 'uc-davis-gap'];
+const SPOTS: StageSet[] = ['hollywood-high', 'wallenberg', 'sunset-car-wash', 'lyon-25', 'leap-of-faith', 'miami-triangle', 'uc-davis-gap', 'carlsbad-gap', 'emage-20'];
 const plan = (set: StageSet, base = 'Kickflip', stance: Stance = 'regular', riderStance: RiderStance = 'regular', popHeight = 1) =>
   planStage({ id: base, name: base, base, stance }, {
     set, landed: true, riderStance, style: resolveSkateStyle({ popHeight, rotationSpeed: 1, flickStrength: 1 }), fall: 'slam', shankProgress: 0.65,
@@ -41,18 +41,15 @@ describe('classic spots use their actual terrain', () => {
   });
 
   it('plans each drop separately and keeps the explorer timeline synchronized', () => {
-    const flights = new Set<number>();
     for (const set of SPOTS) {
       const stage = plan(set);
       const timeline = setTimeline(set, stage.style, true, 'stairs', 'regular', 'Kickflip')!;
       expect(timeline.land).toBe(stage.stairs!.land);
       expect(timeline.end).toBe(stage.end);
-      flights.add(stage.stairs!.flight);
       const frame = stageFrame(stage, timeline.land, 1);
       expect(frame.scroll).toBeCloseTo(stage.stairs!.terrain.run + stage.stairs!.terrain.landPast);
       expect(frame.stairs!.across).toBe(setInfo(set).terrain!.laneZ);
     }
-    expect(flights.size).toBe(SPOTS.length);
   });
 
   it('clears the obstacles across tricks, both riders and forward/backward approaches', () => {

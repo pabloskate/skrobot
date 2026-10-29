@@ -1,5 +1,6 @@
 import type { Handrail } from '../../motion/grind';
 import { SET_FOOT, type DropTerrain } from '../elToro/stairs';
+import type { SpotTripod, SpotTripods, SpotFilmers } from '../tripods';
 
 /**
  * Triangle Bank: the established gap and sloping-bank challenge in a
@@ -245,4 +246,37 @@ export const MIAMI_GAP_TERRAIN: DropTerrain = {
   surface: miamiSurface,
   entry: { x: MIAMI_POP_X, z: 0, yaw: 0 },
   pop: 1.25,
+};
+
+const MIAMI_TRIPODS: SpotTripods['stands'] = {
+  // On the plaza looking back up the line, as Carpenter's filmer did;
+  // off to the boulevard side, or the slab's apex would hide the deck.
+  bottom: { u: 24 * F, z: 9 * F, height: MIAMI_PLAZA_Y + 3.5 * F, frame: 18 * F, place: 0.55 },
+  // Side-on from the plaza's boulevard side, Ehrlund's angle: the box,
+  // the wall and the slab in one line, the box on the left.
+  side: { u: 8 * F, z: 24 * F, height: MIAMI_PLAZA_Y + 4.5 * F, frame: 20 * F, place: 0.5 },
+  // Up on the deck behind the rider, beside their line.
+  top: { u: -14 * F, z: 6 * F, height: 5.5 * F, frame: 14 * F, place: 0.55 },
+};
+
+const across = (tripod: SpotTripod): SpotTripod => ({ ...tripod, z: -tripod.z });
+/** A grind's line: in over the deck to the apex, then down its edge (`side` 1 the right one). */
+const edgeLine = (side: 1 | -1) => (u: number) => side * Math.max(0, u - MIAMI_SLAB_APEX_X) * Math.tan((MIAMI_EDGE_YAW * Math.PI) / 180);
+
+/** Up top on the side of the deck a grind rolls in along: further back, clear of the line in. */
+const topBack = (side: 1 | -1): SpotTripod => ({ ...MIAMI_TRIPODS.top, u: -20 * F, z: side * 9 * F });
+
+/**
+ * Where the filmers stand (tripods.ts). Grinding an edge they move round:
+ * the one up top stands on the other side of the deck from the line in (it
+ * rolls in along the far side from the edge), the side one outside the
+ * edge, and the one at the bottom across the line from where the rider
+ * rolls away.
+ */
+export const MIAMI_FILMERS: SpotFilmers = {
+  stairs: { line: 0, stands: MIAMI_TRIPODS },
+  ledges: {
+    right: { line: edgeLine(1), stands: { ...MIAMI_TRIPODS, bottom: across(MIAMI_TRIPODS.bottom) }, across: { top: topBack(-1) } },
+    left: { line: edgeLine(-1), stands: { ...MIAMI_TRIPODS, side: across(MIAMI_TRIPODS.side), top: across(MIAMI_TRIPODS.top) }, across: { top: topBack(1) } },
+  },
 };

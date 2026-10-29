@@ -1,4 +1,5 @@
 import { SET_FOOT, RISER, STAIR_DROP, STAIR_RUN, TREAD, nosingLine } from './stairs';
+import type { SpotFilmers } from '../tripods';
 
 /** The rails' pipe, height and run past the steps: the center one is the one grinds ride (stairs.ts). */
 export { RAIL_EXT, RAIL_R, RAIL_TOP } from './stairs';
@@ -65,3 +66,22 @@ export const ET = {
   rail: '#6f7975',
   railLit: '#bfc5bb',
 } as const;
+
+/**
+ * Where El Toro's filmers stand (tripods.ts), in the set's own layout. All
+ * three stand on the side wall's side, clear of the rider's line, the rail,
+ * and the ride away.
+ */
+export const EL_TORO_FILMERS: SpotFilmers = {
+  stairs: {
+    line: RIDER_LANE_Z,
+    stands: {
+      // Crouched on the bottom landing a little off the line, where the ride away rolls up to.
+      bottom: { u: STAIR_RUN + 30 * SET_FOOT, z: WALL_Z - SET_FOOT, height: 3 * SET_FOOT - STAIR_DROP, frame: 30 * SET_FOOT, place: 0.42 },
+      // Well up the grass bank past the side wall, on a long lens across the set.
+      side: { u: 0.6 * STAIR_RUN, z: WALL_Z + 20 * SET_FOOT, height: hill(0.6 * STAIR_RUN) + 5 * SET_FOOT, frame: 30 * SET_FOOT, place: 0.52 },
+      // At the top beside the side wall, holding the camera up to see down the set.
+      top: { u: -40, z: WALL_Z + 3 * SET_FOOT, height: 6 * SET_FOOT, frame: 20 * SET_FOOT, place: 0.48 },
+    },
+  },
+};

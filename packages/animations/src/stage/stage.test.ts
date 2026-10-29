@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { cameraLift } from '../camera/camera';
 import { barSpan, grindCameraLift, grindStreetDist } from '../motion/grind';
 import { SHIN, THIGH, type Frame3 } from '../motion/skeleton';
+import { armsLifted } from '../motion/armClearance';
+import { stageArmLift } from './armLift';
 import { resolveSkateStyle } from '../motion/style';
 import type { RiderStance, Robot, Trick } from '../types';
 import { WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z } from '../board/board';
@@ -184,12 +186,14 @@ describe('TrickScene3D stage', () => {
           ? solveGrindRig(t, stage.grind, stage.mechanics, style).rig
           : solveRig(computeFrame(t, stage.spec, true, 'slam', 0.65, style), stage.spec, stage.mechanics, style, 'landed');
         const { rig } = stageFrame(stage, t, 1);
+        // The arms only as lifted out of the knees over the attempt (armLift.ts).
+        const lifted = armsLifted(shared, stageArmLift(stage, t));
         bodyOff = Math.max(
           bodyOff,
           gap(shared.head.origin, rig.head.origin),
           gap(shared.torso.origin, rig.torso.origin),
           ...rig.legs.map((leg, i) => gap(shared.legs[i].hip, leg.hip)),
-          ...rig.arms.map((arm, i) => gap(shared.arms[i].hand, arm.hand)),
+          ...rig.arms.map((arm, i) => gap(lifted.arms[i].hand, arm.hand)),
         );
         for (const leg of rig.legs) boneOff = Math.max(boneOff, Math.abs(gap(leg.hip, leg.knee) - THIGH), Math.abs(gap(leg.knee, leg.ankle) - SHIN));
       }

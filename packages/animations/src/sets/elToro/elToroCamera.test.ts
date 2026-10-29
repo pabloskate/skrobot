@@ -6,7 +6,7 @@ import { FOOT } from '../../units';
 import { resolveSkateStyle } from '../../motion/style';
 import type { RiderStance, Stance } from '../../types';
 import { elToroTripodView, elToroView, EL_TORO_CAMERA_MIN_Z, EL_TORO_CAMERA_Z } from './elToroCamera';
-import { HILL_EDGE, WALL_Z, hill } from './elToroLayout';
+import { HILL_EDGE, RIDER_LANE_Z, WALL_Z, hill } from './elToroLayout';
 import { planStage, stageFrame } from '../../stage/stage';
 import { projectThree, stageView, type StageView, type Vec3 } from '../../camera/view';
 
@@ -65,11 +65,14 @@ describe('El Toro camera clearance', () => {
   });
 
   it('puts the side tripod across the rider’s line when the shot films from the left', () => {
-    const frame = { scroll: 0, lift: 0, stairs: { dir: 1 as const, shadowY: 0, across: 0 } };
+    // The rider on their line, which the stage's z is measured from.
+    const frame = { scroll: 0, lift: 0, stairs: { dir: 1 as const, shadowY: 0, across: RIDER_LANE_Z * SET_SCALE } };
     const camera = { yaw: 0, pitch: 3, lens: 1 };
-    const right = elToroTripodView('side', frame, 0.7, 500 / 404, camera);
+    const own = elToroTripodView('side', frame, 0.7, 500 / 404, camera);
+    const right = elToroTripodView('side', frame, 0.7, 500 / 404, { ...camera, side: 'right' });
     const left = elToroTripodView('side', frame, 0.7, 500 / 404, { ...camera, side: 'left' });
-    // The filmer crosses to the far side of the line, same height and place along the set.
+    // Its own filmer stands up the bank on the right; on the left it crosses to the far side of the line, same height and place along the set.
+    expect(right.eye).toEqual(own.eye);
     expect(right.eye[2]).toBeGreaterThan(0);
     expect(left.eye[0]).toBeCloseTo(right.eye[0], 8);
     expect(left.eye[1]).toBeCloseTo(right.eye[1], 8);

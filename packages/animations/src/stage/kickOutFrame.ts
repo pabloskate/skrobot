@@ -5,7 +5,9 @@ import { ASPHALT } from '../camera/view';
 import { smoothstep, type V3 } from '../math';
 import { bodyDims } from '../motion/fall/body';
 import { boardAt, boardRigOf } from '../motion/fall/boardBody';
-import { hipsAt, kickOutAt, offLineRig, planKickOut, type KickOutPlan, type KickOutSetup } from '../motion/fall/kickOut';
+import { TAKEOVER_LEAD, hipsAt, kickOutAt, offLineRig, planKickOut, type KickOutPlan, type KickOutSetup } from '../motion/fall/kickOut';
+import { UP } from '../motion/fall/footing';
+import { STEP_OFF_JUMP } from '../motion/fall/stepOff';
 import { IDENTITY, type Quat } from '../motion/fall/rotation';
 import { travel } from '../motion/grind';
 import { solveRig } from '../motion/rig';
@@ -14,6 +16,7 @@ import { GROUND, ROLL_IN, X0, boardGlued, catchFraction, computeFrame, flightTim
 import { stairDeckHeight, terrainSurface, type StairPlan } from '../sets/elToro/stairs';
 import { GRAVITY } from '../units';
 import { shiftRig, stairCrane, stairRig, stairShadowLevel } from './downhill';
+import { stageArms } from './armLift';
 import { kickedUp, onTheGround, posed, riderShadows, type StageFrame } from './frameParts';
 import type { StagePlan } from './stage';
 
@@ -117,7 +120,7 @@ function flatSetup(stage: StagePlan): KickOutSetup {
   return {
     style,
     body: bodyDims(skater),
-    regular: (t, error = IDENTITY) => shiftRig(posed(attemptRig(stage, t, error), skater), { x: landedScroll(stage, t), y: 0, z: 0 }),
+    regular: (t, error = IDENTITY) => shiftRig(posed(stageArms(stage, t, attemptRig(stage, t, error)), skater), { x: landedScroll(stage, t), y: 0, z: 0 }),
     wheel: (t) => landedWheel(stage, t),
     pop: ROLL_IN,
     glued: boardGlued(spec),
@@ -139,6 +142,8 @@ function spotSetup(stage: StagePlan, stairs: StairPlan): KickOutSetup {
   const { spec, style, skater } = stage;
   const attempt = (t: number, error: Quat = IDENTITY) =>
     stairRig(stage, stairs, t, null, error === IDENTITY ? undefined : (rig) => offLineRig(rig, error), true);
+  // Stepping off a made landing instead: the board's under the feet, and the legs hop the body off it.
+  const hop = stage.stepOff;
   return {
     style,
     body: bodyDims(skater),
@@ -151,12 +156,14 @@ function spotSetup(stage: StagePlan, stairs: StairPlan): KickOutSetup {
       return a.wheel(a.route.travel);
     },
     pop: stairs.pop,
-    glued: boardGlued(spec),
+    glued: hop != null || boardGlued(spec),
     gravity: GRAVITY,
     ground: (x, z) => ASPHALT - terrainSurface(stairs.terrain, x - X0, z),
-    catchAt: stairs.pop + catchFraction(style) * stairs.flight,
-    touchdown: stairs.land,
+    ...(stairs.terrain.brush && { drag: (x: number, z: number) => stairs.terrain.brush!(x - X0, z) }),
+    catchAt: hop ? hop.at + TAKEOVER_LEAD : stairs.pop + catchFraction(style) * stairs.flight,
+    touchdown: hop?.down ?? stairs.land,
     end: stage.end,
+    ...(hop && { jump: { x: STEP_OFF_JUMP.along, y: UP.y * STEP_OFF_JUMP.up, z: 0 }, hopOut: STEP_OFF_JUMP.out }),
   };
 }
 

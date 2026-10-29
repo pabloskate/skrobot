@@ -1,9 +1,10 @@
 import type { Handrail } from '../../motion/grind';
 import type { DropTerrain } from '../elToro/stairs';
 import { SET_FOOT } from '../setScale';
+import type { SpotFilmers } from '../tripods';
 
-/** Hollywood High's south-facing sixteen. Measurements are visual estimates;
- * see docs/HOLLYWOOD_REFERENCE.md, including the separate twelve-stair warning. */
+/** Hollywood High's opposite flights off one walkway. Dimensions are visual
+ * estimates, not a survey; see docs/HOLLYWOOD_REFERENCE.md. */
 export const HOLLYWOOD_FOOT = SET_FOOT;
 const F = HOLLYWOOD_FOOT;
 export const HOLLYWOOD_STEPS = 16;
@@ -31,6 +32,20 @@ export const HOLLYWOOD_BUILDING_END = HOLLYWOOD_RUN + 0.5 * F;
 export const HOLLYWOOD_BUILDING_FACE = HOLLYWOOD_RIGHT_Z + 2;
 export const HOLLYWOOD_BUILDING_TOP = 7.8 * F;
 
+/** The north-facing twelve is more compact and steeper, not a scaled sixteen.
+ * Both landings share the scene's estimated sidewalk datum. */
+export const HOLLYWOOD_WALKWAY = 42 * F;
+export const HOLLYWOOD_12_LIP = -HOLLYWOOD_WALKWAY;
+export const HOLLYWOOD_12_STEPS = 12;
+export const HOLLYWOOD_12_DROP = HOLLYWOOD_DROP;
+export const HOLLYWOOD_12_RUN = 10.5 * F;
+export const HOLLYWOOD_12_RISER = HOLLYWOOD_12_DROP / HOLLYWOOD_12_STEPS;
+export const HOLLYWOOD_12_TREAD = HOLLYWOOD_12_RUN / (HOLLYWOOD_12_STEPS - 1);
+export const HOLLYWOOD_12_GRADE = HOLLYWOOD_12_RISER / HOLLYWOOD_12_TREAD;
+/** In the twelve's frame the street is +z, school −z: a half-turn, not a mirror. */
+export const HOLLYWOOD_12_LANE_Z = -HOLLYWOOD_LANE_Z;
+export const HOLLYWOOD_12_RAIL_END = HOLLYWOOD_12_RUN - 0.35 * F;
+
 /** The street side: the concrete cheek's outer face, the black picket fence
  * on the sidewalk below it, the wide sidewalk, and the road's near curb. */
 export const HOLLYWOOD_CHEEK_Z = HOLLYWOOD_LEFT_Z - 0.65 * F;
@@ -38,7 +53,7 @@ export const HOLLYWOOD_FENCE_Z = HOLLYWOOD_LEFT_Z - 0.95 * F;
 /** Its pickets' tops (7.25 ft over the sidewalk), as a height over the top landing; the spear tips stand a little over them. */
 export const HOLLYWOOD_FENCE_TOP = -HOLLYWOOD_DROP + 7.25 * F;
 export const HOLLYWOOD_FENCE_TIPS = HOLLYWOOD_FENCE_TOP + 7;
-export const HOLLYWOOD_FENCE_START = -42 * F;
+export const HOLLYWOOD_FENCE_START = HOLLYWOOD_12_LIP - HOLLYWOOD_12_RUN - 12 * F;
 export const HOLLYWOOD_FENCE_END = HOLLYWOOD_RUN + 12 * F;
 export const HOLLYWOOD_CURB_Z = HOLLYWOOD_LEFT_Z - 15 * F;
 /** Four eleven-foot lanes, two each way, between the curbs. */
@@ -48,10 +63,26 @@ export const HOLLYWOOD_FAR_CURB_Z = HOLLYWOOD_CURB_Z - 4 * HOLLYWOOD_LANE_WIDTH;
 export const HOLLYWOOD_ROAD_Y = -HOLLYWOOD_DROP - 0.5 * F;
 
 export function hollywoodGround(u: number): number {
+  if (u <= HOLLYWOOD_12_LIP) return hollywood12Ground(HOLLYWOOD_12_LIP - u);
   if (u < 0) return 0;
   if (u >= HOLLYWOOD_RUN) return -HOLLYWOOD_DROP;
   return -(Math.floor(u / HOLLYWOOD_TREAD) + 1) * HOLLYWOOD_RISER;
 }
+
+/** Ground going north down the twelve, in its own downhill (+x) frame. */
+export function hollywood12Ground(u: number): number {
+  if (u <= -HOLLYWOOD_WALKWAY) {
+    const south = -HOLLYWOOD_WALKWAY - u;
+    return south >= HOLLYWOOD_RUN ? -HOLLYWOOD_DROP : -(Math.floor(south / HOLLYWOOD_TREAD) + 1) * HOLLYWOOD_RISER;
+  }
+  if (u < 0) return 0;
+  if (u >= HOLLYWOOD_12_RUN) return -HOLLYWOOD_12_DROP;
+  return -(Math.floor(u / HOLLYWOOD_12_TREAD) + 1) * HOLLYWOOD_12_RISER;
+}
+
+export const hollywood12Nosing = (u: number) => -u * HOLLYWOOD_12_GRADE;
+export const hollywood12CheekTop = (u: number) =>
+  Math.max(-HOLLYWOOD_12_DROP + 0.4 * F, Math.min(0.4 * F, hollywood12Nosing(u) + 0.15 * F));
 
 export const hollywoodNosing = (u: number) => -u * HOLLYWOOD_GRADE;
 
@@ -63,9 +94,14 @@ export const hollywoodCheekTop = (x: number) =>
 export function hollywoodSurface(x: number, z: number): number {
   if (z < HOLLYWOOD_CURB_Z && z > HOLLYWOOD_FAR_CURB_Z) return HOLLYWOOD_ROAD_Y;
   if (z < HOLLYWOOD_CHEEK_Z) return -HOLLYWOOD_DROP;
-  if (z < HOLLYWOOD_LEFT_Z) return x < HOLLYWOOD_RUN + 0.4 * F ? hollywoodCheekTop(x) : -HOLLYWOOD_DROP;
+  if (z < HOLLYWOOD_LEFT_Z) {
+    if (x < HOLLYWOOD_12_LIP) return x > HOLLYWOOD_12_LIP - HOLLYWOOD_12_RUN - 0.4 * F ? hollywood12CheekTop(HOLLYWOOD_12_LIP - x) : -HOLLYWOOD_DROP;
+    return x < HOLLYWOOD_RUN + 0.4 * F ? hollywoodCheekTop(x) : -HOLLYWOOD_DROP;
+  }
   return hollywoodGround(x);
 }
+
+export const hollywood12Surface = (x: number, z: number) => hollywoodSurface(HOLLYWOOD_12_LIP - x, -z);
 
 /** One continuous sloping top pipe; Hollywood's center rail has no lower bar. */
 export const HOLLYWOOD_RAIL: Handrail = {
@@ -77,6 +113,17 @@ export const HOLLYWOOD_RAIL: Handrail = {
   ground: hollywoodGround,
   rest: (u) => Math.max(-HOLLYWOOD_DROP, Math.min(0, hollywoodNosing(u))),
   speed: 14 * F,
+};
+
+export const HOLLYWOOD_12_RAIL: Handrail = {
+  start: HOLLYWOOD_RAIL_START,
+  end: HOLLYWOOD_12_RAIL_END,
+  top: HOLLYWOOD_RAIL_HEIGHT + HOLLYWOOD_RAIL_RADIUS * Math.hypot(1, HOLLYWOOD_12_GRADE),
+  slope: HOLLYWOOD_12_GRADE,
+  radius: HOLLYWOOD_RAIL_RADIUS,
+  ground: hollywood12Ground,
+  rest: (u) => Math.max(-HOLLYWOOD_12_DROP, Math.min(0, hollywood12Nosing(u))),
+  speed: 12 * F,
 };
 
 /** Both real side handrails follow the same nosing grade. The school-side
@@ -148,4 +195,59 @@ export const HOLLYWOOD_FENCE_TERRAIN: DropTerrain = {
   // An angled line runs out of run-up before the school wall: start just before the crouch.
   runUp: 0.15,
   trickPop: fencePop,
+};
+
+const lower = -HOLLYWOOD_DROP;
+
+/** Where the filmers stand (tripods.ts): the sixteen's on its street side, and over the fence their own. */
+export const HOLLYWOOD_FILMERS: SpotFilmers = {
+  stairs: {
+    line: HOLLYWOOD_LANE_Z,
+    stands: {
+      bottom: { u: HOLLYWOOD_RUN + 23 * F, z: HOLLYWOOD_LEFT_Z + 1.6 * F, height: lower + 2.8 * F, frame: 24 * F, place: 0.43 },
+      side: { u: HOLLYWOOD_RUN + 6 * F, z: HOLLYWOOD_LEFT_Z - 14 * F, height: lower + 7 * F, frame: 23 * F, place: 0.53 },
+      top: { u: -3 * F, z: HOLLYWOOD_LEFT_Z + 1.1 * F, height: 6.5 * F, frame: 19 * F, place: 0.48 },
+    },
+    across: {
+      // The school runs along the right side to the bottom step: past its end, looking back up.
+      side: { u: HOLLYWOOD_RUN + 14 * F, z: HOLLYWOOD_RIGHT_Z + 4 * F, height: lower + 5.5 * F, frame: 23 * F, place: 0.53 },
+    },
+  },
+  obstacles: {
+    // Over the fence: from the sidewalk the rider lands on, from down the
+    // street, and from the top of the stairs behind the center rail, as
+    // the classic clips were filmed.
+    fence: {
+      line: fenceLine,
+      stands: {
+        bottom: { u: 8 * F, z: HOLLYWOOD_CURB_Z + 1.5 * F, height: lower + 2.6 * F, frame: 22 * F, place: 0.45 },
+        side: { u: 58 * F, z: HOLLYWOOD_FENCE_Z - 5 * F, height: lower + 5.5 * F, frame: 24 * F, place: 0.5 },
+        top: { u: 2 * F, z: 3 * F, height: 5 * F, frame: 20 * F, place: 0.5 },
+      },
+      across: {
+        // The stairs are on the line's right: down the sidewalk past the
+        // landing instead, standing to see over the pickets.
+        bottom: { u: 34 * F, z: HOLLYWOOD_FENCE_Z - 5 * F, height: lower + 5.5 * F, frame: 22 * F, place: 0.45 },
+        // The sidewalk's on its left, a floor down: on the run-up inside the fence.
+        top: { u: -6 * F, z: HOLLYWOOD_LEFT_Z + 2 * F, height: 5 * F, frame: 20 * F, place: 0.5 },
+      },
+    },
+  },
+};
+
+/** The twelve's filmers, on its own street side. */
+export const HOLLYWOOD_12_FILMERS: SpotFilmers = {
+  stairs: {
+    line: HOLLYWOOD_12_LANE_Z,
+    stands: {
+      bottom: { u: HOLLYWOOD_12_RUN + 23 * F, z: HOLLYWOOD_RIGHT_Z - 1.6 * F, height: lower + 2.8 * F, frame: 22 * F, place: 0.43 },
+      // Above the pickets and in front of the street-tree canopy.
+      side: { u: HOLLYWOOD_12_RUN + 6 * F, z: HOLLYWOOD_RIGHT_Z + 4 * F, height: lower + 10 * F, frame: 23 * F, place: 0.53 },
+      top: { u: -3 * F, z: HOLLYWOOD_RIGHT_Z - 1.1 * F, height: 6.5 * F, frame: 18 * F, place: 0.48 },
+    },
+    across: {
+      // No pickets to see over on the left: standing on the bottom landing.
+      side: { u: HOLLYWOOD_12_RUN + 6 * F, z: HOLLYWOOD_12_LANE_Z - 8 * F, height: lower + 5.5 * F, frame: 23 * F, place: 0.53 },
+    },
+  },
 };

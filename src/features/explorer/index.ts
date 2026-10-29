@@ -2,7 +2,7 @@
  * Explorer feature — the customer-facing Trick Explorer at /explore: watch any
  * flatground trick or grind combo the robot can skate, slowed down, scrubbed,
  * and filmed from any camera angle at any spot (at the landmarks, El Toro's
- * 20 stair, Hollywood 16, Wallenberg, and Roof to Bank, flatground tricks
+ * 20 stair, Hollywood High's connected 16 and 12, Wallenberg, and Roof to Bank, flatground tricks
  * go down the drop, grinds go down a handrail where there is one, and tripods
  * film from the bottom, the side, and the top), by the robot or the
  * realistic human, with a shareable URL for what's on stage and a video of it to download (MP4, with a WebM fallback).

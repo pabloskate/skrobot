@@ -83,11 +83,14 @@ flat bar's:
 ## Tripod angles
 
 Besides the crane presets, three tripods stand still in the spot and pan with the
-rider (`EL_TORO_TRIPODS` in `sets/elToro/elToroCamera.ts`): crouched on the bottom
+rider (`EL_TORO_FILMERS` in `sets/elToro/elToroLayout.ts`): crouched on the bottom
 landing off the line, up the grass bank past the side wall, and at the top beside
-the wall. Each has a fixed lens, so the rider grows as they come closer and
-shrinks as they go. Beyond the bottom landing the set is an open concrete
-expanse, which the side and top tripods look out over once the rider is down.
+the wall, all on the rider's right. The viewer can stand any of them on the left
+instead, their mirror image across the rider's line (`sets/tripods.ts`): the
+bottom one nearer the center rail, the side one up the planted bank. Each has a
+fixed lens, so the rider grows as they come closer and shrinks as they go.
+Beyond the bottom landing the set is an open concrete expanse, which the side
+and top tripods look out over once the rider is down.
 
 ## References
 

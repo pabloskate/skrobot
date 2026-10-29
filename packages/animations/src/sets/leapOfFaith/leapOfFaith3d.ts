@@ -9,7 +9,7 @@ import { hash2 } from '../setKit';
 import {
   LEAP_OF_FAITH_ALCOVE_BACK, LEAP_OF_FAITH_ALCOVE_Z as WORLD_LEAP_OF_FAITH_ALCOVE_Z,
   LEAP_OF_FAITH_BALCONY_BACK, LEAP_OF_FAITH_BALCONY_END_Z as WORLD_LEAP_OF_FAITH_BALCONY_END_Z,
-  LEAP_OF_FAITH_DROP, LEAP_OF_FAITH_FOOT as F, LEAP_OF_FAITH_LANE_Z,
+  LEAP_OF_FAITH_DROP, LEAP_OF_FAITH_FILMERS, LEAP_OF_FAITH_FOOT as F, LEAP_OF_FAITH_LANE_Z,
   LEAP_OF_FAITH_BEND_LENGTH, leapOfFaithStairPoint,
   LEAP_OF_FAITH_LOWER_RUN, LEAP_OF_FAITH_LOWER_STEPS,
   LEAP_OF_FAITH_MID_DROP, LEAP_OF_FAITH_MID_END_Z as WORLD_LEAP_OF_FAITH_MID_END_Z,
@@ -278,13 +278,7 @@ export class LeapOfFaith3D extends ClassicSpot3D {
           { at: [5 * F, FLOOR, -82 * F], height: 38 * F, yaw: 134 },
         ],
       },
-      tripods: {
-        // Out in front of the undercroft, as in the archival footage; the
-        // stair block stands on +z and would hide the drop from there.
-        bottom: { u: 28 * F, z: -20 * F, height: FLOOR + 3 * F, frame: 22 * F, place: 0.58 },
-        side: { u: 12 * F, z: -34 * F, height: FLOOR + 5 * F, frame: 24 * F, place: 0.56 },
-        top: { u: -0.5 * F, z: -6.5 * F, height: 5 * F, frame: 8 * F, place: 0.6 },
-      },
+      filmers: LEAP_OF_FAITH_FILMERS,
     });
   }
 }

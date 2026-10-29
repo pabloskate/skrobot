@@ -70,13 +70,13 @@ export const SKATER_OUTFIT = {
   beanie: '#4b5052',
 } as const;
 
-/** The alien's green. */
-export const ALIEN_SKIN: AlienSkin = { skin: '#7fb062', lips: '#3d6236' };
+/** A soft leaf green, with the mouth close in tone to the cheeks. */
+export const ALIEN_SKIN: AlienSkin = { skin: '#9ac58a', lips: '#7da472' };
 
 /**
  * Who wears the realistic rider's clothes: the skater, or the green alien the
  * build makes from him (blender/build_skater.py): the same body, rig, tee,
- * jeans and shoes, with a bare domed head, big black almond eyes, and long
+ * jeans and shoes, with a bare domed head, rounded dark almond eyes, and
  * three-fingered hands.
  */
 export type RealisticCharacter = keyof typeof MODELS;

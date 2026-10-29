@@ -2,6 +2,7 @@ import { BOARD_WIDTH_SCALE } from '../../board/boardDimensions';
 import { BOTTOM_LOCAL, TOP_LOCAL } from '../../board/deck';
 import { HANGER_BOTTOM, WHEEL_HALF_W, WHEEL_R, WHEEL_SPIN, WHEEL_X, WHEEL_Y, WHEEL_Z } from '../../board/board';
 import { add3, clamp01, cross3, dot3, norm3, scale3, sub3, type V3 } from '../../math';
+import { FOOT } from '../../units';
 import type { BoardRig } from '../skeleton';
 import { qconj, qexp, qlog, qmul, qnorm, qrot, qslerp, type Quat } from './rotation';
 
@@ -24,6 +25,8 @@ import { qconj, qexp, qlog, qmul, qnorm, qrot, qslerp, type Quat } from './rotat
 /** Steps a second, and the samples kept. */
 const SIM_HZ = 1200;
 const KEEP_EVERY = 5;
+/** How high brush stands (world units): a board this close over the ground is in it. */
+const BRUSH_HEIGHT = 2 * FOOT;
 /** The board's center of mass under the deck's middle: trucks and wheels are about two fifths of it. */
 const COM_LOCAL: V3 = { x: 0, y: 3, z: 0 };
 /** Moments of inertia about the center of mass, along the board's own axes: easy to roll, hard to spin flat or end over end. */
@@ -140,6 +143,8 @@ interface BoardSimOptions {
    * came rather than being stopped dead on it.
    */
   slope?: (x: number, z: number, y: number) => number;
+  /** How fast brush on the ground under (x, z) takes the speed of a board in it (a share a second): undergrowth it ploughs into. */
+  drag?: (x: number, z: number) => number;
 }
 
 /**
@@ -157,7 +162,7 @@ export function simulateBoard(start: BoardMotion, t0: number, t1: number, option
  * start of what's been followed. Each is the track simulateBoard gives.
  */
 export function boardSimulation(start: BoardMotion, t0: number, options: BoardSimOptions): (t1: number) => BoardTrack {
-  const { gravity, ground, slope, pushes = [] } = options;
+  const { gravity, ground, slope, drag, pushes = [] } = options;
   const contacts = options.hangers ? HANGER_CONTACTS : CONTACTS;
   const dt = 1 / SIM_HZ;
   let q = start.q;
@@ -290,6 +295,12 @@ export function boardSimulation(start: BoardMotion, t0: number, options: BoardSi
           const along = qrot(q, { x: 1, y: 0, z: 0 });
           wheelRate = (WHEEL_SPIN * dot3(v, along)) / WHEEL_R;
         }
+      }
+      // In brush (bouncing through it too, not only on the ground under it), it slows along and stops turning over.
+      if (drag && ground(com.x, com.z, com.y) - com.y < BRUSH_HEIGHT) {
+        const brush = Math.max(0, 1 - drag(com.x, com.z) * dt);
+        v = { x: v.x * brush, y: v.y, z: v.z * brush };
+        w = scale3(w, brush);
       }
       com = add3(com, scale3(v, dt));
       q = qnorm(qmul(qexp(scale3(w, dt)), q));

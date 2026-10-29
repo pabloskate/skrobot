@@ -1,5 +1,6 @@
 import type { DropTerrain } from '../elToro/stairs';
 import { SET_FOOT } from '../setScale';
+import type { SpotFilmers } from '../tripods';
 
 /** The 25 Stair. Exact gap dimensions supplied by the user; historical
  * research in docs/LYON_REFERENCE.md. The surrounding buildings are original. */
@@ -44,4 +45,16 @@ export const LYON_TERRAIN: DropTerrain = {
   drop: LYON_DROP, run: LYON_RUN, landPast: 5 * F,
   laneZ: LYON_LANE_Z, ground: lyonGround, surface: lyonSurface,
   runUp: 0.85,
+};
+
+/** Where the filmers stand (tripods.ts). */
+export const LYON_FILMERS: SpotFilmers = {
+  stairs: {
+    line: LYON_LANE_Z,
+    stands: {
+      bottom: { u: LYON_RUN + 32 * F, z: -7 * F, height: -LYON_DROP + 4 * F, frame: 29 * F, place: 0.43 },
+      side: { u: LYON_RUN + 9 * F, z: LYON_LEFT_Z + 2.5 * F, height: -LYON_DROP + 5 * F, frame: 28 * F, place: 0.47 },
+      top: { u: -7 * F, z: LYON_LEFT_Z + 3 * F, height: 6 * F, frame: 25 * F, place: 0.48 },
+    },
+  },
 };

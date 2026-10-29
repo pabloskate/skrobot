@@ -117,6 +117,8 @@ export interface RunOutSetup {
   facing: (t: number) => V3;
   /** Seconds to run. */
   until: number;
+  /** How fast brush at the hips' (x, z) takes their level speed (a share a second): running into undergrowth. */
+  drag?: (x: number, z: number) => number;
 }
 
 interface State {
@@ -270,6 +272,8 @@ export function runOut(setup: RunOutSetup): RunOut {
       a = { x: off.x * lever, y: -ah, z: off.z * lever };
     }
     const nudge = sub3(extra(s.t + dt), extra(s.t));
+    const brush = setup.drag?.(s.p.x, s.p.z) ?? 0;
+    if (brush > 0) a = { x: a.x - brush * s.v.x, y: a.y, z: a.z - brush * s.v.z };
     let v = add3(add3(s.v, scale3(a, dt)), nudge);
     let p = add3(s.p, scale3(v, dt));
     const next: State = { t: s.t + dt, p, v };
@@ -502,7 +506,8 @@ function landingTime(setup: RunOutSetup, from: State, ground: (x: number, z: num
   while (t < from.t + 3) {
     if (t >= setup.first.earliest && ground(p.x, p.z) - p.y <= height) return t;
     const nudge = sub3(shove(t + dt), shove(t));
-    v = add3(add3(v, { x: 0, y: g * dt, z: 0 }), nudge);
+    const brush = 1 - (setup.drag?.(p.x, p.z) ?? 0) * dt;
+    v = add3(add3({ x: v.x * brush, y: v.y, z: v.z * brush }, { x: 0, y: g * dt, z: 0 }), nudge);
     p = add3(p, scale3(v, dt));
     t += dt;
   }

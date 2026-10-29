@@ -1,4 +1,4 @@
-import { setInfo, type Obstacle, type PopEnd, type RailChoice, type StageSet } from '@skrobot/animations';
+import { setInfo, setLocation, type Obstacle, type PopEnd, type RailChoice, type StageSet } from '@skrobot/animations';
 import {
   DEFAULT_STATE,
   cameraPreset,
@@ -25,6 +25,8 @@ export interface DreamLine {
   id: string;
   label: string;
   mode: ExplorerMode;
+  /** The flight at a shared location; omitted when the spot has only one. */
+  set?: StageSet;
   /** What a gap trick goes over. */
   obstacle: Obstacle;
   /** Which handrail a grind goes down. */
@@ -50,30 +52,42 @@ const rail = (label: string, choice: RailChoice = 'center'): DreamLine => ({
 /** The landmark spots, the only ones this page offers (the plaza and waterfront stay in the explorer). */
 export const DREAM_SPOTS: readonly DreamSpot[] = [
   { id: 'el-toro', name: setInfo('el-toro').label, where: 'Lake Forest, CA', feature: '20 stair and handrails', lines: [gap('20 stair'), rail('Center rail'), rail('Side rail', 'side')] },
-  { id: 'hollywood-high', name: setInfo('hollywood-high').label, where: 'Los Angeles', feature: '16 stair, rail, and fence', lines: [gap('16 stair'), rail('Handrail'), gap('Over the fence', 'fence')] },
+  {
+    id: 'hollywood-high', name: setInfo('hollywood-high').label, where: 'Los Angeles', feature: 'Back-to-back 16 and 12 stairs, rails, and fence',
+    lines: [
+      { ...gap('16 stair'), set: 'hollywood-high' },
+      { ...rail('16 rail'), set: 'hollywood-high' },
+      { ...gap('Over the fence', 'fence'), set: 'hollywood-high' },
+      { ...gap('12 stair'), id: 'twelve-stairs', set: 'hollywood-high-12' },
+      { ...rail('12 rail'), id: 'twelve-rail', set: 'hollywood-high-12' },
+    ],
+  },
   { id: 'wallenberg', name: setInfo('wallenberg').label, where: 'San Francisco', feature: 'The four block gap', lines: [gap('Four block')] },
   { id: 'sunset-car-wash', name: setInfo('sunset-car-wash').label, where: 'Redesigned setting', feature: 'Off the roof into the bank', lines: [gap('Roof to bank')] },
   { id: 'lyon-25', name: setInfo('lyon-25').label, where: 'Redesigned courtyard', feature: '25 stairs · 14.76 ft down, 21.29 ft across', lines: [gap('25 stairs')] },
   { id: 'leap-of-faith', name: setInfo('leap-of-faith').label, where: 'Point Loma High · San Diego', feature: 'Over the rail · 14.3 ft courtyard drop', lines: [gap('Over the rail')] },
   { id: 'miami-triangle', name: setInfo('miami-triangle').label, where: 'Redesigned park', feature: 'Gap to the triangular bank, or its edges', lines: [gap('Gap to bank'), gap('Over the triangle', 'triangle'), rail('Down an edge')] },
   { id: 'uc-davis-gap', name: setInfo('uc-davis-gap').label, where: 'Roessler Hall · UC Davis', feature: 'Ivy gap · approx. 24 ft 4 in across, 10 ft down', lines: [gap('Over the ivy')] },
+  { id: 'carlsbad-gap', name: setInfo('carlsbad-gap').label, where: 'Carlsbad High · California', feature: 'Grass gap beside the 11 stair · uphill landing', lines: [gap('Over the grass')] },
+  { id: 'emage-20', name: setInfo('emage-20').label, where: 'Denver · Colorado', feature: '20 stair and side rail', lines: [gap('20 stair'), rail('Side rail', 'side')] },
 ];
 
 const SPOT_BY_ID = new Map(DREAM_SPOTS.map((spot) => [spot.id, spot]));
 
-export const dreamSpot = (set: StageSet): DreamSpot => SPOT_BY_ID.get(set) ?? DREAM_SPOTS[0];
+export const dreamSpot = (set: StageSet): DreamSpot => SPOT_BY_ID.get(setLocation(set).id) ?? DREAM_SPOTS[0];
 
 /** What the rider is hitting at the spot now. */
 export function dreamLine(state: ExplorerState): DreamLine {
   const { lines } = dreamSpot(state.set);
-  return lines.find((line) => line.mode === state.mode && (line.mode === 'flatground' ? line.obstacle === state.obstacle : line.rail === state.rail)) ?? lines[0];
+  return lines.find((line) => (!line.set || line.set === state.set) && line.mode === state.mode && (line.mode === 'flatground' ? line.obstacle === state.obstacle : line.rail === state.rail)) ?? lines[0];
 }
 
 /** Hit something else at the spot, keeping the trick or grind picked for each. */
 export function withDreamLine(state: ExplorerState, line: DreamLine): ExplorerState {
+  const moved = line.set ? withSet(state, line.set) : state;
   return line.mode === 'flatground'
-    ? { ...withMode(state, 'flatground'), obstacle: line.obstacle }
-    : { ...withMode(state, 'grinds'), rail: line.rail };
+    ? { ...withMode(moved, 'flatground'), obstacle: line.obstacle }
+    : { ...withMode(moved, 'grinds'), rail: line.rail, obstacle: line.obstacle };
 }
 
 /** Go to another spot, starting on its first line. */
@@ -108,7 +122,7 @@ export function dreamStateFromSearch(search: string): ExplorerState {
   const params = new URLSearchParams(search);
   let state = stateFromSearch(search);
   if (!params.get('trick') && !params.get('grind')) state = { ...state, mode: 'flatground', trick: DREAM_DEFAULT.trick };
-  if (!SPOT_BY_ID.has(state.set)) state = withSet(state, DREAM_DEFAULT.set);
+  if (!SPOT_BY_ID.has(setLocation(state.set).id)) state = withSet(state, DREAM_DEFAULT.set);
   if (state.camera === 'classic') state = { ...state, camera: CLASSIC_SHOT, zoom: params.has('zoom') ? state.zoom : CLASSIC_SHOT_ZOOM };
   return state;
 }

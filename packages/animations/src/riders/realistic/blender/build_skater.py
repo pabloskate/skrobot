@@ -8,9 +8,9 @@ textures re-encoded beside it; the browser grows it onto the trick rig's legs
 as it loads (MODEL_SCALE in humanProportions.ts).
 
 The alien is the same body in the same clothes, reshaped: MakeHuman's head
-targets (a domed cranium over a small, narrow face), each eye warped into a
-big almond tilted up at its outer corner, long thin fingers and no little
-finger, and no brows, lashes, or beanie. It shares the skater's textures.
+targets (a rounded dome over a soft, full-cheeked face), gently rounded
+almond eyes, three fingers and a thumb, and no brows, lashes, or beanie.
+It shares the skater's textures.
 
 Needs Blender 4.2+ with the MPFB extension and the MakeHuman asset packs
 "makehuman_system_assets" and "skins02" in MPFB's user data (see README.md).
@@ -47,25 +47,26 @@ macro.update({"gender": 1.0, "age": 0.5, "muscle": 0.62, "weight": 0.42, "propor
 macro["race"] = {"caucasian": 0.8, "african": 0.05, "asian": 0.15}
 body = HumanService.create_human(macro_detail_dict=macro)
 
-# The alien's head and hands, as MakeHuman targets ("@" for each side), some
-# pushed past MakeHuman's own range. Set before the rig, so it fits them.
+# The alien's head and hands, as MakeHuman targets ("@" for each side).
+# Set before the rig, so it fits them. Keep the cheeks and mouth soft:
+# hollow cheeks, a pinched chin and steep eye corners read as a scowl.
 ALIEN_TARGETS = {
-    # A big, rounded cranium over a small face that narrows to the chin.
-    "head-age-decr": 1.0, "head-invertedtriangular": 0.6, "head-round": 1.0, "head-oval": 0.4, "head-scale-horiz-incr": 0.5,
-    "head-back-scale-depth-incr": 1.0, "forehead-scale-vert-incr": 0.3, "forehead-temple-incr": 1.0,
-    "chin-width-decr": 1.0, "chin-bones-decr": 0.5, "chin-prognathism-decr": 0.6, "chin-cleft-decr": 1.0,
-    "@-cheek-volume-decr": 1.0, "@-cheek-bones-incr": 0.6,
-    # Bigger eyes, opened wider, without bags under them (warped into almonds below).
-    "@-eye-scale-incr": 2.0, "@-eye-height1-incr": 1.0, "@-eye-height2-incr": 1.0, "@-eye-height3-incr": 1.0,
-    "@-eye-corner1-up": 1.0, "@-eye-bag-decr": 1.0,
-    # A small flat nose, a small lipless mouth, ears down to nubs.
-    "nose-scale-horiz-decr": 2.0, "nose-scale-vert-decr": 1.5, "nose-scale-depth-decr": 1.8, "nose-volume-decr": 1.5,
+    # A rounded cranium, with a little more room through the cheeks and chin.
+    "head-age-decr": 1.0, "head-invertedtriangular": 0.25, "head-round": 0.8, "head-oval": 0.15, "head-scale-horiz-incr": 0.35,
+    "head-back-scale-depth-incr": 0.35, "forehead-scale-vert-incr": 0.2, "forehead-temple-incr": 0.45,
+    "chin-width-decr": 0.4, "chin-bones-decr": 0.25, "chin-prognathism-decr": 0.35, "chin-cleft-decr": 1.0,
+    "@-cheek-volume-decr": 0.1, "@-cheek-bones-incr": 0.15,
+    # Open, rounded eyes with relaxed outer corners (warped with their sockets below).
+    "@-eye-scale-incr": 1.3, "@-eye-height1-incr": 0.65, "@-eye-height2-incr": 0.65, "@-eye-height3-incr": 0.65,
+    "@-eye-corner1-up": 0.15, "@-eye-bag-decr": 0.5,
+    # A small nose and a visible, relaxed mouth; ears stay down to nubs.
+    "nose-scale-horiz-decr": 1.0, "nose-scale-vert-decr": 0.9, "nose-scale-depth-decr": 1.1, "nose-volume-decr": 0.8,
     "nose-point-width-decr": 1.0, "nose-nostrils-width-decr": 1.0, "nose-flaring-decr": 1.0,
-    "mouth-scale-horiz-decr": 1.0, "mouth-trans-backward": 0.3, "mouth-upperlip-height-decr": 1.0,
-    "mouth-upperlip-volume-decr": 1.5, "mouth-lowerlip-volume-decr": 1.5,
+    "mouth-scale-horiz-decr": 0.35, "mouth-trans-backward": 0.15, "mouth-upperlip-height-decr": 0.35,
+    "mouth-upperlip-volume-decr": 0.3, "mouth-lowerlip-volume-decr": 0.3,
     "@-ear-scale-decr": 1.6, "@-ear-flap-decr": 1.0, "@-ear-lobe-decr": 1.0,
-    # Long, thin fingers, a little apart.
-    "@-hand-fingers-length-incr": 1.0, "@-hand-fingers-diameter-decr": 1.0, "@-hand-fingers-distance-incr": 0.6,
+    # A little longer than human fingers, with a relaxed, less spindly silhouette.
+    "@-hand-fingers-length-incr": 0.35, "@-hand-fingers-diameter-decr": 0.25, "@-hand-fingers-distance-incr": 0.25,
 }
 if ALIEN:
     for name, weight in ALIEN_TARGETS.items():
@@ -73,6 +74,9 @@ if ALIEN:
             key = TargetService.load_target(body, TargetService.target_full_path(target), weight=0.0)
             key.slider_max = max(1.0, weight)
             key.value = weight
+    # A hint of a smile at rest, without opening the mouth or showing teeth.
+    smile = os.path.join(LocationService.get_mpfb_data("targets"), "expression", "units", "caucasian", "mouth-corner-puller.target.gz")
+    TargetService.load_target(body, smile, weight=0.18)
 
 rig = HumanService.add_builtin_rig(body, "default")
 
@@ -111,10 +115,10 @@ def smooth01(a, b, x):
 
 # ---------- The alien's eyes and hands ----------
 
-# Each eye, its lids and socket, widened into an almond and turned so its outer
-# corner rises, about the eyeball's middle (where the eye and lid bones start),
-# fading out over the face around it.
-EYE_WARP = {"wide": 1.7, "tall": 1.35, "tilt": 22.0, "reach": 0.04, "full": 0.45, "forward": 0.002}
+# Each eye, its lids and socket, widened into a rounded almond with only a
+# gentle rise at the outer corner, about the eyeball's middle (where the eye
+# and lid bones start), fading out over the face around it.
+EYE_WARP = {"wide": 1.45, "tall": 1.45, "tilt": 7.0, "reach": 0.04, "full": 0.45, "forward": 0.002}
 
 
 def eye_warp(obj, side):
@@ -133,6 +137,37 @@ def eye_warp(obj, side):
         x, z = d.x * EYE_WARP["wide"], d.z * EYE_WARP["tall"]
         warped = Vector((x * c - z * s, d.y - EYE_WARP["forward"], x * s + z * c))
         v.co = local @ (center + d + (warped - d) * k)
+
+
+def soften_eye_surrounds():
+    """Relax the doubled folds the enlarged eyes leave under their sockets.
+    Keep the opening and its immediate rim in place against the eyeball."""
+    world = body.matrix_world
+    eyes = [rig.matrix_world @ rig.data.bones[f"eye.{s}"].head_local for s in ("L", "R")]
+    bm = bmesh.new()
+    bm.from_mesh(body.data)
+    strength = {}
+    for v in bm.verts:
+        p = world @ v.co
+        eye = min(eyes, key=lambda e: (p - e).length)
+        r = (p - eye).length
+        k = smooth01(0.018, 0.026, r) * (1.0 - smooth01(0.038, 0.055, r))
+        k *= 1.0 - smooth01(eye.z - 0.004, eye.z + 0.008, p.z)
+        # The nose and the eye opening keep their shape.
+        k *= smooth01(abs(eye.x) * 0.4, abs(eye.x) * 0.8, abs(p.x))
+        if k > 0 and not v.is_boundary:
+            strength[v] = k
+    for _ in range(12):
+        relaxed = {}
+        for v, k in strength.items():
+            neighbors = [e.other_vert(v) for e in v.link_edges]
+            if neighbors:
+                average = sum((n.co for n in neighbors), Vector()) / len(neighbors)
+                relaxed[v] = v.co.lerp(average, 0.5 * k)
+        for v, p in relaxed.items():
+            v.co = p
+    bm.to_mesh(body.data)
+    bm.free()
 
 
 def drop_little_fingers():
@@ -227,8 +262,10 @@ if ALIEN:
     for side in ("L", "R"):
         eye_warp(body, side)
         eye_warp(parts["eyes"], side)
+    soften_eye_surrounds()
     smooth_cranium()
-    # Solid black eyes have no iris to aim: they ride the head, and the lids carry the look.
+    # The reshaped eyes ride the head's gaze; rotating their almond meshes
+    # independently would pull them out of the matching sockets.
     eyes = parts["eyes"]
     for group in list(eyes.vertex_groups):
         if group.name != "head":

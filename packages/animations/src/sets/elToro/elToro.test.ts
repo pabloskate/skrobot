@@ -13,6 +13,8 @@ import { resolveSkateStyle } from '../../motion/style';
 import type { RiderStance, Robot, Stance, Trick } from '../../types';
 import { ElToro3D } from './elToro3d';
 import { planStage, stageFrame, type StageFrame, type StagePlan } from '../../stage/stage';
+import { stageArmLift } from '../../stage/armLift';
+import { armsLifted } from '../../motion/armClearance';
 import { ASPHALT, stageView } from '../../camera/view';
 import { X0 } from '../../motion/trick';
 import { sweep, sweepHz } from '../../testing';
@@ -133,8 +135,13 @@ describe('El Toro', () => {
           const unturn = (p: V3): V3 => heading ? { x: 2 * X0 - p.x, y: p.y, z: -p.z } : p;
           // From the flatground roll-in on (before it, the stairs' run-up has no flatground frame).
           for (let t = stairs.stairs!.pop - ROLL_IN; t < stairs.stairs!.land; t += 0.05) {
-            const down = stageFrame(stairs, t, 1).rig;
-            const level = stageFrame(flat, stairClock(stairs.stairs!, t), 1).rig;
+            // Each with its arms as posed, before they're lifted out of the knees on its own clock (stage/armLift.ts).
+            const bare = (stage: StagePlan, at: number) => {
+              const lift = stageArmLift(stage, at);
+              return armsLifted(stageFrame(stage, at, 1).rig, [-lift[0], -lift[1]]);
+            };
+            const down = bare(stairs, t);
+            const level = bare(flat, stairClock(stairs.stairs!, t));
             expect(down.board.flipDeg).toBeCloseTo(level.board.flipDeg, 6);
             expect(down.board.yawDeg - heading).toBeCloseTo(level.board.yawDeg, 6);
             expect(down.bodyYawDeg - heading).toBeCloseTo(level.bodyYawDeg, 6);

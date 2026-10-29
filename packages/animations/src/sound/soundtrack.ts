@@ -78,6 +78,19 @@ const CRUISE = travel(1);
 const quiet = () => 0;
 
 export function soundtrackFor(stage: StagePlan): Soundtrack {
+  const track = attemptSoundtrack(stage);
+  const hop = stage.stepOff?.at;
+  if (hop == null) return track;
+  // Stepped off the landing: from the hop the board rolls on alone, lighter, slowing into the brush.
+  const fade = (t: number) => (t < hop ? 1 : Math.exp(-(t - hop) / RIDERLESS_STOP));
+  return {
+    ...track,
+    roll: (t) => track.roll(t) * (t < hop ? 1 : RIDERLESS_ROLL * fade(t)),
+    speed: (t) => track.speed(t) * fade(t),
+  };
+}
+
+function attemptSoundtrack(stage: StagePlan): Soundtrack {
   const { grind, stairs, landed } = stage;
   if (grind && stage.railBail) {
     // Jumping off: the grind scrapes up to the jump, and the board left on the rail clatters down on its own.

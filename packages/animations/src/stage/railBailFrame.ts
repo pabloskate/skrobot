@@ -13,9 +13,11 @@ import { solveGrindRig } from '../motion/grindRig';
 import { GROUND, X0 } from '../motion/trick';
 import { barShadowParts } from '../sets/bar';
 import { GRAVITY } from '../units';
-import { ROLL_ABOVE } from '../motion/fall/railBail';
+import { ROLL_ABOVE, type RailBailPlan } from '../motion/fall/railBail';
+import { STEP_OFF_JUMP } from '../motion/fall/stepOff';
 import { craneDownhill, ledgeAcross, placeOnLedge, railRig, shadowLevel, shiftRig } from './downhill';
 import { followAt, followRider, lowestOver, SHADOW_SEAM_T, type Follow } from './kickOutFrame';
+import { stageArms } from './armLift';
 import { groundHull, grownBy, kickedUp, onTheGround, posed, riderShadows, type StageFrame } from './frameParts';
 import type { StagePlan } from './stage';
 
@@ -87,7 +89,7 @@ function grindRigAt(stage: StagePlan, t: number) {
     return shiftRig(rig, { x: u, y: 0, z: 0 });
   }
   const solved = solveGrindRig(t, grind, stage.mechanics, stage.style, grownBy(stage.skater));
-  return shiftRig(posed(clearFeet(onTheGround(solved.rig)), stage.skater), { x: travel(t) * grind.spec.dir, y: 0, z: 0 });
+  return shiftRig(posed(stageArms(stage, t, clearFeet(onTheGround(solved.rig))), stage.skater), { x: travel(t) * grind.spec.dir, y: 0, z: 0 });
 }
 
 /** The street's scroll, or how far down the rail the frame's middle is, at clock `t` ridden as landed. */
@@ -100,9 +102,17 @@ function groundOf(grind: GrindPlan): (x: number, z: number) => number {
   return (x, z) => ASPHALT - ride.rail.ground(x - X0, z);
 }
 
+/** The jump off: the rail bail's, or a hop off the board stepping off a landing with no room to ride it out. */
+function bailOf(stage: StagePlan): Pick<RailBailPlan, 'at' | 'jump' | 'side' | 'down'> {
+  if (stage.railBail) return stage.railBail;
+  const hop = stage.stepOff!;
+  // (Out beside the board too, to the side the kick-out finds: KickOutSetup.hopOut.)
+  return { at: hop.at, jump: { ...STEP_OFF_JUMP, out: 0 }, side: 1, down: hop.down };
+}
+
 function setupFor(stage: StagePlan): KickOutSetup {
   const grind = stage.grind!;
-  const bail = stage.railBail!;
+  const bail = bailOf(stage);
   const way = frameOf(stage);
   const ground = groundOf(grind);
   // A ledge's top is its ground already; a rail or the bar stands up out of it.
@@ -125,7 +135,9 @@ function setupFor(stage: StagePlan): KickOutSetup {
     boardGround,
     // A rail's top falls away downhill: a board riding it goes on down it, not stopped as on level ground.
     boardSlope: grind.handrail && !grind.handrail.rail.ledge ? (x: number, z: number, y: number) => (railTop(grind, x, z, y) < ground(x, z) ? grind.handrail!.rail.slope : 0) : undefined,
-    rollAbove: ROLL_ABOVE,
+    // Off a rail the feet come down across the way they're going; stepping off a landing they run it out first.
+    ...(stage.railBail ? { rollAbove: ROLL_ABOVE } : { hopOut: STEP_OFF_JUMP.out }),
+    ...(grind.handrail?.rail.brush && { drag: (x: number, z: number) => grind.handrail!.rail.brush!(x - X0, z) }),
   };
 }
 
@@ -169,7 +181,7 @@ export const railBailPlan = (stage: StagePlan): KickOutPlan => planned(stage).pl
 export const railBailBoardDown = (stage: StagePlan): number => planned(stage).boardDown;
 
 /** When the rider's own motion takes over from the grind. */
-export const railBailTakeover = (stage: StagePlan): number => stage.railBail!.at;
+export const railBailTakeover = (stage: StagePlan): number => bailOf(stage).at;
 
 /** The bail's frame at clock `t`, from the jump on; `attempt` is the grind's frame it takes over from. */
 export function railBailFrame(stage: StagePlan, t: number, rate: number, attempt: (t: number) => StageFrame): StageFrame {

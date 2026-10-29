@@ -8,12 +8,15 @@ import { CENTER_Z, FAR_RAIL_Z, HILL_RAIL_Z } from './elToro/elToroLayout';
 import { EL_TORO_RAIL, EL_TORO_TERRAIN, SET_FOOT, stairTimeline, type DropTerrain } from './elToro/stairs';
 import { SET_SCALE, stageHandrail, stageTerrain } from './setScale';
 import { HOLLYWOOD_DROP, HOLLYWOOD_FENCE_TERRAIN, HOLLYWOOD_RUN, HOLLYWOOD_LANE_Z, HOLLYWOOD_RAIL, HOLLYWOOD_CENTER_Z, HOLLYWOOD_LEFT_RAIL_Z, HOLLYWOOD_RIGHT_RAIL_Z, hollywoodGround } from './hollywood/hollywoodLayout';
+import { HOLLYWOOD_12_DROP, HOLLYWOOD_12_RUN, HOLLYWOOD_12_LANE_Z, HOLLYWOOD_12_RAIL, hollywood12Ground, hollywood12Surface } from './hollywood/hollywoodLayout';
 import { WALLENBERG_DROP, WALLENBERG_DROP_IN, WALLENBERG_RUN, WALLENBERG_LANE_Z, wallenbergGround, wallenbergSurface } from './wallenberg/wallenbergLayout';
 import { SUNSET_DROP, SUNSET_LAND_X, SUNSET_LANE_Z, SUNSET_POP_X, SUNSET_POP_Z, sunsetGround, sunsetSlope, sunsetSurface } from './sunset/sunsetLayout';
 import { LYON_TERRAIN } from './lyon/lyonLayout';
 import { LEAP_OF_FAITH_TERRAIN } from './leapOfFaith/leapOfFaithLayout';
 import { MIAMI_BANK_TERRAIN, MIAMI_GAP_TERRAIN, MIAMI_LEDGES } from './miami/miamiLayout';
 import { UC_DAVIS_TERRAIN } from './ucDavis/ucDavisLayout';
+import { CARLSBAD_TERRAIN } from './carlsbad/carlsbadLayout';
+import { EMAGE_RAIL, EMAGE_RAIL_Z, EMAGE_TERRAIN } from './emage/emageLayout';
 
 /**
  * The sets a trick can be staged at (the explorer calls them spots), and
@@ -29,7 +32,7 @@ import { UC_DAVIS_TERRAIN } from './ucDavis/ucDavisLayout';
  * are scaled as they're registered.
  */
 
-export type StageSet = 'plaza' | 'waterfront' | 'el-toro' | 'hollywood-high' | 'wallenberg' | 'sunset-car-wash' | 'lyon-25' | 'leap-of-faith' | 'miami-triangle' | 'uc-davis-gap';
+export type StageSet = 'plaza' | 'waterfront' | 'el-toro' | 'hollywood-high' | 'hollywood-high-12' | 'wallenberg' | 'sunset-car-wash' | 'lyon-25' | 'leap-of-faith' | 'miami-triangle' | 'uc-davis-gap' | 'carlsbad-gap' | 'emage-20';
 
 /**
  * Which handrail a grind rides where a set has several: the center one, or
@@ -60,6 +63,8 @@ export interface SetObstacle {
 }
 
 export interface SetRails {
+  /** A spot with just one physical side rail keeps every trick on that line. */
+  fixedLine?: 'left' | 'right';
   /** Side rails can be scenery only when a real wall or fence leaves no board clearance. */
   sideGrinds?: boolean;
   /** Every handrail here as a grind sees it: the same pipe over the same steps. */
@@ -84,6 +89,10 @@ export interface SetInfo {
   id: StageSet;
   /** What the spot picker calls it. */
   label: string;
+  /** Another flight within this location, sharing its spot card and scenery. */
+  location?: StageSet;
+  /** Name of the flight when a location offers several. */
+  lineLabel?: string;
   /**
    * The drop a flatground trick goes down here (stairs, a gap, a bank;
    * sets/elToro/stairs.ts plans it), travel fixed downhill whatever the
@@ -141,14 +150,22 @@ export const STAGE_SETS: readonly SetInfo[] = [
     tripods: ['bottom', 'side', 'top'],
   },
   {
-    id: 'hollywood-high', label: 'Hollywood 16', grinds: true,
-    description: 'Hollywood High, Los Angeles · 16 stairs, the iconic center handrail, and the fence beside them.',
+    id: 'hollywood-high', label: 'Hollywood High', lineLabel: '16 stair', grinds: true,
+    description: 'Hollywood High, Los Angeles · The 16 and 12 descend opposite ends of one auditorium walkway, with center handrails and the fence beside the 16.',
     terrain: HOLLYWOOD_STAIRS,
     obstacles: [
       { id: 'stairs', label: 'Stairs', hint: 'down the stairs', terrain: HOLLYWOOD_STAIRS },
       { id: 'fence', label: 'Fence', hint: 'over the rail and fence, coming in at an angle', terrain: stageTerrain(HOLLYWOOD_FENCE_TERRAIN) },
     ],
     rails: stageRails(HOLLYWOOD_RAIL, { center: HOLLYWOOD_CENTER_Z, left: HOLLYWOOD_LEFT_RAIL_Z, right: HOLLYWOOD_RIGHT_RAIL_Z }, false),
+    farPanorama: false, tripods: ['bottom', 'side', 'top'],
+  },
+  {
+    id: 'hollywood-high-12', label: 'Hollywood 12', location: 'hollywood-high', lineLabel: '12 stair', grinds: true,
+    description: 'The steeper north-facing 12, behind the 16 across the shared upper walkway.',
+    terrain: stageTerrain({ drop: HOLLYWOOD_12_DROP, run: HOLLYWOOD_12_RUN, landPast: 4 * SET_FOOT, laneZ: HOLLYWOOD_12_LANE_Z, ground: hollywood12Ground, surface: hollywood12Surface }),
+    // The street-side cheek has no grindable pipe; the wall rail is scenery.
+    rails: stageRails(HOLLYWOOD_12_RAIL, { center: 0, left: -HOLLYWOOD_RIGHT_RAIL_Z, right: -HOLLYWOOD_LEFT_RAIL_Z }, false),
     farPanorama: false, tripods: ['bottom', 'side', 'top'],
   },
   {
@@ -198,12 +215,34 @@ export const STAGE_SETS: readonly SetInfo[] = [
     terrain: stageTerrain(UC_DAVIS_TERRAIN),
     rails: null, farPanorama: false, tripods: ['bottom', 'side', 'top'],
   },
+  {
+    id: 'carlsbad-gap', label: 'Carlsbad Gap', grinds: false,
+    description: 'Carlsbad High, California · The original grass gap beside the yellow-edged 11 stair, with its curved retaining wall and uphill landing. Dimensions estimated from archival photos.',
+    terrain: stageTerrain(CARLSBAD_TERRAIN),
+    rails: null, farPanorama: false, tripods: ['bottom', 'side', 'top'],
+  },
+  {
+    id: 'emage-20', label: 'Emage 20', grinds: true,
+    description: 'Denver, Colorado · The riverside 20 stair inset into ten seating terraces, with its skateable river-side rail and the Platte River Bridge. Dimensions estimated from reference photos.',
+    terrain: stageTerrain(EMAGE_TERRAIN),
+    rails: { ...stageRails(EMAGE_RAIL, { center: EMAGE_RAIL_Z, left: EMAGE_RAIL_Z, right: EMAGE_RAIL_Z }), fixedLine: 'right' },
+    farPanorama: false, tripods: ['bottom', 'side', 'top'],
+  },
 ];
 
 const BY_ID = new Map(STAGE_SETS.map((set) => [set.id, set]));
 
 /** What a set changes about the attempt; the plaza for anything unknown. */
 export const setInfo = (id: StageSet): SetInfo => BY_ID.get(id) ?? STAGE_SETS[0];
+
+/** The location a flight belongs to: one spot card for both Hollywood flights. */
+export const setLocation = (id: StageSet): SetInfo => setInfo(setInfo(id).location ?? id);
+
+/** All flights of that location, in their picker order. */
+export const setFlights = (id: StageSet): readonly SetInfo[] => {
+  const location = setLocation(id).id;
+  return STAGE_SETS.filter((set) => set.id === location || set.location === location);
+};
 
 /** Whether a spot offers `obstacle` to go over. */
 export const hasObstacle = (set: StageSet, obstacle: Obstacle) => setInfo(set).obstacles?.some((o) => o.id === obstacle) ?? false;
@@ -243,6 +282,14 @@ export function ledgeFor(spec: GrindSpec, mechanics: RiderMechanics): 'left' | '
 export const setGrindSpec = (set: StageSet, trick: Pick<Trick, 'base' | 'stance'>): GrindSpec | null =>
   grindSpecFor(trick, { ledge: setInfo(set).ledges != null });
 
+/** Whether a grind can approach a fixed side rail from the stairs. */
+export function railApproachAllowed(set: StageSet, trick: Pick<Trick, 'base' | 'stance'>, riderStance: RiderStance): boolean {
+  const fixedLine = setInfo(set).rails?.fixedLine;
+  if (!fixedLine) return true;
+  const spec = setGrindSpec(set, trick);
+  return !spec || sideRailFor(spec, resolveRiderMechanics(riderStance, trick.stance)) === fixedLine;
+}
+
 /** The handrail a trick rides at a set, or null where it isn't a grind or the set has no handrails. */
 export function railLineFor(set: StageSet, trick: Pick<Trick, 'base' | 'stance'>, riderStance: RiderStance, choice: RailChoice): RailLine | null {
   const spec = setGrindSpec(set, trick);
@@ -250,6 +297,7 @@ export function railLineFor(set: StageSet, trick: Pick<Trick, 'base' | 'stance'>
   if (!spec || !(rails || ledges)) return null;
   const mechanics = resolveRiderMechanics(riderStance, trick.stance);
   if (ledges) return ledgeFor(spec, mechanics);
+  if (rails?.fixedLine) return rails.fixedLine;
   return choice === 'side' && rails?.sideGrinds !== false ? sideRailFor(spec, mechanics) : 'center';
 }
 

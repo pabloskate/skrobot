@@ -2,7 +2,7 @@ import { Group, Mesh, SphereGeometry, type BufferAttribute, type BufferGeometry,
 import { PALETTE } from '../../camera/camera';
 import { mixHex, rad, smoothstep, sub3, norm3, dot3, type V3 } from '../../math';
 import type { Expression, RobotLook } from '../look';
-import { shiftFrame, type Rig } from '../../motion/skeleton';
+import { ARM_RADII, HAND_RADIUS, LEG_RADII, shiftFrame, type Rig } from '../../motion/skeleton';
 import { Capsule, frontDecalGeometry, roundedBoxGeometry, type BoxSpec } from '../../three/geometry';
 import { faceMaterial, inkInfo, INK_ROBOT, toonMaterial } from '../../three/materials';
 import { shoeGeometries } from '../shoe3d';
@@ -27,10 +27,13 @@ const TORSO: BoxSpec = { f: 11, u: TORSO_FRAME_U - TORSO_BASE_RAISE / 2, s: 15.5
 const TORSO_RINGS = 8;
 /** The most the chest twists off the hips (deg): fakie slides turn the shoulders well past square. */
 const TWIST_MAX = 135;
-/** Limb widths, root → joint → tip: sturdy and only gently tapered, so they read as a toy's limbs, not sticks. */
-const ARM_W = [10, 8.8, 8] as const;
-const LEG_W = [13, 10.4, 8.6] as const;
-const HAND_R = 5.8;
+/**
+ * Limb widths, root → joint → tip: sturdy and only gently tapered, so they read as a toy's limbs, not sticks.
+ * The motion keeps limbs this thick out of the board and of each other (skeleton.ts).
+ */
+const ARM_W = [ARM_RADII.shoulder * 2, ARM_RADII.elbow * 2, ARM_RADII.wrist * 2] as const;
+const LEG_W = [LEG_RADII.hip * 2, LEG_RADII.knee * 2, LEG_RADII.ankle * 2] as const;
+const HAND_R = HAND_RADIUS;
 const NECK_W = 8;
 
 /** Outline widths (world units): every part's, and the head's slightly heavier one. */

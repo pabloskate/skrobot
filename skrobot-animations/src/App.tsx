@@ -9,7 +9,9 @@ import {
   grindSpecFor,
   grindTimelineFor,
   railLineFor,
+  railApproachAllowed,
   setInfo,
+  setLocation,
   setTimeline,
   type FallVariant,
   type RailChoice,
@@ -169,12 +171,14 @@ export default function App() {
   const exitEnds = exitEndsFor(selectedGrind);
   const exit = parseExit(exitTrick);
 
-  const currentTrick = useMemo(() => {
-    if (discipline === 'grinds') {
-      return grindTrick(selectedGrind, grindSide, selectedStance, entryTrick || undefined, parseExit(exitTrick) ?? undefined);
-    }
-    return availableTricks.find((t) => t.base === selectedBase) ?? availableTricks[0];
-  }, [availableTricks, discipline, entryTrick, exitTrick, grindSide, selectedBase, selectedGrind, selectedStance]);
+  const availableSides = useMemo(() => GRIND_SIDES.filter((side) =>
+    railApproachAllowed(stageSet, grindTrick(selectedGrind, side, selectedStance, entryTrick || undefined, parseExit(exitTrick) ?? undefined), selectedRiderStance),
+  ), [stageSet, selectedGrind, selectedStance, entryTrick, exitTrick, selectedRiderStance]);
+  const activeSide = availableSides.includes(grindSide) ? grindSide : availableSides[0] ?? grindSide;
+  const currentTrick = useMemo(() => discipline === 'grinds'
+    ? grindTrick(selectedGrind, activeSide, selectedStance, entryTrick || undefined, parseExit(exitTrick) ?? undefined)
+    : availableTricks.find((t) => t.base === selectedBase) ?? availableTricks[0],
+  [availableTricks, discipline, entryTrick, exitTrick, activeSide, selectedBase, selectedGrind, selectedStance]);
   const grindSpec = discipline === 'grinds' ? grindSpecFor(currentTrick) : null;
 
   const animationKey = [
@@ -473,12 +477,12 @@ export default function App() {
         {discipline === 'grinds' && <div>
           <h2 className={styles.sectionTitle}>Grind side</h2>
           <div className={styles.stanceRow}>
-            {GRIND_SIDES.map((side) => (
+            {availableSides.map((side) => (
               <button
                 key={side}
-                className={`${styles.stanceBtn} ${grindSide === side ? styles.stanceBtnActive : ''}`}
+                className={`${styles.stanceBtn} ${activeSide === side ? styles.stanceBtnActive : ''}`}
                 onClick={() => setGrindSide(side)}
-                aria-pressed={grindSide === side}
+                aria-pressed={activeSide === side}
               >
                 {side}
               </button>
@@ -614,13 +618,13 @@ export default function App() {
                 }}
                 aria-pressed={stageSet === option.id}
               >
-                {option.label}
+                {option.lineLabel ? `${setLocation(option.id).label} · ${option.lineLabel}` : option.label}
               </button>
             ))}
           </div>
         </div>
 
-        {discipline === 'grinds' && setInfo(stageSet).rails && setInfo(stageSet).rails?.sideGrinds !== false && <div>
+        {discipline === 'grinds' && setInfo(stageSet).rails && setInfo(stageSet).rails?.sideGrinds !== false && !setInfo(stageSet).rails?.fixedLine && <div>
           <h2 className={styles.sectionTitle}>Rail</h2>
           <p className={styles.styleNote}>A side rail is the one the grind comes in toward: {railLineFor(stageSet, currentTrick, selectedRiderStance, 'side')}</p>
           <div className={styles.optionGrid}>
@@ -658,7 +662,7 @@ export default function App() {
         <div className={styles.stageHeading}>
           <div><span className={styles.eyebrow}>{robot.name} / {selectedRiderStance} rider</span>
           <h2>{currentTrick?.name ?? selectedBase}</h2></div>
-          <span className={styles.stageBadge}>{STAGE_SETS.find((option) => option.id === stageSet)?.label}</span>
+          <span className={styles.stageBadge}>{setLocation(stageSet).label}{setInfo(stageSet).lineLabel && ` · ${setInfo(stageSet).lineLabel}`}</span>
         </div>
         <div className={styles.viewport}>
           <TrickScene3D

@@ -38,6 +38,8 @@ import { Lyon3D } from '../sets/lyon/lyon3d';
 import { LeapOfFaith3D } from '../sets/leapOfFaith/leapOfFaith3d';
 import { Miami3D } from '../sets/miami/miami3d';
 import { UcDavis3D } from '../sets/ucDavis/ucDavis3d';
+import { Carlsbad3D } from '../sets/carlsbad/carlsbad3d';
+import { Emage3D } from '../sets/emage/emage3d';
 import { Plaza3D } from '../sets/plaza3d';
 import { setInfo, type StageSet } from '../sets/sets';
 import { SET_SCALE } from '../sets/setScale';
@@ -92,12 +94,15 @@ const SET_PIECES: Record<StageSet, () => SetPiece> = {
   waterfront: () => new Waterfront3D(),
   'el-toro': () => new ElToro3D(),
   'hollywood-high': () => new Hollywood3D(),
+  'hollywood-high-12': () => new Hollywood3D('twelve'),
   wallenberg: () => new Wallenberg3D(),
   'sunset-car-wash': () => new Sunset3D(),
   'lyon-25': () => new Lyon3D(),
   'leap-of-faith': () => new LeapOfFaith3D(),
   'miami-triangle': () => new Miami3D(),
   'uc-davis-gap': () => new UcDavis3D(),
+  'carlsbad-gap': () => new Carlsbad3D(),
+  'emage-20': () => new Emage3D(),
 };
 
 /** Each skater's body, and the board they ride. */

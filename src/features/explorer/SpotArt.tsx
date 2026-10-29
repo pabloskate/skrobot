@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import type { StageSet } from '@skrobot/animations';
 
-/** Stairs down from (x, top) to the ground, `count` steps of `run` by `rise`. */
+/** A stair profile from (x, top), `count` steps of `run` by `rise` (negative to climb). */
 function stairs(x: number, top: number, count: number, run: number, rise: number): string {
   let d = '';
   for (let i = 0; i < count; i++) d += ` H${x + run * (i + 1)} V${top + rise * (i + 1)}`;
@@ -17,11 +17,13 @@ const PROFILES: Partial<Record<StageSet, { ground: string; strokeWidth?: number;
     extra: <path d="M15 4 L42 31" />,
   },
   'hollywood-high': {
-    ground: `M0 12 H18${stairs(18, 12, 8, 3, 3)} H72`,
+    // Opposite flights descend from one elevated walkway; the twelve is
+    // shorter than the sixteen, rather than a second stair set in series.
+    ground: `M0 28 H4${stairs(4, 28, 12, 1.75, -1.5)} H43${stairs(43, 10, 16, 1.55, 1.5)} H72`,
+    strokeWidth: 1,
     extra: (
       <>
-        <path d="M17 6 L42 31" />
-        <path d="M50 26 V36 M54 26 V36 M58 26 V36 M62 26 V36 M66 26 V36 M48 29 H70" strokeOpacity={0.7} />
+        <path d="M4 22 L25 4 M43 4 L68 28" />
       </>
     ),
   },
@@ -77,6 +79,22 @@ const PROFILES: Partial<Record<StageSet, { ground: string; strokeWidth?: number;
         <path d="M19 19 l3 2 3 -1 M29 23 l3 2 3 -1 M39 27 l3 2 3 -1 M49 31 l3 2 3 -1 M26 29 l3 2 3 -1 M38 34 l3 2 3 -1" strokeWidth={1.1} strokeOpacity={0.7} />
       </>
     ),
+  },
+  'carlsbad-gap': {
+    // Low classroom canopy, grassy bank and concrete toe, then uphill pavement.
+    ground: 'M0 15 H19 L46 31 V36 L72 31',
+    extra: (
+      <>
+        <path d="M0 15 V5 H14 V15 M0 4 H18 M3 9 H14 M7 5 V15" strokeWidth={1.2} strokeOpacity={0.75} />
+        <path d="M22 19 l3 -1 M28 23 l3 -1 M35 27 l3 -1 M44 31 H49" strokeWidth={1.1} strokeOpacity={0.7} />
+      </>
+    ),
+  },
+  'emage-20': {
+    // The long riverside flight with one round rail along its outer edge.
+    ground: `M0 10 H16${stairs(16, 10, 20, 1.8, 1.3)} H72`,
+    strokeWidth: 0.9,
+    extra: <path d="M14 5 Q15 2 18 4 L54 30 M19 5 V12 M31 14 V21 M43 23 V30" strokeWidth={1.4} />,
   },
 };
 

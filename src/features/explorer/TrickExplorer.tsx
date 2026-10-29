@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { TbArrowLeft, TbCheck, TbShare } from 'react-icons/tb';
-import { STAGE_SETS, setInfo, useSoundEffects, type RailChoice } from '@skrobot/animations';
+import { STAGE_SETS, setFlights, setInfo, setLocation, useSoundEffects, type RailChoice } from '@skrobot/animations';
 import { ROBOT_BY_ID, ROBOTS } from '@/features/robots';
 import {
   CAMERA_SIDES,
   cameraLabel,
   cameraPreset,
   cameraPresetsFor,
+  filmingSide,
   picksObstacle,
   railLine,
   sceneCamera,
@@ -18,6 +19,7 @@ import {
   sceneTripod,
   searchFromState,
   stageTrick,
+  restrictRailApproach,
   stateFromSearch,
   timelineFor,
   trickSteps,
@@ -50,7 +52,8 @@ const URL_SYNC_MS = 250;
  * URL always describes what's on the stage, so a combo can be shared.
  */
 export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: string }) {
-  const [state, setState] = useState<ExplorerState>(() => stateFromSearch(initialSearch));
+  const [state, setRawState] = useState<ExplorerState>(() => stateFromSearch(initialSearch));
+  const setState = (next: ExplorerState) => setRawState(restrictRailApproach(next));
   const [rate, setRate] = useState(1);
   const [loop, setLoop] = useState(false);
   const [shared, setShared] = useState(false);
@@ -66,8 +69,10 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
   const preset = typeof state.camera === 'string' ? cameraPreset(state.camera) : null;
   const search = searchFromState(state);
   // A grind at a spot with handrails picks one; a side rail's side comes from the trick.
-  const pickRail = state.mode === 'grinds' && setInfo(state.set).rails != null && setInfo(state.set).rails?.sideGrinds !== false;
+  const pickRail = state.mode === 'grinds' && setInfo(state.set).rails != null && !setInfo(state.set).rails?.fixedLine && setInfo(state.set).rails?.sideGrinds !== false;
   const line = railLine(state);
+  const location = setLocation(state.set);
+  const flights = setFlights(state.set);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -185,8 +190,8 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
                       key={option.id}
                       type="button"
                       role="radio"
-                      aria-checked={state.cameraSide === option.id}
-                      className={state.cameraSide === option.id ? 'active' : ''}
+                      aria-checked={filmingSide(state) === option.id}
+                      className={filmingSide(state) === option.id ? 'active' : ''}
                       onClick={() => setState(withCameraSide(state, option.id))}
                     >
                       {option.label}
@@ -213,14 +218,14 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
             <div className="explorer-field explorer-spots">
               <span className="explorer-field-label" id="explorer-set-label">Spot</span>
               <div className="explorer-segmented explorer-spot-options" role="radiogroup" aria-labelledby="explorer-set-label">
-                {STAGE_SETS.map((option) => (
+                {STAGE_SETS.filter((option) => !option.location).map((option) => (
                   <button
                     key={option.id}
                     type="button"
                     role="radio"
-                    aria-checked={state.set === option.id}
-                    className={state.set === option.id ? 'active' : ''}
-                    onClick={() => setState(withSet(state, option.id))}
+                    aria-checked={location.id === option.id}
+                    className={location.id === option.id ? 'active' : ''}
+                    onClick={() => setState(withSet(state, location.id === option.id ? state.set : option.id))}
                   >
                     {option.label}
                   </button>
@@ -228,6 +233,25 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
               </div>
               {setInfo(state.set).description && <p className="explorer-spot-description">{setInfo(state.set).description}</p>}
             </div>
+            {flights.length > 1 && (
+              <div className="explorer-field explorer-field-inline">
+                <span className="explorer-field-label" id="explorer-flight-label">Flight</span>
+                <div className="explorer-segmented explorer-segmented-compact" role="radiogroup" aria-labelledby="explorer-flight-label">
+                  {flights.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={state.set === option.id}
+                      className={state.set === option.id ? 'active' : ''}
+                      onClick={() => setState(withSet(state, option.id))}
+                    >
+                      {option.lineLabel ?? option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             {picksObstacle(state) && (
               <div className="explorer-field explorer-field-inline">
                 <span className="explorer-field-label" id="explorer-obstacle-label">

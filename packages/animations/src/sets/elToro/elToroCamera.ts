@@ -1,10 +1,11 @@
 import type { SceneCamera, TripodId } from '../../camera/camera';
-import { SET_FOOT, RISER, STAIR_DROP, STAIR_RUN, TREAD } from './stairs';
+import { RISER, TREAD } from './stairs';
 import { EL_TORO_CANOPY } from './elToroCanopy';
-import { BUILDING_FACE, EAVE, RIDER_LANE_Z, WALL_Z, hill } from './elToroLayout';
+import { BUILDING_FACE, EAVE, EL_TORO_FILMERS, RIDER_LANE_Z } from './elToroLayout';
 import { SET_SCALE } from '../setScale';
 import type { StageFrame } from '../../stage/stage';
 import { stageView, tripodView, type StageView, type Vec3 } from '../../camera/view';
+import { tripodStand } from '../tripods';
 
 /** The camera stays in the open walkway, clear of the school's eave and wall (the set's z on the stage; the stage's is less where the rider is across it). */
 const CAMERA_Z = (BUILDING_FACE - EAVE - 24) * SET_SCALE;
@@ -43,28 +44,10 @@ export function elToroView(lift: number, camera: Readonly<SceneCamera>, zoom: nu
   return stageView(lift, { ...safeCamera, lens: safeCamera.lens * ratio }, zoom, aspect);
 }
 
-/**
- * Where El Toro's filmers stand, in the set's own layout (along the stairs
- * from the lip, across them, and the lens's height over the top landing),
- * how far off each one's lens shows the rider at the crane's size, and how
- * far down the picture it holds them. All three stand on the side wall's
- * side, clear of the rider's line, the rail, and the ride away.
- */
-export const EL_TORO_TRIPODS: Readonly<Record<TripodId, { u: number; z: number; height: number; frame: number; place: number }>> = {
-  // Crouched on the bottom landing a little off the line, where the ride away rolls up to.
-  bottom: { u: STAIR_RUN + 30 * SET_FOOT, z: WALL_Z - SET_FOOT, height: 3 * SET_FOOT - STAIR_DROP, frame: 30 * SET_FOOT, place: 0.42 },
-  // Well up the grass bank past the side wall, on a long lens across the set.
-  side: { u: 0.6 * STAIR_RUN, z: WALL_Z + 20 * SET_FOOT, height: hill(0.6 * STAIR_RUN) + 5 * SET_FOOT, frame: 30 * SET_FOOT, place: 0.52 },
-  // At the top beside the side wall, holding the camera up to see down the set.
-  top: { u: -40, z: WALL_Z + 3 * SET_FOOT, height: 6 * SET_FOOT, frame: 20 * SET_FOOT, place: 0.48 },
-};
-
 /** El Toro filmed from one of its tripods: the eye stays where the filmer stands while the set slides under the rider. */
 export function elToroTripodView(tripod: TripodId, frame: Pick<StageFrame, 'scroll' | 'lift' | 'stairs'>, zoom: number, aspect: number, camera: Readonly<SceneCamera>): StageView {
-  const spot = EL_TORO_TRIPODS[tripod];
+  const spot = tripodStand(EL_TORO_FILMERS.stairs, tripod, camera.side);
   const across = frame.stairs?.across ?? LANE_Z;
-  // The other side of a side-on shot: the filmer stands across the rider's line.
-  const behind = spot.z * SET_SCALE - across;
-  const eye: Vec3 = [spot.u * SET_SCALE - frame.scroll, spot.height * SET_SCALE, camera.side === 'left' ? -behind : behind];
+  const eye: Vec3 = [spot.u * SET_SCALE - frame.scroll, spot.height * SET_SCALE, spot.z * SET_SCALE - across];
   return tripodView(eye, frame.lift, spot.frame * SET_SCALE, spot.place, zoom, aspect, camera.pan);
 }

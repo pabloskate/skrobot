@@ -24,6 +24,7 @@ import {
   stairLift,
   type StairPlan,
 } from '../sets/elToro/stairs';
+import { stageArms } from './armLift';
 import { dustPuffs, expressionAt, grindExpression, groundLift, grownBy, hipsOf, onTheGround, posed, riderShadows, DUST_T, SHADOW_HIPS, type Puff, type StageFrame } from './frameParts';
 import type { StagePlan } from './stage';
 
@@ -260,7 +261,7 @@ export function stairRig(
   const rolling = stairs.dropIn != null && clock <= stairs.pop;
   const solved = clearFeet(onTheGround(offLine ? offLine(downhill) : downhill, stairs.terrain.slope || rolling ? undefined : stepUnder));
   const absorbed = absorbDrop(solved, stairs, clock, rise);
-  const banked = bankRig(posed(absorbed, stage.skater, headPose), stairs, clock, u, route.yaw);
+  const banked = bankRig(posed(stageArms(stage, t, absorbed), stage.skater, headPose), stairs, clock, u, route.yaw);
   const carried = shiftRig(banked, { x: 0, y: -drop, z: 0 });
   // Feet already cleared the grip before the rigid bank transform. Resolve
   // terrain contact by carrying this complete posed skeleton, not by solving
@@ -411,7 +412,7 @@ export function railRig(stage: StagePlan, plan: GrindPlan, t: number, headPose?:
   const solved = clearFeet(onTheGround(downhill, stepUnder));
   // A person's arms keep off the steps under them (along their edges), not the top landing far above.
   const hipsAlong = u + hipsOf(solved).x - X0;
-  const rig = posed(solved, stage.skater, headPose, ASPHALT - rail.rest(hipsAlong));
+  const rig = posed(stageArms(stage, t, solved), stage.skater, headPose, ASPHALT - rail.rest(hipsAlong));
   return { grind, u, heading, solved, rig };
 }
 

@@ -11,9 +11,11 @@ import {
   canEnterGrind,
   hasObstacle,
   railLineFor,
+  railApproachAllowed,
   setGrindSpec,
   setHandrail,
   setInfo,
+  tripodSide,
   canExitGrind,
   clampOrbitCamera,
   clampTripodPan,
@@ -28,6 +30,7 @@ import {
   setTimeline,
   flatTimeline,
   wrapOrbitYaw,
+  type CameraSide,
   type Obstacle,
   type PopEnd,
   type RailBail,
@@ -61,8 +64,7 @@ import {
 
 export type ExplorerMode = 'flatground' | 'grinds';
 export type GrindSide = 'Frontside' | 'Backside';
-/** On a side-on shot, the side of the rider the filmer stands. */
-export type CameraSide = 'left' | 'right';
+export type { CameraSide };
 
 /** A trick popped out of a grind, and the end of the board it pops off. */
 export interface GrindOut {
@@ -91,8 +93,12 @@ export interface ExplorerState {
   out: GrindOut | null;
   /** A named angle, or a custom one the viewer dragged to. */
   camera: CameraPresetId | SceneCamera;
-  /** On a side-on shot, which side of the rider the filmer stands; other shots ignore it. */
-  cameraSide: CameraSide;
+  /**
+   * On a shot with sides (a tripod, the side-on crane), which side of the
+   * rider's line the viewer asked to film from; omitted, wherever the shot
+   * stands (filmingSide). Other shots ignore it.
+   */
+  cameraSide?: CameraSide;
   /** On a tripod shot, how far the viewer turned its head off the rider; none keeps it on them. */
   pan?: TripodPan;
   /** How far in the picture is magnified, whatever the angle: 1 is the stock framing. */
@@ -250,7 +256,6 @@ export const DEFAULT_STATE: Readonly<ExplorerState> = Object.freeze({
   into: null,
   out: null,
   camera: 'classic',
-  cameraSide: 'right',
   zoom: CLASSIC_ZOOM,
   set: 'waterfront',
   rail: 'center',
@@ -261,14 +266,14 @@ export const DEFAULT_STATE: Readonly<ExplorerState> = Object.freeze({
 
 /** Move to another spot; gap-only spots open the saved gap trick, and an obstacle the new spot lacks goes back to its stairs. */
 export function withSet(state: ExplorerState, set: StageSet): ExplorerState {
-  return {
+  return restrictRailApproach({
     ...state,
     set,
     mode: setInfo(set).grinds ? state.mode : 'flatground',
     fall: setInfo(set).grinds ? state.fall : outcomeOf({ mode: 'flatground', fall: state.fall }),
-    rail: setInfo(set).rails?.sideGrinds === false ? 'center' : state.rail,
+    rail: setInfo(set).rails?.fixedLine ? 'side' : setInfo(set).rails?.sideGrinds === false ? 'center' : state.rail,
     obstacle: hasObstacle(set, state.obstacle) ? state.obstacle : DEFAULT_STATE.obstacle,
-  };
+  });
 }
 
 /** Whether the stage offers a choice of obstacle: a flatground trick at a spot with more than one way down. */
@@ -279,13 +284,13 @@ export const picksObstacle = (state: Pick<ExplorerState, 'mode' | 'set'>) =>
 export function withMode(state: ExplorerState, mode: ExplorerMode): ExplorerState {
   const next = { ...state, mode: mode === 'grinds' && !setInfo(state.set).grinds ? 'flatground' as const : mode };
   // A miss the other mode doesn't have goes back to landed.
-  return { ...next, fall: outcomeOf(next) };
+  return restrictRailApproach({ ...next, fall: outcomeOf(next) });
 }
 
 /** Keeps a trick out only if the grind rides the end it pops off. */
 export function withGrind(state: ExplorerState, grind: string): ExplorerState {
   const out = state.out && outEndsFor(grind).includes(state.out.end) ? state.out : null;
-  return { ...state, grind, out };
+  return restrictRailApproach({ ...state, grind, out });
 }
 
 // ----- Names -----
@@ -327,6 +332,18 @@ const withArticle = (name: string) => `${/^([aeiou]|fs\b)/i.test(name) ? 'an' : 
  */
 export function railLine(state: ExplorerState): RailLine | null {
   return state.mode === 'grinds' ? railLineFor(state.set, stageTrick(state), state.rider, state.rail) : null;
+}
+
+/** Sides that can approach the selected spot’s rail. */
+export function grindSidesFor(state: ExplorerState): readonly GrindSide[] {
+  if (state.mode !== 'grinds') return GRIND_SIDES;
+  return GRIND_SIDES.filter((side) => railApproachAllowed(state.set, stageTrick({ ...state, side }), state.rider));
+}
+
+/** Keep the trick on the accessible side when the spot, stance, rider or trick changes. */
+export function restrictRailApproach(state: ExplorerState): ExplorerState {
+  const sides = grindSidesFor(state);
+  return sides.length && !sides.includes(state.side) ? { ...state, side: sides[0] } : state;
 }
 
 /** One step of a trick or combo, as a skater would call it. */
@@ -488,7 +505,7 @@ export interface CameraPreset {
    * stand, for the dial and as where dragging takes over from.
    */
   tripod?: TripodId;
-  /** A side-on shot, where the viewer picks which side of the rider the filmer stands. */
+  /** A shot filmed from one side of the rider's line, where the viewer can pick the other: a tripod, or the side-on crane. */
   sides?: boolean;
 }
 
@@ -496,9 +513,9 @@ export const CAMERA_PRESETS: readonly CameraPreset[] = [
   { id: 'classic', label: 'Classic', hint: 'The game view', camera: { ...DEFAULT_SCENE_CAMERA }, zoom: CLASSIC_ZOOM, followsTravel: false },
   { id: 'bottom-center', label: 'Bottom center', hint: 'Straight up the center rail from the landing', camera: { yaw: -90, pitch: 6, lens: 1, targetZ: -6 * FOOT }, zoom: 0.6, followsTravel: false, set: 'el-toro' },
   { id: 'bottom-right', label: 'Bottom right', hint: 'Up the stairs from the planted bank side', camera: { yaw: -125, pitch: 9, lens: 1 }, followsTravel: false, set: 'el-toro' },
-  { id: 'tripod-bottom', label: 'Bottom tripod', hint: 'Standing at the bottom, panning as it comes down at you', camera: { yaw: -100, pitch: 2, lens: 1.4 }, tripod: 'bottom', followsTravel: false, set: 'el-toro' },
+  { id: 'tripod-bottom', label: 'Bottom tripod', hint: 'Standing at the bottom, panning as it comes down at you', camera: { yaw: -100, pitch: 2, lens: 1.4 }, tripod: 'bottom', followsTravel: false, set: 'el-toro', sides: true },
   { id: 'tripod-side', label: 'Side tripod', hint: 'Beside the spot, panning across the whole drop', camera: { yaw: 0, pitch: 6, lens: 1.4 }, tripod: 'side', followsTravel: false, set: 'el-toro', sides: true },
-  { id: 'tripod-top', label: 'Top tripod', hint: 'At the top, watching it drop away', camera: { yaw: 70, pitch: 14, lens: 1 }, tripod: 'top', followsTravel: false, set: 'el-toro' },
+  { id: 'tripod-top', label: 'Top tripod', hint: 'At the top, watching it drop away', camera: { yaw: 70, pitch: 14, lens: 1 }, tripod: 'top', followsTravel: false, set: 'el-toro', sides: true },
   { id: 'side', label: 'Side on', hint: 'Pop height and flip axis', camera: { yaw: 0, pitch: 3, lens: 1.25 }, followsTravel: false, sides: true },
   { id: 'head-on', label: 'Head on', hint: 'Which way the board flicks', camera: { yaw: -70, pitch: 7, lens: 1 }, followsTravel: true },
   { id: 'follow', label: 'Follow cam', hint: 'Chasing from behind', camera: { yaw: 58, pitch: 14, lens: 0.85 }, followsTravel: true },
@@ -517,11 +534,11 @@ const PRESET_BY_ID = new Map(CAMERA_PRESETS.map((p) => [p.id, p]));
 
 export const cameraPreset = (id: CameraPresetId): CameraPreset => PRESET_BY_ID.get(id) ?? CAMERA_PRESETS[0];
 
-/** Whether this camera offers a choice of sides: a side-on crane or tripod. */
+/** Whether this camera offers a choice of sides: a tripod or the side-on crane. */
 export const cameraHasSides = (camera: ExplorerState['camera']): boolean =>
   typeof camera === 'string' && cameraPreset(camera).sides === true;
 
-/** The two sides a side-on shot can film from, in picker order. */
+/** The two sides a shot can film from, in picker order. */
 export const CAMERA_SIDES: readonly { id: CameraSide; label: string }[] = [
   { id: 'left', label: 'Left' },
   { id: 'right', label: 'Right' },
@@ -554,16 +571,37 @@ function presetCamera(state: ExplorerState): SceneCamera {
   return sidedCamera(state, preset, base);
 }
 
+/** The side of the rider's line a crane at `yaw` films from: yaw 0 is side-on from their right. */
+const yawSide = (yaw: number): CameraSide => Math.cos((yaw * Math.PI) / 180) >= 0 ? 'right' : 'left';
+
 /**
- * A side-on shot from the other side of the rider: the crane swings round
- * behind them, while a tripod stands across the rider's line and keeps the
- * same head-on angle at the same spot.
+ * A shot from the side of the rider's line it films from: the crane swings
+ * round to its mirror image across the line, and a tripod's filmer crosses
+ * to stand there, its rough angle (for the dial) mirrored with them.
  */
 function sidedCamera(state: ExplorerState, preset: CameraPreset, camera: SceneCamera): SceneCamera {
-  if (!preset.sides || state.cameraSide !== 'left') return camera;
-  return sceneTripod(state)
-    ? { ...camera, side: 'left' }
-    : { ...camera, yaw: wrapOrbitYaw(camera.yaw + 180) };
+  const side = preset.sides ? filmingSide(state) : null;
+  if (!side) return camera;
+  const sided = yawSide(camera.yaw) === side ? camera : { ...camera, yaw: wrapOrbitYaw(-180 - camera.yaw) };
+  return state.cameraSide && sceneTripod(state) ? { ...sided, side: state.cameraSide } : sided;
+}
+
+/**
+ * Which side of the rider's line a shot with sides films from: the one the
+ * viewer picked, or else wherever the spot's own filmer stands for this
+ * line (or the crane, where the spot has no such filmer). Null for a shot
+ * without sides.
+ */
+export function filmingSide(state: ExplorerState): CameraSide | null {
+  if (typeof state.camera !== 'string' || !cameraPreset(state.camera).sides) return null;
+  if (state.cameraSide) return state.cameraSide;
+  const tripod = sceneTripod(state);
+  const line = railLine(state);
+  const own = tripod && tripodSide(state.set, tripod, {
+    obstacle: state.mode === 'flatground' ? state.obstacle : undefined,
+    ledge: setInfo(state.set).ledges && (line === 'left' || line === 'right') ? line : undefined,
+  });
+  return own ?? yawSide(cameraPreset(state.camera).camera.yaw);
 }
 
 /** The tripod the 3D explorer films from, where the spot has the chosen one; null for the crane. */
@@ -591,7 +629,7 @@ export function turnCamera(camera: SceneCamera, yaw: number, pitch: number): Sce
 export function withCamera(state: ExplorerState, camera: SceneCamera): ExplorerState {
   if (camera.pan && sceneTripod(state)) return { ...state, pan: camera.pan.yaw || camera.pan.pitch ? camera.pan : undefined };
   // Dragging a crane makes it a custom angle, which carries its side in the yaw.
-  return { ...state, camera, pan: undefined, cameraSide: 'right' };
+  return { ...state, camera, pan: undefined, cameraSide: undefined };
 }
 
 /** The state on a named shot, looking where that shot looks. */
@@ -599,13 +637,14 @@ export function withShot(state: ExplorerState, shot: CameraPresetId): ExplorerSt
   return {
     ...state,
     camera: shot,
-    cameraSide: cameraPreset(shot).sides ? state.cameraSide : 'right',
+    // A side the viewer picked carries over to another shot with sides.
+    cameraSide: cameraPreset(shot).sides ? state.cameraSide : undefined,
     pan: undefined,
     zoom: defaultZoomForCamera(shot),
   };
 }
 
-/** Look from the other side of the rider on a side-on shot, keeping the rest of the shot. */
+/** Film from this side of the rider's line, keeping the rest of the shot. */
 export function withCameraSide(state: ExplorerState, side: CameraSide): ExplorerState {
   return { ...state, cameraSide: side, pan: undefined };
 }
@@ -704,11 +743,11 @@ export function stateFromSearch(search: string): ExplorerState {
     stance: isStance(stanceParam) ? stanceParam : DEFAULT_STATE.stance,
     rider: params.get('rider') === 'goofy' ? 'goofy' : 'regular',
     camera,
-    cameraSide: cameraHasSides(camera) && params.get('from') === 'left' ? 'left' : DEFAULT_STATE.cameraSide,
+    cameraSide: cameraHasSides(camera) ? CAMERA_SIDES.find((side) => side.id === params.get('from'))?.id : undefined,
     zoom: params.has('zoom') ? parseZoom(params.get('zoom')) : defaultZoomForCamera(camera),
     ...(pan && sceneTripod({ set, camera }) ? { pan } : {}),
     set,
-    rail: params.get('rail') === 'side' && setInfo(set).rails?.sideGrinds !== false ? 'side' : DEFAULT_STATE.rail,
+    rail: setInfo(set).rails?.fixedLine || (params.get('rail') === 'side' && setInfo(set).rails?.sideGrinds !== false) ? 'side' : DEFAULT_STATE.rail,
     obstacle: setInfo(set).obstacles?.find((o) => o.id === params.get('obstacle'))?.id ?? DEFAULT_STATE.obstacle,
     skater: SKATERS.find((option) => option.id === params.get('skater'))?.id ?? DEFAULT_STATE.skater,
     // Kept if it's a miss the mode named below has (a flatground trick's kick-out, a grind's jump off).
@@ -770,7 +809,7 @@ export function searchFromState(state: ExplorerState): string {
     const pan = clampTripodPan(state.pan);
     if (pan.yaw || pan.pitch) params.set('pan', `${round(pan.yaw, 1)}_${round(pan.pitch, 1)}`);
   }
-  if (state.cameraSide !== 'right' && cameraHasSides(state.camera)) params.set('from', state.cameraSide);
+  if (state.cameraSide && cameraHasSides(state.camera)) params.set('from', state.cameraSide);
   if (state.zoom !== defaultZoomForCamera(state.camera)) params.set('zoom', String(round(state.zoom, 2)));
   if (state.set !== DEFAULT_STATE.set) params.set('set', PUBLIC_SET_SLUGS[state.set] ?? state.set);
   if (state.rail !== DEFAULT_STATE.rail) params.set('rail', state.rail);

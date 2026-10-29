@@ -18,7 +18,7 @@ import {
 } from './trick';
 import { SKATE_STYLE_BOUNDS, resolveSkateStyle } from './style';
 import { flickExtension, orientTrickRotation, resolveRiderMechanics } from './stance';
-import { isFiniteFrame, sweep } from '../testing';
+import { SWEEP_TIMEOUT, isFiniteFrame, sweep } from '../testing';
 import { planStage, stageFrame } from '../stage/stage';
 import type { RiderStance, Robot, Stance, Trick } from '../types';
 import { WHEEL_R, WHEEL_SPIN } from '../board/board';
@@ -100,7 +100,7 @@ describe('Rider on the trick', () => {
         }
       }
     }
-  });
+  }, SWEEP_TIMEOUT);
 
   it('flicks a kickflip off the heelside rail and a heelflip off the toeside, early in the roll', () => {
     // The flick is what starts the roll, so by the time the board has turned

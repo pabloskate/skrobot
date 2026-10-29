@@ -15,6 +15,7 @@ import {
   type FallVariant,
 } from './trick';
 import { FOOT, GRAVITY, INCH } from '../units';
+import { STEP_OFF_T, stepOffAt } from './fall/stepOff';
 import { HANGER_BOTTOM, WHEEL_BOTTOM, WHEEL_HALF_W, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z } from '../board/board';
 import { BOTTOM_LOCAL, TIP_X } from '../board/deck';
 import { BOARD_WIDTH_SCALE } from '../board/boardDimensions';
@@ -412,6 +413,10 @@ export interface Handrail {
    * can't hang through it: what it hangs over that side rests on it instead.
    */
   ledge?: { fall: number };
+  /** How far along a landing off the rail can be ridden before the rider must step off (DropTerrain.runout). */
+  runout?: number;
+  /** Brush on the ground (DropTerrain.brush), `z` across from this rail as for `ground`. */
+  brush?: (u: number, z?: number) => number;
 }
 
 /**
@@ -1050,6 +1055,8 @@ export interface GrindPlan {
   /** Seconds a slip takes to fall from the bar to the ground. */
   drop: number;
   end: number;
+  /** Ridden off a handrail with no room past it (Handrail.runout): when the rider hops off the board after landing; null otherwise. */
+  stepOff: number | null;
   /** The bar's ends, in world units along the direction of travel, at street distance 0. */
   barStart: number;
   barEnd: number;
@@ -1257,6 +1264,9 @@ export function planGrind(
     return Math.max(1, deckOn(ride.rail.rest(s)) - onRail(lock, spec.contact, ride.rail, ride.tilt, spec.dir, s).y);
   };
   const drop = Math.sqrt((2 * (fail == null ? lockRise : slipFrom(fail))) / GRAVITY);
+  // No room past the bottom (Emage's river): the rider hops off before the runout ends (fall/stepOff.ts).
+  const runout = ride?.rail.runout;
+  const stepOff = fail == null && ride && runout != null ? stepOffAt(land, off, ride.offS, ride.offSpeed, runout) : null;
   return {
     spec,
     entry,
@@ -1309,7 +1319,8 @@ export function planGrind(
     fail,
     fall: landed ? null : fall,
     drop,
-    end: fail == null ? land + LAND_T : fail + drop + FALL_T,
+    end: stepOff != null ? stepOff + STEP_OFF_T : fail == null ? land + LAND_T : fail + drop + FALL_T,
+    stepOff,
     barStart: travel(lockAt) - LOCK_MARGIN,
     barEnd: travel(off) + END_MARGIN,
   };

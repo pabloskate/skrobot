@@ -1,4 +1,4 @@
-# Hollywood High 16 reference notes
+# Hollywood High 12 and 16 reference notes
 
 ## Current presentation
 
@@ -7,8 +7,9 @@ The auditorium wall in the shipped scene is plain. The portrait-mural recreation
 See [Location presentation](LOCATION_PRESENTATION.md) for the public names, links and location notice.
 
 The recreation depicts the classic open sixteen-stair on the south end of the
-Hollywood High auditorium walkway. Research and image inspection: October 5,
-2026. It is an architectural interpretation at the sets' 29 units per foot
+Hollywood High auditorium walkway and the twelve-stair at its north end.
+Research and image inspection: October 5 and October 26, 2026. It is an
+architectural interpretation at the sets' 29 units per foot
 (`SET_FOOT`; the stage scales sets onto the riders' units with `SET_SCALE`),
 not a measured survey or a claim about present-day access.
 
@@ -26,13 +27,52 @@ not a measured survey or a claim about present-day access.
 The [FindSkateSpots photograph](https://images.findskatespots.com/images/large/da4517d64b26c11c83b1c5d97989e1de.jpg)
 was also inspected. It shows the opposite **twelve-stair**, with the school on the
 right while looking up, and was used only for shared brickwork, cornice and rail
-details. It did not determine the sixteen's shape or orientation.
+details in the original sixteen-stair scene. It did not determine the sixteen's
+shape or orientation. The October 26 combined-scene work also uses it as the
+direct architectural reference for the twelve.
+
+## One spot, two opposite flights
+
+The twelve and sixteen descend in opposite directions from one shared elevated
+walkway beside the auditorium. They are not parallel flights and the twelve is
+not a second flight below the sixteen. Steve Emig's
+[on-location photograph and caption](https://steveemigthewhitebear.substack.com/p/skatebmx-history-of-hollywood-high)
+explicitly identify the twelve as north-facing and the sixteen as south-facing,
+on opposite sides of the same upper landing. Highland Avenue runs beside both.
+
+The [FindSkateSpots page](https://findskatespots.com/spots/los-angeles-ca/north-highland-avenue-hollywood-high)
+pairs photographs of the two flights:
+
+- [Twelve, looking south/up](https://images.findskatespots.com/images/large/da4517d64b26c11c83b1c5d97989e1de.jpg): twelve risers (eleven treads between them), a single round center handrail with three supports, brick school wall and wall-mounted rail to the viewer's right, and the low concrete cheek and street-side fence to the left. Behind its upper landing, the auditorium entrance stairs rise perpendicular to the skateable flight, toward the school.
+- [Sixteen, looking north/up](https://images.findskatespots.com/images/large/377c8c8183d753f0a81707a7b39d5fdc.jpg): school and wall-mounted rail to the viewer's left, street-side cheek and fence to the right, with the common walkway and auditorium entrance visible beyond the lip.
+
+[Forrest Brandt's Slow Impact talk](https://forrestbrandt.substack.com/p/confessional-hijinx-eve-babitz-baker)
+independently describes the elevated platform, the run-up between the flights,
+the twelve's steeper pitch and the sixteen's more gradual descent. Both center
+rails are straight round bars. Consequently the twelve should not be made by
+uniformly shrinking the sixteen: that would preserve the wrong stair pitch.
+
+The connected scene turns half a revolution when staging the twelve, so both
+playable descents can use the stage's positive-x travel convention while the
+school and street remain on their correct physical sides. That is a rotation,
+not a reflection of the architecture. The opposite flight remains part of the
+same scenery behind the rider.
+
+No surveyed twelve-stair drop, run, width, lip separation, or relative landing
+elevation was found. Those dimensions remain visual modeling estimates. The
+photographs establish the architectural relationship and the different stair
+pitches; they do not establish an exact difference in sidewalk height or a
+measured rollout grade.
 
 ## Dimensions and confidence
 
 | Feature | Modeled value | Evidence |
 | --- | --- | --- |
-| Stair count | 16 risers / 15 treads | Verified in photographs and independent spot references |
+| Sixteen stair count | 16 risers / 15 treads | Verified in photographs and independent spot references |
+| Twelve stair count | 12 risers / 11 treads | Verified in the north-facing photograph |
+| Twelve drop / run | 8 ft / 10.5 ft | Modeling estimates: shared sidewalk datum, shorter and steeper flight; no surveyed drop found |
+| Twelve riser / tread | 8 in / 11.45 in | Derived from the estimated twelve dimensions |
+| Shared walkway lip spacing | 42 ft | Visual/compositional estimate, not measured |
 | Vertical drop | 8 ft / 2.44 m | Visual estimate; no reliable field survey found |
 | Lip to last riser | 16 ft / 4.88 m | Photo-based estimate, lengthened from 14 ft at the user's request (October 6, 2026): the set is longer than the community map estimate |
 | Clear flight width | 16 ft / 4.88 m | Photo-based estimate |
@@ -94,7 +134,16 @@ as the filmer at the top does; the fence has its own tripods.
 ## Coordinate and rendering contract
 
 `x = 0` is the takeoff lip, `y = 0` the top landing; travel is positive `x`.
-The final riser is at `x = 464`, lower ground is `y = -232`. The center rail is
+The sixteen’s final riser is at `x = 464`, lower ground is `y = -232`.
+The twelve’s lip is behind it at `x = -1218`; it descends toward negative `x`
+and reaches its final riser at `x = -1522.5`. The level walkway joins both
+lips. For staging the twelve the entire scene is rotated 180° by
+`(x, z) → (-1218 - x, -z)`: its lip becomes `x = 0`, travel remains positive
+`x`, school moves to negative `z`, street to positive `z`. Neither flight is
+reflected. Both views include both flights, with rotated rail shadows,
+building shadows, trees and moving traffic. The scene keeps a common lower
+sidewalk datum as an explicit modeling simplification; the actual north/south
+landing elevation difference has not been surveyed. The center rail is
 at `z = 0`, school at positive `z`, the street at negative `z` (fence at
 `z = -259.55`, near curb at `z = -667`), and the default trick line down the
 steps is `z = -116`. Both rider stances use this same scene.
@@ -118,3 +167,14 @@ and lamps, with hazy mid-rises behind. A Streamline classroom wing continues
 the campus down the block, set back behind a hedge clear of the landing.
 Furniture stays out of the fence line's touchdown and ride away and away from
 the tripods.
+
+## Selecting a flight
+
+Hollywood High is one location card. The explorer offers **16 stair** and
+**12 stair** flights; Dream Tricks offers both stairs and center rails plus the
+existing fence line beside the sixteen. Existing `set=hollywood-high` links
+still select the sixteen; `set=hollywood-high-12` selects the opposite flight.
+The twelve has its observed center pipe and wall-mounted pipe, with a concrete
+street-side cheek; no extra street-side handrail or fence-gap line is invented.
+The auditorium entrance stairs rise perpendicular to the shared walkway between
+the brick wings. Their detailed dimensions are also estimates.

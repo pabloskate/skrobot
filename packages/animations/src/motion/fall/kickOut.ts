@@ -127,6 +127,16 @@ export interface KickOutSetup {
    * hard limits of a ridden fall (rollOut.ts): off a rail the feet come down still across the way the body's going.
    */
   rollAbove?: number;
+  /**
+   * How fast brush on the ground at street (x, z) slows what goes through it (a share of its level speed a second): the
+   * rider running into it and the board rolling into it. No one rolls across brush; they're held up in it on their feet.
+   */
+  drag?: (x: number, z: number) => number;
+  /**
+   * With `jump`, hopping off a board that's still rolling (stepOff.ts): how fast the legs also throw the body out beside
+   * it, to the side the free foot comes down on (the board goes out the other).
+   */
+  hopOut?: number;
 }
 
 /** Points on the deck this close in height (world units) are as high as each other, for where the kicking foot finds it. */
@@ -364,7 +374,7 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
   // Where the foot finds the board: the highest point of the deck's cross-section under it, when it gets there.
   const boardGround = setup.boardGround ?? ground;
   const hangers = setup.boardGround != null;
-  const freeTrack = simulateBoard(atTakeover, takeover, contact + 0.05, { gravity, ground: boardGround, hangers, slope: setup.boardSlope });
+  const freeTrack = simulateBoard(atTakeover, takeover, contact + 0.05, { gravity, ground: boardGround, hangers, slope: setup.boardSlope, drag: setup.drag });
   const atContact = boardAt(freeTrack, contact);
   const toLocal = (p: V3) => qrot(qconj(atTakeover.q), sub3(p, atTakeover.center));
   const footX = Math.max(-26, Math.min(26, toLocal(start.shoes[kick].at).x));
@@ -404,6 +414,7 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
         ground: boardGround,
         hangers,
         slope: setup.boardSlope,
+        drag: setup.drag,
         pushes: [{ from: contact, until: release, at: contactLocal, impulse: scale3(dir, push) }],
       });
       sims.set(key, sim);
@@ -414,10 +425,12 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
   // ----- The rider's run -----
   // The push shoves the rider back as it goes: a half-sine of the board's impulse, over RIDER_MASS. Jumping off a rail,
   // the legs throw the body too, as hard at the start as a jump's push (and holding its weight up while they're on it).
+  // Hopping off a rolling board, they throw it out beside the board as well.
+  const jump = setup.jump && add3(setup.jump, scale3(across, (Math.sign(freeSide) || 1) * (setup.hopOut ?? 0)));
   const jumpOf = (t: number): V3 => {
-    if (!setup.jump) return { x: 0, y: 0, z: 0 };
+    if (!jump) return { x: 0, y: 0, z: 0 };
     const k = clamp01((t - takeover) / JUMP_T);
-    return add3(scale3(setup.jump, (1 - Math.cos(Math.PI * k)) / 2), scale3(UP, gravity * k * JUMP_T));
+    return add3(scale3(jump, (1 - Math.cos(Math.PI * k)) / 2), scale3(UP, gravity * k * JUMP_T));
   };
   const shoveOf = (dir: V3, push: number) => (t: number): V3 => {
     const k = clamp01((t - contact) / PUSH_T);
@@ -463,6 +476,7 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
         first: { foot: free, earliest: contact + FIRST_AFTER * PUSH_T, brake: FIRST_BRAKE, heading: firstTurned },
         facing,
         until: setup.end - takeover + 0.1,
+        drag: setup.drag,
       });
       byPush.set(push, run);
     }
@@ -496,7 +510,7 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
   const level0 = ground(firstDown.at.x, firstDown.at.z);
   const flatAhead = Array.from({ length: ROLL_ROOM.samples + 1 }, (_, i) => (i / ROLL_ROOM.samples) * ROLL_ROOM.ahead * leg)
     .flatMap((d) => [-1, 0, 1].map((side) => add3(add3(firstDown.at, scale3(travel, d)), scale3(rightOf(travel), side * ROLL_ROOM.half * leg))))
-    .every((p) => Math.abs(ground(p.x, p.z) - level0) <= ROLL_ROOM.rise * leg);
+    .every((p) => Math.abs(ground(p.x, p.z) - level0) <= ROLL_ROOM.rise * leg && !setup.drag?.(p.x, p.z));
   const downV = runOutAt(still, firstDown.on - still.dt).velocity;
   const rolling = flatAhead && (rollsOut(downV, gravity, leg) || (setup.rollAbove != null && Math.hypot(downV.x, downV.y, downV.z) > setup.rollAbove * Math.sqrt(gravity * leg)));
   const rollBoard = boardRigOf(atContact);

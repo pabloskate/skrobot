@@ -1,10 +1,9 @@
 import type { Vec3 } from '../../camera/view';
-import type { TripodId } from '../../camera/camera';
-import { ClassicSpot3D, type SpotTripod } from '../classicSpot3d';
+import { ClassicSpot3D } from '../classicSpot3d';
 import type { CarPlacement, StreetPropPlacements } from '../props/streetProps';
 import { buildMiamiGeometry, MIAMI_BOULEVARD, MIAMI_SOUTHBOUND, miamiBoulevard, miamiParkingStall } from './miamiGeometry';
 import {
-  MIAMI_DROP, MIAMI_FOOT as F, MIAMI_PLAZA_Y, MIAMI_SLAB_GRADE, MIAMI_SLAB_LIP_X, miamiGround,
+  MIAMI_DROP, MIAMI_FILMERS, MIAMI_FOOT as F, MIAMI_PLAZA_Y, MIAMI_SLAB_GRADE, MIAMI_SLAB_LIP_X, miamiGround,
 } from './miamiLayout';
 
 export { buildMiamiGeometry } from './miamiGeometry';
@@ -46,30 +45,6 @@ export const MIAMI_STREET_PROPS: StreetPropPlacements = {
   ],
 };
 
-export const MIAMI_TRIPODS: Readonly<Record<TripodId, SpotTripod>> = {
-  // On the plaza looking back up the line, as Carpenter's filmer did;
-  // off to the boulevard side, or the slab's apex would hide the deck.
-  bottom: { u: 24 * F, z: 9 * F, height: MIAMI_PLAZA_Y + 3.5 * F, frame: 18 * F, place: 0.55 },
-  // Side-on from the plaza's boulevard side, Ehrlund's angle: the box,
-  // the wall and the slab in one line, the box on the left.
-  side: { u: 8 * F, z: 24 * F, height: MIAMI_PLAZA_Y + 4.5 * F, frame: 20 * F, place: 0.5 },
-  // Up on the deck behind the rider, beside their line.
-  top: { u: -14 * F, z: 6 * F, height: 5.5 * F, frame: 14 * F, place: 0.55 },
-};
-
-const across = (tripod: SpotTripod): SpotTripod => ({ ...tripod, z: -tripod.z });
-
-/**
- * Grinding an edge the filmers move round: the one up top stands on the
- * other side of the deck from the line in (it rolls in along the far side
- * from the edge), the side one outside the edge, and the one at the bottom
- * across the line from where the rider rolls away.
- */
-export const MIAMI_LEDGE_TRIPODS: Readonly<Record<'left' | 'right', Readonly<Record<TripodId, SpotTripod>>>> = {
-  right: { ...MIAMI_TRIPODS, bottom: across(MIAMI_TRIPODS.bottom) },
-  left: { ...MIAMI_TRIPODS, side: across(MIAMI_TRIPODS.side), top: across(MIAMI_TRIPODS.top) },
-};
-
 export class Miami3D extends ClassicSpot3D {
   constructor() {
     super({
@@ -78,8 +53,7 @@ export class Miami3D extends ClassicSpot3D {
       grade: MIAMI_SLAB_GRADE, run: MIAMI_SLAB_LIP_X, drop: MIAMI_DROP,
       framing: 0.85,
       streetProps: MIAMI_STREET_PROPS,
-      tripods: MIAMI_TRIPODS,
-      ledgeTripods: MIAMI_LEDGE_TRIPODS,
+      filmers: MIAMI_FILMERS,
     });
   }
 }

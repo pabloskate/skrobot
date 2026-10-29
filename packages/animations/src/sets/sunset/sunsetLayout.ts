@@ -1,4 +1,5 @@
 import { SET_FOOT, SET_SCALE } from '../setScale';
+import type { SpotFilmers } from '../tripods';
 
 /**
  * Roof to Bank: the skateable roof and bank. Dimensions are photo-based
@@ -55,3 +56,20 @@ export function sunsetSlope(u: number): number {
   if (u <= SUNSET_TOE_START) return -SUNSET_GRADE;
   return -SUNSET_GRADE * (SUNSET_BANK_END - u) / SUNSET_TOE_LENGTH;
 }
+
+/** Where the filmers stand (tripods.ts), either side of the line down the bank. */
+export const SUNSET_FILMERS: SpotFilmers = {
+  stairs: {
+    line: SUNSET_LANE_Z,
+    stands: {
+      // Out in the street, just right of the line down the bank.
+      bottom: { u: SUNSET_BANK_END + 22 * UNIT, z: SUNSET_LANE_Z + 2 * SET_FOOT, height: -SUNSET_DROP + 3 * UNIT, frame: 24 * SET_FOOT, place: 0.44 },
+      side: { u: 13 * UNIT, z: -32 * UNIT, height: -SUNSET_DROP + 6 * UNIT, frame: 27 * SET_FOOT, place: 0.48 },
+      top: { u: -4 * UNIT, z: -9 * UNIT, height: 8 * UNIT, frame: 22 * SET_FOOT, place: 0.48 },
+    },
+    across: {
+      // Nearer the line than its mirror image, from where the scenery hides the touchdown.
+      side: { u: 13 * UNIT, z: SUNSET_LANE_Z + 20 * SET_FOOT, height: -SUNSET_DROP + 6 * UNIT, frame: 27 * SET_FOOT, place: 0.48 },
+    },
+  },
+};

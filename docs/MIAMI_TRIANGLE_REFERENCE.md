@@ -230,10 +230,11 @@ with the nose dipped outside the edge. Both roll away across the plaza.
 - **Off the end** the rider pops off the low corner, drops about 1¾ ft to
   the plaza and rolls away along the edge's heading, clear of the pots and
   the stepped beds. A slip falls off the outside of the edge onto the plaza.
-- **Filmers** move with the edge (`MIAMI_LEDGE_TRIPODS`). The top one stands
-  on the other side of the deck from the line in, the side one outside the
-  edge, and the bottom one across the line from the ride-away. Otherwise
-  they're the gap lines' tripods.
+- **Filmers** move with the edge (`MIAMI_FILMERS` ledges in `miamiLayout.ts`).
+  The top one stands on the other side of the deck from the line in, the side
+  one outside the edge, and the bottom one across the line from the
+  ride-away. Otherwise they're the gap lines' tripods. Asked to film from the
+  line-in side, the top one stands further back on the deck, clear of it.
 
 The scenery is the classic bare-concrete configuration. The terrace is white
 board-formed concrete with panel joints, form-tie holes, peeling-paint patches

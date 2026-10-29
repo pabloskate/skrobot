@@ -1,12 +1,17 @@
-import { Bake, NO_INK, type Ink, type Paint } from '../../three/bake';
+import { Bake, NO_INK, type Ink } from '../../three/bake';
 import { INK_PROP } from '../../three/materials';
-import { lambert, tone } from '../../camera/camera';
 import type { Vec3 } from '../../camera/view';
-import { ClassicSpot3D } from '../classicSpot3d';
+import { ClassicSpot3D, type ClassicSpotConfig } from '../classicSpot3d';
+import { TurnedBake, sunlit as lit, turnPoint, type Baker } from './turn';
+import {
+  HOLLYWOOD_12_FILMERS, HOLLYWOOD_12_LIP, HOLLYWOOD_12_STEPS, HOLLYWOOD_12_DROP, HOLLYWOOD_12_RUN,
+  HOLLYWOOD_12_RISER, HOLLYWOOD_12_TREAD, HOLLYWOOD_12_GRADE, HOLLYWOOD_12_LANE_Z,
+  HOLLYWOOD_12_RAIL_END, hollywood12Ground, hollywood12Nosing, hollywood12CheekTop,
+} from './hollywoodLayout';
 import {
   HOLLYWOOD_BUILDING_END, HOLLYWOOD_BUILDING_FACE, HOLLYWOOD_BUILDING_TOP,
   HOLLYWOOD_CHEEK_Z, HOLLYWOOD_CURB_Z, HOLLYWOOD_DROP, HOLLYWOOD_FAR_CURB_Z,
-  HOLLYWOOD_FENCE_END, HOLLYWOOD_FENCE_START, HOLLYWOOD_FENCE_TIPS,
+  HOLLYWOOD_FENCE_END, HOLLYWOOD_FENCE_START, HOLLYWOOD_FENCE_TIPS, HOLLYWOOD_FILMERS,
   HOLLYWOOD_FENCE_TOP, HOLLYWOOD_FENCE_Z, HOLLYWOOD_FOOT as F, HOLLYWOOD_GRADE,
   HOLLYWOOD_LANE_WIDTH, HOLLYWOOD_LANE_Z, HOLLYWOOD_LEFT_Z, HOLLYWOOD_RAIL_END,
   HOLLYWOOD_RAIL_HEIGHT, HOLLYWOOD_RAIL_LINES, HOLLYWOOD_RAIL_RADIUS,
@@ -19,7 +24,6 @@ const ink = (id: number, priority = 5, solid = 0): Ink => ({ id, priority, width
 const STEP_INK = ink(40, 4, 6);
 const WALL_INK = ink(74, 7, 10);
 const LEAF_INK = ink(100, 8, 13);
-const lit = (color: string, n: Vec3): Paint => ({ color: tone(color, lambert({ x: n[0], y: -n[1], z: n[2] })) });
 const up: Vec3 = [0, 1, 0];
 const front: Vec3 = [0, 0, -1];
 const lower = -HOLLYWOOD_DROP;
@@ -35,22 +39,28 @@ export interface HollywoodShadowBox { min: Vec3; max: Vec3 }
 
 /** All details are real, static geometry. Two merged draws, no web textures,
  * camera-facing foliage or per-brick meshes. The layout is never mirrored. */
-export function buildHollywoodGeometry() {
-  const ground = new Bake();
-  const props = new Bake();
+export type HollywoodFlight = 'sixteen' | 'twelve';
+
+export function buildHollywoodGeometry(flight: HollywoodFlight = 'sixteen') {
+  const groundBake = new Bake();
+  const propsBake = new Bake();
+  const turned = flight === 'twelve';
+  const at = (p: Vec3) => turned ? turnPoint(HOLLYWOOD_12_LIP, p) : p;
+  const ground: Baker = turned ? new TurnedBake(groundBake, HOLLYWOOD_12_LIP) : groundBake;
+  const props: Baker = turned ? new TurnedBake(propsBake, HOLLYWOOD_12_LIP) : propsBake;
   const railSegments: HollywoodRailSegment[] = [];
   const shadowBoxes: HollywoodShadowBox[] = [];
   const plane = (x0: number, x1: number, z0: number, z1: number, y: number, color: string, detail = NO_INK) =>
     ground.quad([x0, y, z0], [x1, y, z0], [x1, y, z1], [x0, y, z1], up, lit(color, up), detail);
   const tube = (spine: Vec3[], radius: number, color: string, detail = ink(71, 6), sides = 8, cast = false) => {
     props.tube(spine, spine.map(() => radius), { color, lit: { color: '#bfc0b0', from: 0.2, to: 2 } }, detail, sides, true);
-    if (cast) for (let i = 1; i < spine.length; i++) railSegments.push({ a: spine[i - 1], b: spine[i], radius });
+    if (cast) for (let i = 1; i < spine.length; i++) railSegments.push({ a: at(spine[i - 1]), b: at(spine[i]), radius });
   };
 
   // The long elevated run-up between the school's twelve and sixteen. The
   // street side is lower, so no fictitious bank fills this edge. Near the
   // lip it is poured slabs, each a slightly different pour of concrete.
-  plane(-FAR, -RUN_UP_SLABS * SLAB, HOLLYWOOD_LEFT_Z, HOLLYWOOD_RIGHT_Z, 0, '#bdbdb1');
+  plane(HOLLYWOOD_12_LIP, -RUN_UP_SLABS * SLAB, HOLLYWOOD_LEFT_Z, HOLLYWOOD_RIGHT_Z, 0, '#bdbdb1');
   const across = (HOLLYWOOD_RIGHT_Z - HOLLYWOOD_LEFT_Z) / 4;
   for (let i = 0; i < RUN_UP_SLABS; i++) for (let j = 0; j < 4; j++) {
     const x0 = -(i + 1) * SLAB, z0 = HOLLYWOOD_LEFT_Z + j * across;
@@ -61,40 +71,20 @@ export function buildHollywoodGeometry() {
   // depth from distant cameras, even when their nominal heights differ.
   // The wide sidewalk runs past the fence and on beside the bottom landing.
   plane(HOLLYWOOD_RUN, FAR, HOLLYWOOD_CURB_Z, FAR, lower, '#bebdaf');
+  plane(-FAR, HOLLYWOOD_12_LIP - HOLLYWOOD_12_RUN, HOLLYWOOD_CHEEK_Z, FAR, lower, '#bebdaf');
   plane(-FAR, HOLLYWOOD_RUN, HOLLYWOOD_CURB_Z, HOLLYWOOD_CHEEK_Z, lower, '#b3b5a9');
   plane(-FAR, FAR, HOLLYWOOD_FAR_CURB_Z, HOLLYWOOD_CURB_Z, HOLLYWOOD_ROAD_Y, '#5d6261');
   plane(-FAR, FAR, -FAR, HOLLYWOOD_FAR_CURB_Z, lower, '#adafa3');
 
-  // Sixteen risers, with fifteen independent treads. Pale rounded wear bands
-  // and blackened corners remain visible when seen from the landing.
-  for (let k = 1; k <= HOLLYWOOD_STEPS; k++) {
-    const x = (k - 1) * HOLLYWOOD_TREAD;
-    const high = -(k - 1) * HOLLYWOOD_RISER;
-    const low = -k * HOLLYWOOD_RISER;
-    ground.quad([x, high, HOLLYWOOD_LEFT_Z], [x, low, HOLLYWOOD_LEFT_Z], [x, low, HOLLYWOOD_RIGHT_Z], [x, high, HOLLYWOOD_RIGHT_Z], [1, 0, 0], lit('#969e92', [1, 0, 0]), STEP_INK);
-    // The worn nosing wraps onto the vertical face. A low landing camera
-    // cannot see the tread tops, so their wear alone would flatten all
-    // sixteen identically colored risers into an apparent concrete slope.
-    for (const [y0, y1, color] of [
-      [high - 1.1, high, '#c4c6b6'],
-      [high - 1.65, high - 1.1, '#abb3a3'],
-      [low, low + 0.65, '#828e80'],
-    ] as const) {
-      ground.quad([x + 0.025, y0, HOLLYWOOD_LEFT_Z], [x + 0.025, y0, HOLLYWOOD_RIGHT_Z], [x + 0.025, y1, HOLLYWOOD_RIGHT_Z], [x + 0.025, y1, HOLLYWOOD_LEFT_Z], [1, 0, 0], lit(color, [1, 0, 0]), NO_INK);
-    }
-    if (k < HOLLYWOOD_STEPS) {
-      plane(x, x + HOLLYWOOD_TREAD, HOLLYWOOD_LEFT_Z, HOLLYWOOD_RIGHT_Z, low, '#bdbfb3', STEP_INK);
-      plane(x + HOLLYWOOD_TREAD - 1.8, x + HOLLYWOOD_TREAD, HOLLYWOOD_LEFT_Z, HOLLYWOOD_RIGHT_Z, low + 0.06, '#d1d0c0', NO_INK);
-      plane(x + 0.06, x + 2, HOLLYWOOD_LEFT_Z, HOLLYWOOD_RIGHT_Z, low + 0.08, '#8e968b', NO_INK);
-    }
-    // Different narrow weather runs per step, avoiding a tiled dirt texture.
-    for (let j = 0; j < 6; j++) {
-      const z = HOLLYWOOD_LEFT_Z + 15 + random(k * 51 + j) * (HOLLYWOOD_RIGHT_Z - HOLLYWOOD_LEFT_Z - 35);
-      const w = 0.7 + random(k * 29 + j) * 2.5;
-      const h = 0.8 + random(k * 71 + j) * 2.4;
-      props.quad([x + 0.08, low, z], [x + 0.08, low, z + w], [x + 0.08, low + h, z + w * 0.8], [x + 0.08, low + h * 0.7, z + 0.3], [1, 0, 0], lit('#818c80', [1, 0, 0]), NO_INK);
-    }
-  }
+  buildFlight(ground, props, tube);
+  // The twelve is physically behind the sixteen, descending north.
+  // Its frame turns both axes, keeping the same school and same street.
+  const northProps = new TurnedBake(props, HOLLYWOOD_12_LIP);
+  const northGround = new TurnedBake(ground, HOLLYWOOD_12_LIP);
+  const northTube: Tube = (spine, radius, color, detail, sides, cast) =>
+    tube(spine.map((p) => turnPoint(HOLLYWOOD_12_LIP, p)), radius, color, detail, sides, cast);
+  buildFlight(northGround, northProps, northTube, true);
+
   // Tooled joints between the run-up's slabs, and the landing's.
   for (let i = 1; i <= RUN_UP_SLABS; i++) plane(-i * SLAB - 0.3, -i * SLAB + 0.3, HOLLYWOOD_LEFT_Z, HOLLYWOOD_RIGHT_Z, 0.09, '#898f86');
   for (let j = 1; j < 4; j++) {
@@ -106,32 +96,94 @@ export function buildHollywoodGeometry() {
   }
   for (const z of [-2 * F, 5.4 * F]) plane(HOLLYWOOD_RUN + 1, HOLLYWOOD_RUN + 32 * F, z, z + 0.6, lower + 0.09, '#8e9489');
 
+
+  const cheek = HOLLYWOOD_CHEEK_Z;
+  ground.box([HOLLYWOOD_12_LIP, lower, cheek], [0, 0.4 * F, HOLLYWOOD_LEFT_Z], '#a2a699', '#b6b7a9', WALL_INK);
+  buildSchool(props, shadowBoxes);
+  buildBoundary(props, tube);
+  buildStreet(props, ground);
+  buildStreetFurniture(props, ground, tube);
+  buildWear(props, ground);
+  buildTrees(props, tube);
+  const boxes = shadowBoxes.map(({ min, max }) => {
+    const a = at(min), b = at(max);
+    return { min: [Math.min(a[0], b[0]), min[1], Math.min(a[2], b[2])] as Vec3, max: [Math.max(a[0], b[0]), max[1], Math.max(a[2], b[2])] as Vec3 };
+  });
+  return { ground: groundBake.geometry(), props: propsBake.geometry(), railSegments, shadowBoxes: boxes };
+}
+
+/** The active flight's geometry in its downhill frame. */
+function buildFlight(ground: Baker, props: Baker, tube: Tube, twelve = false) {
+  const steps = twelve ? HOLLYWOOD_12_STEPS : HOLLYWOOD_STEPS;
+  const tread = twelve ? HOLLYWOOD_12_TREAD : HOLLYWOOD_TREAD;
+  const riser = twelve ? HOLLYWOOD_12_RISER : HOLLYWOOD_RISER;
+  const run = twelve ? HOLLYWOOD_12_RUN : HOLLYWOOD_RUN;
+  const railEnd = twelve ? HOLLYWOOD_12_RAIL_END : HOLLYWOOD_RAIL_END;
+  const groundAt = twelve ? hollywood12Ground : hollywoodGround;
+  const nosing = twelve ? hollywood12Nosing : hollywoodNosing;
+  const wallFace = twelve ? -HOLLYWOOD_BUILDING_FACE : HOLLYWOOD_BUILDING_FACE;
+  const rails = twelve ? [{ z: 0, wallMounted: false }, { z: -HOLLYWOOD_RAIL_LINES[2].z, wallMounted: true }] : HOLLYWOOD_RAIL_LINES;
+  const plane = (x0: number, x1: number, z0: number, z1: number, y: number, color: string, detail = NO_INK) =>
+    ground.quad([x0, y, z0], [x1, y, z0], [x1, y, z1], [x0, y, z1], up, lit(color, up), detail);
+  // Each flight has its own risers and intervening treads. Pale rounded wear bands
+  // and blackened corners remain visible when seen from the landing.
+  for (let k = 1; k <= steps; k++) {
+    const x = (k - 1) * tread;
+    const high = -(k - 1) * riser;
+    const low = -k * riser;
+    ground.quad([x, high, HOLLYWOOD_LEFT_Z], [x, low, HOLLYWOOD_LEFT_Z], [x, low, HOLLYWOOD_RIGHT_Z], [x, high, HOLLYWOOD_RIGHT_Z], [1, 0, 0], lit('#969e92', [1, 0, 0]), STEP_INK);
+    // The worn nosing wraps onto the vertical face. A low landing camera
+    // cannot see the tread tops, so their wear alone would flatten all
+    // sixteen identically colored risers into an apparent concrete slope.
+    for (const [y0, y1, color] of [
+      [high - 1.1, high, '#c4c6b6'],
+      [high - 1.65, high - 1.1, '#abb3a3'],
+      [low, low + 0.65, '#828e80'],
+    ] as const) {
+      ground.quad([x + 0.025, y0, HOLLYWOOD_LEFT_Z], [x + 0.025, y0, HOLLYWOOD_RIGHT_Z], [x + 0.025, y1, HOLLYWOOD_RIGHT_Z], [x + 0.025, y1, HOLLYWOOD_LEFT_Z], [1, 0, 0], lit(color, [1, 0, 0]), NO_INK);
+    }
+    if (k < steps) {
+      plane(x, x + tread, HOLLYWOOD_LEFT_Z, HOLLYWOOD_RIGHT_Z, low, '#bdbfb3', STEP_INK);
+      plane(x + tread - 1.8, x + tread, HOLLYWOOD_LEFT_Z, HOLLYWOOD_RIGHT_Z, low + 0.06, '#d1d0c0', NO_INK);
+      plane(x + 0.06, x + 2, HOLLYWOOD_LEFT_Z, HOLLYWOOD_RIGHT_Z, low + 0.08, '#8e968b', NO_INK);
+    }
+    // Different narrow weather runs per step, avoiding a tiled dirt texture.
+    for (let j = 0; j < 6; j++) {
+      const z = HOLLYWOOD_LEFT_Z + 15 + random(k * 51 + j) * (HOLLYWOOD_RIGHT_Z - HOLLYWOOD_LEFT_Z - 35);
+      const w = 0.7 + random(k * 29 + j) * 2.5;
+      const h = 0.8 + random(k * 71 + j) * 2.4;
+      props.quad([x + 0.08, low, z], [x + 0.08, low, z + w], [x + 0.08, low + h, z + w * 0.8], [x + 0.08, low + h * 0.7, z + 0.3], [1, 0, 0], lit('#818c80', [1, 0, 0]), NO_INK);
+    }
+  }
   // Solid outside cheek: a narrow concrete slope, not a second staircase.
-  const cheekOuter = HOLLYWOOD_CHEEK_Z;
-  const cheekTop = hollywoodCheekTop;
-  for (const [x0, x1] of [[-35 * F, 0], [0, HOLLYWOOD_RUN], [HOLLYWOOD_RUN, HOLLYWOOD_RUN + 0.4 * F]]) {
+  const cheekOuter = twelve ? -HOLLYWOOD_CHEEK_Z : HOLLYWOOD_CHEEK_Z;
+  const cheekInner = twelve ? HOLLYWOOD_RIGHT_Z : HOLLYWOOD_LEFT_Z;
+  const outside: Vec3 = [0, 0, twelve ? 1 : -1];
+  const cheekTop = twelve ? hollywood12CheekTop : hollywoodCheekTop;
+  for (const [x0, x1] of [[0, run], [run, run + 0.4 * F]]) {
     const h0 = cheekTop(x0), h1 = cheekTop(x1);
     const n: Vec3 = [-(h1 - h0) / Math.hypot(x1 - x0, h1 - h0), (x1 - x0) / Math.hypot(x1 - x0, h1 - h0), 0];
-    ground.quad([x0, h0, cheekOuter], [x1, h1, cheekOuter], [x1, h1, HOLLYWOOD_LEFT_Z], [x0, h0, HOLLYWOOD_LEFT_Z], n, lit('#b6b7a9', n), WALL_INK);
-    ground.quad([x0, lower, cheekOuter], [x1, lower, cheekOuter], [x1, h1, cheekOuter], [x0, h0, cheekOuter], front, lit('#a2a699', front), WALL_INK);
-    ground.quad([x0, lower, HOLLYWOOD_LEFT_Z], [x0, h0, HOLLYWOOD_LEFT_Z], [x1, h1, HOLLYWOOD_LEFT_Z], [x1, lower, HOLLYWOOD_LEFT_Z], [0, 0, 1], lit('#b9b9ac', [0, 0, 1]), WALL_INK);
+    ground.quad([x0, h0, cheekOuter], [x1, h1, cheekOuter], [x1, h1, cheekInner], [x0, h0, cheekInner], n, lit('#b6b7a9', n), WALL_INK);
+    ground.quad([x0, lower, cheekOuter], [x1, lower, cheekOuter], [x1, h1, cheekOuter], [x0, h0, cheekOuter], outside, lit('#a2a699', outside), WALL_INK);
+    ground.quad([x0, lower, cheekInner], [x0, h0, cheekInner], [x1, h1, cheekInner], [x1, lower, cheekInner], [0, 0, -outside[2]], lit('#b9b9ac', [0, 0, -outside[2]]), WALL_INK);
   }
 
-  // Three real handrails. The round center rail has three supports and no
+  // The sixteen has three pipes; the twelve has center and wall pipes.
+  // The round center rail has three supports and no
   // horizontal ends or lower longitudinal rail, unlike El Toro's handrails.
-  HOLLYWOOD_RAIL_LINES.forEach(({ z, wallMounted }, index) => {
+  rails.forEach(({ z, wallMounted }, index) => {
     const detail = ink(60 + index, 10 + index);
-    const at = (x: number): Vec3 => [x, hollywoodNosing(x) + HOLLYWOOD_RAIL_HEIGHT, z];
-    tube([at(HOLLYWOOD_RAIL_START), at(HOLLYWOOD_RAIL_END)], HOLLYWOOD_RAIL_RADIUS, index === 0 ? '#555b56' : '#959d91', detail, 12, true);
-    const posts = [HOLLYWOOD_RAIL_START, 7 * HOLLYWOOD_TREAD, HOLLYWOOD_RAIL_END];
+    const at = (x: number): Vec3 => [x, nosing(x) + HOLLYWOOD_RAIL_HEIGHT, z];
+    tube([at(HOLLYWOOD_RAIL_START), at(railEnd)], HOLLYWOOD_RAIL_RADIUS, index === 0 ? '#555b56' : '#959d91', detail, 12, true);
+    const posts = [HOLLYWOOD_RAIL_START, Math.floor(steps / 2) * tread, railEnd];
     for (const x of posts) {
-      const h = hollywoodNosing(x) + HOLLYWOOD_RAIL_HEIGHT;
+      const h = nosing(x) + HOLLYWOOD_RAIL_HEIGHT;
       if (wallMounted) {
         // Short returned brackets embed in the school wall rather than
         // inventing a second free-standing rail in the narrow school lane.
-        tube([[x, h - 4, HOLLYWOOD_BUILDING_FACE - 0.1], [x, h - 4, z], [x, h, z]], 1.5, '#9aa194', detail, 8, true);
+        tube([[x, h - 4, wallFace - 0.1], [x, h - 4, z], [x, h, z]], 1.5, '#9aa194', detail, 8, true);
       } else {
-        const base = index === 0 ? hollywoodGround(x) : cheekTop(x);
+        const base = index === 0 ? groundAt(x) : cheekTop(x);
         tube([[x, base, z], [x, h, z]], HOLLYWOOD_RAIL_RADIUS, index === 0 ? '#797f73' : '#a0a699', detail, 10, true);
         props.tube([[x, base + 0.2, z], [x, base + 1.2, z]], [4.2, 3.7], { color: '#878e80' }, detail, 10);
         // Faded paper stickers wrapped around the lower center posts.
@@ -143,24 +195,22 @@ export function buildHollywoodGeometry() {
     }
   });
 
-  buildSchool(props, shadowBoxes);
-  buildBoundary(props, tube);
-  buildStreet(props, ground);
-  buildStreetFurniture(props, ground, tube);
-  buildWear(props, ground);
-  buildTrees(props, tube);
-  return { ground: ground.geometry(), props: props.geometry(), railSegments, shadowBoxes };
 }
 
 /** Long red brick auditorium flank, its cream cornice and recessed entry. */
-function buildSchool(props: Bake, shadows: HollywoodShadowBox[]) {
+function buildSchool(props: Baker, shadows: HollywoodShadowBox[]) {
   const face = HOLLYWOOD_BUILDING_FACE;
-  const x0 = -42 * F;
+  const x0 = HOLLYWOOD_12_LIP - HOLLYWOOD_12_RUN - 0.5 * F;
   const x1 = HOLLYWOOD_BUILDING_END;
   const depth = face + 19 * F;
   const top = HOLLYWOOD_BUILDING_TOP;
-  props.box([x0, lower - 5, face], [x1, top, depth], '#867f6d', '#b6b3a1', WALL_INK);
-  shadows.push({ min: [x0, lower, face], max: [x1, top, depth] });
+  // The brick wings flank the auditorium's perpendicular entrance stairs.
+  // Leaving this recess open is important: a solid wall would cut off the entry.
+  const wings = [[x0, -35 * F], [-14 * F, x1]];
+  for (const [start, end] of wings) {
+    props.box([start, lower - 5, face], [end, top, depth], '#867f6d', '#b6b3a1', WALL_INK);
+    shadows.push({ min: [start, lower, face], max: [end, top, depth] });
+  }
   // Mortar is recessed behind staggered red/brown brick faces. Each brick is
   // a quad: 3D relief goes in the piers, caps, corners and window surrounds.
   const brickColors = ['#a06e53', '#9c664f', '#9e7258', '#8e654e', '#a4775b', '#a5785b'];
@@ -168,8 +218,8 @@ function buildSchool(props: Bake, shadows: HollywoodShadowBox[]) {
   for (let row = 0; row * brickH < top - lower - 11; row++) {
     const y = lower + row * brickH;
     let col = 0;
-    for (let x = x0 - (row % 2) * brickW / 2; x < x1; x += brickW) {
-      const left = Math.max(x0, x + 0.65), right = Math.min(x1, x + brickW - 0.6);
+    for (const [start, end] of wings) for (let x = start - (row % 2) * brickW / 2; x < end; x += brickW) {
+      const left = Math.max(start, x + 0.65), right = Math.min(end, x + brickW - 0.6);
       if (right <= left) continue;
       const n: Vec3 = [0, 0, -1];
       const color = brickColors[Math.floor(random(row * 138 + col++) * brickColors.length)];
@@ -178,12 +228,15 @@ function buildSchool(props: Bake, shadows: HollywoodShadowBox[]) {
     for (let z = face; z < depth; z += brickW) {
       const right = Math.min(z + brickW - 0.65, depth);
       props.quad([x1 + 0.2, y + 0.8, z + 0.6], [x1 + 0.2, y + 0.8, right], [x1 + 0.2, y + brickH - 0.5, right], [x1 + 0.2, y + brickH - 0.5, z + 0.6], [1, 0, 0], lit(brickColors[(row + Math.round(z / brickW)) % brickColors.length], [1, 0, 0]), NO_INK);
+      props.quad([x0 - 0.2, y + 0.8, right], [x0 - 0.2, y + 0.8, z + 0.6], [x0 - 0.2, y + brickH - 0.5, z + 0.6], [x0 - 0.2, y + brickH - 0.5, right], [-1, 0, 0], lit(brickColors[(row + Math.round(z / brickW)) % brickColors.length], [-1, 0, 0]), NO_INK);
     }
   }
   // Horizontal concrete fascia is a distinctive stripe above the brick.
-  props.box([x0 - 10, top - 10, face - 16], [x1 + 17, top + 3, depth + 8], '#909487', '#c8c7b5', ink(80, 8));
-  props.box([x0 - 7, top + 3, face - 12], [x1 + 12, top + 11, depth + 6], '#bcbdac', '#d0cebd', ink(80, 8));
-  props.box([x0 - 7, top + 10, face - 10], [x1 + 12, top + 13, depth + 6], '#81887d', '#a6ab9b', NO_INK);
+  for (const [start, end] of wings) {
+    props.box([start - 10, top - 10, face - 16], [end + 17, top + 3, depth + 8], '#909487', '#c8c7b5', ink(80, 8));
+    props.box([start - 7, top + 3, face - 12], [end + 12, top + 11, depth + 6], '#bcbdac', '#d0cebd', ink(80, 8));
+    props.box([start - 7, top + 10, face - 10], [end + 12, top + 13, depth + 6], '#81887d', '#a6ab9b', NO_INK);
+  }
   // Small anti-skating sign is drawn in geometry; it is part of the location.
   props.box([90, 11, face - 2.1], [164, 45, face - 0.3], '#6e756d', '#6e756d', NO_INK);
   props.quad([93, 14, face - 2.4], [161, 14, face - 2.4], [161, 42, face - 2.4], [93, 42, face - 2.4], front, { color: '#e8e5ca' }, NO_INK);
@@ -192,31 +245,46 @@ function buildSchool(props: Bake, shadows: HollywoodShadowBox[]) {
 
   // Graffiti buffed out in not-quite-matching paint, as on every skated wall.
   for (const [px0, px1, py0, py1, color, seed] of [
-    [-12 * F, -6.5 * F, 22, 118, '#8f5d48', 1], [-31 * F, -27 * F, 14, 74, '#9b9688', 2],
+    [-12 * F, -6.5 * F, 22, 118, '#8f5d48', 1], [-47 * F, -43 * F, 14, 74, '#9b9688', 2],
     [4.5 * F, 9.5 * F, -112, 6, '#94644e', 3], [11 * F, 13.5 * F, -175, -118, '#a07560', 4],
   ] as const) {
     const j = (k: number) => (random(seed * 31 + k) - 0.5) * 9;
     props.quad([px0 + j(1), py0 + j(2), face - 0.35], [px1 + j(3), py0 + j(4), face - 0.35], [px1 + j(5), py1 + j(6), face - 0.35], [px0 + j(7), py1 + j(8), face - 0.35], front, lit(color, front), NO_INK);
   }
   // Downspouts from the cornice, strapped to the brick, onto splash blocks.
-  for (const x of [-38 * F, -20 * F]) {
+  for (const x of [-48 * F, -7 * F]) {
     props.tube([[x, top - 11, face - 3], [x, 9, face - 3], [x, 3, face - 11]], [2.4, 2.4, 2.4], { color: '#8a8676', lit: { color: '#b4ae98', from: 0, to: 2 } }, ink(140, 6), 8);
     for (let y = 30; y < top - 20; y += 4 * F) props.box([x - 3.4, y, face - 6], [x + 3.4, y + 1.6, face - 0.3], '#6f6d62', '#6f6d62', NO_INK);
     props.box([x - 6, 0, face - 30], [x + 6, 1.8, face - 9], '#a9a99b', '#bdbcae', NO_INK);
   }
   // A utility panel and its conduit, and a security light under the cornice.
-  props.box([-26 * F, 1.6 * F, face - 6], [-24 * F, 4.2 * F, face], '#868b84', '#9ea39b', ink(142, 6));
-  props.quad([-25.8 * F, 1.9 * F, face - 6.2], [-24.2 * F, 1.9 * F, face - 6.2], [-24.2 * F, 3.9 * F, face - 6.2], [-25.8 * F, 3.9 * F, face - 6.2], front, lit('#7b8079', front), NO_INK);
-  props.tube([[-25 * F, 4.2 * F, face - 2.6], [-25 * F, top - 11, face - 2.6]], [1.3, 1.3], { color: '#8d9089' }, NO_INK, 6);
-  props.tube([[-24.5 * F, 1.6 * F, face - 2.6], [-24.5 * F, 0, face - 2.6]], [1.3, 1.3], { color: '#8d9089' }, NO_INK, 6);
+  props.box([-45 * F, 1.6 * F, face - 6], [-43 * F, 4.2 * F, face], '#868b84', '#9ea39b', ink(142, 6));
+  props.quad([-44.8 * F, 1.9 * F, face - 6.2], [-43.2 * F, 1.9 * F, face - 6.2], [-43.2 * F, 3.9 * F, face - 6.2], [-44.8 * F, 3.9 * F, face - 6.2], front, lit('#7b8079', front), NO_INK);
+  props.tube([[-44 * F, 4.2 * F, face - 2.6], [-44 * F, top - 11, face - 2.6]], [1.3, 1.3], { color: '#8d9089' }, NO_INK, 6);
+  props.tube([[-43.5 * F, 1.6 * F, face - 2.6], [-43.5 * F, 0, face - 2.6]], [1.3, 1.3], { color: '#8d9089' }, NO_INK, 6);
   props.box([-9 * F - 6, top - 34, face - 9], [-9 * F + 6, top - 24, face], '#55595a', '#686c6b', ink(143, 6));
   props.quad([-9 * F - 4, top - 34.2, face - 8], [-9 * F + 4, top - 34.2, face - 8], [-9 * F + 4, top - 34.2, face - 2], [-9 * F - 4, top - 34.2, face - 2], [0, -1, 0], { color: '#d9d6c4' }, NO_INK);
 
   // Taller recessed theater entry on the same school's upper apron. This is
   // perpendicular to the skated flight, as it is in reference views.
   const towerX0 = -35 * F, towerX1 = -14 * F;
-  const towerFace = face + 9 * F;
+  const towerFace = face + 12 * F;
   const towerTop = 30 * F;
+  // Entrance stairs climb into the building, at right angles to the 12/16.
+  const entrySteps = 13;
+  for (let k = 0; k < entrySteps; k++) {
+    const z0 = face + k * 12 * F / entrySteps;
+    const z1 = face + (k + 1) * 12 * F / entrySteps;
+    props.box([towerX0, 0, z0], [towerX1, (k + 1) * top / entrySteps, z1], '#969e92', '#bdbfb3', STEP_INK, 'tfkle');
+  }
+  for (const x of [towerX0 + 6 * F, towerX1 - 6 * F]) {
+    const rail: Vec3[] = [[x, 3 * F, face], [x, top + 3 * F, towerFace]];
+    props.tube(rail, [1.8, 1.8], { color: '#a6ae9e' }, ink(70, 6), 8);
+    for (const k of [0, 6, 12]) {
+      const z = face + k * 12 * F / entrySteps, y = k * top / entrySteps;
+      props.tube([[x, y, z], [x, y + 3 * F, z]], [1.8, 1.8], { color: '#a6ae9e' }, ink(70, 6), 8);
+    }
+  }
   props.box([towerX0, top, towerFace], [towerX1, towerTop, depth + 20 * F], '#c3bfaa', '#ccc9b7', ink(83, 8));
   shadows.push({ min: [towerX0, top, towerFace], max: [towerX1, towerTop, depth + 20 * F] });
   for (let x = towerX0 + 20; x < towerX1; x += 118) {
@@ -258,9 +326,9 @@ function buildSchool(props: Bake, shadows: HollywoodShadowBox[]) {
 type Tube = (spine: Vec3[], radius: number, color: string, detail?: Ink, sides?: number, cast?: boolean) => void;
 
 /** Welded mesh atop the upper retaining cheek, black spear fence below (raised a little: it's an obstacle now). */
-function buildBoundary(props: Bake, tube: Tube) {
+function buildBoundary(props: Baker, tube: Tube) {
   const z = HOLLYWOOD_LEFT_Z - 0.22 * F;
-  const length = 34 * F;
+  const length = -HOLLYWOOD_12_LIP - 1.3 * F;
   const white = '#bfc3b2';
   // Square welded wire, not chain-link: vertical/horizontal open mesh.
   for (const y of [7, 87]) tube([[-length, y, z], [-38, y, z]], 1.6, white, ink(72, 6));
@@ -308,7 +376,7 @@ function buildBoundary(props: Bake, tube: Tube) {
  * crosswalk down the block, tree wells in the wide sidewalk, and beyond the
  * road low businesses, billboards, palms and hazy mid-rises. Cars drive the
  * lanes (HOLLYWOOD_TRAFFIC). */
-function buildStreet(props: Bake, ground: Bake) {
+function buildStreet(props: Baker, ground: Baker) {
   const road = HOLLYWOOD_ROAD_Y;
   // Paint and patching lie at distinct heights over the asphalt, so nothing stacked fights for depth.
   const paint = (x0: number, x1: number, z0: number, z1: number, color: string, lift = 0.06) =>
@@ -479,7 +547,7 @@ function buildStreet(props: Bake, ground: Bake) {
  * of the filmers' tripods: cobra-head streetlights, a hydrant, parking signs,
  * a city trash can, a signal cabinet and the corner's traffic signal.
  */
-function buildStreetFurniture(props: Bake, ground: Bake, tube: Tube) {
+function buildStreetFurniture(props: Baker, ground: Baker, tube: Tube) {
   const kerb = HOLLYWOOD_CURB_Z + 1.6 * F;
   const steel = { color: '#7d827b', lit: { color: '#b4b8ae', from: 0.1, to: 2 } };
   for (const x of [-48 * F, 84 * F]) {
@@ -570,7 +638,7 @@ function buildStreetFurniture(props: Bake, ground: Bake, tube: Tube) {
  * black board scuffs at the lip and powerslide marks on the landing, and
  * dry leaves in the gutter and along the fences' feet.
  */
-function buildWear(props: Bake, ground: Bake) {
+function buildWear(props: Baker, ground: Baker) {
   const scatter = (count: number, seed: number, x0: number, x1: number, z0: number, z1: number, draw: (x: number, z: number, k: number) => void) => {
     for (let k = 0; k < count; k++) draw(x0 + random(seed + k * 3) * (x1 - x0), z0 + random(seed + k * 3 + 1) * (z1 - z0), k);
   };
@@ -621,24 +689,24 @@ function buildWear(props: Bake, ground: Bake) {
   for (const { at: [x, , z] } of HOLLYWOOD_TREES) scatter(8, 2700 + x, x - 1.8 * F, x + 1.8 * F, z - 1.8 * F, z + 1.8 * F, (lx, lz, k) => leaf(lx, lz, lower + 0.14, k + 140));
 }
 
-const flat = (bake: Bake, x0: number, x1: number, z0: number, z1: number, y: number, color: string) =>
+const flat = (bake: Baker, x0: number, x1: number, z0: number, z1: number, y: number, color: string) =>
   bake.quad([x0, y, z0], [x1, y, z0], [x1, y, z1], [x0, y, z1], up, lit(color, up), NO_INK);
 
 /** A round cover lying flat on the ground. */
-function disc(bake: Bake, x: number, z: number, y: number, r: number, color: string, sides = 12) {
+function disc(bake: Baker, x: number, z: number, y: number, r: number, color: string, sides = 12) {
   const at = (i: number): Vec3 => [x + Math.cos(i * Math.PI * 2 / sides) * r, y, z + Math.sin(i * Math.PI * 2 / sides) * r];
   for (let i = 0; i < sides; i++) bake.triangle([x, y, z], at(i + 1), at(i), up, lit(color, up), NO_INK);
 }
 
 /** A round painted shape on a face toward the street (+z). */
-function discFacing(bake: Bake, x: number, y: number, z: number, r: number, color: string, sides = 18) {
+function discFacing(bake: Baker, x: number, y: number, z: number, r: number, color: string, sides = 18) {
   const n: Vec3 = [0, 0, 1];
   const at = (i: number): Vec3 => [x + Math.cos(i * Math.PI * 2 / sides) * r, y + Math.sin(i * Math.PI * 2 / sides) * r, z];
   for (let i = 0; i < sides; i++) bake.triangle([x, y, z], at(i), at(i + 1), n, lit(color, n), NO_INK);
 }
 
 /** An irregular blot on the ground: a stain, a gum spot, a dried puddle. */
-function blot(bake: Bake, x: number, z: number, y: number, r: number, color: string, seed: number, sides = 7) {
+function blot(bake: Baker, x: number, z: number, y: number, r: number, color: string, seed: number, sides = 7) {
   const at = (i: number): Vec3 => {
     const k = r * (0.78 + 0.32 * random(seed * 13 + (i % sides)));
     return [x + Math.cos(i * Math.PI * 2 / sides) * k, y, z + Math.sin(i * Math.PI * 2 / sides) * k * 0.8];
@@ -647,7 +715,7 @@ function blot(bake: Bake, x: number, z: number, y: number, r: number, color: str
 }
 
 /** A thin line along the ground through (x, z) points: a crack, a sealed seam. */
-function seam(bake: Bake, points: Array<[number, number]>, y: number, width: number, color: string) {
+function seam(bake: Baker, points: Array<[number, number]>, y: number, width: number, color: string) {
   for (let i = 1; i < points.length; i++) {
     const [x0, z0] = points[i - 1], [x1, z1] = points[i];
     const length = Math.hypot(x1 - x0, z1 - z0) || 1;
@@ -687,7 +755,7 @@ export const HOLLYWOOD_TRAFFIC = ([
 }));
 
 /** True three-dimensional palm fronds. */
-function buildTrees(props: Bake, tube: Tube) {
+function buildTrees(props: Baker, tube: Tube) {
   for (const [x, z, height] of [[-8 * F, HOLLYWOOD_FAR_CURB_Z - 4 * F, 44 * F], [-59 * F, HOLLYWOOD_FAR_CURB_Z - 5 * F, 37 * F]]) {
     const top = lower + height;
     props.tube([[x, lower, z], [x + 13, top * 0.45, z - 4], [x + 18, top, z + 7]], [10, 8, 5], { color: '#827d61', lit: { color: '#afa184', from: 0.1, to: 2 } }, ink(97, 7), 9);
@@ -727,7 +795,7 @@ const GLYPHS: Record<string, string[]> = {
   T: ['11111', '00100', '00100', '00100', '00100', '00100', '00100'],
 };
 
-function lettering(props: Bake, text: string, x: number, y: number, z: number, scale: number, color: string) {
+function lettering(props: Baker, text: string, x: number, y: number, z: number, scale: number, color: string) {
   for (let i = 0; i < text.length; i++) {
     const glyph = GLYPHS[text[i]];
     if (!glyph) continue;
@@ -739,35 +807,32 @@ function lettering(props: Bake, text: string, x: number, y: number, z: number, s
   }
 }
 
-export class Hollywood3D extends ClassicSpot3D {
-  constructor() {
-    super({
-      build: buildHollywoodGeometry,
-      laneZ: HOLLYWOOD_LANE_Z,
-      ground: hollywoodGround,
-      grade: HOLLYWOOD_GRADE,
-      run: HOLLYWOOD_RUN,
-      drop: HOLLYWOOD_DROP,
+/** The same scene filmed facing down the chosen flight. */
+export function hollywoodConfig(flight: HollywoodFlight = 'sixteen'): ClassicSpotConfig {
+  const twelve = flight === 'twelve';
+  const at = (p: Vec3) => twelve ? turnPoint(HOLLYWOOD_12_LIP, p) : p;
+  const turn = (yaw: number) => twelve ? yaw + 180 : yaw;
+  return {
+      build: () => buildHollywoodGeometry(flight),
+      laneZ: twelve ? HOLLYWOOD_12_LANE_Z : HOLLYWOOD_LANE_Z,
+      ground: twelve ? hollywood12Ground : hollywoodGround,
+      grade: twelve ? HOLLYWOOD_12_GRADE : HOLLYWOOD_GRADE,
+      run: twelve ? HOLLYWOOD_12_RUN : HOLLYWOOD_RUN,
+      drop: twelve ? HOLLYWOOD_12_DROP : HOLLYWOOD_DROP,
       // The crane stays clear of the real school wall on the positive side.
-      cameraZ: [-30 * F, HOLLYWOOD_BUILDING_FACE - 25],
-      streetProps: { trees: HOLLYWOOD_TREES, cars: HOLLYWOOD_TRAFFIC },
-      tripods: {
-        bottom: { u: HOLLYWOOD_RUN + 23 * F, z: HOLLYWOOD_LEFT_Z + 1.6 * F, height: lower + 2.8 * F, frame: 24 * F, place: 0.43 },
-        side: { u: HOLLYWOOD_RUN + 6 * F, z: HOLLYWOOD_LEFT_Z - 14 * F, height: lower + 7 * F, frame: 23 * F, place: 0.53 },
-        top: { u: -3 * F, z: HOLLYWOOD_LEFT_Z + 1.1 * F, height: 6.5 * F, frame: 19 * F, place: 0.48 },
+      cameraZ: twelve ? [-HOLLYWOOD_BUILDING_FACE + 25, 30 * F] : [-30 * F, HOLLYWOOD_BUILDING_FACE - 25],
+      streetProps: {
+        trees: HOLLYWOOD_TREES.map((tree) => ({ ...tree, at: at(tree.at), yaw: turn(tree.yaw) })),
+        cars: HOLLYWOOD_TRAFFIC.map((car) => ({ ...car, at: at(car.at), yaw: turn(car.yaw) })),
       },
-      stayUp: ['fence'],
-      obstacleTripods: {
-        // Over the fence: from the sidewalk the rider lands on, from down the
-        // street, and from the top of the stairs behind the center rail, as
-        // the classic clips were filmed.
-        fence: {
-          bottom: { u: 8 * F, z: HOLLYWOOD_CURB_Z + 1.5 * F, height: lower + 2.6 * F, frame: 22 * F, place: 0.45 },
-          side: { u: 58 * F, z: HOLLYWOOD_FENCE_Z - 5 * F, height: lower + 5.5 * F, frame: 24 * F, place: 0.5 },
-          top: { u: 2 * F, z: 3 * F, height: 5 * F, frame: 20 * F, place: 0.5 },
-        },
-      },
-    });
+      filmers: twelve ? HOLLYWOOD_12_FILMERS : HOLLYWOOD_FILMERS,
+      stayUp: twelve ? [] : ['fence'],
+  };
+}
+
+export class Hollywood3D extends ClassicSpot3D {
+  constructor(flight: HollywoodFlight = 'sixteen') {
+    super(hollywoodConfig(flight));
   }
 }
 

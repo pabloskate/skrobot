@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { TbX } from 'react-icons/tb';
+import type { SceneCamera } from '@skrobot/animations';
 import { cameraPreset, CAMERA_SIDES, type CameraPresetId, type CameraSide } from './explorer';
 import type { DreamShot } from './dream';
 import ShotIcon from './ShotIcon';
@@ -10,13 +11,16 @@ import ShotIcon from './ShotIcon';
 interface Props {
   shots: readonly DreamShot[];
   selected: CameraPresetId | null;
-  side: CameraSide;
+  /** The side the chosen shot films from, if it has sides. */
+  side: CameraSide | null;
+  /** Where each shot films from, on the side it would. */
+  cameraFor: (shot: CameraPresetId) => SceneCamera;
   onChoose: (shot: CameraPresetId) => void;
   onSideChange: (side: CameraSide) => void;
   onClose: () => void;
 }
 
-export default function CameraAngleDialog({ shots, selected, side, onChoose, onSideChange, onClose }: Props) {
+export default function CameraAngleDialog({ shots, selected, side, cameraFor, onChoose, onSideChange, onClose }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const title = useId();
   const sideOn = selected != null && cameraPreset(selected).sides === true;
@@ -61,7 +65,7 @@ export default function CameraAngleDialog({ shots, selected, side, onChoose, onS
             onClick={() => onChoose(option.id)}
             title={option.hint}
           >
-            <ShotIcon camera={cameraPreset(option.id).camera} tripod={cameraPreset(option.id).tripod != null} />
+            <ShotIcon camera={cameraFor(option.id)} tripod={cameraPreset(option.id).tripod != null} />
             <span>{option.label}</span>
           </button>
         ))}

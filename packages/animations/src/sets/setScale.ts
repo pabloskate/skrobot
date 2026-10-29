@@ -18,13 +18,15 @@ const k = SET_SCALE;
 
 /** A drop laid out in set units, in the stage's. */
 export function stageTerrain(terrain: DropTerrain): DropTerrain {
-  const { ground, surface, slope, entry, dropIn } = terrain;
+  const { ground, surface, slope, entry, dropIn, brush } = terrain;
   return {
     ...terrain,
     drop: terrain.drop * k,
     run: terrain.run * k,
     landPast: terrain.landPast * k,
     laneZ: terrain.laneZ * k,
+    ...(terrain.runout !== undefined && { runout: terrain.runout * k }),
+    ...(brush && { brush: (u: number, z: number) => brush(u / k, z / k) }),
     ground: (u) => k * ground(u / k),
     ...(surface && { surface: (x: number, z: number) => k * surface(x / k, z / k) }),
     ...(slope && { slope: (u: number) => slope(u / k) }),
@@ -35,7 +37,7 @@ export function stageTerrain(terrain: DropTerrain): DropTerrain {
 
 /** A handrail or a ledge laid out in set units, in the stage's. */
 export function stageHandrail(rail: Handrail): Handrail {
-  const { ground, rest, takeoff } = rail;
+  const { ground, rest, takeoff, brush } = rail;
   const across = (z?: number) => (z === undefined ? undefined : z / k);
   return {
     ...rail,
@@ -44,6 +46,8 @@ export function stageHandrail(rail: Handrail): Handrail {
     top: rail.top * k,
     radius: rail.radius * k,
     speed: rail.speed * k,
+    ...(rail.runout !== undefined && { runout: rail.runout * k }),
+    ...(brush && { brush: (s: number, z?: number) => brush(s / k, across(z)) }),
     ground: (s, z) => k * ground(s / k, across(z)),
     rest: (s, z) => k * rest(s / k, across(z)),
     ...(takeoff && { takeoff: { s: takeoff.s * k, off: takeoff.off * k, lock: takeoff.lock * k } }),

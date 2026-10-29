@@ -6,19 +6,21 @@ import { useSoundEffects, type Skater } from '@skrobot/animations';
 import { ROBOT_BY_ID, ROBOTS } from '@/features/robots';
 import {
   FLATGROUND_TIERS,
-  GRIND_SIDES,
+  grindSidesFor,
   GRIND_TIERS,
   INTO_CHOICES,
   OUT_CHOICES,
   RIDERS,
   STANCES,
   cameraPreset,
+  filmingSide,
   flatgroundTrick,
   sceneCamera,
   sceneTripod,
   searchFromState,
   shuffle,
   stageTrick,
+  restrictRailApproach,
   timelineFor,
   withCamera,
   withCameraSide,
@@ -98,7 +100,8 @@ function Choice<T extends string>({ label, options, value, onChange, name = capi
  * exactly what's on stage.
  */
 export default function DreamTricks({ initialSearch = '' }: { initialSearch?: string }) {
-  const [state, setState] = useState<ExplorerState>(() => dreamStateFromSearch(initialSearch));
+  const [state, setRawState] = useState<ExplorerState>(() => dreamStateFromSearch(initialSearch));
+  const setState = (next: ExplorerState) => setRawState(restrictRailApproach(next));
   const [rate, setRate] = useState(1);
   const [shared, setShared] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -209,7 +212,7 @@ export default function DreamTricks({ initialSearch = '' }: { initialSearch?: st
             <h2 id="dream-spot-title" className="dream-heading">Pick a spot</h2>
             <div className="dream-spot-list" role="radiogroup" aria-labelledby="dream-spot-title">
               {DREAM_SPOTS.map((option) => {
-                const active = option.id === state.set;
+                const active = option.id === spot.id;
                 return (
                   <button
                     key={option.id}
@@ -315,7 +318,7 @@ export default function DreamTricks({ initialSearch = '' }: { initialSearch?: st
               <div className="dream-tweaks">
                 <Choice
                   label="Grind side"
-                  options={GRIND_SIDES}
+                  options={grindSidesFor(state)}
                   value={state.side}
                   onChange={(side) => set({ side })}
                   name={(side) => side}
@@ -352,7 +355,8 @@ export default function DreamTricks({ initialSearch = '' }: { initialSearch?: st
         <CameraAngleDialog
           shots={shots}
           selected={shot}
-          side={state.cameraSide}
+          side={filmingSide(state)}
+          cameraFor={(next) => sceneCamera({ ...state, camera: next })}
           onClose={() => setCameraOpen(false)}
           onChoose={(next) => {
             setState(withShot(state, next));

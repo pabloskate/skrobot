@@ -15,7 +15,7 @@ presentation changes, not a claim of legal clearance.
   and low garden seating instead of the memorial's equilateral platform and
   triangular planting bed. The plaza uses one stone tile color with subtle
   grout lines, without patchwork tile colors or decorative stains.
-- **Hollywood 16** keeps its name and riding obstacles; its auditorium wall is
+- **Hollywood High (16 and 12)** keeps its name and riding obstacles; its auditorium wall is
   plain rather than reproducing the portrait mural.
 
 The animation registry owns display names used by both explorers and video

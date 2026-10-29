@@ -2,7 +2,7 @@ import { ClassicSpot3D } from '../classicSpot3d';
 import type { SceneCamera, TripodId } from '../../camera/camera';
 import type { StageFrame } from '../../stage/stage';
 import { buildWallenbergGeometry } from './wallenbergGeometry';
-import { SET_FOOT, WALLENBERG_DROP, WALLENBERG_LANE_Z, WALLENBERG_RUN, wallenbergGround, wallenbergLevel } from './wallenbergLayout';
+import { WALLENBERG_DROP, WALLENBERG_FILMERS, WALLENBERG_LANE_Z, WALLENBERG_RUN, wallenbergGround } from './wallenbergLayout';
 import { wallenbergView } from './wallenbergCamera';
 
 /**
@@ -20,11 +20,7 @@ export class Wallenberg3D extends ClassicSpot3D {
       grade: WALLENBERG_DROP / WALLENBERG_RUN,
       run: WALLENBERG_RUN,
       drop: WALLENBERG_DROP,
-      tripods: {
-        bottom: { u: WALLENBERG_RUN + 24 * SET_FOOT, z: 2 * SET_FOOT, height: 4.5 * SET_FOOT - WALLENBERG_DROP, frame: 21 * SET_FOOT, place: 0.42 },
-        side: { u: 9 * SET_FOOT, z: -36 * SET_FOOT, height: 6.5 * SET_FOOT + wallenbergLevel(2), frame: 20 * SET_FOOT, place: 0.44 },
-        top: { u: -2 * SET_FOOT, z: -9.5 * SET_FOOT, height: 5.5 * SET_FOOT, frame: 20 * SET_FOOT, place: 0.46 },
-      },
+      filmers: WALLENBERG_FILMERS,
     });
   }
 

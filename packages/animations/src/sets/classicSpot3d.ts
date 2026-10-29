@@ -7,8 +7,7 @@ import { elToroPropMaterial, elToroSkyMaterial } from './elToro/elToroMaterials'
 import { StreetProps, type StreetPropPlacements } from './props/streetProps';
 import { wireMeshMaterial, type WireMesh } from './wireMesh';
 import { SET_SCALE } from './setScale';
-
-export interface SpotTripod { u: number; z: number; height: number; frame: number; place: number }
+import { filmersFor, tripodStand, type SpotFilmers } from './tripods';
 /** A spot's scenery and cameras, laid out in its own set units (setScale.ts): the stage draws and films it SET_SCALE bigger. */
 export interface ClassicSpotConfig {
   build: () => {
@@ -27,7 +26,8 @@ export interface ClassicSpotConfig {
   framing?: number;
   /** Camera corridor in the spot's coordinates, independent of the rider's line. */
   cameraZ?: [number, number];
-  tripods?: Readonly<Record<TripodId, SpotTripod>>;
+  /** Where its filmers stand (tripods.ts). */
+  filmers?: SpotFilmers;
   /**
    * Obstacles the crane films from up top (Hollywood's fence; 'stairs' for a
    * spot's only way down, Leap of Faith's drop beside its stair block): it
@@ -36,10 +36,6 @@ export interface ClassicSpotConfig {
    * pickets or into the stairs.
    */
   stayUp?: readonly Obstacle[];
-  /** Where the filmers stand instead for a trick over another obstacle (Hollywood's fence). */
-  obstacleTripods?: Partial<Record<Obstacle, Readonly<Record<TripodId, SpotTripod>>>>;
-  /** …and for a grind down one of the spot's ledges (Miami's slab edges), clear of the line in. */
-  ledgeTripods?: Readonly<Record<'left' | 'right', Readonly<Record<TripodId, SpotTripod>>>>;
   /** Realistic trees and cars, parked or driving, loaded after the set (props/streetProps.ts). */
   streetProps?: StreetPropPlacements;
 }
@@ -179,13 +175,10 @@ export class ClassicSpot3D {
     if (!frame.stairs) return null;
     zoom *= this.config.framing ?? 1;
     const across = frame.stairs.across;
-    const tripods = (frame.stairs.ledge && this.config.ledgeTripods?.[frame.stairs.ledge])
-      ?? (frame.stairs.obstacle && this.config.obstacleTripods?.[frame.stairs.obstacle]) ?? this.config.tripods;
-    if (tripod && tripods) {
-      const p = tripods[tripod];
-      // The other side of a side-on shot: the filmer stands across the rider's line.
-      const behind = p.z * SET_SCALE - across;
-      const eye: Vec3 = [p.u * SET_SCALE - frame.scroll, p.height * SET_SCALE, camera.side === 'left' ? -behind : behind];
+    if (tripod && this.config.filmers) {
+      const p = tripodStand(filmersFor(this.config.filmers, frame.stairs), tripod, camera.side);
+      // Standing still in the set, which slides under the rider.
+      const eye: Vec3 = [p.u * SET_SCALE - frame.scroll, p.height * SET_SCALE, p.z * SET_SCALE - across];
       return tripodView(eye, frame.lift, p.frame * SET_SCALE, p.place, zoom, aspect, camera.pan);
     }
     const rad = Math.PI / 180;

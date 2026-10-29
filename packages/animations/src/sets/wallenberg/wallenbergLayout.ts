@@ -1,4 +1,5 @@
 import { SET_FOOT } from '../setScale';
+import type { SpotFilmers } from '../tripods';
 
 export { SET_FOOT };
 const INCH = SET_FOOT / 12;
@@ -142,3 +143,15 @@ export function wallenbergSurface(x: number, z: number): number {
   const blocks = wallenbergLevel(WALLENBERG_STEPS - level);
   return onSlope(x, z) ? Math.max(blocks, wallenbergSlope(x)) : blocks;
 }
+
+/** Where the filmers stand (tripods.ts): out on the street straight up the line, on the court side below the blocks’ rounded ends, and beside the lip looking up the alley. */
+export const WALLENBERG_FILMERS: SpotFilmers = {
+  stairs: {
+    line: WALLENBERG_LANE_Z,
+    stands: {
+      bottom: { u: WALLENBERG_RUN + 24 * SET_FOOT, z: 2 * SET_FOOT, height: 4.5 * SET_FOOT - WALLENBERG_DROP, frame: 21 * SET_FOOT, place: 0.42 },
+      side: { u: 9 * SET_FOOT, z: -36 * SET_FOOT, height: 6.5 * SET_FOOT + wallenbergLevel(2), frame: 20 * SET_FOOT, place: 0.44 },
+      top: { u: -2 * SET_FOOT, z: -9.5 * SET_FOOT, height: 5.5 * SET_FOOT, frame: 20 * SET_FOOT, place: 0.46 },
+    },
+  },
+};

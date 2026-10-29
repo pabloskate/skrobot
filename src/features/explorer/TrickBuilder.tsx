@@ -6,7 +6,7 @@ import { SKATERS, setInfo, type PopEnd } from '@skrobot/animations';
 import { trickMatchesSearch } from '@/features/tricks';
 import {
   FLATGROUND_TIERS,
-  GRIND_SIDES,
+  grindSidesFor,
   GRIND_TIERS,
   INTO_TIERS,
   OUT_CHOICES,
@@ -327,7 +327,7 @@ export default function TrickBuilder({ state, onChange }: Props) {
             {slot === 'grind' && (
               <>
                 <div className="explorer-segmented explorer-segmented-compact" role="radiogroup" aria-label="Grind side">
-                  {GRIND_SIDES.map((side) => (
+                  {grindSidesFor(state).map((side) => (
                     <button
                       key={side}
                       type="button"

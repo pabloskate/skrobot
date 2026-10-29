@@ -6,7 +6,7 @@ import type { StageFrame } from '../../stage/stage';
 import { SET_SCALE } from '../setScale';
 import { buildUcDavisGeometry } from './ucDavisGeometry';
 import {
-  UC_DAVIS_DROP, UC_DAVIS_FOOT as F, UC_DAVIS_LANE_Z, UC_DAVIS_RUN, ucDavisGround,
+  UC_DAVIS_DROP, UC_DAVIS_FILMERS, UC_DAVIS_FOOT as F, UC_DAVIS_LANE_Z, UC_DAVIS_RUN, ucDavisGround,
   UC_DAVIS_BUILDING_FRONT_X,
   UC_DAVIS_HALL_HALF_WIDTH, UC_DAVIS_ROOF_FRONT_X,
 } from './ucDavisLayout';
@@ -19,11 +19,7 @@ export class UcDavis3D extends ClassicSpot3D {
       grade: UC_DAVIS_DROP / UC_DAVIS_RUN, run: UC_DAVIS_RUN, drop: UC_DAVIS_DROP,
       cameraZ: [-100 * F, 100 * F],
       stayUp: ['stairs'],
-      tripods: {
-        bottom: { u: UC_DAVIS_RUN + 52 * F, z: -F, height: -UC_DAVIS_DROP + 4 * F, frame: 21 * F, place: 0.55 },
-        side: { u: UC_DAVIS_RUN + 16 * F, z: 20 * F, height: -UC_DAVIS_DROP + 5.5 * F, frame: 22 * F, place: 0.55 },
-        top: { u: -3 * F, z: 10 * F, height: 5.8 * F, frame: 21.5 * F, place: 0.54 },
-      },
+      filmers: UC_DAVIS_FILMERS,
     });
   }
 

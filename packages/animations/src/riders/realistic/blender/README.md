@@ -50,13 +50,17 @@ blender -b --python packages/animations/src/riders/realistic/blender/build_skate
 ```
 
 The second makes `alien.glb`: the same body, rig and clothes, reshaped by
-MakeHuman's head and hand targets (`ALIEN_TARGETS`: a domed cranium over a
-small, narrow face, a small nose and mouth, ears down to nubs, long thin
-fingers), each eye widened into an almond tilted up at its outer corner
-(`EYE_WARP`, about the eye bones' heads, so the eye and lid bones stay put),
-the little fingers capped off at the knuckle, and no brows, lashes, or
-beanie. Its eyes ride the head bone: they're solid black, so the lids carry
-the look. It writes no textures (it wears the skater's).
+MakeHuman's head and hand targets (`ALIEN_TARGETS`: a softly domed cranium,
+full cheeks, a small nose, a relaxed mouth with a hint of a smile, ears down
+to nubs, and slightly elongated fingers). Each eye is widened into a rounded
+almond with a gentle tilt (`EYE_WARP`, about the eye bones' heads, so the eye
+and lid bones stay put); the folds below the enlarged sockets are relaxed
+without moving the opening. The little fingers are capped off at the knuckle,
+and there are no brows, lashes, or beanie. The reshaped eyes ride the head
+bone so their almond surfaces stay in the sockets; the runtime shades them
+jade with round pupils and soft reflections. It writes no textures (it
+wears the skater's). After changing the alien, re-render its selection
+portrait at `public/skaters/alien.webp` from the updated stage rider too.
 
 Then check the skater in `/explore?skater=realistic` from a few angles, in
 both stances and a slam, and run `npm test` (`realisticHuman3d.test.ts`
