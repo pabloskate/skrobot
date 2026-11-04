@@ -1,0 +1,1390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Skate Robot — Clone Prototype</title>
+<style>
+/* ===== Design system (ported from globals.css) ===== */
+@font-face {
+  font-family: 'Montserrat';
+  src: local('Montserrat'), local('system-ui');
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+}
+:root {
+  --purple: #6431d8;
+  --purple-dark: #4f23b0;
+  --purple-soft: #ece5fb;
+  --ink: #221a4e;
+  --muted: #6b6786;
+  --bg: #f3f2f6;
+  --card: #ffffff;
+  --danger: #e0455c;
+  --green: #2da866;
+  --radius: 16px;
+  --shadow: 0 2px 8px rgba(34,26,78,.08), 0 8px 24px rgba(34,26,78,.06);
+  --robot-ink: #23232e;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Montserrat', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  -webkit-font-smoothing: antialiased;
+}
+button { font-family: inherit; color: inherit; cursor: pointer; border: none; background: none; }
+input { font-family: inherit; }
+
+/* ===== Top bar ===== */
+.topbar {
+  background: var(--purple);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px 16px;
+  padding-top: max(16px, env(safe-area-inset-top));
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  box-shadow: 0 2px 12px rgba(34,26,78,.25);
+}
+.topbar h1 {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: .3px;
+  flex: 1;
+}
+.back-btn {
+  color: #fff;
+  font-size: 26px;
+  line-height: 1;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: none;
+  border: none;
+}
+.back-btn:hover { background: rgba(255,255,255,.15); }
+
+/* ===== Tab bar ===== */
+.tabbar {
+  position: fixed;
+  right: 0; bottom: 0; left: 0;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  padding: 6px 0 max(7px, env(safe-area-inset-bottom));
+  background: rgba(255,255,255,.96);
+  border-top: 1px solid rgba(124,118,156,.22);
+  backdrop-filter: blur(14px);
+}
+.tabbar-btn {
+  position: relative;
+  min-height: 55px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: #70698b;
+  font-size: 11px;
+  font-weight: 700;
+  background: none;
+  border: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.tabbar-btn svg { width: 22px; height: 22px; stroke-width: 2.2; transition: stroke-width .15s, color .15s; }
+.tabbar-btn::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  width: 40px;
+  height: 4px;
+  border-radius: 0 0 4px 4px;
+  background: var(--purple);
+  opacity: 0;
+  transform: scaleX(.5);
+  transition: opacity .18s, transform .18s;
+}
+.tabbar-btn.active { color: var(--purple); font-weight: 800; }
+.tabbar-btn.active svg { stroke-width: 2.7; }
+.tabbar-btn.active::before { opacity: 1; transform: scaleX(1); }
+.tabbar-btn:active { transform: scale(.97); }
+
+/* ===== Layout ===== */
+main { flex: 1; padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+.container { max-width: 680px; margin: 0 auto; padding: 20px 16px 40px; }
+.screen { animation: screen-in .26s cubic-bezier(.22,.61,.36,1); }
+@keyframes screen-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ===== Cards ===== */
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+.card-compact { padding: 14px 16px; }
+
+/* ===== Buttons ===== */
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 16px 20px;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: .02em;
+  transition: transform .08s, background .15s;
+}
+.btn:active { transform: scale(.98); }
+.btn-primary { background: var(--purple); color: #fff; }
+.btn-primary:hover { background: var(--purple-dark); }
+.btn-secondary { background: var(--purple-soft); color: var(--purple-dark); }
+.btn-ghost { background: transparent; color: var(--muted); font-weight: 700; }
+.btn-danger { background: rgba(224,69,92,.12); color: var(--danger); }
+
+/* ===== Home screen ===== */
+.hero-card {
+  background: linear-gradient(135deg, var(--purple) 0%, var(--purple-dark) 100%);
+  color: #fff;
+  border-radius: 20px;
+  padding: 28px 24px;
+  margin-bottom: 20px;
+  box-shadow: 0 8px 32px rgba(100,49,216,.3);
+}
+.hero-eyebrow {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+  opacity: .8;
+  margin-bottom: 8px;
+}
+.hero-card h2 {
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: -.02em;
+  line-height: 1.1;
+  margin-bottom: 6px;
+}
+.hero-card p { font-size: 14px; opacity: .85; line-height: 1.5; margin-bottom: 20px; }
+.hero-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.hero-stat {
+  background: rgba(255,255,255,.15);
+  border-radius: 12px;
+  padding: 10px 8px;
+  text-align: center;
+}
+.hero-stat-val { font-size: 22px; font-weight: 900; line-height: 1; }
+.hero-stat-lbl { font-size: 10px; font-weight: 700; opacity: .75; text-transform: uppercase; letter-spacing: .08em; margin-top: 4px; }
+
+/* ===== Section headers ===== */
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.section-header h3 {
+  font-size: 18px;
+  font-weight: 800;
+}
+.section-header a {
+  color: var(--purple);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* ===== Clone card ===== */
+.clone-card {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px;
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  transition: transform .1s;
+  cursor: pointer;
+}
+.clone-card:active { transform: scale(.98); }
+.clone-avatar-wrap {
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  background: var(--bg);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.clone-info { flex: 1; min-width: 0; }
+.clone-name { font-size: 16px; font-weight: 800; line-height: 1.2; }
+.clone-creator { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.clone-meta {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.chip {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--purple-soft);
+  color: var(--purple-dark);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.chip-tier-beginner { background: #e3f3e8; color: #1a7a3e; }
+.chip-tier-intermediate { background: #e8eaf6; color: #3949ab; }
+.chip-tier-advanced { background: #fff3e0; color: #e65100; }
+.chip-tier-pro { background: #fce4ec; color: #c62828; }
+
+/* ===== Wizard ===== */
+.wizard-progress {
+  display: flex;
+  gap: 6px;
+  padding: 16px 20px 0;
+}
+.wizard-step-dot {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(100,49,216,.18);
+  transition: background .3s;
+}
+.wizard-step-dot.done { background: var(--purple); }
+.wizard-step-dot.current { background: var(--purple); }
+.wizard-step-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  padding: 8px 20px 0;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.step-title {
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: -.02em;
+  margin-bottom: 6px;
+}
+.step-sub {
+  font-size: 14px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin-bottom: 24px;
+}
+
+/* ===== DNA / Stats display ===== */
+.dna-section { margin-bottom: 24px; }
+.dna-section-title {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--purple);
+  margin-bottom: 10px;
+}
+.dna-score-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.dna-score-circle {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: conic-gradient(var(--purple) calc(var(--pct) * 1%), var(--purple-soft) 0);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.dna-score-circle-inner {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--card);
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+  font-weight: 900;
+  color: var(--purple);
+}
+.dna-score-info h4 { font-size: 16px; font-weight: 800; }
+.dna-score-info p { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+.trick-list { display: flex; flex-direction: column; gap: 8px; }
+.trick-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--bg);
+  border-radius: 12px;
+}
+.trick-name { flex: 1; font-size: 14px; font-weight: 700; }
+.trick-diff { font-size: 11px; color: var(--muted); font-weight: 600; }
+.trick-rate-bar {
+  width: 60px;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(124,118,156,.18);
+  overflow: hidden;
+}
+.trick-rate-fill { height: 100%; border-radius: 3px; background: var(--green); }
+.trick-rate-fill.med { background: #f0a020; }
+.trick-rate-fill.low { background: var(--danger); }
+.trick-rate-pct { font-size: 13px; font-weight: 800; width: 36px; text-align: right; }
+
+/* ===== Name input ===== */
+.name-input-wrap { margin-bottom: 24px; }
+.name-input {
+  width: 100%;
+  padding: 16px 18px;
+  border: 2px solid rgba(124,118,156,.2);
+  border-radius: 14px;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--card);
+  outline: none;
+  transition: border-color .15s;
+}
+.name-input:focus { border-color: var(--purple); }
+.name-suggestions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.name-suggestion {
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: var(--purple-soft);
+  color: var(--purple-dark);
+  font-size: 13px;
+  font-weight: 700;
+  border: 1px solid transparent;
+  transition: border-color .15s;
+}
+.name-suggestion:hover { border-color: var(--purple); }
+
+.tagline-input {
+  width: 100%;
+  padding: 14px 16px;
+  border: 2px solid rgba(124,118,156,.2);
+  border-radius: 14px;
+  font-size: 15px;
+  color: var(--ink);
+  background: var(--card);
+  outline: none;
+  margin-top: 12px;
+}
+.tagline-input:focus { border-color: var(--purple); }
+
+/* ===== Appearance customization ===== */
+.custom-section { margin-bottom: 28px; }
+.custom-label {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+.color-swatches {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.color-swatch {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 3px solid transparent;
+  transition: border-color .15s, transform .1s;
+  position: relative;
+}
+.color-swatch.selected { border-color: var(--ink); }
+.color-swatch:active { transform: scale(.92); }
+
+.variant-picker {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+.variant-option {
+  aspect-ratio: 1;
+  border-radius: 14px;
+  background: var(--bg);
+  display: grid;
+  place-items: center;
+  border: 2px solid transparent;
+  transition: border-color .15s;
+}
+.variant-option.selected { border-color: var(--purple); }
+
+/* ===== Preview ===== */
+.preview-card {
+  background: var(--card);
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+.preview-header {
+  background: linear-gradient(135deg, var(--preview-body, var(--purple)) 0%, var(--preview-accent, var(--purple-dark)) 100%);
+  padding: 32px 24px;
+  text-align: center;
+  color: #fff;
+}
+.preview-avatar-wrap {
+  width: 120px;
+  height: 120px;
+  margin: 0 auto 12px;
+  background: rgba(255,255,255,.15);
+  border-radius: 24px;
+  display: grid;
+  place-items: center;
+}
+.preview-name { font-size: 24px; font-weight: 900; }
+.preview-tagline { font-size: 13px; opacity: .85; margin-top: 4px; }
+.preview-body { padding: 20px; }
+.preview-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.preview-stat {
+  text-align: center;
+  padding: 12px 8px;
+  background: var(--bg);
+  border-radius: 12px;
+}
+.preview-stat-val { font-size: 20px; font-weight: 900; color: var(--purple); }
+.preview-stat-lbl { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-top: 4px; }
+
+/* ===== Community ===== */
+.community-filters {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 0 16px 16px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.community-filters::-webkit-scrollbar { display: none; }
+.filter-chip {
+  white-space: nowrap;
+  padding: 8px 16px;
+  border-radius: 12px;
+  background: var(--card);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  border: 1px solid rgba(124,118,156,.15);
+  transition: all .15s;
+}
+.filter-chip.active { background: var(--purple); color: #fff; border-color: var(--purple); }
+
+.clone-list { display: flex; flex-direction: column; gap: 12px; }
+
+/* ===== Clone profile ===== */
+.profile-header {
+  background: linear-gradient(135deg, var(--profile-body) 0%, var(--profile-accent) 100%);
+  padding: 40px 24px 28px;
+  text-align: center;
+  color: #fff;
+}
+.profile-avatar-wrap {
+  width: 100px;
+  height: 100px;
+  margin: 0 auto 12px;
+  background: rgba(255,255,255,.15);
+  border-radius: 20px;
+  display: grid;
+  place-items: center;
+}
+.profile-name { font-size: 26px; font-weight: 900; }
+.profile-tagline { font-size: 14px; opacity: .85; margin-top: 4px; }
+.profile-creator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: rgba(255,255,255,.2);
+  font-size: 12px;
+  font-weight: 700;
+}
+.profile-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: rgba(124,118,156,.12);
+}
+.profile-stat {
+  background: var(--card);
+  padding: 16px 8px;
+  text-align: center;
+}
+.profile-stat-val { font-size: 20px; font-weight: 900; }
+.profile-stat-lbl { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-top: 4px; }
+
+/* ===== Toast ===== */
+.toast {
+  position: fixed;
+  bottom: 90px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  background: var(--ink);
+  color: #fff;
+  padding: 14px 24px;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: 0 8px 24px rgba(34,26,78,.3);
+  z-index: 100;
+  opacity: 0;
+  transition: transform .3s, opacity .3s;
+  pointer-events: none;
+}
+.toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+/* ===== Misc ===== */
+.empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
+.empty-state h3 { font-size: 18px; font-weight: 800; color: var(--ink); margin-bottom: 8px; }
+.empty-state p { font-size: 14px; line-height: 1.5; }
+
+.divider { height: 1px; background: rgba(124,118,156,.15); margin: 20px 0; }
+
+.badge-new {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--green);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  vertical-align: middle;
+  margin-left: 8px;
+}
+
+.wizard-nav {
+  display: flex;
+  gap: 10px;
+  padding: 20px 0 0;
+}
+.wizard-nav .btn { flex: 1; }
+
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- ===== Top bar ===== -->
+<div class="topbar" id="topbar">
+  <button class="back-btn hidden" id="backBtn" onclick="goBack()">&#8249;</button>
+  <h1 id="topbarTitle">Clone Lab</h1>
+</div>
+
+<main>
+  <!-- ===== SCREEN: Home (Clone Lab entry) ===== -->
+  <div class="container screen" id="screen-home">
+    <!-- Hero: user's skating identity -->
+    <div class="hero-card">
+      <div class="hero-eyebrow">Your Skate Identity</div>
+      <h2 id="heroTitle">You're ready to clone</h2>
+      <p id="heroSub">You've played 14 games and built up a real bag of tricks. Your clone will skate with your exact consistency rates and trick selection.</p>
+      <div class="hero-stats">
+        <div class="hero-stat">
+          <div class="hero-stat-val" id="heroSkill">6.2</div>
+          <div class="hero-stat-lbl">Skate Score</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-val" id="heroTricks">12</div>
+          <div class="hero-stat-lbl">In Bag</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-val" id="heroGames">14</div>
+          <div class="hero-stat-lbl">Games</div>
+        </div>
+      </div>
+      <button class="btn" style="background:#fff;color:var(--purple)" onclick="startWizard()">
+        Clone Yourself
+      </button>
+    </div>
+
+    <!-- My Clone (if created) -->
+    <div id="myCloneSection" class="hidden">
+      <div class="section-header">
+        <h3>Your Clone</h3>
+        <a href="javascript:void(0)" onclick="editClone()">Edit</a>
+      </div>
+      <div class="clone-card" id="myCloneCard" onclick="viewClone('me')">
+        <!-- filled by JS -->
+      </div>
+    </div>
+
+    <!-- Community Clones preview -->
+    <div class="section-header" style="margin-top:28px">
+      <h3>Community Clones <span class="badge-new">NEW</span></h3>
+      <a href="javascript:void(0)" onclick="showScreen('community')">See all</a>
+    </div>
+    <div id="homeCommunityPreview" style="display:flex;flex-direction:column;gap:12px">
+      <!-- filled by JS -->
+    </div>
+  </div>
+
+  <!-- ===== SCREEN: Wizard ===== -->
+  <div class="container screen hidden" id="screen-wizard">
+    <div class="wizard-progress" id="wizardProgress">
+      <div class="wizard-step-dot current"></div>
+      <div class="wizard-step-dot"></div>
+      <div class="wizard-step-dot"></div>
+      <div class="wizard-step-dot"></div>
+    </div>
+    <div class="wizard-step-label" id="wizardStepLabel">Step 1 of 4 — Skate DNA</div>
+
+    <!-- Step 1: DNA -->
+    <div id="wizard-step-1">
+      <h2 class="step-title" style="margin-top:20px">This is your Skate DNA</h2>
+      <p class="step-sub">Your clone will inherit these exact stats. This is what makes it <em>you</em>.</p>
+
+      <div class="dna-section">
+        <div class="dna-section-title">Skate Score</div>
+        <div class="dna-score-row">
+          <div class="dna-score-circle" style="--pct:62">
+            <div class="dna-score-circle-inner">6.2</div>
+          </div>
+          <div class="dna-score-info">
+            <h4>Advanced</h4>
+            <p>Skates like Bouncer — the tre-flip gatekeeper</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="dna-section">
+        <div class="dna-section-title">Bag of Tricks (12 tricks)</div>
+        <div class="trick-list" id="dnaTrickList">
+          <!-- filled by JS -->
+        </div>
+      </div>
+
+      <div class="dna-section">
+        <div class="dna-section-title">Record</div>
+        <div style="display:flex;gap:12px">
+          <div style="flex:1;background:var(--bg);border-radius:12px;padding:14px;text-align:center">
+            <div style="font-size:22px;font-weight:900;color:var(--green)">9W</div>
+            <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase">Wins</div>
+          </div>
+          <div style="flex:1;background:var(--bg);border-radius:12px;padding:14px;text-align:center">
+            <div style="font-size:22px;font-weight:900;color:var(--danger)">5L</div>
+            <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase">Losses</div>
+          </div>
+          <div style="flex:1;background:var(--bg);border-radius:12px;padding:14px;text-align:center">
+            <div style="font-size:22px;font-weight:900;color:var(--purple)">64%</div>
+            <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase">Win Rate</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="wizard-nav">
+        <button class="btn btn-primary" onclick="nextStep()">Continue</button>
+      </div>
+    </div>
+
+    <!-- Step 2: Name -->
+    <div id="wizard-step-2" class="hidden">
+      <h2 class="step-title" style="margin-top:20px">Name your clone</h2>
+      <p class="step-sub">This is how other skaters will see your clone in the community. Make it memorable.</p>
+
+      <div class="name-input-wrap">
+        <label class="custom-label">Clone Name</label>
+        <input class="name-input" id="cloneNameInput" placeholder="e.g. Tre-Flip Terry" maxlength="24" oninput="updatePreview()" />
+        <div class="name-suggestions">
+          <button class="name-suggestion" onclick="setName('Mirror Me')">Mirror Me</button>
+          <button class="name-suggestion" onclick="setName('Tre-Flip Terry')">Tre-Flip Terry</button>
+          <button class="name-suggestion" onclick="setName('Diesel Jr')">Diesel Jr</button>
+          <button class="name-suggestion" onclick="setName('Switch Slinger')">Switch Slinger</button>
+          <button class="name-suggestion" onclick="setName('Hardflip Hank')">Hardflip Hank</button>
+        </div>
+      </div>
+
+      <div class="name-input-wrap">
+        <label class="custom-label">Tagline (optional)</label>
+        <input class="tagline-input" id="cloneTaglineInput" placeholder="A short personality line..." maxlength="60" oninput="updatePreview()" />
+      </div>
+
+      <div class="wizard-nav">
+        <button class="btn btn-ghost" onclick="prevStep()">Back</button>
+        <button class="btn btn-primary" onclick="nextStep()">Continue</button>
+      </div>
+    </div>
+
+    <!-- Step 3: Appearance -->
+    <div id="wizard-step-3" class="hidden">
+      <h2 class="step-title" style="margin-top:20px">Customize appearance</h2>
+      <p class="step-sub">Pick your clone's colors and style. This is how it looks on the roster.</p>
+
+      <div id="customPreview" style="display:flex;justify-content:center;margin-bottom:24px">
+        <!-- live avatar preview -->
+      </div>
+
+      <div class="custom-section">
+        <div class="custom-label">Body Color</div>
+        <div class="color-swatches" id="bodySwatches"></div>
+      </div>
+
+      <div class="custom-section">
+        <div class="custom-label">Accent Color</div>
+        <div class="color-swatches" id="accentSwatches"></div>
+      </div>
+
+      <div class="custom-section">
+        <div class="custom-label">Avatar Style</div>
+        <div class="variant-picker" id="variantPicker"></div>
+      </div>
+
+      <div class="wizard-nav">
+        <button class="btn btn-ghost" onclick="prevStep()">Back</button>
+        <button class="btn btn-primary" onclick="nextStep()">Continue</button>
+      </div>
+    </div>
+
+    <!-- Step 4: Review & Publish -->
+    <div id="wizard-step-4" class="hidden">
+      <h2 class="step-title" style="margin-top:20px">Ready to publish?</h2>
+      <p class="step-sub">This is your clone. Once published, skaters worldwide can play against it.</p>
+
+      <div class="preview-card" id="reviewCard">
+        <!-- filled by JS -->
+      </div>
+
+      <div style="background:var(--purple-soft);border-radius:14px;padding:16px;margin-bottom:20px">
+        <div style="font-size:12px;font-weight:800;color:var(--purple-dark);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px">What happens next?</div>
+        <ul style="font-size:13px;color:var(--ink);line-height:1.7;padding-left:16px;margin:0">
+          <li>Your clone joins the community roster</li>
+          <li>Other skaters can challenge it to S.K.A.T.E.</li>
+          <li>You'll see how it performs in the Clone Stats</li>
+          <li>You can update or unpublish anytime</li>
+        </ul>
+      </div>
+
+      <div class="wizard-nav">
+        <button class="btn btn-ghost" onclick="prevStep()">Back</button>
+        <button class="btn btn-primary" onclick="publishClone()">Publish Clone</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== SCREEN: Community ===== -->
+  <div class="screen hidden" id="screen-community">
+    <div class="community-filters" id="communityFilters">
+      <button class="filter-chip active" onclick="filterClones('all', this)">All</button>
+      <button class="filter-chip" onclick="filterClones('beginner', this)">Beginner</button>
+      <button class="filter-chip" onclick="filterClones('intermediate', this)">Intermediate</button>
+      <button class="filter-chip" onclick="filterClones('advanced', this)">Advanced</button>
+      <button class="filter-chip" onclick="filterClones('pro', this)">Pro</button>
+      <button class="filter-chip" onclick="filterClones('trending', this)">Trending</button>
+    </div>
+    <div class="container" style="padding-top:0">
+      <div class="clone-list" id="communityList">
+        <!-- filled by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== SCREEN: Clone Profile ===== -->
+  <div class="screen hidden" id="screen-profile">
+    <div id="profileContent">
+      <!-- filled by JS -->
+    </div>
+  </div>
+
+</main>
+
+<!-- ===== Tab bar ===== -->
+<div class="tabbar" id="tabbar">
+  <button class="tabbar-btn active" data-tab="home" onclick="showScreen('home')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12l9-9 9 9M5 10v10h14V10" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>Home</span>
+  </button>
+  <button class="tabbar-btn" data-tab="community" onclick="showScreen('community')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5M16 8v6M19 11h-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>Clones</span>
+  </button>
+  <button class="tabbar-btn" data-tab="tricks">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 16l4-8 4 8 4-8 4 8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>Tricks</span>
+  </button>
+  <button class="tabbar-btn" data-tab="settings">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.5-2.4 1a7 7 0 0 0-1.7-1l-.4-2.5h-4l-.4 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a7 7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5c.1-.3.1-.7.1-1z" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>Settings</span>
+  </button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== Data =====
+const BODY_COLORS = ['#6431d8','#e0455c','#2da866','#f0a020','#4f86f7','#ff6b6b','#41c9b4','#ff9f1c','#cdb4db','#aab2bd'];
+const ACCENT_COLORS = ['#f9b234','#e05c7a','#3ddad7','#f7c948','#2ec4b6','#ffd166','#4ecdc4','#ffafcc','#8d99ae','#10002b'];
+
+const USER_TRICKS = [
+  { name: 'Ollie', diff: 1, rate: 0.95 },
+  { name: 'Pop Shuvit', diff: 2, rate: 0.88 },
+  { name: 'Frontside 180', diff: 2, rate: 0.82 },
+  { name: 'Backside 180', diff: 2, rate: 0.79 },
+  { name: 'Kickflip', diff: 3, rate: 0.72 },
+  { name: 'Heelflip', diff: 3, rate: 0.65 },
+  { name: 'Varial Kickflip', diff: 4, rate: 0.55 },
+  { name: 'Frontside Shuvit', diff: 2, rate: 0.76 },
+  { name: 'Bigspin', diff: 4, rate: 0.48 },
+  { name: '360 Flip', diff: 5, rate: 0.42 },
+  { name: 'Hardflip', diff: 5, rate: 0.35 },
+  { name: 'Backside 360', diff: 4, rate: 0.38 },
+];
+
+const COMMUNITY_CLONES = [
+  { id: 'c1', name: 'Tre-Flip Terry', creator: 'terry_skates', tier: 'advanced', skill: 6.1, games: 47, wins: 28, body: '#e07a5f', accent: '#3d405b', variant: 0, tagline: 'Tre flips on demand', signature: '360 Flip', signatureRate: 0.78, trending: true },
+  { id: 'c2', name: 'Switch Slinger', creator: 'mia_switch', tier: 'pro', skill: 7.2, games: 89, wins: 61, body: '#cdb4db', accent: '#ffafcc', variant: 3, tagline: 'Mirror mode activated', signature: 'Switch Kickflip', signatureRate: 0.71, trending: true },
+  { id: 'c3', name: 'Diesel Jr', creator: 'diesel_jr', tier: 'advanced', skill: 5.9, games: 32, wins: 15, body: '#e76f51', accent: '#264653', variant: 1, tagline: 'Hardflip specialist', signature: 'Hardflip', signatureRate: 0.64, trending: false },
+  { id: 'c4', name: 'Cruiser Carl', creator: 'carl_cruise', tier: 'beginner', skill: 3.2, games: 18, wins: 7, body: '#7bb661', accent: '#c8e6b0', variant: 0, tagline: 'Old school rules', signature: 'Manual', signatureRate: 0.90, trending: false },
+  { id: 'c5', name: 'Laser Luna', creator: 'luna_laser', tier: 'pro', skill: 7.8, games: 112, wins: 82, body: '#e0aaff', accent: '#10002b', variant: 0, tagline: 'Laser flip sniper', signature: 'Laser Flip', signatureRate: 0.68, trending: true },
+  { id: 'c6', name: 'Nollie Nate', creator: 'nate_nollie', tier: 'intermediate', skill: 4.6, games: 24, wins: 11, body: '#f6a5c0', accent: '#3a2e4d', variant: 2, tagline: 'Lives on the nose', signature: 'Nollie Flip', signatureRate: 0.73, trending: false },
+  { id: 'c7', name: 'Bigspin Bea', creator: 'bea_spin', tier: 'intermediate', skill: 4.5, games: 31, wins: 16, body: '#ff6b6b', accent: '#4ecdc4', variant: 0, tagline: 'Bigspin merchant', signature: 'Bigspin', signatureRate: 0.75, trending: true },
+  { id: 'c8', name: 'Fakie Finn', creator: 'finn_fakie', tier: 'intermediate', skill: 4.8, games: 42, wins: 23, body: '#a8dadc', accent: '#e63946', variant: 3, tagline: 'Rides out of fakie', signature: 'Half Cab', signatureRate: 0.82, trending: false },
+  { id: 'c9', name: 'Heelflip Hero', creator: 'hero_heel', tier: 'beginner', skill: 3.0, games: 12, wins: 4, body: '#41c9b4', accent: '#1d7a8c', variant: 1, tagline: 'Heels over head', signature: 'Heelflip', signatureRate: 0.77, trending: false },
+  { id: 'c10', name: 'Double Dex', creator: 'dex_double', tier: 'pro', skill: 8.4, games: 156, wins: 119, body: '#48cae4', accent: '#023e8a', variant: 2, tagline: 'Double flip dealer', signature: 'Double Kickflip', signatureRate: 0.66, trending: true },
+];
+
+// ===== State =====
+let currentScreen = 'home';
+let screenStack = [];
+let wizardStep = 1;
+let myClone = null; // null until created
+let wizardState = {
+  name: '',
+  tagline: '',
+  bodyColor: '#6431d8',
+  accentColor: '#f9b234',
+  variant: 0,
+};
+let communityFilter = 'all';
+
+// ===== Robot Avatar (ported from RobotAvatar.tsx) =====
+function robotAvatarSVG(body, accent, variant, size) {
+  const STROKE = '#23232e';
+  const SW = 3;
+  const LIMB_W = 5.5;
+  const s = size || 64;
+
+  function outlinedPath(d, w) {
+    w = w || LIMB_W;
+    return `<path d="${d}" stroke="${STROKE}" stroke-width="${w+2}" stroke-linecap="round" fill="none"/>
+            <path d="${d}" stroke="${accent}" stroke-width="${w-1}" stroke-linecap="round" fill="none"/>`;
+  }
+  function backArmPath(d) {
+    return `<path d="${d}" stroke="${accent}" stroke-width="4.5" stroke-linecap="round" fill="none" opacity="0.35"/>`;
+  }
+
+  // Variant modifies head shape slightly
+  const headRx = 7;
+  const headRy = variant === 1 ? 9 : 7; // variant 1: taller head
+  const visorH = variant === 2 ? 8 : 7; // variant 2: bigger visor
+  const antennaLen = variant === 3 ? 8 : 6; // variant 3: longer antenna
+  const torsoRx = 9;
+
+  const hand = { fill: accent, stroke: STROKE, sw: 1.5 };
+
+  const arms = `
+    <g>${backArmPath('M38 40 Q30 52 28 66')}${backArmPath('M58 40 Q66 52 68 66')}</g>
+    <g>${outlinedPath('M38 40 Q24 54 22 68')}${outlinedPath('M58 40 Q72 54 74 68')}
+      <circle cx="22" cy="68" r="4" fill="${hand.fill}" stroke="${hand.stroke}" stroke-width="${hand.sw}"/>
+      <circle cx="74" cy="68" r="4" fill="${hand.fill}" stroke="${hand.stroke}" stroke-width="${hand.sw}"/>
+    </g>`;
+
+  const legs = `<g>${outlinedPath('M42 64 Q36 78 34 92')}${outlinedPath('M54 64 Q60 78 62 92')}</g>`;
+
+  const bodyGroup = `
+    <g>
+      <line x1="48" y1="32" x2="48" y2="36" stroke="${STROKE}" stroke-width="2.5" stroke-linecap="round"/>
+      <rect x="36" y="36" width="24" height="28" rx="${torsoRx}" fill="${body}" stroke="${STROKE}" stroke-width="${SW}"/>
+      <rect x="34" y="12" width="28" height="20" rx="${headRx}" fill="${body}" stroke="${STROKE}" stroke-width="${SW}"/>
+      <rect x="38" y="16" width="20" height="${visorH}" rx="3.5" fill="${STROKE}" opacity="0.85"/>
+      <circle cx="43" cy="19.5" r="2" fill="${accent}"/>
+      <circle cx="53" cy="19.5" r="2" fill="${accent}"/>
+      <line x1="48" y1="12" x2="48" y2="${12-antennaLen}" stroke="${STROKE}" stroke-width="2.5" stroke-linecap="round"/>
+      <circle cx="48" cy="${12-antennaLen-1.5}" r="3.5" fill="${accent}" stroke="${STROKE}" stroke-width="1.5"/>
+    </g>`;
+
+  const boots = `
+    <g>
+      <rect x="28" y="89" width="12" height="7" rx="3.5" fill="${accent}" stroke="${STROKE}" stroke-width="2"/>
+      <rect x="56" y="89" width="12" height="7" rx="3.5" fill="${accent}" stroke="${STROKE}" stroke-width="2"/>
+    </g>`;
+
+  const board = `
+    <g transform="translate(18 86)">
+      <path d="M0 0 q4 6 12 6 h40 q8 0 12 -6" stroke="${STROKE}" stroke-width="${SW}" fill="none" stroke-linecap="round"/>
+      <circle cx="16" cy="10" r="3.8" fill="#c8c8c8" stroke="${STROKE}" stroke-width="2.5"/>
+      <circle cx="48" cy="10" r="3.8" fill="#c8c8c8" stroke="${STROKE}" stroke-width="2.5"/>
+    </g>`;
+
+  return `<svg class="robot-avatar" width="${s}" height="${s}" viewBox="-5 -5 110 110" role="img">
+    <g transform="translate(2 0) scale(0.95)">
+      ${arms}${legs}${boots}${bodyGroup}
+    </g>
+    ${board}
+  </svg>`;
+}
+
+// ===== Helpers =====
+function tierClass(tier) { return 'chip-tier-' + tier; }
+function tierLabel(tier) { return tier.charAt(0).toUpperCase() + tier.slice(1); }
+
+function rateClass(rate) {
+  if (rate >= 0.6) return '';
+  if (rate >= 0.35) return 'med';
+  return 'low';
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ===== Screen navigation =====
+function showScreen(name, pushStack) {
+  if (pushStack !== false && currentScreen !== name) {
+    screenStack.push(currentScreen);
+  }
+  currentScreen = name;
+
+  document.querySelectorAll('[id^="screen-"]').forEach(el => el.classList.add('hidden'));
+  const target = document.getElementById('screen-' + name);
+  if (target) target.classList.remove('hidden');
+
+  // Tab bar
+  document.querySelectorAll('.tabbar-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === name);
+  });
+
+  // Top bar
+  const titles = { home: 'Clone Lab', community: 'Community Clones', profile: 'Clone Profile', wizard: 'Create Clone' };
+  document.getElementById('topbarTitle').textContent = titles[name] || 'Skate Robot';
+
+  // Back button
+  const showBack = name === 'wizard' || name === 'profile' || (name === 'community' && screenStack.length > 0);
+  document.getElementById('backBtn').classList.toggle('hidden', !showBack);
+
+  // Tab bar visibility
+  const showTabbar = name === 'home' || name === 'community';
+  document.getElementById('tabbar').style.display = showTabbar ? 'grid' : 'none';
+
+  window.scrollTo(0, 0);
+}
+
+function goBack() {
+  if (screenStack.length > 0) {
+    const prev = screenStack.pop();
+    showScreen(prev, false);
+  } else {
+    showScreen('home', false);
+  }
+}
+
+// ===== Home screen =====
+function renderHome() {
+  // Hero stats
+  document.getElementById('heroSkill').textContent = '6.2';
+  document.getElementById('heroTricks').textContent = '12';
+  document.getElementById('heroGames').textContent = '14';
+
+  // My clone section
+  if (myClone) {
+    document.getElementById('myCloneSection').classList.remove('hidden');
+    document.getElementById('heroTitle').textContent = 'Your clone is live';
+    document.getElementById('heroSub').textContent = myClone.name + ' is skating in the community. ' + myClone.gamesPlayed + ' skaters have challenged it so far.';
+    document.getElementById('myCloneCard').innerHTML = cloneCardHTML(myClone);
+  }
+
+  // Community preview (first 3)
+  const preview = document.getElementById('homeCommunityPreview');
+  preview.innerHTML = COMMUNITY_CLONES.slice(0, 3).map(c => cloneCardHTML(c)).join('');
+}
+
+function cloneCardHTML(clone) {
+  const winRate = clone.games > 0 ? Math.round(clone.wins / clone.games * 100) : 0;
+  return `
+    <div class="clone-card" onclick="viewClone('${clone.id}')">
+      <div class="clone-avatar-wrap">${robotAvatarSVG(clone.body, clone.accent, clone.variant, 48)}</div>
+      <div class="clone-info">
+        <div class="clone-name">${clone.name}</div>
+        <div class="clone-creator">by @${clone.creator}</div>
+        <div class="clone-meta">
+          <span class="chip ${tierClass(clone.tier)}">${tierLabel(clone.tier)}</span>
+          <span class="chip">${clone.games} games</span>
+          <span class="chip">${winRate}% win</span>
+          ${clone.trending ? '<span class="chip" style="background:#fff3e0;color:#e65100">Trending</span>' : ''}
+        </div>
+      </div>
+    </div>`;
+}
+
+// ===== Wizard =====
+function startWizard() {
+  wizardStep = 1;
+  wizardState = { name: '', tagline: '', bodyColor: '#6431d8', accentColor: '#f9b234', variant: 0 };
+  showScreen('wizard');
+  renderWizardStep();
+}
+
+function renderWizardStep() {
+  // Progress dots
+  const dots = document.querySelectorAll('.wizard-step-dot');
+  dots.forEach((dot, i) => {
+    dot.classList.remove('done', 'current');
+    if (i < wizardStep - 1) dot.classList.add('done');
+    if (i === wizardStep - 1) dot.classList.add('current');
+  });
+
+  const labels = ['Step 1 of 4 — Skate DNA', 'Step 2 of 4 — Name & Tagline', 'Step 3 of 4 — Appearance', 'Step 4 of 4 — Review & Publish'];
+  document.getElementById('wizardStepLabel').textContent = labels[wizardStep - 1];
+
+  for (let i = 1; i <= 4; i++) {
+    document.getElementById('wizard-step-' + i).classList.toggle('hidden', i !== wizardStep);
+  }
+
+  if (wizardStep === 1) renderDNA();
+  if (wizardStep === 3) renderCustomizer();
+  if (wizardStep === 4) renderReview();
+
+  window.scrollTo(0, 0);
+}
+
+function nextStep() {
+  if (wizardStep < 4) { wizardStep++; renderWizardStep(); }
+}
+function prevStep() {
+  if (wizardStep > 1) { wizardStep--; renderWizardStep(); }
+}
+
+function renderDNA() {
+  const list = document.getElementById('dnaTrickList');
+  list.innerHTML = USER_TRICKS.map(t => `
+    <div class="trick-row">
+      <div class="trick-name">${t.name}</div>
+      <div class="trick-diff">Diff ${t.diff}</div>
+      <div class="trick-rate-bar"><div class="trick-rate-fill ${rateClass(t.rate)}" style="width:${t.rate*100}%"></div></div>
+      <div class="trick-rate-pct">${Math.round(t.rate*100)}%</div>
+    </div>
+  `).join('');
+}
+
+function setName(name) {
+  document.getElementById('cloneNameInput').value = name;
+  wizardState.name = name;
+}
+
+function updatePreview() {
+  wizardState.name = document.getElementById('cloneNameInput').value;
+  wizardState.tagline = document.getElementById('cloneTaglineInput').value;
+}
+
+// ===== Customizer =====
+function renderCustomizer() {
+  // Body swatches
+  const bodyEl = document.getElementById('bodySwatches');
+  bodyEl.innerHTML = BODY_COLORS.map(c => `
+    <div class="color-swatch ${c === wizardState.bodyColor ? 'selected' : ''}"
+         style="background:${c}" onclick="pickColor('body','${c}')"></div>
+  `).join('');
+
+  // Accent swatches
+  const accentEl = document.getElementById('accentSwatches');
+  accentEl.innerHTML = ACCENT_COLORS.map(c => `
+    <div class="color-swatch ${c === wizardState.accentColor ? 'selected' : ''}"
+         style="background:${c}" onclick="pickColor('accent','${c}')"></div>
+  `).join('');
+
+  // Variant picker
+  const varEl = document.getElementById('variantPicker');
+  varEl.innerHTML = [0,1,2,3].map(v => `
+    <div class="variant-option ${v === wizardState.variant ? 'selected' : ''}" onclick="pickVariant(${v})">
+      ${robotAvatarSVG(wizardState.bodyColor, wizardState.accentColor, v, 56)}
+    </div>
+  `).join('');
+
+  renderCustomPreview();
+}
+
+function pickColor(type, color) {
+  if (type === 'body') wizardState.bodyColor = color;
+  else wizardState.accentColor = color;
+  renderCustomizer();
+}
+
+function pickVariant(v) {
+  wizardState.variant = v;
+  renderCustomizer();
+}
+
+function renderCustomPreview() {
+  const el = document.getElementById('customPreview');
+  el.innerHTML = `
+    <div style="background:var(--bg);border-radius:20px;padding:20px;display:grid;place-items:center">
+      ${robotAvatarSVG(wizardState.bodyColor, wizardState.accentColor, wizardState.variant, 100)}
+    </div>`;
+}
+
+// ===== Review =====
+function renderReview() {
+  wizardState.name = document.getElementById('cloneNameInput').value || 'Unnamed Clone';
+  wizardState.tagline = document.getElementById('cloneTaglineInput').value || 'A clone of you';
+
+  const card = document.getElementById('reviewCard');
+  card.style.setProperty('--preview-body', wizardState.bodyColor);
+  card.style.setProperty('--preview-accent', wizardState.accentColor);
+  card.innerHTML = `
+    <div class="preview-header" style="background:linear-gradient(135deg, ${wizardState.bodyColor} 0%, ${wizardState.accentColor} 100%)">
+      <div class="preview-avatar-wrap" style="background:rgba(255,255,255,.15)">
+        ${robotAvatarSVG(wizardState.bodyColor, wizardState.accentColor, wizardState.variant, 80)}
+      </div>
+      <div class="preview-name">${wizardState.name}</div>
+      <div class="preview-tagline">${wizardState.tagline}</div>
+    </div>
+    <div class="preview-body">
+      <div class="preview-stat-grid">
+        <div class="preview-stat">
+          <div class="preview-stat-val">6.2</div>
+          <div class="preview-stat-lbl">Skill</div>
+        </div>
+        <div class="preview-stat">
+          <div class="preview-stat-val">12</div>
+          <div class="preview-stat-lbl">Tricks</div>
+        </div>
+        <div class="preview-stat">
+          <div class="preview-stat-val">Advanced</div>
+          <div class="preview-stat-lbl">Tier</div>
+        </div>
+      </div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.5">
+        <strong style="color:var(--ink)">Signature trick:</strong> 360 Flip (42% consistency)<br>
+        <strong style="color:var(--ink)">Plays like:</strong> Bouncer — tre-flip gatekeeper
+      </div>
+    </div>`;
+}
+
+// ===== Publish =====
+function publishClone() {
+  myClone = {
+    id: 'me',
+    name: wizardState.name,
+    creator: 'you',
+    tier: 'advanced',
+    skill: 6.2,
+    games: 0,
+    wins: 0,
+    body: wizardState.bodyColor,
+    accent: wizardState.accentColor,
+    variant: wizardState.variant,
+    tagline: wizardState.tagline,
+    signature: '360 Flip',
+    signatureRate: 0.42,
+    trending: false,
+    gamesPlayed: 0,
+  };
+
+  showToast('Clone published! It\'s now in the community.');
+  screenStack = [];
+  showScreen('home', false);
+  renderHome();
+}
+
+function editClone() {
+  // Jump to wizard with pre-filled state
+  wizardStep = 2;
+  wizardState = {
+    name: myClone.name,
+    tagline: myClone.tagline,
+    bodyColor: myClone.body,
+    accentColor: myClone.accent,
+    variant: myClone.variant,
+  };
+  showScreen('wizard');
+  renderWizardStep();
+  document.getElementById('cloneNameInput').value = myClone.name;
+  document.getElementById('cloneTaglineInput').value = myClone.tagline;
+}
+
+// ===== Community =====
+function renderCommunity() {
+  const list = document.getElementById('communityList');
+  let clones = COMMUNITY_CLONES;
+  if (myClone) clones = [myClone, ...clones];
+
+  if (communityFilter !== 'all') {
+    if (communityFilter === 'trending') {
+      clones = clones.filter(c => c.trending);
+    } else {
+      clones = clones.filter(c => c.tier === communityFilter);
+    }
+  }
+
+  if (clones.length === 0) {
+    list.innerHTML = `<div class="empty-state"><h3>No clones here yet</h3><p>Try a different filter.</p></div>`;
+  } else {
+    list.innerHTML = clones.map(c => cloneCardHTML(c)).join('');
+  }
+}
+
+function filterClones(filter, btn) {
+  communityFilter = filter;
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+  renderCommunity();
+}
+
+// ===== Clone Profile =====
+function viewClone(id) {
+  let clone;
+  if (id === 'me' && myClone) clone = myClone;
+  else clone = COMMUNITY_CLONES.find(c => c.id === id);
+
+  if (!clone) return;
+
+  const winRate = clone.games > 0 ? Math.round(clone.wins / clone.games * 100) : 0;
+  const isMe = clone.id === 'me';
+
+  const content = document.getElementById('profileContent');
+  content.style.setProperty('--profile-body', clone.body);
+  content.style.setProperty('--profile-accent', clone.accent);
+  content.innerHTML = `
+    <div class="profile-header" style="background:linear-gradient(135deg, ${clone.body} 0%, ${clone.accent} 100%)">
+      <div class="profile-avatar-wrap">${robotAvatarSVG(clone.body, clone.accent, clone.variant, 80)}</div>
+      <div class="profile-name">${clone.name}</div>
+      <div class="profile-tagline">${clone.tagline}</div>
+      <div class="profile-creator">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6" stroke-linecap="round"/></svg>
+        ${isMe ? 'Created by you' : 'by @' + clone.creator}
+      </div>
+    </div>
+    <div class="profile-stats">
+      <div class="profile-stat">
+        <div class="profile-stat-val">${clone.skill}</div>
+        <div class="profile-stat-lbl">Skill</div>
+      </div>
+      <div class="profile-stat">
+        <div class="profile-stat-val">${clone.games}</div>
+        <div class="profile-stat-lbl">Games</div>
+      </div>
+      <div class="profile-stat">
+        <div class="profile-stat-val">${winRate}%</div>
+        <div class="profile-stat-lbl">Win Rate</div>
+      </div>
+      <div class="profile-stat">
+        <div class="profile-stat-val">${tierLabel(clone.tier)}</div>
+        <div class="profile-stat-lbl">Tier</div>
+      </div>
+    </div>
+    <div class="container">
+      <div class="card">
+        <div class="dna-section-title">Signature Trick</div>
+        <div style="display:flex;align-items:center;gap:16px">
+          <div style="font-size:32px">${robotAvatarSVG(clone.body, clone.accent, clone.variant, 0).length ? '' : ''}</div>
+          <div style="flex:1">
+            <div style="font-size:18px;font-weight:900">${clone.signature}</div>
+            <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+              <div class="trick-rate-bar" style="width:100px"><div class="trick-rate-fill" style="width:${clone.signatureRate*100}%;background:var(--purple)"></div></div>
+              <span style="font-size:14px;font-weight:800">${Math.round(clone.signatureRate*100)}% consistency</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="dna-section-title">Bag of Tricks</div>
+        <div class="trick-list">
+          ${USER_TRICKS.map(t => `
+            <div class="trick-row">
+              <div class="trick-name">${t.name}</div>
+              <div class="trick-diff">Diff ${t.diff}</div>
+              <div class="trick-rate-bar"><div class="trick-rate-fill ${rateClass(t.rate)}" style="width:${t.rate*100}%"></div></div>
+              <div class="trick-rate-pct">${Math.round(t.rate*100)}%</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+
+      ${isMe ? `
+        <div style="display:flex;gap:10px;margin-bottom:16px">
+          <button class="btn btn-secondary" style="flex:1" onclick="editClone()">Edit Clone</button>
+          <button class="btn btn-danger" style="flex:1" onclick="unpublishClone()">Unpublish</button>
+        </div>
+      ` : `
+        <button class="btn btn-primary" style="margin-bottom:16px" onclick="challengeClone('${clone.id}')">
+          Play S.K.A.T.E. vs ${clone.name}
+        </button>
+        <button class="btn btn-ghost" onclick="shareClone('${clone.id}')">Share Clone</button>
+      `}
+    </div>`;
+
+  showScreen('profile');
+}
+
+function challengeClone(id) {
+  const clone = COMMUNITY_CLONES.find(c => c.id === id) || myClone;
+  if (clone) {
+    showToast('Game starting vs ' + clone.name + '...');
+    setTimeout(() => showToast('This is a prototype — game flow not included'), 2000);
+  }
+}
+
+function shareClone(id) {
+  showToast('Share link copied! (prototype)');
+}
+
+function unpublishClone() {
+  myClone = null;
+  showToast('Clone unpublished');
+  screenStack = [];
+  showScreen('home', false);
+  renderHome();
+}
+
+// ===== Init =====
+renderHome();
+renderCommunity();
+</script>
+</body>
+</html>
