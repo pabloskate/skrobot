@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Group } from 'three';
-import { LAND_T, ROLL_IN, TRICK_BASES, flightTime } from '../../motion/trick';
+import { LAND_T, ROLL_IN, TRICK_BASES, catchFraction, flatTimeline, flightTime } from '../../motion/trick';
 import { WHEEL_BOTTOM, WHEEL_R, WHEEL_X, WHEEL_Y, WHEEL_Z } from '../../board/board';
 import { DEFAULT_SCENE_CAMERA } from '../../camera/camera';
 import { BOTTOM_LOCAL, TOP_LOCAL } from '../../board/deck';
@@ -194,7 +194,8 @@ describe('El Toro', () => {
       expect(actual.z).toBeCloseTo(expected.z, 6);
     };
     for (const rider of RIDERS) {
-      for (const base of ['Kickflip', 'Heelflip', 'Frontside 180', 'Backside 180', '360 Flip', 'Impossible']) {
+      // A board turning under a square rider is caught short down a drop and guided round (the next test), so no 360 Flip here.
+      for (const base of ['Kickflip', 'Heelflip', 'Frontside 180', 'Backside 180', 'Late Backside Shuvit', 'Impossible']) {
         const stairs = plan(base, { stance: 'fakie', rider });
         const flat = plan(base, { stance: 'fakie', rider, set: 'plaza' });
         const t = stairs.stairs!.pop + stairs.stairs!.flight * 0.45;
@@ -223,6 +224,51 @@ describe('El Toro', () => {
         expect(down.board.pitchDeg).toBe(level.board.pitchDeg);
         expect(down.flickZ).toBe(-level.flickZ);
       }
+    }
+  });
+
+  it('catches a board turning under a square rider short of round, the feet guiding it the rest of the way to touchdown', () => {
+    const style = resolveSkateStyle(robotWith(0.92).skateStyle);
+    const caughtAt = catchFraction(style);
+    const flat = flatTimeline(style);
+    const local = (frame: StageFrame, v: V3) => [{ x: 1, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }, { x: 0, y: 0, z: 1 }].map((axis) => dot3(v, frame.rig.board.dir(axis)));
+    for (const [base, yaw] of [['360 Flip', 360], ['360 Shuvit', 360], ['Varial Kickflip', 180], ['Hardflip', 180], ['Inward Heelflip', 180], ['Pop Shuvit', 180]] as const) {
+      // Short of round by the turn left at the pace that eases to a stop at touchdown, never more than 35°.
+      const short = Math.min(35, (yaw * (1 - caughtAt)) / (1 + caughtAt));
+      for (const stance of STANCES) {
+        for (const rider of RIDERS) {
+          const stage = plan(base, { stance, rider });
+          const { pop, flight } = stage.stairs!;
+          const at = (q: number) => stageFrame(stage, pop + q * flight, 1);
+          // Fakie starts the board turned 180° (the stage rolls it tail first), so count the turn from the pop.
+          const turned = (q: number) => at(q).rig.board.yawDeg - at(0).rig.board.yawDeg;
+          const dir = Math.sign(turned(caughtAt));
+          const touchdown = at(1 - 1e-9);
+          expect(Math.abs(turned(caughtAt))).toBeCloseTo(yaw - short, 6);
+          expect(Math.abs(turned(1 - 1e-9))).toBeCloseTo(yaw, 3);
+          let last = turned(caughtAt - 0.02);
+          for (let q = caughtAt; q < 1; q += 0.01) {
+            const now = turned(q);
+            expect(dir * (now - last)).toBeGreaterThan(-1e-9);
+            last = now;
+            expect(Math.abs(at(q).rig.board.dir({ x: 0, y: 0, z: 1 }).y)).toBeLessThan(1e-6);
+          }
+          // Both feet down by a tenth of the flight after the catch, then turning with the deck.
+          for (let q = caughtAt + 0.1; q < 1; q += 0.01) {
+            const frame = at(q);
+            for (let i = 0; i < 2; i++) {
+              const [a, b] = [frame, touchdown].map((f) => local(f, f.rig.legs[i].shoe.side));
+              expect(Math.acos(Math.min(1, dot3({ x: a[0], y: a[1], z: a[2] }, { x: b[0], y: b[1], z: b[2] }))) * (180 / Math.PI)).toBeLessThan(5);
+              const [pa, pb] = [frame, touchdown].map((f) => local(f, { x: f.rig.legs[i].shoe.origin.x - f.rig.board.center.x, y: f.rig.legs[i].shoe.origin.y - f.rig.board.center.y, z: f.rig.legs[i].shoe.origin.z - f.rig.board.center.z }));
+              expect(Math.hypot(pa[0] - pb[0], pa[2] - pb[2])).toBeLessThan(1);
+            }
+          }
+        }
+      }
+      // On flatground the short hop leaves nothing to guide: it's round at the catch.
+      const level = plan(base, { set: 'plaza' });
+      const levelYaw = (t: number) => stageFrame(level, t, 1).rig.board.yawDeg;
+      expect(Math.abs(levelYaw(flat.pop + caughtAt * (flat.land - flat.pop)) - levelYaw(flat.pop))).toBeCloseTo(yaw, 6);
     }
   });
 

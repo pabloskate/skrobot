@@ -67,7 +67,22 @@ interface Spec {
    * carries the nose up on end between the legs (see the rig's tiltFor).
    */
   tilt: number;
+  /**
+   * Caught short of its shuv, the feet guiding the last of it round to
+   * touchdown (guideShort), as a board turning under a square rider is down
+   * a drop. There the long hang would otherwise leave the board finished,
+   * hanging, before the feet come down on it. The stage sets it for a gap.
+   */
+  guided: boolean;
 }
+
+/**
+ * The most of its shuv a guided catch (Spec.guided) leaves the board to turn
+ * (degrees): about as far as the legs can steer a deck under hips that stay
+ * square. A 360 flip down a big set is caught 20–40° short of round and
+ * guided the rest of the way into the landing.
+ */
+const GUIDE_MAX = 35;
 
 /**
  * Share of the catch clock a counter shuv's trick is caught by
@@ -189,9 +204,48 @@ function specFor(trick: Trick): Spec {
     late: false,
     counterShuv: false,
     tilt: 0,
+    guided: false,
   };
   const spec = { ...base, ...TRICK_MOTIONS[trick.base] };
   return { ...spec, bodySpinDir: spec.bodySpinDir || spec.spinDir };
+}
+
+/**
+ * Whether a guided catch (Spec.guided) steers the board round: its own shuv,
+ * under a rider who isn't turning, caught (`caughtAt` of the flight) before
+ * touchdown. A body spin carries the board to touchdown already, an
+ * impossible's foot never lets go of it, and a late shuv whips round late on
+ * its own clock.
+ */
+const guidesShuv = (spec: Spec, caughtAt: number) =>
+  spec.guided && spec.yaw > 0 && !spec.bodyYaw && !spec.wrap && !spec.late && caughtAt < 1;
+
+/**
+ * How far short of its shuv (degrees) a guided board is when the feet catch
+ * it, `caughtAt` of the way through the flight; 0 for any other. From there
+ * the feet take its spin out, to nothing at touchdown. Slowing it steadily
+ * from the pace it was caught at turns it on half that pace over the rest of
+ * the flight: 29° of a 360 for a neutral catch (0.85), more for an earlier
+ * one, up to GUIDE_MAX.
+ */
+function guideShort(spec: Spec, caughtAt: number): number {
+  if (!guidesShuv(spec, caughtAt)) return 0;
+  return Math.min(GUIDE_MAX, (spec.yaw * (1 - caughtAt)) / (1 + caughtAt));
+}
+
+/**
+ * 0 → 1: how far round its shuv a guided board is `p` of the way through the
+ * flight. It turns steadily to `short` degrees short by the catch, then
+ * slows under the feet and stops, round, at touchdown. The turn left goes as
+ * a power of the flight left, the one that keeps the board's pace through
+ * the catch: 2, a steady slowing, unless GUIDE_MAX has held the short down,
+ * when the feet slow it harder as they take it and ease it in after.
+ */
+function guidedShuv(spec: Spec, p: number, short: number, caughtAt: number): number {
+  const steady = 1 - short / spec.yaw;
+  if (p <= caughtAt) return (steady * p) / caughtAt;
+  const k = (steady * spec.yaw * (1 - caughtAt)) / (short * caughtAt);
+  return 1 - (short / spec.yaw) * (1 - clamp01((p - caughtAt) / (1 - caughtAt))) ** k;
 }
 
 /**
@@ -381,7 +435,7 @@ interface Frame {
    *  these instead. flipDeg = around the board's long axis, yawDeg = board
    *  around the vertical axis, forwardPitchDeg = Dolphin/Forward-flip nose
    *  dive, bodyYawDeg = skater around the vertical axis; a counter shuv
-   *  also names its shuvDeg (RawTrickRotation). */
+   *  and a guided catch also name their shuvDeg (RawTrickRotation). */
   spin3d: { flipDeg: number; yawDeg: number; forwardPitchDeg: number; bodyYawDeg: number; shuvDeg?: number };
   /** Shared phase clocks for renderer-only motion such as lateral flick. */
   motion: { flight: number; rotation: number };
@@ -687,6 +741,12 @@ function computeFrame(
     const easedShuv = !evenShuv && spec.yaw === 180 && !spec.bodyYaw && !spec.flips && !spec.forwardFlip;
     const spinP = easedShuv ? easeOutCubic(rawSpinP) : rawSpinP;
     rotationProgress = spinP;
+    // A guided catch (Spec.guided) has the feet turn the board the rest of
+    // the way round after it: in the world it's short of its shuv by the
+    // catch. The flip, and the shuv's own turn about its leaning axis, are
+    // done by then, as any catch's are.
+    const short = guideShort(spec, caughtAt);
+    const shuvP = short ? guidedShuv(spec, p, short, caughtAt) : spinP;
     
     // Shank: the trick dies mid-rotation. Flip and body spin (yaw) share the
     // same per-attempt progress (35–90%) so an under-rotated kickflip 180
@@ -712,7 +772,7 @@ function computeFrame(
     // touchdown, carrying the board round with it, and never stops in the air.
     // A counter shuv's turn eases in round the trick and on past its catch.
     const bodyP = spec.counterShuv ? counterTurnProgress(p, caughtAt) : p;
-    const boardYaw = boardYawDeg(spec, spinP, bodyP);
+    const boardYaw = boardYawDeg(spec, shuvP, bodyP);
     if (spec.yaw) {
       const c = Math.cos(rad(boardYaw * shankYawScale));
       // A clean spin (no flip) reads better passing through the signed thin
@@ -1095,7 +1155,7 @@ function computeFrame(
     t,
     board: { x: boardX, y: boardY, rot: boardRot, sx, sy, griptape: sy >= 0 },
     body: { x: bodyX, y: bodyY, sx: bodySX, rot: bodyRot },
-    spin3d: { flipDeg, yawDeg, forwardPitchDeg, bodyYawDeg, ...(spec.counterShuv && { shuvDeg }) },
+    spin3d: { flipDeg, yawDeg, forwardPitchDeg, bodyYawDeg, ...((spec.counterShuv || guidesShuv(spec, catchFraction(skateStyle))) && { shuvDeg }) },
     motion: { flight: flightProgress, rotation: rotationProgress },
     footL,
     footR,
@@ -1111,6 +1171,7 @@ export {
   boardYawDeg,
   computeFrame,
   catchFraction,
+  guidesShuv,
   knee,
   clampFootReach,
   randomFallVariant,

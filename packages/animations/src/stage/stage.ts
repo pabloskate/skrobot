@@ -99,9 +99,9 @@ export function planStage(
   },
 ): StagePlan {
   const { landed, riderStance, style, shankProgress, skater = 'robot', set = 'plaza', rail: choice = 'center', obstacle } = options;
-  const spec = specFor(trick);
+  const trickSpec = specFor(trick);
   const grindSpec = setGrindSpec(set, trick);
-  const mechanics = resolveRiderMechanics(riderStance, spec.stance);
+  const mechanics = resolveRiderMechanics(riderStance, trickSpec.stance);
   // Where the set has handrails a grind rides one down the stairs; where it has a drop a flatground trick goes down it.
   const { rails, grinds, ledges } = setInfo(set);
   const terrain = setTerrain(set, obstacle);
@@ -117,7 +117,9 @@ export function planStage(
   const railBail = jumpsOff && grind ? planRailBail(grind, options.railBail ?? 'forward') : null;
   // A kick-out down a drop flies the landed attempt's arc up to its takeover.
   const kickOut = !landed && fall === 'kickout' && !grind;
-  const stairs = terrain && !grind ? planStairs(style, landed || kickOut, terrain, spec.stance, trick.base) : null;
+  const stairs = terrain && !grind ? planStairs(style, landed || kickOut, terrain, trickSpec.stance, trick.base) : null;
+  // Down a drop a board turning under the rider is caught short of round, and the feet guide it the rest of the way.
+  const spec = stairs ? { ...trickSpec, guided: true } : trickSpec;
   const over = stairs && setInfo(set).obstacles ? (obstacle && hasObstacle(set, obstacle) ? obstacle : 'stairs') : null;
   const hop = landed ? (grind ? grind.stepOff : stairs?.stepOff) ?? null : null;
   const stage: StagePlan = {
