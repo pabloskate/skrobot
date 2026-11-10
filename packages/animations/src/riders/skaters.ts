@@ -1,11 +1,11 @@
 /**
- * Who rides: the robot, the realistic human, or the green alien made from
- * him (same body and clothes). All ride the same trick and board motion. The
- * people wear a person's proportions on the robot's rig (human/humanRig.ts);
- * each one's meshes, and the board they ride, are picked in
- * three/renderer.ts.
+ * Who rides: the robot, the realistic human, the green alien made from him
+ * (same body and clothes), or Wind-Up, a tin toy robot on the robot's rig.
+ * All ride the same trick and board motion. The people wear a person's
+ * proportions on the robot's rig (human/humanRig.ts); each one's meshes,
+ * and the board they ride, are picked in three/renderer.ts.
  */
-export type Skater = 'robot' | 'realistic' | 'alien';
+export type Skater = 'robot' | 'realistic' | 'alien' | 'windup';
 
 export interface SkaterInfo {
   id: Skater;
@@ -19,6 +19,7 @@ export const SKATERS: readonly SkaterInfo[] = [
   { id: 'robot', label: 'Robot', person: false },
   { id: 'realistic', label: 'Realistic', person: true },
   { id: 'alien', label: 'Alien', person: true },
+  { id: 'windup', label: 'Wind-Up', person: false },
 ];
 
 const BY_ID = new Map(SKATERS.map((skater) => [skater.id, skater]));

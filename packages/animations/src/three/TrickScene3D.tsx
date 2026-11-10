@@ -62,7 +62,7 @@ interface Props {
   rail?: RailChoice;
   /** Where the set has several ways down (Hollywood): what a gap trick goes over, the stairs or the fence. */
   obstacle?: Obstacle;
-  /** Who rides: the robot (its look from `robot`), the realistic human, or the alien. */
+  /** Who rides: the robot (its look from `robot`), the realistic human, the alien, or Wind-Up (a tin toy robot in its own paint). */
   skater?: Skater;
   /** Play the attempt's sounds while its clock runs: the pop, the wheels, a grind or slide, the landing. Off by default. */
   sound?: boolean;

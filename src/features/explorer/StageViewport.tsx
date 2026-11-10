@@ -39,7 +39,7 @@ export interface StageScene {
   rail: RailChoice;
   /** At a spot with several ways down, what a flatground trick goes over. */
   obstacle: Obstacle;
-  /** Who skates: the robot, the realistic human, or the alien. */
+  /** Who skates: the robot, the realistic human, the alien, or Wind-Up. */
   skater: Skater;
   /** The attempt missed instead of landed: kicked out, or jumped off a rail (see Outcome). Absent lands it. */
   fall?: Outcome | null;

@@ -62,6 +62,7 @@ const SKATERS: ReadonlyArray<{ id: Skater; label: string }> = [
   { id: 'robot', label: 'Robot' },
   { id: 'realistic', label: 'Realistic' },
   { id: 'alien', label: 'Alien' },
+  { id: 'windup', label: 'Wind-Up' },
 ];
 
 /** Wait for the camera to settle before writing it into the address bar. */

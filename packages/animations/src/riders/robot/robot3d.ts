@@ -3,11 +3,11 @@ import { PALETTE } from '../../camera/camera';
 import { mixHex, rad, smoothstep, sub3, norm3, dot3, type V3 } from '../../math';
 import type { Expression, RobotLook } from '../look';
 import { ARM_RADII, HAND_RADIUS, LEG_RADII, shiftFrame, type Rig } from '../../motion/skeleton';
-import { Capsule, frontDecalGeometry, roundedBoxGeometry, type BoxSpec } from '../../three/geometry';
+import { frontDecalGeometry, roundedBoxGeometry, type BoxSpec } from '../../three/geometry';
 import { faceMaterial, inkInfo, INK_ROBOT, toonMaterial } from '../../three/materials';
 import { shoeGeometries } from '../shoe3d';
-import { toThree, type StageView } from '../../camera/view';
-import { hipsFrame, placeFrame } from '../placement';
+import type { StageView } from '../../camera/view';
+import { hipsFrame, Limb, placeFrame, placePoint, staticMesh } from '../placement';
 
 /**
  * The robot skater: a chunky toy with a box head and visor screen (its face
@@ -47,25 +47,6 @@ export const ROBOT_PRIORITY = { armFar: 40, legFar: 50, legNear: 55, torso: 60, 
 const SHOE_OVER_LEG = 2;
 
 const EXPRESSIONS: Record<Expression, number> = { open: 0, focus: 1, happy: 2, wince: 3 };
-
-function staticMesh(geometry: BufferGeometry, material: ShaderMaterial): Mesh {
-  const mesh = new Mesh(geometry, material);
-  mesh.matrixAutoUpdate = false;
-  return mesh;
-}
-
-/** A limb segment, rewritten every frame in world space. */
-class Limb {
-  readonly capsule = new Capsule();
-  readonly mesh: Mesh;
-  constructor(readonly material: ShaderMaterial) {
-    this.mesh = new Mesh(this.capsule.geometry, material);
-    this.mesh.frustumCulled = false;
-  }
-  set(a: V3, b: V3, wa: number, wb = wa) {
-    this.capsule.set(toThree(a), toThree(b), wa / 2, wb / 2);
-  }
-}
 
 interface ArmParts {
   upper: Limb;
@@ -304,10 +285,4 @@ export class Robot3D {
       }
     });
   }
-}
-
-function placePoint(mesh: Mesh, p: V3) {
-  const [x, y, z] = toThree(p);
-  mesh.matrix.makeTranslation(x, y, z);
-  mesh.matrixWorldNeedsUpdate = true;
 }

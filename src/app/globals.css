@@ -7229,7 +7229,7 @@ main:has(.rps-arena) > .screen {
 /* Skater cards show the same riders as the stage, without extra live canvases. */
 .dream-skater-list {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   margin-top: 12px;
 }
@@ -7237,6 +7237,7 @@ main:has(.rps-arena) > .screen {
 .dream-skater {
   position: relative;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 4px;
   min-width: 0;
   padding: 8px 6px 12px;
@@ -7252,6 +7253,7 @@ main:has(.rps-arena) > .screen {
 .dream-skater-robot { --skater-bg: #eaf4fb; }
 .dream-skater-realistic { --skater-bg: #f4f0e9; }
 .dream-skater-alien { --skater-bg: #edf4e8; }
+.dream-skater-windup { --skater-bg: #fbece6; }
 
 .dream-skater:hover {
   border-color: #cdbff3;
@@ -7288,6 +7290,7 @@ main:has(.rps-arena) > .screen {
   font-weight: 800;
   line-height: 1.3;
   text-align: center;
+  white-space: nowrap;
 }
 
 .dream-skater-check {
@@ -7301,6 +7304,32 @@ main:has(.rps-arena) > .screen {
   border-radius: 50%;
   color: #fff;
   background: var(--purple);
+}
+
+/* Four across a phone: narrow cards, so the tick keeps to its corner, clear of the portrait. */
+@media (max-width: 479px) {
+  .dream-skater {
+    padding-inline: 4px;
+  }
+
+  .dream-skater-check {
+    top: 4px;
+    right: 4px;
+    width: 14px;
+    height: 14px;
+    padding: 2px;
+  }
+}
+
+/* Too narrow for four names in a row: two rows of two, the portraits squarer so the pair stays short. */
+@media (max-width: 384px) {
+  .dream-skater-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dream-skater-portrait {
+    aspect-ratio: 1;
+  }
 }
 
 .dream-footing {

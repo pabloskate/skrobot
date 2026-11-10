@@ -58,7 +58,7 @@ export { STAGE_SETS, hasObstacle, railApproachAllowed, railLineFor, setGrindSpec
 /** The stage's yardstick (the 31-inch deck) and gravity, and the moments of a trick down a drop. */
 export { FOOT, GRAVITY, INCH } from './units';
 export { stairTimeline, type StairTimeline } from './sets/elToro/stairs';
-/** Who rides: the robot, the realistic human, or the alien. */
+/** Who rides: the robot, the realistic human, the alien, or Wind-Up the tin toy robot. */
 export { SKATERS, skaterInfo, type Skater, type SkaterInfo } from './riders/skaters';
 /** Grinds and slides: on the flat bar, or down a spot's handrail. */
 export { grindTimelineFor, type GrindTimeline, type Handrail } from './motion/grind';

@@ -10,8 +10,8 @@ import { dirToThree, toThree, type StageView } from '../camera/view';
 import { BOARD_WIDTH_SCALE } from './boardDimensions';
 
 /**
- * The cartoon skateboard (the robot's), built to
- * board.ts and deck.ts: the popsicle deck with its grip, printed underside,
+ * The cartoon skateboard (the robot's, and Wind-Up's in its own colors),
+ * built to board.ts and deck.ts: the popsicle deck with its grip, printed underside,
  * and ply edge; silver trucks of baseplate, bushing, and a hanger flaring
  * out to the axle; cream wheels whose printed mark turns with the street and
  * smears over a frame's sweep. The board sits on the rig's board transform,

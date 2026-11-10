@@ -117,7 +117,7 @@ export interface ExplorerState {
   rail: RailChoice;
   /** At a spot with more than one way down, what a flatground trick goes over: its stairs, or (Hollywood) the fence beside them. */
   obstacle: Obstacle;
-  /** Who skates it: the robot, the realistic human, or the alien. */
+  /** Who skates it: the robot, the realistic human, the alien, or Wind-Up. */
   skater: Skater;
   /** How the attempt is missed instead (see Outcome), where the mode has that miss. Null lands it. */
   fall: Outcome | null;
