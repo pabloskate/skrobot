@@ -520,6 +520,11 @@ export class ElToro3D {
     return this.built;
   }
 
+  /** The ground and everything built on it, in set units: what a plan of the spot is drawn from (three/spotPlan.ts). */
+  terrain(): readonly Mesh[] {
+    return this.build().group.children.filter((child): child is Mesh => child instanceof Mesh);
+  }
+
   /** Filmed from one of its tripods, or by the crane kept in the walkway between the school and the canopy. */
   view(frame: StageFrame, camera: Readonly<SceneCamera>, zoom: number, aspect: number, tripod: TripodId | null): StageView | null {
     if (!frame.stairs) return null;

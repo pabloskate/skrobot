@@ -1,6 +1,6 @@
 import type { CameraSide, TripodId } from '../camera/camera';
 import type { Obstacle, StageSet } from './sets';
-import { SET_FOOT } from './setScale';
+import { SET_FOOT, SET_SCALE } from './setScale';
 import { CARLSBAD_FILMERS } from './carlsbad/carlsbadLayout';
 import { EL_TORO_FILMERS } from './elToro/elToroLayout';
 import { EMAGE_FILMERS } from './emage/emageLayout';
@@ -113,4 +113,19 @@ export const setFilmers = (set: StageSet): SpotFilmers | null => FILMERS[set] ??
 export function tripodSide(set: StageSet, tripod: TripodId, at: FilmedLine = {}): CameraSide | null {
   const filmers = setFilmers(set);
   return filmers ? standSide(filmersFor(filmers, at), tripod) : null;
+}
+
+/** Where one of a spot's own filmers stands, in stage units: along the drop from its lip, across the set, and its lens's height as the stage's y. */
+export interface SpotStand { u: number; z: number; y: number; frame: number }
+
+/** Where a spot's own filmers stand for this line, on `side` of it where asked; null where it has none. */
+export function spotStands(set: StageSet, at: FilmedLine = {}, side?: CameraSide): Record<TripodId, SpotStand> | null {
+  const filmers = setFilmers(set);
+  if (!filmers) return null;
+  const tripods = filmersFor(filmers, at);
+  const stand = (id: TripodId): SpotStand => {
+    const p = tripodStand(tripods, id, side);
+    return { u: p.u * SET_SCALE, z: p.z * SET_SCALE, y: p.height * SET_SCALE, frame: p.frame * SET_SCALE };
+  };
+  return { bottom: stand('bottom'), side: stand('side'), top: stand('top') };
 }

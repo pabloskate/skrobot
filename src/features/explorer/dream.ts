@@ -1,9 +1,11 @@
-import { setInfo, setLocation, type Obstacle, type PopEnd, type RailChoice, type StageSet } from '@skrobot/animations';
+import { FOOT, setInfo, setLocation, spotStands, wrapOrbitYaw, type Obstacle, type PopEnd, type RailChoice, type SceneCamera, type StageSet, type TripodSpot } from '@skrobot/animations';
 import {
   DEFAULT_STATE,
   cameraPreset,
   cameraPresetsFor,
+  filmedLine,
   outEndsFor,
+  sceneTripod,
   stateFromSearch,
   withGrind,
   withMode,
@@ -11,6 +13,7 @@ import {
   type CameraPresetId,
   type ExplorerMode,
   type ExplorerState,
+  type Phase,
 } from './explorer';
 
 /**
@@ -135,15 +138,164 @@ export interface DreamShot {
 }
 
 const SHOTS: readonly DreamShot[] = [
-  { id: CLASSIC_SHOT, label: 'Classic', hint: 'Filmer at the bottom' },
-  { id: 'tripod-side', label: 'From the side', hint: 'Filmer beside the drop' },
-  { id: 'tripod-top', label: 'From the top', hint: 'Filmer at the top' },
-  { id: 'follow', label: 'Follow', hint: 'Drone chasing from behind' },
-  { id: 'head-on', label: 'Head on', hint: 'Drone facing the rider' },
+  { id: CLASSIC_SHOT, label: 'Bottom', hint: 'Filmer at the bottom' },
+  { id: 'tripod-side', label: 'Side', hint: 'Filmer beside the drop' },
+  { id: 'tripod-top', label: 'Top', hint: 'Filmer at the top' },
+  { id: 'follow', label: 'Behind', hint: 'Chasing from behind' },
+  { id: 'side', label: 'Beside', hint: 'Rolling alongside' },
+  { id: 'head-on', label: 'In front', hint: 'Backing away ahead of the rider' },
+  { id: 'overhead', label: 'Above', hint: 'Looking down on the board' },
 ];
 
-/** The shots this spot can film from. */
-export const dreamShots = (state: Pick<ExplorerState, 'set' | 'camera'>): readonly DreamShot[] => {
+/** The starting points this spot offers for a camera of this kind: its filmers' stands, or angles round the rider. */
+export const dreamShots = (state: Pick<ExplorerState, 'set' | 'camera'>, mode?: CameraMode): readonly DreamShot[] => {
   const available = new Set(cameraPresetsFor(state).map((preset) => preset.id));
-  return SHOTS.filter((shot) => available.has(shot.id));
+  return SHOTS.filter((shot) => available.has(shot.id) && (!mode || (cameraPreset(shot.id).tripod != null) === (mode === 'tripod')));
 };
+
+// ----- Camera: it follows the skater, or it stays put -----
+
+/**
+ * There are only two cameras. One flies with the skater, wherever round
+ * them the viewer swings it. The other is a tripod standing still somewhere
+ * in the spot, turning to keep them in shot: at one of the spot's own
+ * filmers' stands, or anywhere the viewer drags it on the map.
+ */
+export type CameraMode = 'follow' | 'tripod';
+
+export const cameraMode = (state: Pick<ExplorerState, 'set' | 'camera' | 'stand'>): CameraMode =>
+  state.stand || sceneTripod(state) ? 'tripod' : 'follow';
+
+/** A point in a spot seen from above, in stage units: along the drop from its lip, and across the set. */
+export interface MapPoint {
+  u: number;
+  z: number;
+}
+
+/** How high a placed tripod's lens can stand over the ground: lying on it, up to a ladder or a roof's edge. */
+export const STAND_HEIGHT = Object.freeze({ min: 1 * FOOT, max: 24 * FOOT, eye: 5 * FOOT });
+/** How long a lens a placed tripod takes: the distance it shows the rider at the crane's size from. */
+const STAND_FRAME = Object.freeze({ min: 14 * FOOT, max: 90 * FOOT });
+
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+/** Where the rider is on their line at a moment of the attempt. */
+export function pathAt(path: ReadonlyArray<MapPoint & { t: number }>, t: number): MapPoint {
+  if (path.length === 0) return { u: 0, z: 0 };
+  const next = path.findIndex((point) => point.t >= t);
+  if (next <= 0) return next === 0 ? path[0] : path[path.length - 1];
+  const a = path[next - 1];
+  const b = path[next];
+  const k = (t - a.t) / Math.max(1e-6, b.t - a.t);
+  return { u: a.u + (b.u - a.u) * k, z: a.z + (b.z - a.z) * k };
+}
+
+/** Where the trick itself happens: halfway between the pop and the last moment worth jumping to (the landing). */
+export function actionPoint(path: ReadonlyArray<MapPoint & { t: number }>, phases: readonly Phase[]): MapPoint {
+  const pop = phases.find((phase) => phase.label === 'Pop')?.time ?? 0;
+  const land = phases[phases.length - 1]?.time ?? pop;
+  return pathAt(path, (pop + land) / 2);
+}
+
+/** A placed tripod frames a little wider than the crane does, so the spot it stands in is in the picture too. */
+const STAND_WIDE = 0.8;
+
+/** The lens a tripod standing `at` takes, so the trick is framed the same from wherever it's stood. */
+export const standFrame = (at: MapPoint, action: MapPoint): number =>
+  clamp(Math.hypot(at.u - action.u, at.z - action.z) * STAND_WIDE, STAND_FRAME.min, STAND_FRAME.max);
+
+/** The tripod moved to another point on the map, keeping its height. */
+export const placeStand = (stand: TripodSpot, to: MapPoint, action: MapPoint): TripodSpot =>
+  ({ ...stand, u: to.u, z: to.z, frame: standFrame(to, action) });
+
+/** A stretch of a spot seen from above: along the drop, and across the set. */
+export interface MapWindow {
+  u0: number;
+  u1: number;
+  z0: number;
+  z1: number;
+}
+
+/** Room the map keeps round the rider's line and the filmers: past its ends, and to its sides (where a tripod mostly goes). */
+const MAP_PAD = Object.freeze({ along: 16 * FOOT, beside: 24 * FOOT });
+/** The map is never narrower across than this, nor an odder shape than these (along over across). */
+const MAP_DEPTH = 64 * FOOT;
+const MAP_SHAPE = Object.freeze({ min: 1.45, max: 2 });
+/** Its edges fall on this grid, so the map holds still from one trick to the next. */
+const MAP_GRID = 4 * FOOT;
+
+/**
+ * The part of a spot the camera map shows: the rider's line and the spot's
+ * own filmers with room round them to stand a tripod, kept inside what the
+ * spot's plan covers (`within`).
+ */
+export function mapWindow(within: MapWindow, points: readonly MapPoint[]): MapWindow {
+  if (points.length === 0) return within;
+  let u0 = Math.min(...points.map((point) => point.u)) - MAP_PAD.along;
+  let u1 = Math.max(...points.map((point) => point.u)) + MAP_PAD.along;
+  let z0 = Math.min(...points.map((point) => point.z)) - MAP_PAD.beside;
+  let z1 = Math.max(...points.map((point) => point.z)) + MAP_PAD.beside;
+  const grow = (low: number, high: number, to: number): [number, number] => {
+    const more = Math.max(0, to - (high - low)) / 2;
+    return [low - more, high + more];
+  };
+  [z0, z1] = grow(z0, z1, MAP_DEPTH);
+  [z0, z1] = grow(z0, z1, (u1 - u0) / MAP_SHAPE.max);
+  [u0, u1] = grow(u0, u1, (z1 - z0) * MAP_SHAPE.min);
+  const snap = (value: number, round: (x: number) => number) => round(value / MAP_GRID) * MAP_GRID;
+  return {
+    u0: Math.max(within.u0, snap(u0, Math.floor)),
+    u1: Math.min(within.u1, snap(u1, Math.ceil)),
+    z0: Math.max(within.z0, snap(z0, Math.floor)),
+    z1: Math.min(within.z1, snap(z1, Math.ceil)),
+  };
+}
+
+/** A point kept inside a window, a margin in from its edges. */
+export const insideWindow = (point: MapPoint, window: MapWindow, margin = 0): MapPoint => ({
+  u: clamp(point.u, window.u0 + margin, window.u1 - margin),
+  z: clamp(point.z, window.z0 + margin, window.z1 - margin),
+});
+
+/** Feet the lens rises per degree a drag would tilt the crane. */
+const SWING_RISE = 0.2 * FOOT;
+
+/**
+ * The tripod swung round the trick, as a drag across the picture swings the
+ * crane round the rider: `yaw` degrees about where the trick happens, and
+ * its lens raised as far as `pitch` degrees would lift the crane.
+ */
+export function swingStand(stand: TripodSpot, action: MapPoint, yaw: number, pitch: number): TripodSpot {
+  const du = stand.u - action.u;
+  const dz = stand.z - action.z;
+  const reach = Math.hypot(du, dz);
+  const angle = Math.atan2(-du, dz) + (yaw * Math.PI) / 180;
+  return {
+    ...stand,
+    u: action.u - reach * Math.sin(angle),
+    z: action.z + reach * Math.cos(angle),
+    height: clamp(stand.height + pitch * SWING_RISE, STAND_HEIGHT.min, STAND_HEIGHT.max),
+  };
+}
+
+/** Where the crane hangs round the rider, seen from above: its angle and reach as a point off them. */
+export function followOffset(camera: SceneCamera, reach: number): MapPoint {
+  const a = (camera.yaw * Math.PI) / 180;
+  const flat = reach * camera.lens * Math.cos((camera.pitch * Math.PI) / 180);
+  return { u: -flat * Math.sin(a), z: flat * Math.cos(a) };
+}
+
+/** The crane angle that hangs it over this point off the rider. */
+export const followYaw = (offset: MapPoint): number => wrapOrbitYaw((Math.atan2(-offset.u, offset.z) * 180) / Math.PI);
+
+/**
+ * Where the spot's own filmer for the shot on stage stands, as a tripod the
+ * viewer can then drag: its lens's height over the ground there (`groundAt`
+ * reads the spot's plan). Null on the crane, or with a tripod already placed.
+ */
+export function presetStand(state: ExplorerState, groundAt: (u: number, z: number) => number): TripodSpot | null {
+  const tripod = sceneTripod(state);
+  const own = tripod && spotStands(state.set, filmedLine(state), state.cameraSide)?.[tripod];
+  if (!own) return null;
+  return { u: own.u, z: own.z, height: clamp(own.y - groundAt(own.u, own.z), STAND_HEIGHT.min, STAND_HEIGHT.max), frame: own.frame };
+}

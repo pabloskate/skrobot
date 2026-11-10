@@ -133,6 +133,7 @@ export class ClassicSpot3D {
   private readonly solid = elToroPropMaterial();
   private readonly surface = groundMaterial();
   private readonly scenery = new Group();
+  private readonly solids: Mesh[];
   private readonly streetProps: StreetProps | null;
   /** Resolves once the street props have loaded (or failed to). */
   readonly ready: Promise<void>;
@@ -156,6 +157,7 @@ export class ClassicSpot3D {
     ground.renderOrder = -50;
     ground.frustumCulled = props.frustumCulled = false;
     this.scenery.add(ground, props);
+    this.solids = [ground, props];
     if (built.wireMesh) {
       const mesh = new Mesh(built.wireMesh.geometry, wireMeshMaterial(built.wireMesh));
       mesh.frustumCulled = false;
@@ -195,6 +197,11 @@ export class ClassicSpot3D {
     const target = camera.targetZ ?? 0;
     const ratio = Math.max(0.08, (bound - target) / (view.eye[2] - target));
     return stageView(frame.lift, { ...safe, lens: safe.lens * ratio }, zoom, aspect);
+  }
+
+  /** The ground and everything built on it, in set units: what a plan of the spot is drawn from (three/spotPlan.ts). */
+  terrain(): readonly Mesh[] {
+    return this.solids;
   }
 
   update(view: StageView, scroll: number, size: { width: number; height: number }, shadow: Texture, opacity: [number, number, number], frame?: StageFrame) {

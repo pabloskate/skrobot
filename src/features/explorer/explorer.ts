@@ -31,6 +31,7 @@ import {
   flatTimeline,
   wrapOrbitYaw,
   type CameraSide,
+  type FilmedLine,
   type Obstacle,
   type PopEnd,
   type RailBail,
@@ -43,6 +44,7 @@ import {
   type StageSet,
   type TripodId,
   type TripodPan,
+  type TripodSpot,
 } from '@skrobot/animations';
 import {
   TRICKS,
@@ -101,6 +103,12 @@ export interface ExplorerState {
   cameraSide?: CameraSide;
   /** On a tripod shot, how far the viewer turned its head off the rider; none keeps it on them. */
   pan?: TripodPan;
+  /**
+   * A tripod the viewer stood somewhere of their own in the spot (Dream
+   * Tricks' camera map). It films from there in place of `camera`, which
+   * stays what it was underneath.
+   */
+  stand?: TripodSpot;
   /** How far in the picture is magnified, whatever the angle: 1 is the stock framing. */
   zoom: number;
   /** The spot the rider skates, with terrain and supported obstacles from the shared set registry. */
@@ -269,6 +277,8 @@ export function withSet(state: ExplorerState, set: StageSet): ExplorerState {
   return restrictRailApproach({
     ...state,
     set,
+    // A tripod stood in one spot means nothing in another.
+    stand: set === state.set ? state.stand : undefined,
     mode: setInfo(set).grinds ? state.mode : 'flatground',
     fall: setInfo(set).grinds ? state.fall : outcomeOf({ mode: 'flatground', fall: state.fall }),
     rail: setInfo(set).rails?.fixedLine ? 'side' : setInfo(set).rails?.sideGrinds === false ? 'center' : state.rail,
@@ -555,6 +565,7 @@ function travelDir(state: ExplorerState): 1 | -1 {
 
 /** The camera the 3D explorer films from. */
 export function sceneCamera(state: ExplorerState): SceneCamera {
+  if (state.stand) return { ...presetCamera(state), stand: state.stand };
   // A tripod films from where it stands, so dragging turns its head rather than flying the crane.
   if (sceneTripod(state)) return { ...presetCamera(state), pan: state.pan ?? { yaw: 0, pitch: 0 } };
   return presetCamera(state);
@@ -596,17 +607,22 @@ export function filmingSide(state: ExplorerState): CameraSide | null {
   if (typeof state.camera !== 'string' || !cameraPreset(state.camera).sides) return null;
   if (state.cameraSide) return state.cameraSide;
   const tripod = sceneTripod(state);
-  const line = railLine(state);
-  const own = tripod && tripodSide(state.set, tripod, {
-    obstacle: state.mode === 'flatground' ? state.obstacle : undefined,
-    ledge: setInfo(state.set).ledges && (line === 'left' || line === 'right') ? line : undefined,
-  });
+  const own = tripod && tripodSide(state.set, tripod, filmedLine(state));
   return own ?? yawSide(cameraPreset(state.camera).camera.yaw);
 }
 
+/** What the spot's filmers are filming: a gap trick over the chosen obstacle, or a grind down one of its ledges. */
+export function filmedLine(state: ExplorerState): FilmedLine {
+  const line = railLine(state);
+  return {
+    obstacle: state.mode === 'flatground' ? state.obstacle : undefined,
+    ledge: setInfo(state.set).ledges && (line === 'left' || line === 'right') ? line : undefined,
+  };
+}
+
 /** The tripod the 3D explorer films from, where the spot has the chosen one; null for the crane. */
-export function sceneTripod(state: Pick<ExplorerState, 'set' | 'camera'>): TripodId | null {
-  if (typeof state.camera !== 'string') return null;
+export function sceneTripod(state: Pick<ExplorerState, 'set' | 'camera' | 'stand'>): TripodId | null {
+  if (state.stand || typeof state.camera !== 'string') return null;
   const { tripod } = cameraPreset(state.camera);
   return tripod && setInfo(state.set).tripods.includes(tripod) ? tripod : null;
 }
@@ -627,9 +643,12 @@ export function turnCamera(camera: SceneCamera, yaw: number, pitch: number): Sce
 
 /** The state looking through `camera`, a turn of the stage's: a tripod keeps its shot and takes the pan. */
 export function withCamera(state: ExplorerState, camera: SceneCamera): ExplorerState {
+  if (camera.stand) return { ...state, stand: camera.stand, pan: undefined };
   if (camera.pan && sceneTripod(state)) return { ...state, pan: camera.pan.yaw || camera.pan.pitch ? camera.pan : undefined };
   // Dragging a crane makes it a custom angle, which carries its side in the yaw.
-  return { ...state, camera, pan: undefined, cameraSide: undefined };
+  // The crane's own fields only: where a tripod stood or looked doesn't come along.
+  const crane: SceneCamera = { yaw: camera.yaw, pitch: camera.pitch, lens: camera.lens, ...(camera.targetZ ? { targetZ: camera.targetZ } : {}) };
+  return { ...state, camera: crane, stand: undefined, pan: undefined, cameraSide: undefined };
 }
 
 /** The state on a named shot, looking where that shot looks. */
@@ -640,13 +659,14 @@ export function withShot(state: ExplorerState, shot: CameraPresetId): ExplorerSt
     // A side the viewer picked carries over to another shot with sides.
     cameraSide: cameraPreset(shot).sides ? state.cameraSide : undefined,
     pan: undefined,
+    stand: undefined,
     zoom: defaultZoomForCamera(shot),
   };
 }
 
 /** Film from this side of the rider's line, keeping the rest of the shot. */
 export function withCameraSide(state: ExplorerState, side: CameraSide): ExplorerState {
-  return { ...state, cameraSide: side, pan: undefined };
+  return { ...state, cameraSide: side, pan: undefined, stand: undefined };
 }
 
 /** How much a key press, button, or notch of scrolling zooms by. */
@@ -724,6 +744,14 @@ function parsePan(value: string | null): TripodPan | null {
   return pan.yaw || pan.pitch ? pan : null;
 }
 
+/** A placed tripod's `u_z_height` or `u_z_height_frame`, in feet. */
+function parseStand(value: string | null): TripodSpot | null {
+  const fields = value?.split('_').map(Number) ?? [];
+  if ((fields.length !== 3 && fields.length !== 4) || fields.some((n) => !Number.isFinite(n))) return null;
+  const [u, z, height, frame] = fields.map((feet) => feet * FOOT);
+  return { u, z, height: Math.max(0, height), ...(frame > 0 ? { frame } : {}) };
+}
+
 /** Public links use neutral names; internal IDs remain stable for existing links and the renderer. */
 const PUBLIC_SET_SLUGS: Partial<Record<StageSet, string>> = {
   'sunset-car-wash': 'roof-to-bank',
@@ -738,6 +766,7 @@ export function stateFromSearch(search: string): ExplorerState {
   const camera = parseCamera(params.get('cam'));
   const set = STAGE_SETS.find((option) => option.id === params.get('set') || PUBLIC_SET_SLUGS[option.id] === params.get('set'))?.id ?? DEFAULT_STATE.set;
   const pan = parsePan(params.get('pan'));
+  const stand = setInfo(set).terrain ? parseStand(params.get('stand')) : null;
   const base: ExplorerState = {
     ...DEFAULT_STATE,
     stance: isStance(stanceParam) ? stanceParam : DEFAULT_STATE.stance,
@@ -746,6 +775,7 @@ export function stateFromSearch(search: string): ExplorerState {
     cameraSide: cameraHasSides(camera) ? CAMERA_SIDES.find((side) => side.id === params.get('from'))?.id : undefined,
     zoom: params.has('zoom') ? parseZoom(params.get('zoom')) : defaultZoomForCamera(camera),
     ...(pan && sceneTripod({ set, camera }) ? { pan } : {}),
+    ...(stand ? { stand } : {}),
     set,
     rail: setInfo(set).rails?.fixedLine || (params.get('rail') === 'side' && setInfo(set).rails?.sideGrinds !== false) ? 'side' : DEFAULT_STATE.rail,
     obstacle: setInfo(set).obstacles?.find((o) => o.id === params.get('obstacle'))?.id ?? DEFAULT_STATE.obstacle,
@@ -809,7 +839,11 @@ export function searchFromState(state: ExplorerState): string {
     const pan = clampTripodPan(state.pan);
     if (pan.yaw || pan.pitch) params.set('pan', `${round(pan.yaw, 1)}_${round(pan.pitch, 1)}`);
   }
-  if (state.cameraSide && cameraHasSides(state.camera)) params.set('from', state.cameraSide);
+  if (state.stand) {
+    const { u, z, height, frame } = state.stand;
+    params.set('stand', [u, z, height, ...(frame ? [frame] : [])].map((units) => round(units / FOOT, 1)).join('_'));
+  }
+  if (state.cameraSide && cameraHasSides(state.camera) && !state.stand) params.set('from', state.cameraSide);
   if (state.zoom !== defaultZoomForCamera(state.camera)) params.set('zoom', String(round(state.zoom, 2)));
   if (state.set !== DEFAULT_STATE.set) params.set('set', PUBLIC_SET_SLUGS[state.set] ?? state.set);
   if (state.rail !== DEFAULT_STATE.rail) params.set('rail', state.rail);

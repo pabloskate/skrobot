@@ -49,9 +49,10 @@ export {
   type SceneCamera,
   type TripodId,
   type TripodPan,
+  type TripodSpot,
 } from './camera/camera';
 /** The landmarks' filmers, and which side of the rider's line each stands on. */
-export { tripodSide, type FilmedLine } from './sets/tripods';
+export { tripodSide, spotStands, type FilmedLine, type SpotStand } from './sets/tripods';
 /** The sets (spots) a trick can be staged at, and what each changes: stairs and other obstacles, handrails, tripods. */
 export { STAGE_SETS, hasObstacle, railApproachAllowed, railLineFor, setGrindSpec, setHandrail, setInfo, setLocation, setFlights, setTerrain, setTimeline, type Obstacle, type RailChoice, type RailLine, type SetInfo, type SetObstacle, type SetRails, type StageSet } from './sets/sets';
 /** The stage's yardstick (the 31-inch deck) and gravity, and the moments of a trick down a drop. */

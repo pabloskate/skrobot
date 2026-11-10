@@ -6475,16 +6475,44 @@ main:has(.rps-arena) > .screen {
 .dream-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 18px;
-  padding: 16px 12px 0;
+  gap: 14px;
 }
 
-.dream-main,
+.dream-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  background: var(--bg);
+}
+
 .dream-side {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   align-content: start;
   gap: 18px;
+  padding: 0 12px;
+}
+
+/* On a phone the picture is pinned to the top and the choices scroll under
+   it, so a trick, a spot or the camera can be changed while watching. Not on
+   a screen too short to leave room for them. */
+@media (max-width: 959px) {
+  .dream-main .dream-stage-card {
+    width: min(100%, calc(48svh * 500 / 404));
+    margin: 0 auto;
+    border-radius: 0;
+    box-shadow: none;
+  }
+}
+
+@media (max-width: 959px) and (min-height: 620px) {
+  .dream-main {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    padding-bottom: 10px;
+    box-shadow: 0 10px 18px -12px rgba(34, 26, 78, 0.35);
+  }
 }
 
 @media (min-width: 960px) {
@@ -6501,7 +6529,157 @@ main:has(.rps-arena) > .screen {
   .dream-main {
     position: sticky;
     top: 16px;
+    gap: 12px;
+    background: none;
   }
+
+  .dream-side {
+    padding: 0;
+  }
+}
+
+/* What's on stage, in four tiles under the picture; each opens its choices. */
+
+.dream-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  padding: 10px 10px 0;
+}
+
+.dream-tile {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px 10px 9px;
+  border: 1.5px solid var(--explorer-line);
+  border-radius: 14px;
+  color: var(--ink);
+  background: var(--card);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, transform 0.08s ease;
+}
+
+.dream-tile:hover:not(.active) {
+  border-color: #cdbff3;
+}
+
+.dream-tile:active {
+  transform: scale(0.97);
+}
+
+.dream-tile:focus-visible {
+  outline: 3px solid var(--purple);
+  outline-offset: 2px;
+}
+
+.dream-tile.active {
+  border-color: var(--purple);
+  color: #fff;
+  background: var(--purple);
+  box-shadow: 0 4px 12px rgba(100, 49, 216, 0.3);
+}
+
+.dream-tile-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.dream-tile.active .dream-tile-label {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.dream-tile-label svg {
+  flex: none;
+  width: 13px;
+  height: 13px;
+}
+
+/* Two lines at most, and room for two always: the picture above doesn't jump when a longer name comes up. */
+.dream-tile-value {
+  display: -webkit-box;
+  min-height: 2.4em;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.2;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+@media (min-width: 960px) {
+  .dream-tiles {
+    gap: 10px;
+    padding: 0;
+  }
+
+  .dream-tile {
+    padding: 11px 14px 12px;
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+  }
+
+  .dream-tile-label {
+    font-size: 11px;
+  }
+
+  .dream-tile-value {
+    font-size: 15px;
+  }
+}
+
+.dream-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+
+.dream-field {
+  display: grid;
+  gap: 8px;
+}
+
+.dream-field-label small {
+  margin-left: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dream-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.dream-spot-about {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.dream-spot-about strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.dream-spot-about span + span::before {
+  content: '· ';
 }
 
 .dream-heading {
@@ -6519,16 +6697,10 @@ main:has(.rps-arena) > .screen {
   margin-bottom: 10px;
 }
 
-.dream-hint {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
-  text-align: right;
-}
-
 /* Spots: small cards, each in its own colors, with the spot in profile. */
 
-.dream-spots .dream-heading {
+.dream-spots .dream-heading,
+.dream-rider .dream-heading {
   margin-bottom: 10px;
 }
 
@@ -6601,19 +6773,6 @@ main:has(.rps-arena) > .screen {
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.18);
 }
 
-/* What to hit is the first choice within the trick card. */
-
-.dream-lines {
-  display: grid;
-  gap: 8px;
-}
-
-.dream-lines-label {
-  color: var(--ink);
-  font-size: 13px;
-  font-weight: 800;
-}
-
 /* Stage: the picture, with its few controls on it. */
 
 .dream-stage-card {
@@ -6621,48 +6780,6 @@ main:has(.rps-arena) > .screen {
   border-radius: 22px;
   background: var(--card);
   box-shadow: 0 14px 36px rgba(34, 26, 78, 0.2);
-}
-
-/* Camera angle lives above the picture, not pinned to it: it's the one
-   control for framing the shot, so it reads as primary instead of hiding
-   among the transport pills on top of the animation. */
-.dream-stage-topbar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--explorer-line);
-  background: var(--card);
-}
-
-.dream-camera-top {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 40px;
-  padding: 0 16px;
-  border: none;
-  border-radius: 999px;
-  color: #fff;
-  background: var(--purple);
-  box-shadow: 0 4px 14px rgba(100, 49, 216, 0.38);
-  font-size: 13px;
-  font-weight: 800;
-  cursor: pointer;
-  transition: transform 0.08s ease, background 0.15s ease;
-}
-
-.dream-camera-top:hover {
-  background: var(--purple-dark);
-}
-
-.dream-camera-top:active {
-  transform: scale(0.96);
-}
-
-.dream-camera-top svg {
-  width: 18px;
-  height: 18px;
 }
 
 .explorer-stage-overlay {
@@ -6675,30 +6792,17 @@ main:has(.rps-arena) > .screen {
   pointer-events: auto;
 }
 
-.dream-stage-title {
+.dream-camera-chip {
   position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
-  padding: 12px 120px 32px 14px;
-  color: #fff;
-  background: linear-gradient(180deg, rgba(20, 14, 48, 0.55) 0%, rgba(20, 14, 48, 0) 100%);
-}
-
-.dream-stage-title h2 {
-  margin: 0;
-  font-size: 19px;
-  font-weight: 800;
-  line-height: 1.2;
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.25);
-}
-
-.dream-stage-title span {
-  display: block;
-  margin-top: 2px;
+  top: 10px;
+  left: 10px;
+  height: 34px;
   font-size: 12px;
-  font-weight: 700;
-  opacity: 0.88;
+}
+
+.dream-camera-chip svg {
+  width: 16px;
+  height: 16px;
 }
 
 .dream-stage-controls {
@@ -6764,91 +6868,276 @@ main:has(.rps-arena) > .screen {
   .dream-play { width: 44px; height: 44px; padding: 0; }
 }
 
-.dream-camera-dialog {
-  --explorer-line: #e4dff0;
-  width: min(480px, calc(100vw - 24px));
-  max-height: calc(100dvh - 32px);
-  padding: 20px;
-  overflow-y: auto;
-  border: none;
-  border-radius: 22px;
-  color: var(--ink);
-  background: #fff;
-  box-shadow: 0 24px 80px rgba(20, 14, 48, 0.3);
-}
-
-.dream-camera-dialog::backdrop { background: rgba(20, 14, 48, 0.55); backdrop-filter: blur(4px); }
-.dream-camera-close { display: grid; place-items: center; width: 36px; height: 36px; border: none; border-radius: 50%; color: var(--ink); background: var(--purple-soft); cursor: pointer; }
-.dream-camera-close svg { width: 20px; height: 20px; }
-.dream-camera-hint { margin: 0 0 16px; color: var(--muted); font-size: 13px; line-height: 1.5; }
-.dream-camera-dialog .dream-shot-list { grid-auto-flow: row; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.dream-camera-dialog .dream-shot { padding: 12px 6px; }
-.dream-camera-dialog button:focus-visible { outline: 3px solid var(--purple); outline-offset: 3px; }
-.dream-camera-side { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--explorer-line); }
-.dream-camera-side-label { color: var(--muted); font-size: 13px; font-weight: 700; }
-
-.dream-reset {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-}
-
 .dream .explorer-orbit-hint {
   bottom: 68px;
   left: 50%;
   transform: translateX(-50%);
 }
 
-/* Camera shots: where the filmer stands, drawn from above. */
+/* Camera: a tripod stood on a map of the spot, or one that follows the skater. */
 
-/* However many shots the spot has, side by side in one row. */
-.dream-shot-list {
+.dream-camera {
   display: grid;
-  grid-auto-columns: minmax(0, 1fr);
-  grid-auto-flow: column;
-  gap: 6px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
 }
 
-.dream-shot {
+.dream-mode {
   display: grid;
-  justify-items: center;
-  align-content: start;
-  gap: 2px;
-  min-width: 0;
-  padding: 4px 2px 8px;
-  border: 1.5px solid var(--explorer-line);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
   border-radius: 14px;
-  color: var(--purple-dark);
-  background: #fff;
-  cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease, transform 0.08s ease;
-}
-
-.dream-shot:hover:not(.active) {
-  border-color: #cdbff3;
-}
-
-.dream-shot:active {
-  transform: scale(0.96);
-}
-
-.dream-shot.active {
-  border-color: var(--purple);
   background: var(--purple-soft);
 }
 
-.dream-shot span {
-  color: var(--ink);
-  font-size: 11px;
+.dream-mode button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 42px;
+  border: none;
+  border-radius: 11px;
+  color: var(--purple-dark);
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
   font-weight: 800;
-  line-height: 1.2;
-  text-align: center;
+  cursor: pointer;
 }
 
-.dream-shot-icon {
-  display: block;
-  width: 44px;
-  height: 44px;
+.dream-mode button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.dream-mode button.active {
+  color: var(--ink);
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(34, 26, 78, 0.14);
+}
+
+.dream-mode button:focus-visible {
+  outline: 3px solid var(--purple);
+  outline-offset: 2px;
+}
+
+.dream-camera-blurb {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* On a phone the tile already says "Camera": the map gets the room. */
+@media (max-width: 959px) {
+  .dream-camera-heading {
+    display: none;
+  }
+}
+
+/* The spot from above, the drop running left to right. */
+.dream-map {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 16px;
+  background: #160f38;
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dream-map:focus-visible {
+  outline: 3px solid var(--purple);
+  outline-offset: 2px;
+}
+
+.dream-map-follow {
+  cursor: grab;
+}
+
+.dream-map-world {
+  position: absolute;
+  top: 0;
+  left: 0;
+  will-change: transform;
+}
+
+.dream-map-relief,
+.dream-map-lines {
+  position: absolute;
+  pointer-events: none;
+}
+
+.dream-map-lines {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.dream-map-lines {
+  overflow: visible;
+}
+
+.dream-map-lines * {
+  vector-effect: non-scaling-stroke;
+}
+
+.dream-map-path {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.6);
+  stroke-width: 2;
+  stroke-dasharray: 1 5;
+  stroke-linecap: round;
+}
+
+.dream-map-flight {
+  fill: none;
+  stroke: #ffd166;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.dream-map-cone {
+  fill: rgba(255, 255, 255, 0.2);
+  stroke: rgba(255, 255, 255, 0.55);
+  stroke-width: 1;
+  stroke-linejoin: round;
+}
+
+.dream-map-ring {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.8);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 4;
+}
+
+.dream-map-ring-range {
+  stroke: rgba(255, 255, 255, 0.22);
+  stroke-width: 1;
+  stroke-dasharray: none;
+}
+
+.dream-map-rider {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border: 2.5px solid #fff;
+  border-radius: 50%;
+  background: #ff5d8f;
+  box-shadow: 0 0 0 4px rgba(255, 93, 143, 0.3);
+  pointer-events: none;
+}
+
+.dream-map-pin {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  border-radius: 50%;
+  color: var(--purple-dark);
+  background: #fff;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.45), 0 0 0 3px var(--purple);
+  pointer-events: none;
+}
+
+.dream-map-pin[hidden] {
+  display: none;
+}
+
+.dream-map-pin svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Where the spot's own filmers stand: a tap stands the tripod there. */
+.dream-map-mark {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  margin: -13px 0 0 -13px;
+  padding: 0;
+  border: 2px dashed rgba(255, 255, 255, 0.85);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  cursor: pointer;
+}
+
+.dream-map-mark.active {
+  border-color: transparent;
+  background: none;
+}
+
+.dream-map-mark span {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-top: 5px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.dream-map-scale {
+  position: absolute;
+  bottom: 8px;
+  left: 10px;
+  padding-bottom: 2px;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.85);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  text-align: center;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.dream-sliders {
+  display: grid;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--explorer-line);
+}
+
+.dream-slider {
+  display: grid;
+  gap: 4px;
+}
+
+.dream-slider span {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.dream-slider small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.dream-slider input {
+  width: 100%;
+  height: 28px;
+  margin: 0;
+  accent-color: var(--purple);
 }
 
 /* Trick: one dropdown, then the ways to change it. */
@@ -6873,7 +7162,12 @@ main:has(.rps-arena) > .screen {
   margin-left: 0;
 }
 
-/* Beside its options where they fit, above them where they don't. */
+/* How it ends, after the trick itself. Beside its options where they fit, above them where they don't. */
+.dream-outcome {
+  padding-top: 14px;
+  border-top: 1px solid var(--explorer-line);
+}
+
 .dream-outcome .explorer-outcome-field {
   display: flex;
   gap: 8px 12px;
@@ -6888,14 +7182,6 @@ main:has(.rps-arena) > .screen {
 .dream-outcome .explorer-field-label small { display: block; margin-left: 0; }
 .dream-labeled-field { display: grid; gap: 8px; }
 .dream-field-label { color: var(--ink); font-size: 13px; font-weight: 800; }
-
-/* Side and outcome: tweaks to the trick, so they come after it. */
-.dream-tweaks {
-  display: grid;
-  gap: 10px;
-  padding-top: 14px;
-  border-top: 1px solid var(--explorer-line);
-}
 
 .dream-combo {
   display: grid;

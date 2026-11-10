@@ -58,6 +58,26 @@ export interface SceneCamera {
    * The crane carries its side in `yaw` and ignores this.
    */
   side?: CameraSide;
+  /**
+   * Filming from a tripod the viewer stood somewhere of their own: where it
+   * stands in the spot. It films from there whatever the crane fields say,
+   * panning to keep the rider in shot as the spots' own filmers do.
+   */
+  stand?: TripodSpot;
+}
+
+/**
+ * Where a tripod the viewer placed stands in a spot, in stage units: `u`
+ * along the drop from its lip, `z` across the set (the set's own, not the
+ * rider's line), and the lens's `height` over whatever is under it there.
+ * `frame` is how far off its lens shows the rider at the crane's size (the
+ * further, the longer the lens); a stock distance when omitted.
+ */
+export interface TripodSpot {
+  u: number;
+  z: number;
+  height: number;
+  frame?: number;
 }
 
 /** A side of the rider's line, looking down it the way they ride (as a spot's side rails are named). */

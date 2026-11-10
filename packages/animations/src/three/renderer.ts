@@ -20,7 +20,7 @@ import {
   type Texture,
 } from 'three';
 import { DEFAULT_SCENE_CAMERA, type SceneCamera, type TripodId } from '../camera/camera';
-import { stageView, toThree, tracked, type StageView } from '../camera/view';
+import { stageView, toThree, tracked, tripodView, type StageView } from '../camera/view';
 import type { BoardLook, WheelSpin } from '../board/board';
 import { Board3D } from '../board/board3d';
 import { RealisticBoard3D } from '../board/realisticBoard3d';
@@ -30,20 +30,11 @@ import type { Expression, RobotLook } from '../riders/look';
 import { Robot3D } from '../riders/robot/robot3d';
 import type { Skater } from '../riders/skaters';
 import { Bar3D } from '../sets/bar3d';
-import { ElToro3D } from '../sets/elToro/elToro3d';
-import { Hollywood3D } from '../sets/hollywood/hollywood3d';
-import { Wallenberg3D } from '../sets/wallenberg/wallenberg3d';
-import { Sunset3D } from '../sets/sunset/sunset3d';
-import { Lyon3D } from '../sets/lyon/lyon3d';
-import { LeapOfFaith3D } from '../sets/leapOfFaith/leapOfFaith3d';
-import { Miami3D } from '../sets/miami/miami3d';
-import { UcDavis3D } from '../sets/ucDavis/ucDavis3d';
-import { Carlsbad3D } from '../sets/carlsbad/carlsbad3d';
-import { Emage3D } from '../sets/emage/emage3d';
-import { Plaza3D } from '../sets/plaza3d';
 import { setInfo, type StageSet } from '../sets/sets';
+import { SET_PIECES } from './setPieces';
+import { groundUnder, spotPlanFrom } from './spotPlan';
+import { FOOT } from '../units';
 import { SET_SCALE } from '../sets/setScale';
-import { Waterfront3D } from '../sets/waterfront/waterfront3d';
 import type { GroundPolygon, StageFrame } from '../stage/stage';
 import { rgb, shadowShapeMaterial } from './materials';
 import { SCENE_FAR as FAR, SceneCamera3D, prepareReversedDepth, sceneNear } from './depth';
@@ -85,25 +76,10 @@ export interface SetPiece {
   ready?: Promise<void>;
   /** The set's own camera for this frame (its tripods, or limits on the crane), or null for the stock crane. */
   view?(frame: StageFrame, camera: Readonly<SceneCamera>, zoom: number, aspect: number, tripod: TripodId | null): StageView | null;
+  /** The ground and what's built on it, in set units, for a plan of the spot (spotPlan.ts); none on a flat street. */
+  terrain?(): readonly Mesh[];
   dispose(): void;
 }
-
-/** Each set's scenery. Its rules (stairs, a handrail, tripods) are in sets/sets.ts. */
-const SET_PIECES: Record<StageSet, () => SetPiece> = {
-  plaza: () => new Plaza3D(),
-  waterfront: () => new Waterfront3D(),
-  'el-toro': () => new ElToro3D(),
-  'hollywood-high': () => new Hollywood3D(),
-  'hollywood-high-12': () => new Hollywood3D('twelve'),
-  wallenberg: () => new Wallenberg3D(),
-  'sunset-car-wash': () => new Sunset3D(),
-  'lyon-25': () => new Lyon3D(),
-  'leap-of-faith': () => new LeapOfFaith3D(),
-  'miami-triangle': () => new Miami3D(),
-  'uc-davis-gap': () => new UcDavis3D(),
-  'carlsbad-gap': () => new Carlsbad3D(),
-  'emage-20': () => new Emage3D(),
-};
 
 /** Each skater's body, and the board they ride. */
 const RIDER_PIECES: Record<Skater, (look: RendererLook, quality: RenderQuality) => { rider: RiderPiece; board: BoardPiece }> = {
@@ -125,6 +101,10 @@ const RIDER_PIECES: Record<Skater, (look: RendererLook, quality: RenderQuality) 
  *  4. dust puffs, see-through, over the finished picture;
  *  5. FXAA to the canvas.
  */
+
+/** A placed tripod's stock lens: the rider at the crane's size from this far, held just above the middle of the picture. */
+const STAND_FRAME = 28 * FOOT;
+const STAND_PLACE = 0.5;
 
 /** Most dust puffs on stage at once (a pop and a landing). */
 const MAX_PUFFS = 12;
@@ -151,6 +131,7 @@ export class SceneRenderer {
   private readonly board: BoardPiece;
   private readonly bar = new Bar3D();
   private readonly set: SetPiece;
+  private readonly setId: StageSet;
   /** The waterfront's far panorama is under the canvas, so its sky stays see-through. */
   private readonly setLight: boolean;
   private readonly propShadowMaterial = shadowShapeMaterial();
@@ -193,6 +174,7 @@ export class SceneRenderer {
     this.camera.matrixWorldAutoUpdate = false;
 
     ({ rider: this.rider, board: this.board } = RIDER_PIECES[look.skater ?? 'robot'](look, quality));
+    this.setId = set;
     this.set = SET_PIECES[set]();
     this.ready = Promise.all([this.rider.ready, this.set.ready]).then(() => {});
     this.setLight = setInfo(set).farPanorama;
@@ -280,7 +262,8 @@ export class SceneRenderer {
     const { width, height } = this.size;
     const aspect = width / height;
     const crane = tracked(camera, frame);
-    const view = this.set.view?.(frame, crane, zoom, aspect, tripod ?? null) ?? stageView(frame.lift, crane, zoom, aspect);
+    const view = this.standView(frame, camera, zoom, aspect)
+      ?? this.set.view?.(frame, crane, zoom, aspect, tripod ?? null) ?? stageView(frame.lift, crane, zoom, aspect);
     this.placeCamera(view);
     const pxPerUnit = height / view.box.height;
     const shadowOpacity: [number, number, number] = [0.3, frame.shadows.boardOpacity, frame.shadows.bodyOpacity];
@@ -366,6 +349,20 @@ export class SceneRenderer {
     this.fxaa.uniforms.resolution.value.set(1 / width, 1 / height);
     r.setRenderTarget(null);
     this.fxaaQuad.render(r);
+  }
+
+  /**
+   * Filmed from a tripod the viewer stood somewhere in the spot
+   * (`camera.stand`): on whatever is under it there, turned to the rider as
+   * the set slides under them. Null without one, or on a flat street.
+   */
+  private standView(frame: StageFrame, camera: Readonly<SceneCamera>, zoom: number, aspect: number): StageView | null {
+    const { stand } = camera;
+    if (!stand || !frame.stairs) return null;
+    const plan = spotPlanFrom(this.setId, this.set.terrain?.bind(this.set));
+    const ground = plan ? groundUnder(plan, stand.u, stand.z) : 0;
+    const eye: [number, number, number] = [stand.u - frame.scroll, ground + stand.height, stand.z - frame.stairs.across];
+    return tripodView(eye, frame.lift, stand.frame ?? STAND_FRAME, STAND_PLACE, zoom, aspect, camera.pan);
   }
 
   private placeCamera(view: StageView) {

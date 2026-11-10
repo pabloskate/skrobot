@@ -9,8 +9,10 @@
  * Animation comes from @skrobot/animations/three (filming from its video entry);
  * names and descriptions from tricks.
  *
- * Dream Tricks at /dream-tricks is the same stage for players: a landmark
- * spot first, avatar cards to pick a skater, then what to hit and the trick, on repeat.
+ * Dream Tricks at /dream-tricks is the same stage for players: the picture
+ * stays in view over four tiles (trick, spot, skater, camera) that each open
+ * their choices, on repeat. Its camera is a tripod stood anywhere on a map of
+ * the spot, or one that follows the skater.
  * The virtual-location disclosures live at /about, linked from both explorers and Settings.
  */
 export { default as TrickExplorer } from './TrickExplorer';

@@ -1,13 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { setInfo, specFor } from '@skrobot/animations';
-import { outEndsFor, searchFromState, stageTrick, FLATGROUND_TIERS, GRIND_CHOICES } from './explorer';
+import { FOOT, setInfo, specFor, spotStands } from '@skrobot/animations';
+import { outEndsFor, sceneCamera, sceneTripod, searchFromState, stageTrick, withCamera, withShot, FLATGROUND_TIERS, GRIND_CHOICES } from './explorer';
 import {
   DREAM_DEFAULT,
   DREAM_SPOTS,
+  STAND_HEIGHT,
+  actionPoint,
+  cameraMode,
   dreamLine,
   dreamShots,
   dreamSpot,
   dreamStateFromSearch,
+  followOffset,
+  followYaw,
+  insideWindow,
+  mapWindow,
+  pathAt,
+  placeStand,
+  presetStand,
+  standFrame,
+  swingStand,
   withDreamGrind,
   withDreamLine,
   withDreamSpot,
@@ -164,7 +176,7 @@ describe('Dream Tricks', () => {
     for (const spot of DREAM_SPOTS) {
       const shots = dreamShots({ set: spot.id, camera: DREAM_DEFAULT.camera });
       expect(shots.map((shot) => shot.id), spot.id).toEqual(expect.arrayContaining(['tripod-bottom', 'tripod-side', 'tripod-top']));
-      expect(shots.find((shot) => shot.label === 'Classic')?.id, spot.id).toBe('tripod-bottom');
+      expect(shots.find((shot) => shot.label === 'Bottom')?.id, spot.id).toBe('tripod-bottom');
       expect(shots.some((shot) => shot.id === 'classic'), spot.id).toBe(false);
     }
   });
@@ -182,5 +194,94 @@ describe('Dream Tricks', () => {
     expect(dreamStateFromSearch('?cam=classic').zoom).toBe(1);
     // A link that asks for a zoom still keeps it.
     expect(dreamStateFromSearch('?cam=classic&zoom=1.4').zoom).toBe(1.4);
+  });
+
+  describe('camera', () => {
+    const stand = { u: 30 * FOOT, z: -20 * FOOT, height: 5 * FOOT, frame: 30 * FOOT };
+
+    it('is a tripod or a follow camera, with starting points for each', () => {
+      expect(cameraMode(DREAM_DEFAULT)).toBe('tripod');
+      expect(cameraMode(withShot(DREAM_DEFAULT, 'follow'))).toBe('follow');
+      expect(cameraMode({ ...withShot(DREAM_DEFAULT, 'follow'), stand })).toBe('tripod');
+      expect(dreamShots(DREAM_DEFAULT, 'tripod').map((shot) => shot.label)).toEqual(['Bottom', 'Side', 'Top']);
+      expect(dreamShots(DREAM_DEFAULT, 'follow').map((shot) => shot.label)).toEqual(['Behind', 'Beside', 'In front', 'Above']);
+    });
+
+    it('films from a tripod the viewer placed, and keeps it in the link', () => {
+      const placed = { ...DREAM_DEFAULT, stand };
+      expect(sceneTripod(placed)).toBeNull();
+      expect(sceneCamera(placed).stand).toEqual(stand);
+      const back = dreamStateFromSearch(searchFromState(placed));
+      expect(back.stand?.u).toBeCloseTo(stand.u, 3);
+      expect(back.stand?.z).toBeCloseTo(stand.z, 3);
+      expect(back.stand?.height).toBeCloseTo(stand.height, 3);
+      expect(back.stand?.frame).toBeCloseTo(stand.frame, 3);
+      // A named shot, a crane angle, or another spot each let go of it.
+      expect(withShot(placed, 'tripod-side').stand).toBeUndefined();
+      expect(withCamera(placed, { yaw: 10, pitch: 10, lens: 1 }).stand).toBeUndefined();
+      expect(withDreamSpot(placed, 'wallenberg').stand).toBeUndefined();
+    });
+
+    it('starts a dragged tripod from where the spot\'s own filmer stands', () => {
+      for (const spot of DREAM_SPOTS) {
+        const own = spotStands(spot.id, { obstacle: 'stairs' })!.bottom;
+        const from = presetStand(withDreamSpot(DREAM_DEFAULT, spot.id), () => own.y - 4 * FOOT);
+        expect(from, spot.id).toMatchObject({ u: own.u, z: own.z, frame: own.frame });
+        expect(from!.height, spot.id).toBeCloseTo(4 * FOOT, 6);
+      }
+      expect(presetStand(withShot(DREAM_DEFAULT, 'follow'), () => 0)).toBeNull();
+      expect(presetStand({ ...DREAM_DEFAULT, stand }, () => 0)).toBeNull();
+    });
+
+    it('walks a tripod round the trick, and reframes one moved across the map', () => {
+      const action = { u: 10 * FOOT, z: 0 };
+      const swung = swingStand({ ...stand, u: action.u, z: 20 * FOOT }, action, 90, 10);
+      // A quarter turn, crane-wise, from beside the trick to behind it (back up the drop).
+      expect(swung.u).toBeCloseTo(action.u - 20 * FOOT, 6);
+      expect(swung.z).toBeCloseTo(0, 6);
+      expect(swung.height).toBeGreaterThan(stand.height);
+      expect(swingStand(stand, action, 0, 1000).height).toBe(STAND_HEIGHT.max);
+      expect(swingStand(stand, action, 0, -1000).height).toBe(STAND_HEIGHT.min);
+      const moved = placeStand(stand, { u: action.u + 40 * FOOT, z: 30 * FOOT }, action);
+      expect(moved).toMatchObject({ u: action.u + 40 * FOOT, z: 30 * FOOT, height: stand.height });
+      expect(moved.frame).toBeCloseTo(standFrame(moved, action), 6);
+      // Twice as far away, twice as long a lens: the trick stays the same size.
+      expect(standFrame({ u: action.u + 60 * FOOT, z: 0 }, action)).toBeCloseTo(2 * standFrame({ u: action.u + 30 * FOOT, z: 0 }, action), 6);
+    });
+
+    it('hangs the follow camera where the map shows it', () => {
+      for (const yaw of [-170, -90, -30, 0, 58, 90, 179]) {
+        const offset = followOffset({ yaw, pitch: 20, lens: 1.2 }, 520);
+        expect(followYaw(offset), String(yaw)).toBeCloseTo(yaw, 6);
+        expect(Math.hypot(offset.u, offset.z)).toBeCloseTo(520 * 1.2 * Math.cos((20 * Math.PI) / 180), 6);
+      }
+      // Yaw -90 is ahead of the rider, down the drop.
+      expect(followOffset({ yaw: -90, pitch: 0, lens: 1 }, 100).u).toBeCloseTo(100, 6);
+    });
+
+    it('reads the rider\'s place off their path, and the trick\'s between pop and landing', () => {
+      const path = [{ t: 0, u: 0, z: 0 }, { t: 1, u: 10, z: 2 }, { t: 2, u: 30, z: 2 }];
+      expect(pathAt(path, -1)).toEqual({ t: 0, u: 0, z: 0 });
+      expect(pathAt(path, 0.5)).toEqual({ u: 5, z: 1 });
+      expect(pathAt(path, 9)).toEqual({ t: 2, u: 30, z: 2 });
+      expect(actionPoint(path, [{ label: 'Set up', time: 0 }, { label: 'Pop', time: 1 }, { label: 'Land', time: 2 }])).toEqual({ u: 20, z: 2 });
+    });
+
+    it('maps the rider\'s line with room round it, inside the spot\'s plan', () => {
+      const plan = { u0: -60 * FOOT, u1: 200 * FOOT, z0: -70 * FOOT, z1: 70 * FOOT };
+      const line = [{ u: 0, z: 0 }, { u: 80 * FOOT, z: 0 }];
+      const window = mapWindow(plan, line);
+      expect(window.u0).toBeLessThan(-10 * FOOT);
+      expect(window.u1).toBeGreaterThan(90 * FOOT);
+      expect(window.z0).toBeLessThanOrEqual(-24 * FOOT);
+      expect(window.z1).toBeGreaterThanOrEqual(24 * FOOT);
+      const shape = (window.u1 - window.u0) / (window.z1 - window.z0);
+      expect(shape).toBeGreaterThan(1.3);
+      expect(shape).toBeLessThan(2.2);
+      // A small plan is shown whole.
+      const small = { u0: -10 * FOOT, u1: 90 * FOOT, z0: -10 * FOOT, z1: 10 * FOOT };
+      expect(mapWindow(small, line)).toEqual(small);
+      expect(insideWindow({ u: -999 * FOOT, z: 999 * FOOT }, window, FOOT)).toEqual({ u: window.u0 + FOOT, z: window.z1 - FOOT });
+    });
   });
 });

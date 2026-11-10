@@ -51,6 +51,12 @@ interface Props {
   rate: number;
   onCamera: (camera: SceneCamera) => void;
   onZoom: (zoom: number) => void;
+  /**
+   * What a drag or an arrow key does to the camera: `yaw` and `pitch` degrees
+   * of swing from where it was. The crane's own turn unless the page moves
+   * its camera another way (Dream Tricks walks a tripod round the trick).
+   */
+  turn?: (from: SceneCamera, yaw: number, pitch: number) => SceneCamera;
   /** Shown over the picture until the viewer first moves the camera. */
   hint: string;
   /** Controls laid over the picture. */
@@ -67,7 +73,7 @@ const useInBrowser = () => useSyncExternalStore(noSubscription, () => true, () =
  * The picture: the trick at the playhead's moment, a camera the viewer can
  * drag around the rider or pinch to zoom, and a tap to play or pause.
  */
-export default function StageViewport({ scene, playhead, rate, onCamera, onZoom, hint, children }: Props) {
+export default function StageViewport({ scene, playhead, rate, onCamera, onZoom, turn = turnCamera, hint, children }: Props) {
   const { camera, zoom } = scene;
   const sound = useSoundEffects();
   const drag = useRef<{ id: number; x: number; y: number; from: SceneCamera; moved: boolean } | null>(null);
@@ -137,7 +143,7 @@ export default function StageViewport({ scene, playhead, rate, onCamera, onZoom,
     if (!d.moved && Math.hypot(dx, dy) < DRAG_SLOP) return;
     d.moved = true;
     setOrbited(true);
-    onCamera(turnCamera(d.from, dx * DRAG_YAW, dy * DRAG_PITCH));
+    onCamera(turn(d.from, dx * DRAG_YAW, dy * DRAG_PITCH));
   };
   const releasePointer = (id: number) => {
     pointers.current.delete(id);
@@ -173,7 +179,7 @@ export default function StageViewport({ scene, playhead, rate, onCamera, onZoom,
       event.preventDefault();
       const [yaw, pitch] = KEY_TURN[event.key];
       setOrbited(true);
-      onCamera(turnCamera(camera, yaw, pitch));
+      onCamera(turn(camera, yaw, pitch));
     }
   };
 

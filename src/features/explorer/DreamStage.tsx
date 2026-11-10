@@ -1,9 +1,11 @@
 'use client';
 
-import { TbCamera, TbPlayerPauseFilled, TbPlayerPlayFilled, TbRefresh, TbVolume, TbVolumeOff } from 'react-icons/tb';
+import { useEffect, type RefObject } from 'react';
+import { TbPlayerPauseFilled, TbPlayerPlayFilled, TbRun, TbVideo, TbVolume, TbVolumeOff } from 'react-icons/tb';
 import { setSoundEffects, useSoundEffects, type SceneCamera } from '@skrobot/animations';
 import { usePlayhead } from './usePlayhead';
 import StageViewport, { type StageScene } from './StageViewport';
+import type { CameraMode } from './dream';
 
 /** Real speed first: slow motion is a press away. */
 const SPEEDS = [
@@ -15,55 +17,43 @@ const SPEEDS = [
 interface Props extends StageScene {
   /** How long the trick runs (seconds). */
   duration: number;
-  /** Where it's being hit, under the trick's name. */
-  caption: string;
   rate: number;
-  /** The viewer has moved the camera or zoom off the chosen shot. */
-  moved: boolean;
+  /** Which camera is filming, and what it's called, for the chip on the picture. */
+  cameraMode: CameraMode;
+  cameraName: string;
+  /** Kept at the playhead's moment, for whatever else follows the trick (the camera map). */
+  clockRef: RefObject<number>;
   onCamera: (camera: SceneCamera) => void;
   onZoom: (zoom: number) => void;
-  onResetView: () => void;
+  /** What a drag across the picture does to the camera. */
+  turn: (from: SceneCamera, yaw: number, pitch: number) => SceneCamera;
   onRate: (rate: number) => void;
   onOpenCamera: () => void;
 }
 
 /**
- * The trick on repeat, with only what someone playing needs: its name, a
- * camera-angle pick above the picture, play and pause, slow motion, sound,
- * and a way back to the shot after dragging the camera. Key it by trick so
- * a new trick starts from the top.
+ * The trick on repeat, with only what someone playing needs on the picture:
+ * which camera is filming (a tap opens it), play and pause, slow motion and
+ * sound. Key it by trick so a new trick starts from the top.
  */
-export default function DreamStage({ duration, caption, rate, moved, onCamera, onZoom, onResetView, onRate, onOpenCamera, ...scene }: Props) {
+export default function DreamStage({ duration, rate, cameraMode, cameraName, clockRef, onCamera, onZoom, turn, onRate, onOpenCamera, ...scene }: Props) {
   const playhead = usePlayhead(duration, rate, true);
   const sound = useSoundEffects();
   const speedIndex = Math.max(0, SPEEDS.findIndex((s) => s.rate === rate));
   const speed = SPEEDS[speedIndex];
   const nextSpeed = SPEEDS[(speedIndex + 1) % SPEEDS.length];
 
+  useEffect(() => {
+    clockRef.current = playhead.time;
+  });
+
   return (
     <section className="dream-stage-card" aria-label="Trick stage">
-      <div className="dream-stage-topbar">
-        <button
-          type="button"
-          className="dream-camera-top"
-          aria-haspopup="dialog"
-          onClick={onOpenCamera}
-        >
-          <TbCamera aria-hidden />
-          Camera angle
+      <StageViewport scene={scene} playhead={playhead} rate={rate} onCamera={onCamera} onZoom={onZoom} turn={turn} hint="Drag to move the camera">
+        <button type="button" className="dream-stage-btn dream-camera-chip" onClick={onOpenCamera} aria-label={`Camera: ${cameraName}. Open the camera.`}>
+          {cameraMode === 'tripod' ? <TbVideo aria-hidden /> : <TbRun aria-hidden />}
+          {cameraName}
         </button>
-      </div>
-      <StageViewport scene={scene} playhead={playhead} rate={rate} onCamera={onCamera} onZoom={onZoom} hint="Drag to look around">
-        <div className="dream-stage-title">
-          <h2>{scene.trick.name}</h2>
-          <span>{caption}</span>
-        </div>
-        {moved && (
-          <button type="button" className="dream-stage-btn dream-reset" onClick={onResetView}>
-            <TbRefresh aria-hidden />
-            Reset view
-          </button>
-        )}
         <div className="dream-stage-controls">
           <button
             type="button"
