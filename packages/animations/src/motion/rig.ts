@@ -53,10 +53,11 @@ import {
 } from './skeleton';
 import type { SkateStyle } from '../types';
 import { CROUCH_HOLD, extendTime, extending, flightLegs, flightSpeeds, rideAway } from './dynamics';
-import { flickExtension, orientTrickRotation, tailFirst, type RiderMechanics } from './stance';
+import { flickExtension, orientTrickRotation, tailFirst, trickMechanics, type RiderMechanics } from './stance';
 import {
   FOOT_Y,
   boardGlued,
+  lateScoopHold,
   boardRise,
   flightTime,
   popLeft,
@@ -342,6 +343,7 @@ export function solveRig(
   outcome: Outcome = 'landed',
   impact = 0,
 ): Rig {
+  mechanics = trickMechanics(mechanics, spec);
   const track = tuckTrack(spec, mechanics, skateStyle, outcome);
   const nose = mechanics.noseFoot === 'left';
   // A fall comes down onto the board however it lies: the feet don't wait
@@ -440,13 +442,15 @@ function tuckTrack(spec: Spec, mechanics: RiderMechanics, style: SkateStyle, out
   }
   // An impossible's scooping foot stays down on the board while it holds it
   // (poseRig keeps its sole on the grip): only the free foot clears it.
-  const holding = frames.map((f) => (wrapHold(spec, f) > 0.5 ? Infinity : 0));
+  // A late shuv's pushing foot stands on its end the same way while it pushes.
+  const holding = frames.map((f) => (wrapHold(spec, f) > 0.5 || lateScoopHold(spec, f.motion.flight, style) > 0.5 ? Infinity : 0));
   const loose = frames.map(() => 0);
+  const holds = spec.wrap || (spec.late && !spec.flips && spec.yaw > 0);
   const track = measureTuck(
     times,
     (k, tuck) => poseRig(frames[k], spec, mechanics, style, landed ? 'landed' : outcome, tuck),
     undefined,
-    spec.wrap ? (mechanics.popFoot === 'left' ? [holding, loose] : [loose, holding]) : undefined,
+    holds ? (mechanics.popFoot === 'left' ? [holding, loose] : [loose, holding]) : undefined,
   );
   // Store nose foot first.
   if (mechanics.noseFoot !== 'left') track.need.reverse();
@@ -457,6 +461,7 @@ function tuckTrack(spec: Spec, mechanics: RiderMechanics, style: SkateStyle, out
 
 /** How far the board lifts each foot (left, right) at clock time `t`. */
 export function boardTuck(spec: Spec, mechanics: RiderMechanics, style: SkateStyle, outcome: Outcome, t: number): Tuck {
+  mechanics = trickMechanics(mechanics, spec);
   const [nose, tail] = tuckAt(tuckTrack(spec, mechanics, style, outcome), t);
   return mechanics.noseFoot === 'left' ? [nose, tail] : [tail, nose];
 }
@@ -611,6 +616,7 @@ function poseRig(
   // tilted shuv does, but about that spot; where the leg can't reach where
   // that takes it, the foot keeps hold of it, carrying the board with it.
   const wrapping = wrapHold(spec, f);
+  const scooping = lateScoopHold(spec, flight, skateStyle);
   const popSpot = popAtNose ? stand.footR : stand.footL;
   const wrapSpot: V3 = { x: popSpot.x + stand.body.x - stand.board.x, y: popSpot.y + stand.body.y - stand.board.y, z: toeDir * SHOE_TOESIDE };
   // It turns about that spot under the sole, not about its own middle: the
@@ -762,6 +768,18 @@ function poseRig(
       const ridden = toBoard(boardPoint(wrapSpot));
       foot = { x: foot.x + (ridden.x - foot.x) * wrapping, y: foot.y + (ridden.y - foot.y) * wrapping };
       laneZ += (ridden.z - wrapSpot.z) * wrapping;
+    }
+    // A late shuv's popping foot pushes its end round: it goes with that end
+    // as the board turns, out across the rider's line, until it lets go.
+    if (scooping > 0 && mechanics.popFoot === side) {
+      // Where the foot stands on the deck, turned with the board about its middle.
+      const nose = sub3(toBoard(add3(center, boardDir({ x: 1, y: 0, z: 0 }))), toBoard(center));
+      const level = Math.hypot(nose.x, nose.z) || 1;
+      const [c, s] = [nose.x / level, nose.z / level];
+      const dx = foot.x - deckMid.x;
+      const dz = laneZ;
+      foot = { x: foot.x + (deckMid.x + dx * c - dz * s - foot.x) * scooping, y: foot.y };
+      laneZ += (dx * s + dz * c - laneZ) * scooping;
     }
     const rake = restRake + fullTurn * flickOut;
     const toe = toeAt(rake);

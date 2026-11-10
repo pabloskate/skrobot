@@ -352,6 +352,52 @@ describe('Rider body physics', () => {
     }
   });
 
+  it('flips a late flip with the popping foot, and an ordinary flip with the other one', () => {
+    // Mid-flick on each trick's own clock: a late flip holds flat first.
+    const midFlick = (base: string) => ROLL_IN + FLIP_T * (base === 'Late Kickflip' ? 0.5 : 0.2);
+    for (const rider of ['regular', 'goofy'] as const) {
+      for (const stance of STANCES) {
+        const mechanics = resolveRiderMechanics(rider, stance);
+        for (const base of ['Kickflip', 'Late Kickflip']) {
+          const rig = rigAt(base, stance, rider, 'landed', midFlick(base));
+          const flicking = rig.legs.filter((leg) => leg.flicking).map((leg) => leg.side);
+          const want = base === 'Late Kickflip' ? mechanics.popFoot : mechanics.noseFoot === mechanics.popFoot ? mechanics.tailFoot : mechanics.noseFoot;
+          expect(flicking, `${base} ${rider} ${stance}`).toEqual([want]);
+        }
+      }
+    }
+  });
+
+  it('a late shuv is pushed round by the popping foot and caught barely round, just before touchdown', () => {
+    for (const base of ['Late Backside Shuvit', 'Late Frontside Shuvit']) {
+      for (const rider of ['regular', 'goofy'] as const) {
+        for (const stance of STANCES) {
+          const spec = specFor(trickOf(base, stance));
+          const label = `${base} ${rider} ${stance}`;
+          // Still turning late in the flight: not turned and held in the air.
+          const late = computeFrame(ROLL_IN + FLIP_T * 0.85, spec, true, 'slam', 0.65, style);
+          expect(Math.abs(late.spin3d.yawDeg), label).toBeGreaterThan(130);
+          expect(Math.abs(late.spin3d.yawDeg), label).toBeLessThan(175);
+          // Mid-push the popping foot is down on its end of the board, carried
+          // with it out across the line the board rolls on.
+          const rig = rigAt(base, stance, rider, 'landed', ROLL_IN + FLIP_T * 0.47);
+          const mechanics = resolveRiderMechanics(rider, stance);
+          const leg = rig.legs.find((l) => l.side === mechanics.popFoot)!;
+          const sole = leg.shoe.at(0, 0, 0);
+          const toward = mechanics.popFoot === mechanics.noseFoot ? 1 : -1;
+          // How far, seen from above, the sole is off the popping half of the board's long axis.
+          let off = Infinity;
+          for (let x = 0; x <= 40; x++) {
+            const on = rig.board.point({ x: toward * x, y: 0, z: 0 });
+            off = Math.min(off, Math.hypot(sole.x - on.x, sole.z - on.z));
+          }
+          expect(Math.abs(rig.board.yawDeg), label).toBeGreaterThan(15);
+          expect(off, label).toBeLessThan(4);
+        }
+      }
+    }
+  });
+
   it('moves every joint continuously: no pops at the catch, the touchdown, or into a fall', () => {
     // Worst joint acceleration between 120 Hz frames. The one allowed jolt is
     // the tail snap itself, where the shared board pops from flat to steep.

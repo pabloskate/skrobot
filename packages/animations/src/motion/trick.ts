@@ -293,6 +293,46 @@ const FLIP_T = flightTime(DEFAULT_SKATE_STYLE);
 
 /** Share of the flight by which a robot's rotation is caught: 0.85 at neutral speed, never after touchdown. */
 const catchFraction = (style: Readonly<SkateStyle>) => Math.min(1, 0.85 / style.rotationSpeed);
+
+/**
+ * A late shuv's clock, in shares of the flight. The board is ollied flat
+ * (popLeft's LATE_LEVEL), then the popping foot comes back down on its end
+ * and pushes it round for LATE_SHUV_PUSH, speeding it up as it goes. Let go,
+ * the board turns on at the speed the push gave it (nothing in the air slows
+ * it), and is only caught as the feet come down for touchdown, at
+ * LATE_SHUV_CAUGHT: barely, rather than turned and then held in the air. A
+ * faster style's push sends it round sooner; a slower one's is caught later,
+ * though never after LATE_SHUV_LATEST.
+ */
+const LATE_SHUV_START = 0.32;
+const LATE_SHUV_PUSH = 0.22;
+const LATE_SHUV_CAUGHT = 0.94;
+const LATE_SHUV_LATEST = 0.97;
+/** Share of the push the foot rides its end before it starts letting go. */
+const LATE_SHUV_LET_GO = 0.75;
+
+/** A late shuv `p` of the way through its flight: how far round (0 → 1), and how far the popping foot is through its push (0 → 1). */
+function lateShuvClock(p: number, style: Readonly<Pick<SkateStyle, 'rotationSpeed'>>): { turn: number; push: number } {
+  const span = Math.min(LATE_SHUV_LATEST, LATE_SHUV_START + (LATE_SHUV_CAUGHT - LATE_SHUV_START) / style.rotationSpeed) - LATE_SHUV_START;
+  const push = Math.min(LATE_SHUV_PUSH, span / 2);
+  const x = Math.max(0, p - LATE_SHUV_START);
+  // Even speeding up through the push, then even speed: turn = 1 at `span`.
+  const rate = 1 / (span - push / 2);
+  const turn = x < push ? (rate * x * x) / (2 * push) : rate * (x - push / 2);
+  return { turn: clamp01(turn), push: clamp01(x / push) };
+}
+
+/**
+ * 0 → 1: how firmly a late shuv's popping foot is on its end of the board,
+ * pushing it round, `flight` (0 → 1) of the way through the air: on as the
+ * push starts, off as it lets go. 0 for any other trick.
+ */
+function lateScoopHold(spec: Spec, flight: number, style: Readonly<SkateStyle>): number {
+  if (!spec.late || spec.flips || !spec.yaw || flight < 0 || flight >= 1) return 0;
+  const { push } = lateShuvClock(flight, style);
+  if (push <= 0) return 0;
+  return smoothstep(clamp01(push / 0.15)) * (1 - smoothstep(clamp01((push - LATE_SHUV_LET_GO) / (1 - LATE_SHUV_LET_GO))));
+}
 const LAND_T = 0.95 * SPEED_SCALE;
 // Falls share the landing's "impact → settle" budget so a miss doesn't feel
 // like a second, slower animation system. A touch longer than LAND_T for the
@@ -513,6 +553,15 @@ function feetForFlip(
     // flicking foot outward from its board end instead of moving the pop foot.
     const flickX = spec.flipDir === -1 ? 16 : 11;
     const flickY = spec.flipDir === -1 ? 26 : 23;
+    if (spec.late) {
+      // Late flip: the popping foot comes back for the levelled board and
+      // kicks the flip off its own end (stance.ts trickMechanics); the other
+      // foot only lifts clear of the roll.
+      const kick = { x: popBaseX + popOutward * lift * flickX * flickStrength, y: baselineY - lift * flickY * flickStrength };
+      const kicked = clampFootReach(kick);
+      const clear = clampFootReach({ x: flickBaseX, y: baselineY - lift * 10 });
+      return popFromNose ? { footR: kicked, footL: clear } : { footR: clear, footL: kicked };
+    }
     return fromPopAndFlick(
       { x: popBaseX, y: baselineY - lift * 10 },
       {
@@ -677,14 +726,19 @@ function computeFrame(
     // A "late" shuvit holds the board flat off the pop, then whips the rotation
     // through in the back half of the flight (the late scoop). Its yaw runs on a
     // delayed clock; everything else (pop arc, catch) stays on catchP.
-    const rawSpinP = spec.late
-      ? clamp01((p - 0.38) / (0.30 / skateStyle.rotationSpeed))
-      : catchP;
+    // A late shuv runs on its own clock (lateShuvClock): pushed round by the
+    // popping foot, then turning evenly until it's caught just before touchdown.
+    const lateShuv = spec.late && !spec.flips ? lateShuvClock(p, skateStyle) : null;
+    const rawSpinP = lateShuv
+      ? lateShuv.turn
+      : spec.late
+        ? clamp01((p - 0.38) / (0.30 / skateStyle.rotationSpeed))
+        : catchP;
     // Full shuvs use the tre flip's immediate, linear scoop clock.
     // Only 180 shuvs retain the eased spin into their catch, on flatground: a
     // hop onto or off a bar plays the trick in a shorter flight, where the
     // ease would whip the board round off the pop and hang it, done, in the air.
-    const easedShuv = !evenShuv && spec.yaw === 180 && !spec.bodyYaw && !spec.flips && !spec.forwardFlip;
+    const easedShuv = !evenShuv && !spec.late && spec.yaw === 180 && !spec.bodyYaw && !spec.flips && !spec.forwardFlip;
     const spinP = easedShuv ? easeOutCubic(rawSpinP) : rawSpinP;
     rotationProgress = spinP;
     
@@ -735,9 +789,9 @@ function computeFrame(
       // The pop levels sooner (popLeft's LATE_LEVEL) and settles into the
       // flat hold with zero slope instead of arriving at speed.
       boardRot = popAngle * popLeft(spec, p, flipT);
-      if (spec.yaw) {
-        const scoopPhase = rawSpinP;
-        const dipEase = Math.sin(clamp01(scoopPhase / 0.2) * Math.PI);
+      if (lateShuv) {
+        // The popping foot pushes its end down as it pushes it round.
+        const dipEase = Math.sin(lateShuv.push * Math.PI);
         const dipDir = spec.nollie ? 1 : -1; // tail dips down regardless of stance
         boardRot += dipEase * dipDir * -14;
       }
@@ -816,48 +870,39 @@ function computeFrame(
     if (spec.late) {
       if (spec.flips) {
         // Late flip: hold the board flat off the pop, then flick the flip
-        // through in the back half of the flight. feetForFlip with spinP=0
-        // gives planted feet (hold); as spinP ramps up the flick kicks in
-        // on the delayed clock.
+        // through in the back half of the flight with the popping foot.
+        // feetForFlip with spinP=0 gives planted feet (hold); as spinP ramps
+        // up the kick comes in on the delayed clock.
         const feet = feetForFlip(spec, spinP, bodyYOffset, boardRot, skateStyle.flickStrength);
         footL = feet.footL;
         footR = feet.footR;
       } else {
-        // Late shuvit: back foot stays near the board during the hold phase,
-        // then scoops backward/around to whip the board rotation mid-flight.
-        // Finish with a front-foot catch — same stamp as a regular shuvit.
-        const scoopP = rawSpinP;
-        // Quick pop-and-return scoop arc: peaks early, tapers back toward the
-        // board as the rotation comes around so the foot doesn't hang out.
-        const scoopArc = Math.sin(scoopP * Math.PI) * (1 - scoopP * 0.5);
-        const catchPlant = frontFootCatchPlant(clamp01(p * skateStyle.rotationSpeed));
+        // Late shuvit: ollied flat on both feet, then the popping foot comes
+        // back down on its end and pushes it round (the rig carries it with
+        // that end through the push: lateScoopHold), lets go and lifts clear,
+        // and the board turns on under the lifted feet until the front foot
+        // stamps it, barely round, just before touchdown.
+        const { turn, push } = lateShuv ?? { turn: 1, push: 1 };
+        const letGo = smoothstep(clamp01((push - LATE_SHUV_LET_GO) / (1 - LATE_SHUV_LET_GO)));
+        const catchPlant = smoothstep(clamp01((turn - 0.72) / 0.28));
         const th = rad(boardRot);
         const noseX = spec.nollie ? 25 : 10;
         const tailX = spec.nollie ? -10 : -25;
         const holdR = { x: noseX * Math.cos(th), y: FOOT_Y - 6 + noseX * Math.sin(th) - bodyYOffset };
         const holdL = { x: tailX * Math.cos(th), y: FOOT_Y - 6 + tailX * Math.sin(th) - bodyYOffset };
-        // The actual popping end scoops outward. The other end lifts just
-        // enough to clear the late rotation; rider stance does not alter this
-        // nose/tail mechanic. CatchPlant then drops the front foot onto the
-        // deck while the scooping foot stays tucked.
+        // Let go, the pushing foot lifts up and back out of the board's way,
+        // coming in over its end again for the catch (still a little up:
+        // the front foot catches it first). The other foot eases off the
+        // deck as the push starts, just clear of the turn.
+        const popUp = letGo * (16 - catchPlant * 6);
+        const popOut = letGo * 14 * (1 - catchPlant);
+        const otherUp = 10 * smoothstep(push) * (1 - catchPlant);
         if (spec.nollie) {
-          footR = {
-            x: holdR.x + scoopArc * 22,
-            y: holdR.y - scoopArc * 16 - catchPlant * 12,
-          };
-          footL = {
-            x: holdL.x + scoopArc * 8 * (1 - catchPlant),
-            y: holdL.y - scoopArc * 10 * (1 - catchPlant),
-          };
+          footR = { x: holdR.x + popOut, y: holdR.y - popUp };
+          footL = { x: holdL.x, y: holdL.y - otherUp };
         } else {
-          footR = {
-            x: holdR.x - scoopArc * 8 * (1 - catchPlant),
-            y: holdR.y - scoopArc * 10 * (1 - catchPlant),
-          };
-          footL = {
-            x: holdL.x - scoopArc * 22,
-            y: holdL.y - scoopArc * 16 - catchPlant * 12,
-          };
+          footR = { x: holdR.x, y: holdR.y - otherUp };
+          footL = { x: holdL.x - popOut, y: holdL.y - popUp };
         }
       }
     } else {
@@ -1111,6 +1156,7 @@ export {
   boardYawDeg,
   computeFrame,
   catchFraction,
+  lateScoopHold,
   knee,
   clampFootReach,
   randomFallVariant,

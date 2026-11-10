@@ -112,8 +112,8 @@ describe('classic spots use their actual terrain', () => {
         expect(setup.scroll).toBeCloseTo(SUNSET_POP_X * K);
         expect(takeoff.scroll).toBeCloseTo(SUNSET_POP_X * K);
         expect(setup.stairs!.across).toBeGreaterThan(takeoff.stairs!.across);
-        // A nollie pops further back up the roof, its nose short of the edge (stairs.ts); everything else at the set's pop.
-        if (stance === 'nollie') expect(takeoff.stairs!.across).toBeGreaterThan(SUNSET_POP_Z * K);
+        // A nollie or fakie pops further back up the roof, its leading end short of the edge (stairs.ts); everything else at the set's pop.
+        if (stance === 'nollie' || stance === 'fakie') expect(takeoff.stairs!.across).toBeGreaterThan(SUNSET_POP_Z * K);
         else expect(takeoff.stairs!.across).toBeCloseTo(SUNSET_POP_Z * K);
         expect(takeoff.stairs!.across).toBeGreaterThan(SUNSET_ROOF_Z0 * K);
         expect(touchdown.stairs!.across).toBeCloseTo(-18 * SET_FOOT * K, 9);

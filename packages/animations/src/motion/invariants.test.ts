@@ -466,8 +466,9 @@ describe('computeFrame', () => {
         for (let i = 0; i <= 24; i += 1) {
           const t = ROLL_IN + FLIP_T * (i / 24);
           const frame = computeFrame(t, spec, true, 'slam', 0.65, strong);
-          const flickFoot = spec.nollie ? frame.footL : frame.footR;
-          expect(Math.hypot(flickFoot.x, flickFoot.y), `${base} ${stance}`).toBeLessThanOrEqual(MAX_REACH + 1e-6);
+          // A late flip's popping foot kicks it, and the other foot lifts clear: both stay in reach.
+          const feet = spec.late ? [frame.footL, frame.footR] : [spec.nollie ? frame.footL : frame.footR];
+          for (const foot of feet) expect(Math.hypot(foot.x, foot.y), `${base} ${stance}`).toBeLessThanOrEqual(MAX_REACH + 1e-6);
         }
       }
     }
@@ -491,7 +492,7 @@ describe('computeFrame', () => {
       for (const stance of STANCES) {
         const spec = specFor(trick(base, stance));
         // Catch point: 85% through the flight ends the flip and shuv clocks
-        // (late tricks finish even earlier); sample just after to dodge
+        // (late flips finish even earlier, late shuvs only by touchdown); sample just after to dodge
         // rounding. A body spin, and the board it carries, turns on to
         // touchdown.
         const atCatch = computeFrame(ROLL_IN + FLIP_T * 0.9, spec, true, 'slam').spin3d;
@@ -507,7 +508,9 @@ describe('computeFrame', () => {
           expect(s.yawDeg).toBeCloseTo(boardYawDeg(spec, 1, 1), 5);
           expect(s.bodyYawDeg).toBeCloseTo((spec.bodySpinDir || 1) * spec.bodyYaw, 5);
         }
-        if (!spec.bodyYaw) expect(atCatch.yawDeg).toBeCloseTo((spec.spinDir || 1) * spec.yaw, 5);
+        // A late shuv is caught barely round, just before touchdown: there it's done.
+        const lateShuv = spec.late && !spec.flips;
+        if (!spec.bodyYaw) expect((lateShuv ? atTouchdown : atCatch).yawDeg).toBeCloseTo((spec.spinDir || 1) * spec.yaw, 5);
       }
     }
   });

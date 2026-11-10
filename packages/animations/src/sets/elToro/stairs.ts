@@ -51,14 +51,17 @@ const RUN_UP = 0.6;
 /** Board center behind the lip when the tail strikes. */
 const POP_BEHIND = 26;
 /**
- * How far short of the edge a nollie's nose strikes: the nose leads, and it
- * needs the top landing under it to pop off, so the rider pops this much
- * before it reaches the edge, not over the drop.
+ * How far short of the edge a leading end strikes (a nollie's nose, a
+ * fakie's tail): it needs the top landing under it to pop off, so the rider
+ * pops this much before it reaches the edge, not over the drop.
  */
 const POP_SHORT = 2 * INCH;
 
-/** Whether a stance pops off the nose while it leads to the edge: nollie. */
-export const popsFromNose = (stance: Stance) => stance === 'nollie';
+/**
+ * Whether a stance pops off the end that leads to the edge: a nollie's nose,
+ * or a fakie's tail (rolling backwards, the tail goes first).
+ */
+export const popsFromLeadingEnd = (stance: Stance) => stance === 'nollie' || stance === 'fakie';
 /** Board center past the bottom step at touchdown. */
 const LAND_PAST = 4 * SET_FOOT;
 
@@ -74,7 +77,7 @@ export interface StairPlan {
   rolloutLift: readonly number[] | null;
   /** Touchdowns after rolling off an edge: clock time, and the speed the deck meets the ground with (square to it). */
   ledges: readonly { t: number; impact: number }[];
-  /** Clock time of the pop (the tail, or a nollie's nose, striking short of the lip) and of touchdown. */
+  /** Clock time of the pop (the tail, or the leading end of a nollie or fakie, striking short of the lip) and of touchdown. */
   pop: number;
   /** Where the board's middle is at the pop, down the stairs and across them. */
   takeoff: { x: number; z: number };
@@ -171,14 +174,15 @@ const ROLLOUT_HZ = 240;
 const LEDGE = 0.5;
 
 /**
- * Where the board's middle is at the pop. A tail pop is the set's takeoff
- * (or POP_BEHIND the lip), its leading wheels at the edge. A nollie strikes
- * its leading nose on the takeoff's ground: the takeoff moves back along the
- * route until the nose is POP_SHORT of where the ground falls away.
+ * Where the board's middle is at the pop. A trailing tail's pop is the set's
+ * takeoff (or POP_BEHIND the lip), its leading wheels at the edge. A nollie
+ * or a fakie strikes its leading end on the takeoff's ground: the takeoff
+ * moves back along the route until that end is POP_SHORT of where the
+ * ground falls away.
  */
 function takeoffFor(terrain: DropTerrain, stance: Stance): { x: number; z: number } {
   const from = { x: terrain.entry?.x ?? -POP_BEHIND, z: terrain.entry?.z ?? terrain.laneZ };
-  if (!popsFromNose(stance)) return from;
+  if (!popsFromLeadingEnd(stance)) return from;
   const yaw = rad(terrain.entry?.yaw ?? 0);
   const along = (s: number) => terrainSurface(terrain, from.x + s * Math.cos(yaw), from.z + s * Math.sin(yaw));
   const reach = TIP_X + POP_SHORT;
@@ -365,8 +369,39 @@ export function rideGrade(plan: StairPlan, t: number): number {
  */
 export function stairClock(plan: StairPlan, t: number): number {
   if (t <= plan.pop) return t - (plan.pop - ROLL_IN);
-  if (t < plan.land) return ROLL_IN + ((t - plan.pop) * plan.clockFlight) / plan.flight;
+  if (t < plan.land) return ROLL_IN + flightClock(plan, t - plan.pop);
   return t - plan.land + ROLL_IN + plan.clockFlight;
+}
+
+/**
+ * How long off the pop the stair clock keeps flatground speed: the tail
+ * strike is a foot snapping the board off the ground, as quick off the top
+ * of a drop as on the flat. Stretched with the hang, the snap came late: the
+ * drop carried the board up flat and it only tipped up once in the air.
+ */
+const STRIKE_EASE = 0.1;
+
+/**
+ * The stretch of the flight, as shares of it, over which the clock gives back
+ * the time the strike ran ahead: done well before the catch, and before a
+ * kick-out takes over from the trick (kickOut.ts TAKEOVER_LEAD before it).
+ */
+const STRIKE_GIVE_BACK = [0.2, 0.55] as const;
+
+/**
+ * The flatground flight clock `u` seconds off the pop: stretched evenly to
+ * the drop's hang (rate s = clockFlight / flight), but at flatground speed
+ * off the pop, easing into the stretch over STRIKE_EASE. What that runs
+ * ahead is given back through the middle of the flight, so from there to
+ * touchdown the clock is exactly the even stretch: the landing, and a fall
+ * or kick-out out of it, are as they were.
+ */
+function flightClock(plan: StairPlan, u: number): number {
+  const s = plan.clockFlight / plan.flight;
+  const ahead = (1 - s) * STRIKE_EASE * (1 - Math.exp(-u / STRIKE_EASE));
+  const [from, to] = STRIKE_GIVE_BACK;
+  const k = Math.min(1, Math.max(0, (u / plan.flight - from) / (to - from)));
+  return s * u + ahead * (1 - k * k * (3 - 2 * k));
 }
 
 /** A rollout sample's value at clock time `t` after touchdown. */
@@ -413,7 +448,8 @@ export function stairDeckHeight(plan: StairPlan, t: number): number {
 export function stairLift(plan: StairPlan, t: number, rise: number, distance?: number): number {
   if (t <= plan.pop) return rideHeight(plan, t);
   if (t >= plan.land) return distance === undefined || plan.rolloutLift ? stairDeckHeight(plan, t) : plan.terrain.ground(distance);
-  const p = (t - plan.pop) / plan.flight;
+  // Off the flatground arc as the rider is solved on it: on the stair clock.
+  const p = flightClock(plan, t - plan.pop) / plan.clockFlight;
   return stairDeckHeight(plan, t) - 4 * rise * p * (1 - p);
 }
 

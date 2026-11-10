@@ -86,6 +86,20 @@ export function resolveRiderMechanics(
 }
 
 /**
+ * The rider's mechanics for one trick. A late flip is ollied flat first,
+ * then flipped by the popping foot coming back for the board (the back foot
+ * off the tail, a nollie's front foot off the nose): that foot flicks, not
+ * the other one.
+ */
+export function trickMechanics(
+  mechanics: RiderMechanics,
+  spec: { readonly late: boolean; readonly flips: number },
+): RiderMechanics {
+  if (!spec.late || !spec.flips || mechanics.flickFoot === mechanics.popFoot) return mechanics;
+  return { ...mechanics, flickFoot: mechanics.popFoot };
+}
+
+/**
  * Convert trick-relative rotation into world rotation after the rider's pose
  * is established. Kickflip/heelflip and frontside/backside remain distinct.
  */

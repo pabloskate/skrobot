@@ -1,6 +1,6 @@
 import { BAR_Z, BAR_TOP, BAR_HALF, BAR_TOP_Y, type Bearing, type GrindSpec, grindSpecFor } from './grindDefinitions';
 import type { RiderStance, SkateStyle, Trick } from '../types';
-import { resolveRiderMechanics, type RiderMechanics } from './stance';
+import { resolveRiderMechanics, trickMechanics, type RiderMechanics } from './stance';
 import { resolveSkateStyle } from './style';
 import {
   FALL_T,
@@ -1113,8 +1113,10 @@ export function planGrind(
 ): GrindPlan {
   const toeDir = mechanics.orientationSign;
   const far = approachFar(spec, mechanics);
-  const entry = spec.entry ? { trick: spec.entry, mechanics, style } : null;
-  const exit = spec.exit ? { trick: spec.exit, mechanics: poppingOff(mechanics, spec.exitNose), style, soleX: popSoleX(spec.exitNose, toeDir) } : null;
+  const entry = spec.entry ? { trick: spec.entry, mechanics: trickMechanics(mechanics, spec.entry.spec), style } : null;
+  const exit = spec.exit
+    ? { trick: spec.exit, mechanics: trickMechanics(poppingOff(mechanics, spec.exitNose), spec.exit.spec), style, soleX: popSoleX(spec.exitNose, toeDir) }
+    : null;
   const heading = entry ? settledHeading(entry) : 0;
   const entrySpin = entry ? settledSpin(entry) : NO_SPIN;
   // The lock as the rider rides it, then turned with them: a half turn puts

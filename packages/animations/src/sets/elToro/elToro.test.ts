@@ -168,13 +168,17 @@ describe('El Toro', () => {
     for (const rider of RIDERS) {
       const regular = plan('Kickflip', { rider });
       const fakie = plan('Kickflip', { rider, stance: 'fakie' });
-      expect(fakie.stairs).toEqual(regular.stairs);
+      // Same clock and landing; the leading tail pops short of the lip, so the takeoff is further back (stairs.ts).
+      expect(fakie.stairs!.pop).toBe(regular.stairs!.pop);
+      expect(fakie.stairs!.land).toBe(regular.stairs!.land);
+      expect(fakie.stairs!.takeoff.x).toBeLessThan(regular.stairs!.takeoff.x);
       for (const t of [0, 0.4, regular.stairs!.pop, regular.stairs!.land, regular.end]) {
         const forwards = stageFrame(regular, t, 1);
         const backwards = stageFrame(fakie, t, 1);
         expect(forwards.stairs!.dir).toBe(1);
         expect(backwards.stairs!.dir).toBe(1);
-        expect(backwards.scroll).toBeCloseTo(forwards.scroll, 8);
+        if (t === regular.stairs!.land) expect(backwards.scroll).toBeCloseTo(forwards.scroll, 8);
+        else if (t < regular.stairs!.land) expect(backwards.scroll).toBeLessThanOrEqual(forwards.scroll + 1e-9);
       }
       const forwards = stageFrame(regular, 0.4, 1).rig;
       const backwards = stageFrame(fakie, 0.4, 1).rig;

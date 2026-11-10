@@ -173,6 +173,20 @@ export function inkMaterial() {
 
       ${GLSL_DEPTH}
 
+      /**
+       * How fast this pixel's own surface runs away from the camera, in world
+       * units per pixel along step: the gentler of the two one-sided
+       * differences over the same part (so a silhouette beside it doesn't
+       * count), or nothing where neither neighbor is this part.
+       */
+      float surfaceSlope(vec4 own, float z, vec2 step) {
+        float ahead = 1e9, behind = 1e9;
+        if (abs(texture(uInfo, vUv + step).r - own.r) < 0.5 / 255.0) ahead = viewZ(texture(uDepth, vUv + step).r) - z;
+        if (abs(texture(uInfo, vUv - step).r - own.r) < 0.5 / 255.0) behind = z - viewZ(texture(uDepth, vUv - step).r);
+        float slope = abs(ahead) < abs(behind) ? ahead : behind;
+        return abs(slope) < 1e8 ? slope : 0.0;
+      }
+
       void main() {
         // How far the outlines cast from the tiles around this pixel reach.
         // Tiles two away only matter for outlines wider than a tile.
@@ -199,6 +213,14 @@ export function inkMaterial() {
         }
         float ownSurface = floor(floor(own.a * 255.0 + 0.5) / 4.0);
         float z = viewZ(texture(uDepth, vUv).r);
+        // This surface carried on under its neighbors. Ground seen at a glance
+        // comes a long way nearer in a few pixels, so the floor just below a
+        // wheel is well in front of the wheel standing on it, yet the wheel
+        // touches the floor where it stands. Judged against its own depth the
+        // floor took the wheel's outline; judged against the floor carried on
+        // to the wheel, they touch. Only a surface running away from a
+        // neighbor is carried on: one coming nearer still covers it.
+        vec2 slope = vec2(surfaceSlope(own, z, vec2(uTexel.x, 0.0)), surfaceSlope(own, z, vec2(0.0, uTexel.y)));
         float best = 0.0;
         float bestInk = 0.0;
         float bestDepth = ownDepth;
@@ -220,12 +242,13 @@ export function inkMaterial() {
             // Pieces of one garment: no seam where they meet, only a line where one is clearly in front.
             bool garment = sameSurface && surface > ${GARMENT}.0 - 0.5;
             float gap = surface > ${GARMENT + FEATURES}.0 - 0.5 ? ${FEATURE_GAP.toFixed(1)} : ${GARMENT_GAP.toFixed(1)};
+            float zUnder = z + max(0.0, dot(slope, vec2(float(dx), float(dy))));
             bool crease = sameSurface && !garment && abs(other.g - own.g) > 0.5 / 255.0;
             bool front = crease
               ? other.g > own.g
               : garment
                 ? oz < z - gap
-                : oz < z - uTouch || (abs(oz - z) <= uTouch && other.g > own.g);
+                : oz < zUnder - uTouch || (abs(oz - zUnder) <= uTouch && other.g > own.g);
             if (!front) continue;
             float width = other.b * 4.0 * uFocalPx / oz;
             float cover = clamp(width + 1.0 - d, 0.0, 1.0);
