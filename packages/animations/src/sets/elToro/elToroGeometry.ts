@@ -52,8 +52,12 @@ const WALL_FAR = WALL_Z + WALL_THICK;
 const LOCKER_BANK_END = 125 * F;
 const CANOPY_BANK_END = -88 * F;
 const BAND_Z = -7.3 * F;
-/** The lower paving's slabs lie a hair over the landing under them; marks on them a hair over that. */
-const SLAB_Y = -9.48 * F;
+/**
+ * The lower paving's slabs are the landing itself, at the height the board rolls on (stairs.ts's ground); the
+ * base they lie on, which shows out past them, is a hair under them, and marks on them a hair over.
+ */
+const SLAB_Y = -STAIR_DROP;
+const BASE_Y = SLAB_Y - 0.02 * F;
 const DECAL_LIFT = 0.3;
 
 const smooth = (a: number, b: number, x: number) => {
@@ -156,9 +160,13 @@ function landings(ground: Bake) {
   strip(apronU, HILL_TOP, apronZ, HILL_EDGE - 90, 0, 0, up, ET.walk, CONCRETE);
   strip(-FAR, HILL_TOP, WALL_FAR, BUILDING_BACK + 45, 0, 0, up, ET.walk, CONCRETE);
   strip(-FAR, HILL_TOP, BUILDING_BACK + 45, FAR, 0, 0, up, ET.grass, GRASS);
-  strip(STAIR_RUN, FAR, HILL_EDGE, WALL_FAR, -STAIR_DROP, -STAIR_DROP, up, ET.paving, CONCRETE);
-  strip(HILL_FOOT, FAR, -FAR, HILL_EDGE, -STAIR_DROP, -STAIR_DROP, up, ET.paving, CONCRETE);
-  strip(HILL_FOOT, FAR, WALL_FAR, FAR, -STAIR_DROP, -STAIR_DROP, up, ET.paving, CONCRETE);
+  strip(STAIR_RUN, FAR, HILL_EDGE, WALL_FAR, BASE_Y, BASE_Y, up, ET.paving, CONCRETE);
+  strip(HILL_FOOT, FAR, -FAR, HILL_EDGE, BASE_Y, BASE_Y, up, ET.paving, CONCRETE);
+  strip(HILL_FOOT, FAR, WALL_FAR, FAR, BASE_Y, BASE_Y, up, ET.paving, CONCRETE);
+  // The banks come down to the landing's height: a lip from their foot to the base, where no slab lies against it.
+  for (const [z0, z1] of [[-FAR, HILL_EDGE], [WALL_Z, FAR]]) {
+    ground.quad(P(HILL_FOOT, -STAIR_DROP, z0), P(HILL_FOOT, BASE_Y, z0), P(HILL_FOOT, BASE_Y, z1), P(HILL_FOOT, -STAIR_DROP, z1), downhill, { color: ET.paving }, CONCRETE);
+  }
   // The canopy's floor slab, flush with the walk it stands on and painted as it is.
   campusBox(ground, [-114, -0.3, -88], [0.5, 0, -8.1], ET.walk, SURFACE.concrete);
 }
@@ -169,10 +177,9 @@ function embankment(ground: Bake) {
     ground.quad([u0, hill(u0), z0], [u1, hill(u1), z0], [u1, hill(u1), z1], [u0, hill(u0), z1], SLOPE_N, { color }, ink);
   strip(HILL_TOP, HILL_FOOT, WALL_Z, LOCKER_BANK_END, ET.dirt, SOIL);
   strip(HILL_TOP, HILL_FOOT, LOCKER_BANK_END, FAR, ET.grass, GRASS);
-  // The band lies at the steps' inner-corner line, with a two-foot level return at the top and the bottom.
+  // The band lies at the steps' inner-corner line, with a two-foot level return at the top; the lawn covers its foot.
   strip(HILL_TOP, HILL_FOOT, BAND_Z, HILL_EDGE, ET.band, CONCRETE);
   strip(-2 * F, HILL_TOP, BAND_Z, HILL_EDGE, ET.band, CONCRETE);
-  strip(HILL_FOOT, 22 * F, BAND_Z, HILL_EDGE, ET.band, CONCRETE);
   // The canopy bank: hedges in mulched dirt over its upper part, grass running out onto the lawn below.
   strip(HILL_TOP, 15 * F, CANOPY_BANK_END, BAND_Z, mixHex(ET.dirt, '#6a5440', 0.35), SOIL);
   strip(15 * F, HILL_FOOT, CANOPY_BANK_END, BAND_Z, ET.grass, GRASS);

@@ -10,7 +10,7 @@ import type { Vec3 } from '../../camera/view';
 import {
   BUILDING_END, BUILDING_LENGTH, BUILDING_BACK, BUILDING_FACE, EAVE, CENTER_Z, EL_TORO_FILMERS, FAR_RAIL_Z, HILL_EDGE, HILL_RAIL_Z, LIP_AWAY, RAIL_EXT, RAIL_R, RIDER_LANE_Z, WALL_THICK, WALL_Z,
 } from './elToroLayout';
-import { SET_FOOT, RISER, STAIR_DROP, STAIR_RUN, STAIR_STEPS, TREAD } from './stairs';
+import { SET_FOOT, RISER, STAIR_DROP, STAIR_RUN, STAIR_STEPS, TREAD, stairGround } from './stairs';
 import { buildElToroBuilding } from './elToroBuilding';
 import { Bake } from '../../three/bake';
 import { buildElToroCanopy, EL_TORO_CANOPY, EL_TORO_CANOPY_COLUMNS } from './elToroCanopy';
@@ -258,6 +258,8 @@ describe('El Toro environment geometry', () => {
         expect(point.z).toBe(HILL_EDGE);
         continue;
       }
+      // Nor is the base under the landing's slabs, a hair below them.
+      if (point.y < -STAIR_DROP - 1e-3) continue;
       const riser = normal.getX(i) === 1;
       const tread = normal.getY(i) === 1 && point.y < -1;
       if (!riser && !tread) continue;
@@ -287,6 +289,17 @@ describe('El Toro environment geometry', () => {
       // Each riser is one step's height.
       const ys = face.map(({ y }) => y);
       expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(RISER, 4);
+    }
+  });
+
+  it('draws the run-up and the landing at the height the board rolls on', () => {
+    const mesh = new Mesh(geometry.ground, new MeshBasicMaterial({ side: DoubleSide }));
+    const drawn = (u: number, z: number) =>
+      new Raycaster(new Vector3(u, 60, z), new Vector3(0, -1, 0), 0, 60 + STAIR_DROP + 20).intersectObject(mesh)[0]?.point.y;
+    // The rider's lane, and where a grind comes off a rail: those as far as the round lawn, the lane well past it.
+    for (const [z, reach] of [[RIDER_LANE_Z, 140], [HILL_RAIL_Z, 50], [CENTER_Z, 50], [FAR_RAIL_Z, 50]]) {
+      for (let u = -60 * SET_FOOT; u < -SET_FOOT; u += 3.7 * SET_FOOT) expect(drawn(u, z)).toBeCloseTo(stairGround(u), 4);
+      for (let u = STAIR_RUN + 0.5 * SET_FOOT; u < reach * SET_FOOT; u += 1.7 * SET_FOOT) expect(drawn(u, z)).toBeCloseTo(stairGround(u), 4);
     }
   });
 

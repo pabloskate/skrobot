@@ -384,7 +384,7 @@ function gym(props: Bake) {
   for (let y = 14; y < h; y += 35) props.box([WALLENBERG_GYM_BACK_X, y, z - 0.23], [x, y + 0.6, z - 0.12], '#bbbfaf', '#bbbfaf', NO_INK, 'k');
   // The little roof over the side door, level with the roll-in's deck: the ramp's high end butts up to it.
   const r = WALLENBERG_RAMP;
-  const roof = r.height + 0.6;
+  const roof = r.height;
   const front = r.deck - 1;
   props.box([front - 5.5 * SET_FOOT, roof - 7 * INCH, -0.5 * SET_FOOT], [front, roof, z], '#8c9ea8', '#b4c0c4', ink(109), 'tbke');
   props.box([front - 3.6 * SET_FOOT, 0, z - 4], [front - 0.6 * SET_FOOT, 7 * SET_FOOT, z], '#3a4342', '#3a4342', NO_INK, 'k');
@@ -461,11 +461,12 @@ function rollIn(ground: Bake, props: Bake) {
     const m = Math.hypot(dx, dy);
     return [-dy / m, dx / m, 0];
   };
-  // The sheet's top is the riding surface, its thickness keeping the toe off the alley floor.
-  const sheet = 0.6;
+  // The sheet's top is the riding surface; its toe stays a hair off the alley floor it runs out onto.
+  const toe = 0.3;
+  const sheetTop = (x: number) => Math.max(wallenbergRampHeight(x), toe);
   for (let k = 0; k + 1 < xs.length; k++) {
     const a = xs[k], c = xs[k + 1];
-    const ya = wallenbergRampHeight(a) + sheet, yc = wallenbergRampHeight(c) + sheet;
+    const ya = sheetTop(a), yc = sheetTop(c);
     const n = normal(a, c);
     ground.quad([a, ya, -w], [a, ya, w], [c, yc, w], [c, yc, -w], n, { color: lit(PLYWOOD, n) }, woodInk);
   }
@@ -475,7 +476,7 @@ function rollIn(ground: Bake, props: Bake) {
     const a = xs[k], c = xs[k + 1];
     const step = Math.hypot(c - a, wallenbergRampHeight(c) - wallenbergRampHeight(a));
     const n = normal(a, c);
-    const lift = (x: number): Vec3 => [x + n[0] * 0.2, wallenbergRampHeight(x) + sheet + n[1] * 0.2, 0];
+    const lift = (x: number): Vec3 => [x + n[0] * 0.2, sheetTop(x) + n[1] * 0.2, 0];
     const [pa, pc] = [lift(a), lift(c)];
     ground.quad([pa[0], pa[1], -0.4], [pa[0], pa[1], 0.4], [pc[0], pc[1], 0.4], [pc[0], pc[1], -0.4], n, { color: lit('#9d7d50', n) }, NO_INK);
     if (Math.floor((rolled + step) / (4 * SET_FOOT)) > Math.floor(rolled / (4 * SET_FOOT))) {
@@ -514,7 +515,7 @@ function rollIn(ground: Bake, props: Bake) {
   brace([r.deck - 1, 0.5 * SET_FOOT, w], [r.deck - 1, deckUnder - 0.5 * SET_FOOT, -w]);
   for (const z of [-w - 2, w + 2]) brace([r.deck, 0.5 * SET_FOOT, z], [r.top, deckUnder - 0.5 * SET_FOOT, z]);
   for (const y of [2 * SET_FOOT, 5 * SET_FOOT]) props.box([r.deck, y, -w], [r.deck + 3.5 * INCH, y + 1.5 * INCH, w], LUMBER, '#b8935f', ink(122), 'tkfle');
-  face(props, [r.deck, deckUnder, -w], [r.deck, r.height + 0.6, -w], [r.deck, r.height + 0.6, w], [r.deck, deckUnder, w], [-1, 0, 0], LUMBER, woodInk);
+  face(props, [r.deck, deckUnder, -w], [r.deck, r.height, -w], [r.deck, r.height, w], [r.deck, deckUnder, w], [-1, 0, 0], LUMBER, woodInk);
 }
 
 /* ----- Around the blocks ----- */

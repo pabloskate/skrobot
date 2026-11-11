@@ -85,8 +85,9 @@ describe('Wallenberg landmark geometry', () => {
         const ray = new Raycaster(new Vector3(x, 40 * SET_FOOT, z), new Vector3(0, -1, 0), 0, 80 * SET_FOOT);
         const hits = ray.intersectObject(mesh).map(hit => hit.point.y);
         expect(hits.length, name).toBeGreaterThan(0);
-        // The surface seen from above is the stage's (the roll-in's plywood over it by its thickness).
+        // The surface seen from above is the stage's: to a chord's sag on the curves, and exactly where the board stands still.
         expect(Math.abs(hits[0] - wallenbergSurface(x, z)), name).toBeLessThan(1);
+        if (name === 'roll-in deck') expect(hits[0], name).toBeCloseTo(wallenbergSurface(x, z), 4);
         for (let k = 1; k < hits.length; k++) expect(hits[k - 1] - hits[k], `${name}: coplanar floors`).toBeGreaterThan(0.5);
       }
     } finally {
