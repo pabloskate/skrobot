@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { BoxGeometry, Group, Mesh } from 'three';
 import { prepareCinematicSurfaces } from './cinematic';
-import { faceMaterial, toonMaterial } from './materials';
+import { toonMaterial } from './materials';
+import { faceMaterial } from '../riders/robot/robotMaterials';
 import { realisticBoardMaterial } from '../board/realisticBoardMaterials';
 
 describe('export-only cinematic surfaces', () => {

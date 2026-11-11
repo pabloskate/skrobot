@@ -1,25 +1,33 @@
 import { Group, Mesh, SphereGeometry, type BufferAttribute, type BufferGeometry, type ShaderMaterial } from 'three';
 import { PALETTE } from '../../camera/camera';
-import { mixHex, rad, smoothstep, sub3, norm3, dot3, type V3 } from '../../math';
+import { add3, dot3, mixHex, norm3, rad, smoothstep, sub3, type V3 } from '../../math';
 import type { Expression, RobotLook } from '../look';
-import { ARM_RADII, HAND_RADIUS, LEG_RADII, shiftFrame, type Rig } from '../../motion/skeleton';
+import { ARM_RADII, LEG_RADII, shiftFrame, type Rig } from '../../motion/skeleton';
 import { frontDecalGeometry, roundedBoxGeometry, type BoxSpec } from '../../three/geometry';
-import { faceMaterial, inkInfo, INK_ROBOT, toonMaterial } from '../../three/materials';
+import { inkInfo, INK_ROBOT, toonMaterial } from '../../three/materials';
 import { shoeGeometries } from '../shoe3d';
-import type { StageView } from '../../camera/view';
-import { hipsFrame, Limb, placeFrame, placePoint, staticMesh } from '../placement';
+import { dirToThree, toThree, type StageView } from '../../camera/view';
+import { hipsFrame, Limb, placeBetween, placeFrame, placePoint, staticMesh } from '../placement';
+import { chestMaterial, ChestContact, faceMaterial, headMaterial, SCREEN, shoeUpperMaterial, VISOR_BEZEL } from './robotMaterials';
+import { ballGeometry, earGeometry, KNEE_R, mittGeometry, SHOULDER_R, socketGeometries } from './robotParts';
 
 /**
- * The robot skater: a chunky toy with a box head and visor screen (its face
- * shows the rider's expression; the antenna is the robot's variant), a
- * softly tapered chest, sturdy graphite limbs, big shell-colored mitts, and
- * sculpted accent skate shoes on cream cupsoles (shoe3d.ts). Every part is
- * matte, two cel tones and no highlight: a glint read as shiny. Poses come
- * straight from the rig.
+ * The robot skater: a chunky moulded toy. A box head with a visor screen
+ * set into it (its face shows the rider's expression), button ears and an
+ * antenna in its socket (the robot's variant); a softly tapered chest of
+ * shell the thighs come straight out of; sturdy graphite limbs seated in
+ * shell shoulder caps and jointed at the knee; shell gloves with a rolled
+ * cuff; and sculpted accent skate shoes on cream cupsoles
+ * (shoe3d.ts). Every part is matte, two cel tones and no highlight: a glint
+ * read as shiny. Its shapes are robotParts.ts's, its paint
+ * robotMaterials.ts's, and its poses come straight from the rig.
  */
 
 const HEAD: BoxSpec = { f: 14, u: 15, s: 18, r: 8.5 };
+/** The grid the screen is painted on: this much of the head's front round the screen and its bezel, this far off the shell. */
+const VISOR_GRID = { margin: 0.65, lift: 0.15 } as const;
 const TORSO_FRAME_U = 25;
+/** How far the chest's foot is raised off its frame's, so the thighs come out from under it. */
 const TORSO_BASE_RAISE = 8;
 /** Rounded and barely wedge-shaped, so the chest reads as a pebble of shell, not a crate. */
 const TORSO: BoxSpec = { f: 11, u: TORSO_FRAME_U - TORSO_BASE_RAISE / 2, s: 15.5, r: 10.5, taper: 0.8 };
@@ -28,44 +36,63 @@ const TORSO_RINGS = 8;
 /** The most the chest twists off the hips (deg): fakie slides turn the shoulders well past square. */
 const TWIST_MAX = 135;
 /**
- * Limb widths, root → joint → tip: sturdy and only gently tapered, so they read as a toy's limbs, not sticks.
- * The motion keeps limbs this thick out of the board and of each other (skeleton.ts).
+ * Limb widths, root → joint → tip: a little inside the rig's clearance
+ * (skeleton.ts), so the shoulder's cap and the knee's ball, which fill it,
+ * stand just proud of the limb they joint.
  */
-const ARM_W = [ARM_RADII.shoulder * 2, ARM_RADII.elbow * 2, ARM_RADII.wrist * 2] as const;
-const LEG_W = [LEG_RADII.hip * 2, LEG_RADII.knee * 2, LEG_RADII.ankle * 2] as const;
-const HAND_R = HAND_RADIUS;
-const NECK_W = 8;
+const LIMB_SLIM = 0.9;
+const ARM_W = [ARM_RADII.shoulder, ARM_RADII.elbow, ARM_RADII.wrist].map((r) => 2 * r * LIMB_SLIM);
+const LEG_W = [LEG_RADII.hip, LEG_RADII.knee, LEG_RADII.ankle].map((r) => 2 * r * LIMB_SLIM);
+const NECK_W = 10;
+/** Where each antenna stalk leaves the head (forward, side), and where its tip stands (forward, over the top, side), by variant. */
+const ANTENNA: Record<0 | 1 | 3, ReadonlyArray<{ foot: readonly [number, number]; tip: readonly [number, number, number]; width: number; ball: number }>> = {
+  0: [{ foot: [0, 0], tip: [0, 9, 0], width: 2.2, ball: 3 }],
+  1: [{ foot: [-2, 7], tip: [-6, 10, 9], width: 2.2, ball: 2.8 }],
+  3: [-1, 1].map((side) => ({ foot: [0, side * 9] as const, tip: [-1, 7.5, side * 11.5] as const, width: 2, ball: 2.4 })),
+};
 
-/** Outline widths (world units): every part's, and the head's slightly heavier one. */
+/** Outline widths (world units): every part's, the head's slightly heavier one, and the lighter one a small fitting carries. */
 const INK = 1.15;
 const HEAD_INK = INK * 1.1;
+const FITTING_INK = INK * 0.72;
+/** What casts the chest's contact tone (robotMaterials.ts): the head, as an ellipsoid of these radii, and the upper arms. */
+const HEAD_CONTACT: [number, number, number] = [HEAD.f * 1.05, HEAD.u * 1.05, HEAD.s * 1.05];
 
-/** Part ids for the outline pass: each is one silhouette. */
-const ID = { leftArm: 1, rightArm: 2, leftLeg: 3, rightLeg: 4, torso: 5, head: 6, leftShoe: 7, rightShoe: 8 } as const;
-/** Paint order (back to front) for parts touching. */
-export const ROBOT_PRIORITY = { armFar: 40, legFar: 50, legNear: 55, torso: 60, head: 70, armNear: 80 } as const;
+/**
+ * Part ids for the outline pass: each is one silhouette. The fittings are
+ * numbered clear of the board's, the bar's and the scenery's (as Wind-Up's
+ * are, windup3d.ts).
+ */
+const ID = {
+  leftArm: 1, rightArm: 2, leftLeg: 3, rightLeg: 4, torso: 5, head: 6, leftShoe: 7, rightShoe: 8,
+  fittings: 241, leftKnee: 243, rightKnee: 244, leftShoulder: 245, rightShoulder: 246, leftHand: 247, rightHand: 248,
+} as const;
+/** Paint order (back to front) for parts touching, the fittings just over what they're fitted to. */
+export const ROBOT_PRIORITY = { armFar: 40, legFar: 50, legNear: 55, torso: 60, head: 70, fittings: 72, armNear: 80 } as const;
+const KNEE_OVER_LEG = 1;
 const SHOE_OVER_LEG = 2;
+const SHOULDER_OVER_ARM = 1;
+const HAND_OVER_ARM = 2;
 
 const EXPRESSIONS: Record<Expression, number> = { open: 0, focus: 1, happy: 2, wince: 3 };
 
 interface ArmParts {
   upper: Limb;
   fore: Limb;
+  shoulder: Mesh;
   hand: Mesh;
-  materials: ShaderMaterial[];
 }
 
 interface LegParts {
   thigh: Limb;
   shin: Limb;
+  knee: Mesh;
   shoe: Group;
-  /** Every material of the leg, its shoe's included. */
-  materials: ShaderMaterial[];
-  upper: ShaderMaterial;
-  sole: ShaderMaterial;
+  shoeMaterials: ShaderMaterial[];
 }
 
 const avg = (a: V3, b: V3): V3 => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 });
+const material = (mesh: Mesh) => mesh.material as ShaderMaterial;
 
 export class Robot3D {
   readonly group = new Group();
@@ -74,10 +101,15 @@ export class Robot3D {
   private readonly torsoRest: { pos: Float32Array; nor: Float32Array };
   private twist = 0;
   private readonly head: Mesh;
-  private readonly face: Mesh;
+  private readonly face: ShaderMaterial;
+  /** The ears and the antenna's sockets: graphite let into the head. */
+  private readonly fittings: ShaderMaterial[] = [];
   private readonly neck: Limb;
-  private readonly antenna: Array<{ stalk?: Limb; tip?: Mesh; crest?: Mesh }> = [];
+  private readonly antenna: Array<{ stalk: Limb; tip: Mesh }> = [];
+  private readonly crest?: Mesh;
+  /** Everything in the head's silhouette: the shell, the screen, the neck, the antenna or crest. */
   private readonly headMaterials: ShaderMaterial[] = [];
+  private readonly contact = new ChestContact(HEAD_CONTACT, ARM_RADII.shoulder);
   private readonly arms: Record<'left' | 'right', ArmParts>;
   private readonly legs: Record<'left' | 'right', LegParts>;
   private readonly geometries: BufferGeometry[] = [];
@@ -89,84 +121,93 @@ export class Robot3D {
       return g;
     };
 
-    this.torso = staticMesh(geometry(roundedBoxGeometry(TORSO, 5, TORSO_RINGS)), toonMaterial(look.body));
+    this.torso = staticMesh(geometry(roundedBoxGeometry(TORSO, 5, TORSO_RINGS)), chestMaterial(look.body, this.contact));
     const torsoAttr = (name: string) => (this.torso.geometry.getAttribute(name) as BufferAttribute).array as Float32Array;
     this.torsoRest = { pos: torsoAttr('position').slice(), nor: torsoAttr('normal').slice() };
-    this.head = staticMesh(geometry(roundedBoxGeometry(HEAD)), toonMaterial(look.body));
-    const face = faceMaterial(look.body, look.accent);
-    this.face = staticMesh(geometry(frontDecalGeometry(HEAD, 14.6, -10.6, 9.6, 0.15)), face);
-    this.head.add(this.face);
+    this.head = staticMesh(geometry(roundedBoxGeometry(HEAD)), headMaterial(look.body));
+    this.face = faceMaterial(look.body, look.accent);
+    const around = VISOR_BEZEL + VISOR_GRID.margin;
+    this.head.add(staticMesh(geometry(frontDecalGeometry(
+      HEAD, SCREEN.extent[0] + around, SCREEN.center[1] - SCREEN.extent[1] - around, SCREEN.center[1] + SCREEN.extent[1] + around, VISOR_GRID.lift,
+    )), this.face));
     this.neck = new Limb(toonMaterial(limbHex));
-    this.headMaterials.push(this.head.material as ShaderMaterial, face, this.neck.material);
+    this.headMaterials.push(material(this.head), this.face, this.neck.material);
 
-    // The per-robot antenna, or the crest instead of one.
-    const stalkHex = PALETTE.limb;
-    const tip = (r: number) => {
-      const mesh = staticMesh(geometry(new SphereGeometry(r, 20, 14)), toonMaterial(look.accent));
-      this.headMaterials.push(mesh.material as ShaderMaterial);
-      return mesh;
-    };
-    const stalk = () => {
-      const limb = new Limb(toonMaterial(stalkHex));
-      this.headMaterials.push(limb.material);
-      return limb;
-    };
+    // The per-robot antenna, or the crest instead of one, each let into the head.
+    const feet = look.variant === 2 ? [] : ANTENNA[look.variant];
+    const antenna: ShaderMaterial[] = [];
     if (look.variant === 2) {
-      const crest = staticMesh(geometry(roundedBoxGeometry({ f: 8.5, u: 3.2, s: 2, r: 1.8 })), toonMaterial(look.accent));
-      this.headMaterials.push(crest.material as ShaderMaterial);
-      this.antenna.push({ crest });
-    } else if (look.variant === 3) {
-      this.antenna.push({ stalk: stalk(), tip: tip(2.4) }, { stalk: stalk(), tip: tip(2.4) });
-    } else {
-      this.antenna.push({ stalk: stalk(), tip: tip(look.variant === 1 ? 2.8 : 3) });
+      this.crest = staticMesh(geometry(roundedBoxGeometry({ f: 8.5, u: 3.2, s: 2, r: 1.8 })), toonMaterial(look.accent));
+      antenna.push(material(this.crest));
+    }
+    for (const { ball } of feet) {
+      const stalk = new Limb(toonMaterial(PALETTE.limb));
+      const tip = staticMesh(geometry(new SphereGeometry(ball, 20, 14)), toonMaterial(look.accent));
+      antenna.push(stalk.material, material(tip));
+      this.antenna.push({ stalk, tip });
+    }
+    this.headMaterials.push(...antenna);
+    const sockets = socketGeometries(HEAD, look.variant, feet.map((a) => a.foot));
+    for (const g of [earGeometry(HEAD, -1), earGeometry(HEAD, 1), ...sockets]) {
+      const fitting = staticMesh(geometry(g), toonMaterial(limbHex));
+      this.head.add(fitting);
+      this.fittings.push(material(fitting));
     }
 
-    const handGeometry = geometry(new SphereGeometry(HAND_R, 24, 16));
-    const arm = (): ArmParts => {
-      const upper = new Limb(toonMaterial(limbHex));
-      const fore = new Limb(toonMaterial(limbHex));
-      const hand = staticMesh(handGeometry, toonMaterial(look.body));
-      return { upper, fore, hand, materials: [upper.material, fore.material, hand.material as ShaderMaterial] };
-    };
+    const mitt = geometry(mittGeometry());
+    const shoulderBall = geometry(ballGeometry(SHOULDER_R));
+    const kneeBall = geometry(ballGeometry(KNEE_R));
+    const arm = (): ArmParts => ({
+      upper: new Limb(toonMaterial(limbHex)),
+      fore: new Limb(toonMaterial(limbHex)),
+      shoulder: staticMesh(shoulderBall, toonMaterial(look.body)),
+      hand: staticMesh(mitt, toonMaterial(look.body)),
+    });
     const shoeShape = shoeGeometries();
     geometry(shoeShape.sole);
     geometry(shoeShape.upper);
     const leg = (): LegParts => {
-      const thigh = new Limb(toonMaterial(limbHex));
-      const shin = new Limb(toonMaterial(limbHex));
       const sole = staticMesh(shoeShape.sole, toonMaterial(PALETTE.wheel));
-      const upper = staticMesh(shoeShape.upper, toonMaterial(look.accent, { hex: PALETTE.wheel, ...shoeShape.toeCap }));
+      const upper = staticMesh(shoeShape.upper, shoeUpperMaterial(look.accent, { hex: PALETTE.wheel, ...shoeShape.toeCap }));
       const shoe = new Group();
       shoe.matrixAutoUpdate = false;
       shoe.add(sole, upper);
-      const parts = { upper: upper.material as ShaderMaterial, sole: sole.material as ShaderMaterial };
-      return { thigh, shin, shoe, materials: [thigh.material, shin.material, parts.upper, parts.sole], ...parts };
+      return {
+        thigh: new Limb(toonMaterial(limbHex)),
+        shin: new Limb(toonMaterial(limbHex)),
+        knee: staticMesh(kneeBall, toonMaterial(limbHex)),
+        shoe,
+        shoeMaterials: [material(upper), material(sole)],
+      };
     };
     this.arms = { left: arm(), right: arm() };
     this.legs = { left: leg(), right: leg() };
 
     this.group.add(this.torso, this.head, this.neck.mesh);
-    for (const part of this.antenna) {
-      if (part.stalk) this.group.add(part.stalk.mesh);
-      if (part.tip) this.group.add(part.tip);
-      if (part.crest) this.group.add(part.crest);
-    }
-    for (const a of Object.values(this.arms)) this.group.add(a.upper.mesh, a.fore.mesh, a.hand);
-    for (const l of Object.values(this.legs)) this.group.add(l.thigh.mesh, l.shin.mesh, l.shoe);
+    if (this.crest) this.group.add(this.crest);
+    for (const part of this.antenna) this.group.add(part.stalk.mesh, part.tip);
+    for (const a of Object.values(this.arms)) this.group.add(a.upper.mesh, a.fore.mesh, a.shoulder, a.hand);
+    for (const l of Object.values(this.legs)) this.group.add(l.thigh.mesh, l.shin.mesh, l.knee, l.shoe);
 
     const ink = (materials: ShaderMaterial[], id: number, width = INK) => {
       for (const m of materials) inkInfo(id, 0, width, INK_ROBOT, m.uniforms.uInfo.value);
     };
-    ink([this.torso.material as ShaderMaterial], ID.torso);
-    ink(this.headMaterials, ID.head);
-    ink([this.head.material as ShaderMaterial, face], ID.head, HEAD_INK);
-    ink(this.arms.left.materials, ID.leftArm);
-    ink(this.arms.right.materials, ID.rightArm);
-    ink(this.legs.left.materials, ID.leftLeg);
-    ink(this.legs.right.materials, ID.rightLeg);
-    // A shoe outlines itself against its own leg: the shin drops into the collar.
-    ink([this.legs.left.upper, this.legs.left.sole], ID.leftShoe);
-    ink([this.legs.right.upper, this.legs.right.sole], ID.rightShoe);
+    ink([material(this.torso)], ID.torso);
+    ink([this.neck.material], ID.head);
+    ink([material(this.head), this.face], ID.head, HEAD_INK);
+    ink(antenna, ID.head, FITTING_INK);
+    ink(this.fittings, ID.fittings, FITTING_INK);
+    for (const side of ['left', 'right'] as const) {
+      const a = this.arms[side];
+      ink([a.upper.material, a.fore.material], ID[`${side}Arm`]);
+      ink([material(a.shoulder)], ID[`${side}Shoulder`], FITTING_INK);
+      ink([material(a.hand)], ID[`${side}Hand`]);
+      const l = this.legs[side];
+      ink([l.thigh.material, l.shin.material], ID[`${side}Leg`]);
+      ink([material(l.knee)], ID[`${side}Knee`], FITTING_INK);
+      // A shoe outlines itself against its own leg: the shin drops into the collar.
+      ink(l.shoeMaterials, ID[`${side}Shoe`]);
+    }
   }
 
   update(rig: Rig, expression: Expression, view: StageView) {
@@ -174,46 +215,38 @@ export class Robot3D {
     placeFrame(this.torso, shiftFrame(rig.torso, 0, TORSO_BASE_RAISE / 2, 0));
     this.twistTorso(rig);
     placeFrame(this.head, rig.head);
+    this.contact.aimHead(toThree(rig.head.origin), dirToThree(rig.head.fwd), dirToThree(rig.head.up), dirToThree(rig.head.side));
     this.neck.set(rig.torso.at(0, TORSO_FRAME_U - 4, 0), rig.head.at(-1, -HEAD.u + 1, 0), NECK_W);
 
     const top = HEAD.u;
-    const [first, second] = this.antenna;
-    if (first.crest) {
-      placeFrame(first.crest, shiftFrame(rig.head, -1, top + 1.2, 0));
-    } else if (second) {
-      for (const [i, side] of [-1, 1].entries()) {
-        const part = this.antenna[i];
-        const tip = rig.head.at(-1, top + 7.5, side * 11.5);
-        part.stalk!.set(rig.head.at(0, top - 1, side * 9), tip, 2);
-        placePoint(part.tip!, tip);
-      }
-    } else if (this.look.variant === 1) {
-      const tip = rig.head.at(-6, top + 10, 9);
-      first.stalk!.set(rig.head.at(-2, top - 1, 7), tip, 2.2);
-      placePoint(first.tip!, tip);
-    } else {
-      const tip = rig.head.at(0, top + 9, 0);
-      first.stalk!.set(rig.head.at(0, top - 1, 0), tip, 2.2);
-      placePoint(first.tip!, tip);
+    if (this.crest) placeFrame(this.crest, shiftFrame(rig.head, -1, top + 1.2, 0));
+    for (const [i, part] of this.antenna.entries()) {
+      const { foot, tip, width } = ANTENNA[this.look.variant as 0 | 1 | 3][i];
+      const end = rig.head.at(tip[0], top + tip[1], tip[2]);
+      part.stalk.set(rig.head.at(foot[0], top - 1, foot[1]), end, width);
+      placePoint(part.tip, end);
     }
 
     // The screen fades out gradually as it turns edge-on.
     const facePoint = rig.head.at(HEAD.f, 0, 0);
     const facing = dot3(norm3(sub3(cam.eye, facePoint)), norm3(rig.head.fwd));
-    const face = this.face.material as ShaderMaterial;
-    face.uniforms.uFade.value = smoothstep((facing - 0.02) / 0.24);
-    face.uniforms.uExpression.value = EXPRESSIONS[expression];
+    this.face.uniforms.uFade.value = smoothstep((facing - 0.02) / 0.24);
+    this.face.uniforms.uExpression.value = EXPRESSIONS[expression];
 
     for (const arm of rig.arms) {
       const parts = this.arms[arm.side];
       parts.upper.set(arm.shoulder, arm.elbow, ARM_W[0], ARM_W[1]);
       parts.fore.set(arm.elbow, arm.hand, ARM_W[1], ARM_W[2]);
-      placePoint(parts.hand, arm.hand);
+      placePoint(parts.shoulder, arm.shoulder);
+      this.contact.aimArm(arm.side === 'left' ? 0 : 1, toThree(arm.shoulder), toThree(arm.elbow));
+      // The glove carries straight on down the forearm.
+      placeBetween(parts.hand, arm.hand, add3(arm.hand, norm3(sub3(arm.hand, arm.elbow))));
     }
     for (const leg of rig.legs) {
       const parts = this.legs[leg.side];
       parts.thigh.set(leg.hip, leg.knee, LEG_W[0], LEG_W[1]);
       parts.shin.set(leg.knee, leg.ankle, LEG_W[1], LEG_W[2]);
+      placePoint(parts.knee, leg.knee);
       placeFrame(parts.shoe, leg.shoe);
     }
 
@@ -227,15 +260,22 @@ export class Robot3D {
       for (const m of materials) m.uniforms.uInfo.value.y = priority / 255;
     };
     for (const side of ['left', 'right'] as const) {
-      prioritize(this.arms[side].materials, side === nearArm ? ROBOT_PRIORITY.armNear : ROBOT_PRIORITY.armFar);
+      const a = this.arms[side];
+      const arm = side === nearArm ? ROBOT_PRIORITY.armNear : ROBOT_PRIORITY.armFar;
+      prioritize([a.upper.material, a.fore.material], arm);
+      prioritize([material(a.shoulder)], arm + SHOULDER_OVER_ARM);
+      prioritize([material(a.hand)], arm + HAND_OVER_ARM);
+      const l = this.legs[side];
       const leg = side === nearLeg ? ROBOT_PRIORITY.legNear : ROBOT_PRIORITY.legFar;
-      prioritize(this.legs[side].materials, leg);
+      prioritize([l.thigh.material, l.shin.material], leg);
+      prioritize([material(l.knee)], leg + KNEE_OVER_LEG);
       // The shin meets its shoe where the two cross, at one depth: a nudge
       // up puts the collar's line on the shin there.
-      prioritize([this.legs[side].upper, this.legs[side].sole], leg + SHOE_OVER_LEG);
+      prioritize(l.shoeMaterials, leg + SHOE_OVER_LEG);
     }
-    prioritize([this.torso.material as ShaderMaterial], ROBOT_PRIORITY.torso);
+    prioritize([material(this.torso)], ROBOT_PRIORITY.torso);
     prioritize(this.headMaterials, ROBOT_PRIORITY.head);
+    prioritize(this.fittings, ROBOT_PRIORITY.fittings);
   }
 
   /**
