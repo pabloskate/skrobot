@@ -66,8 +66,10 @@ import {
   POP_RISE,
   ROLL_IN,
   boardYawDeg,
+  catchFraction,
   clampFootReach,
   computeFrame,
+  guidesShuv,
   type FallVariant,
   type Frame,
   type Pt,
@@ -119,6 +121,12 @@ const FLICK_TOE_TURN = 34;
 const LEG_CLEAR = 29;
 /** Flight fraction where the feet start settling onto their touchdown spots. */
 const CATCH_START = 0.86;
+/**
+ * Share of the flight a guided catch (trick.ts Spec.guided) takes to bring
+ * both feet down onto the board from the catch, while it's still turning:
+ * they turn with it as they take it.
+ */
+const GUIDE_GRAB = 0.1;
 /** Seconds a fall takes to hand the hips over to the fall physics. */
 const FALL_HANDOFF = 0.24;
 /** Head nod (deg) toward the board while it's in the air. */
@@ -715,7 +723,18 @@ function poseRig(
     footR = toward(footR, stand, stand.footR, takeoffK);
     footL = toward(footL, stand, stand.footL, takeoffK);
   }
-  const catchK = airborne ? smoothstep((flight - CATCH_START) / (1 - CATCH_START)) : 0;
+  // A guided catch has the feet come down on the board from the catch, as it
+  // turns the last of its shuv, not as it reaches the ground.
+  const caughtAt = catchFraction(skateStyle);
+  const guided = guidesShuv(spec, caughtAt);
+  const catchFrom = guided ? Math.min(caughtAt, 1 - GUIDE_GRAB) : CATCH_START;
+  const catchK = airborne ? smoothstep((flight - catchFrom) / (guided ? GUIDE_GRAB : 1 - CATCH_START)) : 0;
+  // As they take it, they turn with the board through what's left of it
+  // (the world's yaw short of the shuv's own turn: none at touchdown),
+  // about the deck's middle.
+  const guideTurn = guided && airborne ? (yawDeg - shuvDeg) * catchK : 0;
+  const guideAbout: V3 = { x: deckMid.x, y: 0, z: 0 };
+  const guidePoint = (p: V3) => (guideTurn ? add3(guideAbout, rotY(sub3(p, guideAbout), guideTurn)) : p);
   if (catchK > 0) {
     const touch = computeFrame(ROLL_IN + flightTime(skateStyle) + 1e-4, spec, landed, landed ? 'slam' : outcome, 0.65, skateStyle);
     footR = toward(footR, touch, touch.footR, catchK);
@@ -782,15 +801,15 @@ function poseRig(
       laneZ += (dx * s + dz * c - laneZ) * scooping;
     }
     const rake = restRake + fullTurn * flickOut;
-    const toe = toeAt(rake);
+    const toe = rotY(toeAt(rake), guideTurn);
     const down: V3 = { x: 0, y: 1, z: 0 };
-    const along = rotY({ x: 1, y: 0, z: 0 }, toeDir * rake);
-    const ankle: V3 = { x: foot.x, y: foot.y - ANKLE_LIFT, z: laneZ };
+    const along = rotY({ x: 1, y: 0, z: 0 }, toeDir * rake + guideTurn);
+    const ankle = guidePoint({ x: foot.x, y: foot.y - ANKLE_LIFT, z: laneZ });
     // The ankle sits over the heel end, so the shoe reaches forward from it.
     const shoeCenter: V3 = {
-      x: foot.x + toe.x * TOE_REACH,
+      x: ankle.x + toe.x * TOE_REACH,
       y: foot.y + FOOT_OVER_SOLE - SHOE_HALF_HEIGHT,
-      z: laneZ + toe.z * TOE_REACH,
+      z: ankle.z + toe.z * TOE_REACH,
     };
     const placed = frameOf(fromBoard(shoeCenter), (d) => sub3(
       fromBoard(add3(shoeCenter, add3(add3(scale3(toe, d.x), scale3(down, d.y)), scale3(along, d.z)))),
