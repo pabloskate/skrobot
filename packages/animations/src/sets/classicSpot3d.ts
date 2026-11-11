@@ -59,10 +59,16 @@ export interface ClassicSpotConfig {
   streetProps?: StreetPropPlacements;
   /**
    * The realistic look (sets/surfaces.ts): procedural surfaces for solids
-   * 14-18, soft box shadows, contact darkening, tree dapple and the spot's
+   * 14-21, soft box shadows, contact darkening, tree dapple and the spot's
    * own ink and haze. Omitted, the spot draws exactly as it always has.
    */
   look?: SpotLook;
+  /**
+   * Drawn with no frame down the stairs or a rail to place it (a flatground
+   * trick), the lip waits this far ahead (set units), out of reach. Omitted,
+   * the scenery stays where the scroll puts it.
+   */
+  away?: number;
 }
 
 type Look = ReturnType<typeof resolveLook>;
@@ -338,7 +344,8 @@ export class ClassicSpot3D {
   }
 
   update(view: StageView, scroll: number, size: { width: number; height: number }, shadow: Texture, opacity: [number, number, number], frame?: StageFrame) {
-    this.scenery.position.set(-scroll, 0, -(frame?.stairs?.across ?? this.config.laneZ * SET_SCALE));
+    const away = frame?.stairs ? 0 : (this.config.away ?? 0) * SET_SCALE;
+    this.scenery.position.set(-scroll + away, 0, -(frame?.stairs?.across ?? this.config.laneZ * SET_SCALE));
     this.overlay.position.copy(this.scenery.position);
     this.streetProps?.drive(frame?.t ?? 0);
     const u = this.surface.uniforms;

@@ -86,13 +86,18 @@ describe('Bake shading', () => {
 });
 
 describe('look helpers', () => {
-  it('builds uninked surface inks for solids 14-18, under the 32 an ink can hold', () => {
+  it('builds uninked surface inks for solids 14-21, under the 32 an ink can hold', () => {
     for (const name of Object.keys(SURFACE) as Array<keyof typeof SURFACE>) {
       const ink = surfaceInk(name);
       expect(ink).toEqual({ id: 0, priority: 0, width: 0, kind: 0, solid: SURFACE[name] });
       expect(ink.solid!).toBeGreaterThanOrEqual(14);
       expect(ink.solid!).toBeLessThan(32);
     }
+  });
+
+  it('adds soil and standing-seam roofing after the earlier surfaces, keeping their ids', () => {
+    expect(SURFACE).toMatchObject({ grass: 14, concrete: 15, soil: 20, roofing: 21 });
+    expect(new Set(Object.values(SURFACE)).size).toBe(Object.keys(SURFACE).length);
   });
 
   it('places stair contacts at the first riser foot, repeating a tread down', () => {
@@ -159,6 +164,20 @@ describe('the realistic look is opt in', () => {
       }
       for (const name of ['uLook', 'uContactCount', 'uCanopyCount']) expect(m.uniforms[name]).toBeUndefined();
     }
+  });
+
+  it('compiles soil and roofing only into look shaders, behind the shared surface dispatch', () => {
+    const [stockGround, stockProps] = materials(new ClassicSpot3D(spotConfig()));
+    for (const m of [stockGround, stockProps]) for (const word of ['lookSoil', 'lookRoofing', 'lookLitter']) expect(m.fragmentShader).not.toContain(word);
+    for (const m of materials(new ClassicSpot3D(spotConfig({})))) {
+      expect(m.fragmentShader).toContain('vec3 lookSoil(vec3 c, vec2 q, vec3 n)');
+      expect(m.fragmentShader).toContain('vec3 lookRoofing(vec3 c, vec3 n, vec3 local)');
+      expect(m.fragmentShader).toContain('if (surface < 20.5) return lookSoil(c, local.xz, n);');
+      expect(m.fragmentShader).toContain('return lookRoofing(c, n, local);');
+      expect(m.fragmentShader).toContain('surface > 13.5 && surface < 21.5');
+    }
+    // The GLSL itself only arrives through the look source.
+    expect(surfacesGlsl(resolveLook({}))).toContain('lookSoil');
   });
 
   it('gives a spot with `look` its surfaces, shadows, contacts, canopies and knobs', () => {

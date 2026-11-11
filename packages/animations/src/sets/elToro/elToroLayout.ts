@@ -34,14 +34,14 @@ export const DIRT_WIDTH = 520;
  * blue lockers along the side the run-up passes, a pitched roof overhanging
  * it. Its end faces down the stairs a little back from the lip.
  */
-export const BUILDING_END = -50;
-export const BUILDING_LENGTH = 1400;
+export const BUILDING_END = -18 * SET_FOOT;
+export const BUILDING_LENGTH = 96 * SET_FOOT;
 /** The school keeps its position, with an open upper walkway beside the stairs. */
 export const BUILDING_FACE = CENTER_Z + 20 * SET_FOOT + 90;
-export const BUILDING_DEPTH = 420;
+export const BUILDING_DEPTH = 125 * SET_FOOT - BUILDING_FACE;
 export const BUILDING_BACK = BUILDING_FACE + BUILDING_DEPTH;
 export const BUILDING_H = 11 * SET_FOOT;
-export const ROOF_RISE = 80;
+export const ROOF_RISE = 6.5 * SET_FOOT;
 export const EAVE = 38;
 /** The landings and the slopes beside the stairs run off toward the horizon. */
 export const FAR = 30000;
@@ -53,16 +53,26 @@ export const hill = (u: number) => Math.max(-STAIR_DROP, Math.min(0, nosingLine(
 /** The side wall's top: a foot and a half over the steps, level over each landing. */
 export const wallTop = (u: number) => Math.max(-STAIR_DROP, Math.min(0, nosingLine(u))) + WALL_H;
 
+/**
+ * El Toro's ground paint, sampled from the photographs (refs/palette.json) and set as the sunlit colour each
+ * face is authored in (the look lights it). The rails' two are the old set's, unchanged.
+ */
 export const ET = {
-  concrete: '#bdbbad',
-  joint: '#817f72',
-  tread: '#c9c7ba',
-  riser: '#b8b6a9',
-  nosing: '#d0cfc2',
-  dirt: '#887456',
-  wall: '#bcb8a6',
-  planter: '#7c8061',
-  grass: '#8b9468',
+  /** The run-up walk and the top landing: pale, a touch greyer than the apron below. */
+  walk: '#cac1a7',
+  /** The landing apron below the stairs. */
+  landing: '#d0c5a9',
+  /** The older, darker paving the rollaway runs on past the apron (refs/51). */
+  paving: '#aea996',
+  /** Treads, risers and the rubbed noses (refs/07, 43, 55): warm pale buff, not grey. */
+  tread: '#c6bea4',
+  riser: '#cbc3a9',
+  nosing: '#dcd6bd',
+  /** The sloped concrete band beside the steps on the canopy side, and its curb. */
+  band: '#cfbc99',
+  /** Dry umber bank dirt, and the lawns at the bottom. */
+  dirt: '#8c7a5e',
+  grass: '#7f8d55',
   rail: '#6f7975',
   railLit: '#bfc5bb',
 } as const;

@@ -111,7 +111,7 @@ export function elToroPropMaterial(look?: ReturnType<typeof resolveLook>) {
 
 /**
  * The realistic look (sets/surfaces.ts) on top of the stock shader: solids
- * 14-18 get their procedural surfaces, paint alpha darkens as occlusion,
+ * 14-21 get their procedural surfaces, paint alpha darkens as occlusion,
  * the haze is the spot's own and, if asked, props receive the shadow boxes.
  */
 function withLook(material: ShaderMaterial, look: ReturnType<typeof resolveLook>) {
@@ -129,13 +129,22 @@ function withLook(material: ShaderMaterial, look: ReturnType<typeof resolveLook>
   const sunlit = look.light === 'shader' ? 'color *= lookDaylight(n);' : 'if (vBand.x < 1.5) color *= lookDaylight(n);';
   if (look.light === 'shader') fragment = swap(fragment, 'if (vBand.x < 1.5) color *= 0.67 + 0.34 * max(dot(n, SUN), 0.0);', 'color *= lookDaylight(n);');
   // Glass carries its own light (a reflection isn't shaded); every other surface is lit, then textured.
-  fragment = swap(fragment, 'if (id >= 60.0 && id <= 69.0) {', /* glsl */ `if (surface > 13.5 && surface < 19.5) {
+  // Lockers (solid 22) are a surface only where the spot compiles them in; elsewhere solids stop at roofing.
+  const lastSurface = look.lockers ? '22.5' : '21.5';
+  fragment = swap(fragment, 'if (id >= 60.0 && id <= 69.0) {', /* glsl */ `if (surface > 13.5 && surface < ${lastSurface}) {
           if (abs(surface - 16.0) > 0.5) ${sunlit}
           color = lookSurface(color, surface, p / ${SET_FOOT.toFixed(1)}, n, vWorld, vLocal / ${SET_FOOT.toFixed(1)});
         } else if (id >= 60.0 && id <= 69.0) {`);
   // Block walls: courses and joints.
   fragment = swap(fragment, 'if (surface == 10.0) {', `if (surface == 10.0) {
             color = lookMasonry(color, p / ${SET_FOOT.toFixed(1)}, n);`);
+  // Leaves read through each face's own plane, blended by how it faces, at leaf and at branch scale.
+  if (look.foliage) {
+    fragment = swap(fragment, 'float leaf = weather((vLocal.xz + vLocal.y * vec2(0.7, 0.4)) * 0.33);', /* glsl */ `vec3 facing = n * n;
+            vec3 fine = vLocal * 0.3, broad = vLocal * 0.075;
+            float leaf = facing.x * weather(fine.zy) + facing.y * weather(fine.xz + 7.3) + facing.z * weather(fine.xy + 3.1);
+            color *= 0.8 + 0.4 * (facing.x * weather(broad.zy + 11.0) + facing.y * weather(broad.xz + 5.0) + facing.z * weather(broad.xy + 2.0));`);
+  }
   const open = look.soffit > 0 ? `1.0 - ${look.soffit.toFixed(3)} * (1.0 - lookSkyOpen(vLocal))` : '1.0';
   fragment = swap(fragment, 'float haze = 0.72 * smoothstep(2400.0, 12000.0,', /* glsl */ `color *= vAo;
         ${look.propShadows ? `if (abs(surface - 16.0) > 0.5) color = lookLit(color, n, lookBoxShadow(vLocal), ${open});` : ''}

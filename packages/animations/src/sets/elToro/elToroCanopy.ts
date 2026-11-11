@@ -1,17 +1,15 @@
-import { lambert } from '../../camera/camera';
-import { mixHex } from '../../math';
-import { hash2 } from '../setKit';
 import { SET_FOOT } from './stairs';
 import { Bake, NO_INK, type Ink } from '../../three/bake';
+import { SURFACE } from '../surfaces';
 import type { Vec3 } from '../../camera/view';
 
 /** Open campus canopy opposite the blue-locker school, all before the lip. */
 export const EL_TORO_CANOPY = {
-  u0: -740,
-  u1: -50,
-  z0: -1090,
+  u0: -114 * SET_FOOT,
+  u1: 4 * SET_FOOT,
+  z0: -88 * SET_FOOT,
   z1: -235,
-  pierHalf: 24,
+  pierHalf: SET_FOOT,
   pierTop: 330,
   beamBottom: 330,
   beamTop: 358,
@@ -27,31 +25,40 @@ export const EL_TORO_CANOPY_ROOF_BOUNDS: Readonly<{ min: Vec3; max: Vec3 }> = {
 
 /** Discrete piers leave daylight through the open walkway and its cast shadow. */
 export const EL_TORO_CANOPY_COLUMNS: ReadonlyArray<{ u: number; z: number; half: number; height: number }> =
-  [-650, -400, -140].flatMap((u) => [-990, -320].map((z) => ({
-    u, z, half: EL_TORO_CANOPY.pierHalf, height: EL_TORO_CANOPY.pierTop,
+  [-4, -26, -48, -70, -92, -110].flatMap((u) => [-13, -35, -57, -83].map((z) => ({
+    u: u * SET_FOOT, z: z * SET_FOOT, half: EL_TORO_CANOPY.pierHalf, height: EL_TORO_CANOPY.pierTop,
   })));
 
-const MASONRY: Ink = { ...NO_INK, solid: 10 };
-const WOOD: Ink = { ...NO_INK, solid: 11 };
-const METAL: Ink = { ...NO_INK, solid: 12 };
+/**
+ * The canopy's shade: its roof with the fascia round it (from the beams' underside, so the girders' shade is
+ * in it too) and each pier. The look shades the walk and the props under them from these boxes.
+ */
+export function elToroCanopyShade(): Array<{ min: Vec3; max: Vec3 }> {
+  const C = EL_TORO_CANOPY;
+  return [
+    // Flush with the fascia's faces and the roof's top: a face inside a box would shade itself.
+    { min: [C.u0 - 4, C.beamBottom + 14, C.z0 - 4], max: [C.u1 + 4, C.roofTop, C.z1 + 4] },
+    ...EL_TORO_CANOPY_COLUMNS.filter(({ u, z }) => u === -4 * SET_FOOT || (z === -13 * SET_FOOT && u > -70 * SET_FOOT)).map(({ u, z, half, height }) => ({ min: [u - half, 0, z - half] as Vec3, max: [u + half, height, z + half] as Vec3 })),
+  ];
+}
 
-const daylight = (color: string, n: Vec3): string => {
-  const light = lambert({ x: n[0], y: -n[1], z: n[2] });
-  return light > 0.5
-    ? mixHex(color, '#e6dcc4', (light - 0.5) * 0.2)
-    : mixHex(color, '#292e2c', (0.5 - light) * 0.7);
-};
+const tag = (solid: number): Ink => ({ ...NO_INK, solid });
+const MASONRY = tag(10);
+const WOOD = tag(11);
+const METAL = tag(SURFACE.metal);
 
 /**
  * The broad, flat covered walkway in the user's El Toro photograph: tan
  * masonry piers, weathered fascia, projecting rafters and deep open bays.
  * A floor is intentionally left to the spot's shadow-receiving ground mesh.
+ * Every face is its authored sunlit colour: the look lights it, draws the
+ * piers' block courses (solid 10), and its shadow boxes put the underside
+ * and the walk below in the roof's shade.
  */
-export function buildElToroCanopy(props: Bake, dir: 1 | -1): void {
+export function buildElToroCanopy(props: Bake): void {
   const C = EL_TORO_CANOPY;
-  const P = (u: number, y: number, z: number): Vec3 => [dir * u, y, z];
-  const face = (a: Vec3, b: Vec3, c: Vec3, d: Vec3, n: Vec3, color: string, ink: Ink) =>
-    props.quad(a, b, c, d, n, { color: daylight(color, n) }, ink);
+  const P = (u: number, y: number, z: number): Vec3 => [u, y, z];
+  const face = (a: Vec3, b: Vec3, c: Vec3, d: Vec3, n: Vec3, color: string, ink: Ink) => props.quad(a, b, c, d, n, { color }, ink);
   const box = (a: Vec3, b: Vec3, color: string, ink: Ink = WOOD, options: { faces?: string; bottom?: string } = {}) => {
     const [x0, y0, z0]: Vec3 = [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.min(a[2], b[2])];
     const [x1, y1, z1]: Vec3 = [Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.max(a[2], b[2])];
@@ -64,34 +71,11 @@ export function buildElToroCanopy(props: Bake, dir: 1 | -1): void {
     if (faces.includes('e')) face([x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [1, 0, 0], color, ink);
   };
 
-  // Individual running-bond block faces wrap the square piers. Their shallow
-  // mortar gaps read at close range while the original open silhouette stays clear.
-  EL_TORO_CANOPY_COLUMNS.forEach(({ u, z, half, height }, column) => {
-    box(P(u - half, 0, z - half), P(u + half, height, z + half), '#93836c', MASONRY);
-    const blockH = SET_FOOT * 2 / 3;
-    const blockW = SET_FOOT * 4 / 3;
-    const sides: Array<{ point: (s: number, y: number) => Vec3; normal: Vec3 }> = [
-      { point: (s, y) => P(u - half + s, y, z + half + 0.45), normal: [0, 0, 1] },
-      { point: (s, y) => P(u + half - s, y, z - half - 0.45), normal: [0, 0, -1] },
-      { point: (s, y) => P(u + half + 0.45, y, z + half - s), normal: [dir, 0, 0] },
-      { point: (s, y) => P(u - half - 0.45, y, z - half + s), normal: [-dir, 0, 0] },
-    ];
-    sides.forEach(({ point, normal }, side) => {
-      for (let row = 0; row * blockH < height; row++) {
-        const low = row * blockH + 0.55;
-        const high = Math.min(height - 0.4, (row + 1) * blockH - 0.55);
-        for (let cell = -1; cell < 2; cell++) {
-          const start = Math.max(0.35, (cell + (row % 2) * 0.5) * blockW + 0.55);
-          const end = Math.min(half * 2 - 0.35, (cell + 1 + (row % 2) * 0.5) * blockW - 0.55);
-          if (end <= start) continue;
-          const variation = hash2(column * 17 + side * 7 + cell, row, 902);
-          const color = mixHex('#baa481', '#d1b893', variation * 0.5);
-          face(point(start, low), point(end, low), point(end, high), point(start, high), normal, color, MASONRY);
-        }
-      }
-    });
+  // Square block piers: flat faces, the running bond drawn by the look.
+  EL_TORO_CANOPY_COLUMNS.forEach(({ u, z, half, height }) => {
+    box(P(u - half, 0, z - half), P(u + half, height, z + half), '#c6af8a', MASONRY);
     // A darker base course, plus a steel bearing plate under the crossbeam.
-    box(P(u - half - 0.6, 0, z - half - 0.6), P(u + half + 0.6, 5, z + half + 0.6), '#a59477', MASONRY);
+    box(P(u - half - 0.6, 0, z - half - 0.6), P(u + half + 0.6, 5, z + half + 0.6), '#ad9c7f', MASONRY);
     box(P(u - half - 1, height - 2, z - half - 1), P(u + half + 1, height + 1, z + half + 1), '#5b5b4e', METAL);
     // Compact daylight campus sconce high on the downstream face.
     if (u === -140) {
@@ -101,29 +85,30 @@ export function buildElToroCanopy(props: Bake, dir: 1 | -1): void {
     }
   });
 
-  // Three substantial transverse girders rest directly on paired piers.
-  for (const u of [-650, -400, -140]) {
-    box(P(u - 15, C.beamBottom, C.z0 - 6), P(u + 15, C.beamTop, C.z1 + 6), '#716858');
-    // Lower lamination seam and bolt plates on the exposed downstream face.
-    box(P(u + 15.05, C.beamBottom + 8, C.z0 - 6), P(u + 15.35, C.beamBottom + 8.6, C.z1 + 6), '#524f43');
-    for (const z of [-990, -320]) {
-      box(P(u + 15.4, C.beamBottom + 4, z - 8), P(u + 15.9, C.beamTop - 4, z + 8), '#5e6257', METAL);
-      for (const y of [C.beamBottom + 9, C.beamTop - 9]) {
-        props.tube([P(u + 15.9, y, z), P(u + 16.6, y, z)], [1.2, 1.2], { color: '#969785' }, METAL, 6, true);
-      }
+  // Heavy glulam girders across the walk, one on each line of piers, dark with age (refs/34).
+  for (const u of [-4, -26, -48, -70, -92, -110].map((v) => v * SET_FOOT)) {
+    box(P(u - 15, C.beamBottom, C.z0 - 6), P(u + 15, C.beamTop, C.z1 + 6), '#6b5b45');
+    // A lamination seam, and a steel strap where each girder bears on a pier.
+    box(P(u + 15.05, C.beamBottom + 8, C.z0 - 6), P(u + 15.35, C.beamBottom + 8.6, C.z1 + 6), '#4f463a');
+    for (const z of [-13, -35, -57, -83].map((v) => v * SET_FOOT)) {
+      box(P(u + 15.4, C.beamBottom + 4, z - 8), P(u + 15.9, C.beamTop - 4, z + 8), '#55574e', METAL);
     }
   }
 
-  // A dark uninterrupted underside keeps the roof open and sheltered, rather
-  // than turning the canopy into another solid-walled classroom building.
-  box(P(C.u0, C.roofBottom, C.z0), P(C.u1, C.roofTop, C.z1), '#858174', WOOD, { bottom: '#4c493f' });
-  for (let z = C.z0 + 15; z < C.z1; z += 76) {
-    // Exposed rectangular ends project beyond both roof edges, as in the photo.
-    box(P(C.u0 - 23, 354, z - 4), P(C.u1 + 30, 371, z + 4), '#827a66');
-    box(P(C.u1 + 29.7, 356, z - 3), P(C.u1 + 30.2, 369, z + 3), '#a2967d');
-    // Fine roof-sheet seams are subtle geometry, not additional textures.
-    box(P(C.u0, C.roofTop + 0.15, z + 9), P(C.u1, C.roofTop + 0.6, z + 9.8), '#716e62');
+  // An uninterrupted underside keeps the roof open and sheltered, rather than
+  // turning the canopy into another solid-walled classroom building. It's
+  // painted paler than the fascia: the shadow boxes and the hidden sky darken it.
+  box(P(C.u0, C.roofBottom, C.z0), P(C.u1, C.roofTop, C.z1), '#514b40', WOOD, { bottom: '#4a4034' });
+  // Dark timber beams seven feet apart, six by eight inches, their ends projecting past both roof edges with the
+  // end grain showing paler (refs/34, 46). They sit above the fascia's lower edge, so its line stays unbroken.
+  for (let z = C.z0 + 15; z < C.z1; z += 203) {
+    box(P(C.u0 - 23, 353, z - 7), P(C.u1 + 30, 371, z + 7), '#5b4a37');
+    box(P(C.u1 + 29.7, 354, z - 6.5), P(C.u1 + 30.2, 370, z + 6.5), '#8f7a5c');
+    box(P(C.u0 - 23.5, 354, z - 6.5), P(C.u0 - 23, 370, z + 6.5), '#8f7a5c');
   }
+  // Fine roof-sheet seams are subtle geometry, not additional textures.
+  for (let z = C.z0 + 24; z < C.z1; z += 76) box(P(C.u0, C.roofTop + 0.15, z), P(C.u1, C.roofTop + 0.6, z + 0.8), '#716e62');
+  picnicTables(props);
 
   // Each perimeter is a closed ring. The u sides own the corner footprints;
   // the z sides meet them without hidden end caps or duplicate top faces.
@@ -131,16 +116,16 @@ export function buildElToroCanopy(props: Bake, dir: 1 | -1): void {
     for (const [u, outward] of [[C.u0, -1], [C.u1, 1]]) {
       const a = P(u - half, low, C.z0 - half), b = P(u + half, high, C.z1 + half);
       box(a, b, uColor, ink, { faces: 'tbfk' });
-      box(a, b, uColor, ink, { faces: dir * outward > 0 ? 'e' : 'l' });
+      box(a, b, uColor, ink, { faces: outward > 0 ? 'e' : 'l' });
       // Only the section facing the open roof interior is exposed inward.
-      box(P(u - half, low, C.z0 + half), P(u + half, high, C.z1 - half), uColor, ink, { faces: dir * outward > 0 ? 'l' : 'e' });
+      box(P(u - half, low, C.z0 + half), P(u + half, high, C.z1 - half), uColor, ink, { faces: outward > 0 ? 'l' : 'e' });
     }
     for (const z of [C.z0, C.z1]) {
       box(P(C.u0 + half, low, z - half), P(C.u1 - half, high, z + half), zColor, ink, { faces: 'tbfk' });
     }
   };
   // Weathered perimeter fascia with a narrow metal flashing and drip edge.
-  perimeter(4, 344, 370, '#786e5a', '#726956', WOOD);
+  perimeter(4, 344, 370, '#514434', '#514434', WOOD);
   perimeter(4.3, 371, 375.6, '#9c9785', '#999481', METAL);
   for (const u of [C.u0, C.u1]) {
     for (let y = 349; y < 370; y += 5.2) {
@@ -149,13 +134,43 @@ export function buildElToroCanopy(props: Bake, dir: 1 | -1): void {
   }
 
   // A low blue-gray guardrail across the rear bay remains visibly open.
-  const guardU = C.u0 + 16;
-  const z0 = C.z0 + 52;
-  const z1 = C.z1 - 55;
+  const guardU = 0.5 * SET_FOOT;
+  const z0 = -88 * SET_FOOT;
+  const z1 = -9 * SET_FOOT;
   for (const height of [9, 3.4 * SET_FOOT]) {
     box(P(guardU - 1.8, height, z0), P(guardU + 1.8, height + 3.3, z1), '#697977', METAL);
   }
+  // The pickets, eight inches apart: four sides each, their ends hidden in the rails and the slab.
   for (let z = z0; z <= z1; z += 20) {
-    box(P(guardU - 1.1, 0, z - 1.1), P(guardU + 1.1, 3.4 * SET_FOOT + 3.3, z + 1.1), '#687977', METAL);
+    box(P(guardU - 1.1, 0, z - 1.1), P(guardU + 1.1, 3.4 * SET_FOOT + 3.3, z + 1.1), '#687977', METAL, { faces: 'fkle' });
+  }
+  for (let u = -5.5 * SET_FOOT; u <= guardU; u += 20) box(P(u - 1.1, 0, z1 - 1.1), P(u + 1.1, 3.5 * SET_FOOT, z1 + 1.1), '#687977', METAL, { faces: 'fkle' });
+  box(P(-5.5 * SET_FOOT, 3.4 * SET_FOOT, z1 - 1.8), P(guardU, 3.5 * SET_FOOT, z1 + 1.8), '#697977', METAL);
+}
+
+/**
+ * A few picnic tables in the canopy's gloom (refs/46): weathered wooden tops and benches on dark steel frames,
+ * set between the piers and well off the walk and the rider's lane (feet, the spot's axes).
+ */
+function picnicTables(props: Bake) {
+  const P = (u: number, h: number, z: number): Vec3 => [u * SET_FOOT, h * SET_FOOT, z * SET_FOOT];
+  const slab = (a: Vec3, b: Vec3, color: string, ink: Ink) => {
+    const [x0, y0, z0] = a, [x1, y1, z1] = b;
+    const quad = (p: Vec3[], n: Vec3) => props.quad(P(...p[0]), P(...p[1]), P(...p[2]), P(...p[3]), n, { color }, ink);
+    quad([[x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0]], [0, 1, 0]);
+    quad([[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]], [0, 0, 1]);
+    quad([[x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0]], [0, 0, -1]);
+    quad([[x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0]], [-1, 0, 0]);
+    quad([[x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1]], [1, 0, 0]);
+  };
+  for (const [u, z] of [[-31, -24], [-59, -46], [-37, -68], [-81, -24], [-97, -62]]) {
+    // Top and benches run along the walk (u); the frames stand across it.
+    slab([u - 3, 2.35, z - 1.25], [u + 3, 2.5, z + 1.25], '#8a7a62', WOOD);
+    for (const side of [-1, 1]) slab([u - 3, 1.4, z + side * 2.4 - 0.5], [u + 3, 1.52, z + side * 2.4 + 0.5], '#857560', WOOD);
+    for (const du of [-2.2, 2.2]) {
+      slab([u + du - 0.1, 0, z - 1.2], [u + du + 0.1, 2.35, z - 0.95], '#3f413b', METAL);
+      slab([u + du - 0.1, 0, z + 0.95], [u + du + 0.1, 2.35, z + 1.2], '#3f413b', METAL);
+      slab([u + du - 0.1, 1.28, z - 2.9], [u + du + 0.1, 1.4, z + 2.9], '#3f413b', METAL);
+    }
   }
 }

@@ -1,5 +1,5 @@
 import type { Vec3 } from '../camera/view';
-import { glslRgb, SUN } from '../three/materials';
+import { glslRgb, rgb, SUN } from '../three/materials';
 import { DAYLIGHT, type Ink } from '../three/bake';
 import { treeHeight, type TreePlacement } from './props/trees';
 import { SET_FOOT } from './setScale';
@@ -29,6 +29,18 @@ export const SURFACE = {
   metal: 18,
   /** Vertical board siding (T1-11 on a portable classroom): grooves every eight inches, boards in their own tones. */
   siding: 19,
+  /**
+   * Dry planted-bank dirt under bark mulch and fallen leaves, projected from above like turf. Paint it darker
+   * and redder where it's a mulched bed, paler where it's bare bank.
+   */
+  soil: 20,
+  /** Standing-seam metal roofing: seams down the fall line of whatever pitched face it's on. */
+  roofing: 21,
+  /**
+   * Banks of steel lockers, painted on a flat face: doors in tiers, the gaps between them, a latch and vents on
+   * each. Only a spot whose look sets `lockers` compiles it; elsewhere it falls through to roofing.
+   */
+  lockers: 22,
 } as const;
 export type SurfaceName = keyof typeof SURFACE;
 
@@ -107,6 +119,30 @@ export interface SpotLook {
    * paving picks up long, thin urethane marks along x. Compiled in as constants, no uniforms.
    */
   marks?: Array<{ x: [number, number]; z: [number, number] }>;
+  /** How much the urethane marks darken the paving where they're thickest (default 0.2). */
+  markDepth?: number;
+  /**
+   * A straight stair falling along +x, in feet: concrete faces inside its box get worn noses, grime run down
+   * the risers, dust and litter at the backs and ends of the treads, chips and specks, all per pixel so no two
+   * steps match. The first riser stands at x[0] from height `top`; `tread` and `riser` are one step. Compiled
+   * in as constants, no uniforms.
+   */
+  stairs?: { x: [number, number]; z: [number, number]; top: number; tread: number; riser: number; rails?: number[] };
+  /** Gum trodden flat into level paving: spots to a hundred square feet (default none). */
+  gum?: number;
+  /** Mortar between concrete blocks, as it would sit in a wall painted the stock block buff (default: joints only shade). */
+  mortar?: string;
+  /**
+   * The locker surface (SURFACE.lockers), in feet: doors `door` wide in tiers `tier` tall, the first tier's foot
+   * at `from` (and every tier's a whole number of tiers from it, so banks on two levels line up). A bank's face
+   * spans whole doors and tiers.
+   */
+  lockers?: { door: number; tier: number; from: number };
+  /**
+   * Leaves patterned in three dimensions on foliage masses (solid 13). The stock pattern is one flat projection,
+   * which stripes a rounded shrub down its sides; a spot planted with modelled shrubs asks for this instead.
+   */
+  foliage?: boolean;
 }
 
 /** The look's defaults, as compiled. */
@@ -128,6 +164,12 @@ export function resolveLook(look: SpotLook) {
     bounce: look.fill?.bounce ?? DAYLIGHT.bounce,
     soffit: look.propShadows ? (look.soffit ?? 0) : 0,
     marks: look.marks ?? [],
+    markDepth: look.markDepth,
+    stairs: look.stairs,
+    gum: look.gum,
+    mortar: look.mortar,
+    lockers: look.lockers,
+    foliage: look.foliage ?? false,
   };
 }
 
@@ -157,13 +199,13 @@ export function stairContacts(x0: number, y0: number, z0: number, z1: number, tr
 const vec3s = (c: readonly number[]) => `vec3(${c.map((v) => v.toFixed(3)).join(', ')})`;
 
 /**
- * Procedural surfaces, chosen by solid, in the look's fill light. Needs
+ * Procedural surfaces, chosen by solid (14-21), in the look's fill light. Needs
  * EL_TORO_NOISE (hash, noise, weather, grain), SUN and three's
  * cameraPosition. `q` is the face's planar coordinate in feet, `local` its
  * position in feet, `n` its normal, `world` the stage position.
  * Every feature finer than a pixel fades (grain's own fade, or `resolves`).
  */
-export function surfacesGlsl(look: Pick<Look, 'sky' | 'bounce'> & Partial<Pick<Look, 'propShadows' | 'marks'>>) {
+export function surfacesGlsl(look: Pick<Look, 'sky' | 'bounce'> & Partial<Pick<Look, 'propShadows' | 'marks' | 'markDepth' | 'stairs' | 'gum' | 'mortar' | 'lockers'>>) {
   const flat = [0, 1, 2].map((i) => SUN.y * DAYLIGHT.sunTint[i] + look.sky * DAYLIGHT.skyTint[i]);
   // With prop shadows, glass looks for the boxes its reflection runs into (an eave over the window).
   const reflectBlocked = look.propShadows
@@ -173,6 +215,15 @@ export function surfacesGlsl(look: Pick<Look, 'sky' | 'bounce'> & Partial<Pick<L
   // enough for every concrete pixel.
   const zones = (look.marks ?? []).map(({ x, z }) =>
     `m = max(m, min(min(q.x - ${(x[0] - 1).toFixed(2)}, ${(x[1] + 1).toFixed(2)} - q.x), min(q.y - ${(z[0] - 1).toFixed(2)}, ${(z[1] + 1).toFixed(2)} - q.y)));`).join('\n  ');
+  // A spot's own dressing (its stair's wear, gum, mortar, lockers) is compiled in only when it asks: every other
+  // spot's shader text stays exactly as it was.
+  const markDepth = look.markDepth === undefined ? '0.2' : look.markDepth.toFixed(3);
+  const gum = look.gum ? '  c = lookGum(c, q, flatwork);\n' : '';
+  const stairs = look.stairs ? '  if (surface < 15.5) return lookStairWear(lookConcrete(c, q, n), local, n);\n' : '';
+  const lockers = look.lockers ? '  if (surface > 21.5) return lookLockers(c, q, n);\n' : '';
+  const mortar = look.mortar
+    ? `mix(c, c * ${vec3s(rgb(look.mortar).map((v, i) => v / rgb('#bda17e')[i]))}, joint)`
+    : 'c * (1.0 - 0.32 * joint)';
   return /* glsl */ `
 ${reflectBlocked}
 float lookMarkZone(vec2 q) {
@@ -252,7 +303,7 @@ vec3 lookGrass(vec3 c, vec2 q) {
   return mix(turf, mix(dirt, turf * 0.85, tufts * 0.6), bare);
 }
 
-vec3 lookConcrete(vec3 c, vec2 q, vec3 n) {
+${look.gum ? lookGumGlsl(look.gum) : ''}vec3 lookConcrete(vec3 c, vec2 q, vec3 n) {
   float flatwork = smoothstep(0.55, 0.85, abs(n.y));
   // Safety-yellow paint on concrete chips back to the concrete in flakes; duller paint is more worn.
   float yellow = c.r - c.b;
@@ -287,9 +338,9 @@ vec3 lookConcrete(vec3 c, vec2 q, vec3 n) {
   if (zone > 0.0) {
     float stroke = noise(vec2(q.x * 0.22 + 3.0, q.y * 9.0));
     float mark = smoothstep(0.72, 0.86, stroke) * smoothstep(0.3, 0.65, noise(q * 0.3 + 8.0));
-    c *= 1.0 - 0.2 * zone * mark * resolves(q, 9.0);
+    c *= 1.0 - ${markDepth} * zone * mark * resolves(q, 9.0);
   }
-  return c;
+${gum}  return c;
 }
 
 // Window glass: the dark room shows through square-on; the panes mirror the sky above the horizon and the
@@ -340,7 +391,7 @@ vec3 lookMasonry(vec3 c, vec2 q, vec3 n) {
   // Each block its own tone, once blocks are bigger than a pixel or two.
   c *= 1.0 + 0.07 * resolves(q, 0.75) * (hash(vec2(floor(x / 1.3333), row) + 17.0) - 0.5);
   float joint = max(lookJoint(q.y, 0.6667, 0.032), lookJoint(x, 1.3333, 0.032));
-  return c * (1.0 - 0.32 * joint);
+  return ${mortar};
 }
 
 vec3 lookStucco(vec3 c, vec2 q, vec3 n) {
@@ -371,14 +422,245 @@ vec3 lookSiding(vec3 c, vec2 q, vec3 n) {
   return c * (1.0 - 0.38 * lookJoint(q.x + 0.02, 0.6667, 0.045));
 }
 
-vec3 lookSurface(vec3 c, float surface, vec2 q, vec3 n, vec3 world, vec3 local) {
+// A leaf or a chip lying in its own cell of a grid, cell feet square, turned its own way: its cover of the pixel
+// (0-1), len feet long and wide feet wide, pointed at both ends; none in cells whose hash falls under none.
+float lookLitter(vec2 q, float cell, float len, float wide, float none, float salt) {
+  vec2 id = floor(q / cell), f = (fract(q / cell) - 0.5) * cell;
+  float h = hash(id + salt);
+  if (h < none) return 0.0;
+  float a = fract(h * 7.31) * 6.2832;
+  vec2 d = vec2(cos(a), sin(a));
+  // Kept inside its cell, so no neighbour needs looking at.
+  vec2 at = f - (vec2(fract(h * 13.7), fract(h * 29.3)) - 0.5) * (cell - len);
+  float s = dot(at, d) / (0.5 * len), t = dot(at, vec2(-d.y, d.x));
+  float edge = 0.5 * wide * max(1.0 - s * s, 0.0) - abs(t);
+  return clamp(edge / max(fwidth(t), 1e-4) + 0.5, 0.0, 1.0) * step(abs(s), 1.0);
+}
+
+// Dry bank dirt with bark mulch and leaf litter. q is the plan position in feet (projected from above, as turf
+// is, so a slope never stretches it). Every piece fades into the average tone it adds before it goes subpixel.
+vec3 lookSoil(vec3 c, vec2 q, vec3 n) {
+  // How mulched the paint says it is: a bed is darker and redder than bare bank.
+  float mulch = smoothstep(0.47, 0.36, lookLuma(c));
+  // Drier, paler crusts and darker hollows, drifting over yards and over feet.
+  c *= 0.9 + 0.14 * weather(q * 0.09) + 0.08 * (noise(q * 0.55 + 4.1) - 0.5);
+  // Damp drifts where water stands longest, deeper on faces turned from the sun.
+  float away = 1.0 - clamp(dot(n, SUN) / 0.8, 0.0, 1.0);
+  float damp = smoothstep(0.56, 0.82, noise(q * 0.13 + 9.3) * 0.7 + noise(q * 0.41) * 0.3);
+  c = mix(c, c * vec3(0.8, 0.77, 0.74), damp * (0.35 + 0.4 * away));
+  vec2 r1 = mat2(0.8, -0.6, 0.6, 0.8) * q, r2 = mat2(0.28, 0.96, -0.96, 0.28) * q;
+  // Clods a few inches across: lit tops, dark cracks between them.
+  float clods = resolves(q, 4.0);
+  if (clods > 0.0) {
+    float clod = noise(r1 * 3.1) * 0.6 + noise(r2 * 7.0 + 2.0) * 0.4;
+    c *= 1.0 + clods * (0.16 * (clod - 0.5) - 0.12 * smoothstep(0.3, 0.15, clod));
+  }
+  c += grain(r2 * 11.0) * 0.04;
+  // Bark chips, long thin splinters every which way, thick in a bed and scattered on the bank: two offset grids
+  // of them. Out of reach they leave their share of the colour behind.
+  vec3 bark = ${glslRgb('#5e4330')} * (0.85 + 0.3 * noise(q * 2.1 + 6.0));
+  float chipsSeen = resolves(q, 12.0);
+  float chipShare = mix(0.06, 0.34, mulch);
+  float chips = chipShare;
+  if (chipsSeen > 0.0) {
+    float none = 1.0 - mix(0.18, 0.95, mulch);
+    float cover = max(lookLitter(r1, 0.36, 0.26, 0.07, none, 3.0), lookLitter(r2 + 0.17, 0.3, 0.2, 0.06, none, 11.0));
+    chips = mix(chipShare, cover, chipsSeen);
+  }
+  c = mix(c, bark, chips * 0.8);
+  // Fallen gum leaves, pale and dry, a few to a square foot: they fade the same way.
+  float leavesSeen = resolves(q, 10.0);
+  float leafShare = 0.035;
+  float leaf = leafShare;
+  vec2 lq = mat2(0.6, 0.8, -0.8, 0.6) * q;
+  if (leavesSeen > 0.0) leaf = mix(leafShare, lookLitter(lq, 0.75, 0.42, 0.09, 0.55, 23.0), leavesSeen);
+  vec3 dry = mix(${glslRgb('#b9ad8f')}, ${glslRgb('#9c9378')}, noise(lq * 1.3 + 2.0));
+  return mix(c, dry * (0.9 + 0.2 * noise(lq * 5.0)), leaf);
+}
+
+// Standing-seam metal roofing: a raised seam every 18 in, running down the fall line of whatever pitched face it
+// is on (the level part of the face's normal points down the slope, so one surface serves every plane of a hip),
+// each box-filtered so far-off seams settle into the roof's tone instead of shimmering; faint oil-canning in the
+// pans between them and dust washed down them in streaks. local is in feet.
+vec3 lookRoofing(vec3 c, vec3 n, vec3 local) {
+  vec2 fall = n.xz;
+  float m = length(fall);
+  fall = m > 0.05 ? fall / m : vec2(1.0, 0.0);
+  vec2 side = vec2(-fall.y, fall.x);
+  float across = dot(local.xz, side);
+  // Along the slope, not its plan: a level run over the cosine of the pitch.
+  float down = dot(local.xz, fall) / max(n.y, 0.2);
+  vec2 q = vec2(across, down);
+  float pan = floor(across / 1.5);
+  // Each pan rolled from its own coil, a touch lighter or darker.
+  c *= 1.0 + 0.06 * resolves(q, 0.8) * (hash(vec2(pan, 7.0)) - 0.5);
+  // Oil-canning: the flat pan bows a little, so the light on it swells across it and wanders slowly along it.
+  float bow = sin(fract(across / 1.5) * 3.14159);
+  c *= 1.0 + 0.05 * resolves(q, 1.4) * bow * (noise(vec2(pan * 3.1, down * 0.15)) - 0.5);
+  c *= 0.95 + 0.08 * weather(q * 0.06);
+  // Dust and chalking washed down the fall line.
+  c *= 1.0 - 0.08 * smoothstep(0.45, 0.9, noise(vec2(across * 1.3, down * 0.06 + 3.0)));
+  c += grain(q * 9.0) * 0.025;
+  // The seam: a pale ridge on the side the sun is on, a thin shade line on the other.
+  float sunSide = dot(SUN.xz, side) >= 0.0 ? 1.0 : -1.0;
+  float ridge = lookJoint(across - sunSide * 0.025, 1.5, 0.035);
+  float shade = lookJoint(across + sunSide * 0.025, 1.5, 0.035);
+  return c * (1.0 + 0.22 * ridge - 0.38 * shade);
+}
+
+${look.stairs ? lookStairWearGlsl(look.stairs) : ''}${look.lockers ? lookLockersGlsl(look.lockers) : ''}vec3 lookSurface(vec3 c, float surface, vec2 q, vec3 n, vec3 world, vec3 local) {
   // Turf is projected from above, so a steep bank never stretches it or seams where faces turn.
   if (surface < 14.5) return lookGrass(c, local.xz);
-  if (surface < 15.5) return lookConcrete(c, q, n);
+${stairs}  if (surface < 15.5) return lookConcrete(c, q, n);
   if (surface < 16.5) return lookGlass(c, n, world, q, local);
   if (surface < 17.5) return lookStucco(c, q, n);
   if (surface < 18.5) return lookMetal(c, q, n, world);
-  return lookSiding(c, q, n);
+  if (surface < 19.5) return lookSiding(c, q, n);
+  // Soil, like turf, is projected from above.
+  if (surface < 20.5) return lookSoil(c, local.xz, n);
+${lockers}  return lookRoofing(c, n, local);
+}
+`;
+}
+
+const num = (v: number) => v.toFixed(4);
+
+/** Gum trodden into level paving (SpotLook.gum): one spot in some cells of a grid, each kept inside its cell. */
+function lookGumGlsl(perHundred: number) {
+  const cell = 2.2;
+  return /* glsl */ `// Gum trodden flat into the paving: dark, an inch or so across, fading before it can sparkle.
+vec3 lookGum(vec3 c, vec2 q, float flatwork) {
+  float seen = flatwork * resolves(q, 9.0);
+  if (seen <= 0.0) return c;
+  vec2 g = q / ${num(cell)}, f = fract(g) - 0.5;
+  float h = hash(floor(g) + 41.0);
+  if (h > ${num((perHundred * cell * cell) / 100)}) return c;
+  vec2 at = (vec2(fract(h * 23.1), fract(h * 57.7)) - 0.5) * 0.8;
+  float r = (0.035 + 0.045 * fract(h * 91.3)) / ${num(cell)};
+  float d = length(f - at), w = max(fwidth(d), 1e-4);
+  float spot = 1.0 - smoothstep(r - w, r + w, d);
+  return c * (1.0 - (0.35 + 0.2 * fract(h * 7.7)) * spot * seen);
+}
+`;
+}
+
+/**
+ * A stair's weathering (SpotLook.stairs), per pixel on top of its concrete: what the photographs of an old
+ * outdoor stair show (refs at El Toro: 43, 55, 07). Water off each nose and grime kicked back stain the
+ * risers in blotches and runs, never the same twice, heavier under the rails; the noses are rubbed pale and
+ * chipped; dust lies at the back of each tread and thickest toward its ends, where leaves collect; the step
+ * ends standing out of the dirt are dirty at their feet.
+ */
+function lookStairWearGlsl({ x, z, top, tread, riser, rails = [] }: NonNullable<SpotLook['stairs']>) {
+  const steps = Math.round((x[1] - x[0]) / tread) + 1;
+  const near = rails.map((r) => `exp(-pow((local.z - ${num(r)}) / 0.9, 2.0))`).join(' + ') || '0.0';
+  return /* glsl */ `// A stair's own wear: see lookStairWearGlsl.
+vec3 lookStairWear(vec3 c, vec3 local, vec3 n) {
+  const float TREAD = ${num(tread)}, RISER = ${num(riser)}, TOP = ${num(top)};
+  const float Z0 = ${num(z[0])}, Z1 = ${num(z[1])};
+  float u = local.x - ${num(x[0])};
+  if (u < -0.02 || u > ${num(x[1] - x[0])} + 0.02 || local.z < Z0 - 0.02 || local.z > Z1 + 0.02) return c;
+  if (local.y > TOP - 0.02 || local.y < TOP - ${num(steps * riser)} + 0.02) return c;
+  // Grime is grey-brown, not black or green; it darkens the concrete rather than replacing it.
+  vec3 grime = c * vec3(0.6, 0.59, 0.56);
+  float rail = min(1.0, ${near});
+  float edge = min(local.z - Z0, Z1 - local.z);
+  vec2 q = local.zx;
+  if (abs(n.x) > 0.5) {
+    // A riser: k from the top, d from its arris (0) to its foot (1).
+    float k = floor(u / TREAD + 0.5);
+    float d = clamp((TOP - k * RISER - local.y) / RISER, 0.0, 1.0);
+    vec2 r = vec2(local.z, d * RISER);
+    // Blotches a foot or three across, each step its own, mostly over the lower part of the face.
+    float blotch = noise(vec2(local.z * 0.55 + k * 3.17, k * 1.93)) * 0.6 + noise(vec2(local.z * 1.6 + 4.0, k * 2.31)) * 0.4;
+    float blot = smoothstep(0.52, 0.8, blotch + 0.14 * rail) * smoothstep(0.0, 0.5, d);
+    // Runs off the nose: narrow, wandering a little as they fall, fading out where their water gave out.
+    float wander = noise(vec2(local.z * 1.3 + k * 2.3, d * 1.7 + k));
+    float drip = noise(vec2(local.z * 4.2 + k * 7.7 + 0.8 * wander, k * 0.61));
+    float reach = 0.35 + 0.65 * noise(vec2(local.z * 0.9 + 9.0, k * 4.1));
+    float run = smoothstep(0.5, 0.9, drip + 0.2 * blotch) * smoothstep(0.02, 0.2, d) * (1.0 - smoothstep(0.3 * reach, reach, d));
+    // What boots and boards kick back: a ragged band at the foot.
+    float foot = smoothstep(0.5 + 0.35 * (noise(vec2(local.z * 2.1, k * 5.3)) - 0.5), 1.0, d);
+    float stain = max(max(blot * (0.5 + 0.4 * noise(r * 6.0 + k)), run * 0.5), foot * 0.35);
+    stain = min(1.0, stain * (0.85 + 0.6 * rail));
+    c = mix(c, grime, stain * (0.6 + 0.3 * resolves(r, 3.0)));
+    // The arris rubbed pale and round, chipped back here and there.
+    float arris = 1.0 - smoothstep(0.04, 0.16, d);
+    float chip = smoothstep(0.8, 0.9, noise(vec2(local.z * 3.3 + k * 11.0, k * 0.37))) * resolves(r, 8.0);
+    c = mix(c, c * 1.1, arris * (0.7 - 0.5 * chip));
+    return mix(c, c * 0.8, arris * chip);
+  }
+  if (n.y > 0.5) {
+    // A tread: along from its back (0) to its nose (1).
+    float k = floor(u / TREAD);
+    float along = fract(u / TREAD);
+    // The nose rubbed pale and polished, a little rounded so it catches the light, worn unevenly.
+    float rub = 0.6 + 0.4 * noise(vec2(local.z * 1.3 + k * 2.9, k));
+    float nose = smoothstep(0.84, 0.97, along);
+    c = mix(c, c * 1.13, nose * rub);
+    float chip = smoothstep(0.82, 0.9, noise(vec2(local.z * 2.9 + k * 13.0, k * 0.71))) * smoothstep(0.93, 1.0, along) * resolves(q, 8.0);
+    c = mix(c, c * 0.78, chip);
+    // Dust at the back, thickest where nobody steps: toward the ends, and against the flanks.
+    float ends = 1.0 - smoothstep(0.3, 2.2, edge);
+    float back = 1.0 - smoothstep(0.0, 0.3 + 0.12 * noise(vec2(local.z * 1.7, k * 3.1)), along);
+    float dust = back * (0.35 + 0.4 * ends) + 0.3 * ends * (1.0 - nose);
+    dust *= 0.7 + 0.6 * noise(vec2(local.z * 0.8 + k * 5.1, along * 2.0 + k));
+    c = mix(c, c * vec3(0.85, 0.84, 0.81), min(dust, 1.0));
+    // Specks: grit and old gum, gone before they sparkle.
+    float specks = resolves(q, 22.0);
+    if (specks > 0.0) c *= 1.0 - 0.28 * specks * smoothstep(0.86, 0.96, noise(q * 13.0 + k * 3.0));
+    // Leaves blown into the inner corners and against the flanks.
+    float leavesSeen = resolves(q, 10.0);
+    float lie = clamp(0.06 + 0.55 * ends * (1.0 - smoothstep(0.0, 0.5, along)) + 0.25 * back, 0.0, 0.85);
+    float leaf = leavesSeen * lookLitter(mat2(0.6, 0.8, -0.8, 0.6) * q, 0.62, 0.36, 0.09, 1.0 - lie, 31.0 + k);
+    vec3 dry = mix(${glslRgb('#a99670')}, ${glslRgb('#7a6a4f')}, noise(q * 1.9 + k));
+    return mix(c, dry * (lookLuma(c) / 0.62), leaf * 0.9);
+  }
+  // A step's end where it stands out of the bank: dirty at its foot, where the dirt meets it.
+  float k = floor(u / TREAD);
+  float d = clamp((TOP - (k + 1.0) * RISER - local.y) / (0.55 * RISER) + 1.0, 0.0, 1.0);
+  return mix(c, grime * 0.92, smoothstep(0.25, 1.0, d) * (0.5 + 0.3 * noise(vec2(local.x * 2.0, k))));
+}
+`;
+}
+
+/**
+ * Locker banks (SpotLook.lockers, SURFACE.lockers) painted on a flat face: doors in tiers with dark gaps between
+ * them, a latch and a set of vents on each, the odd door replaced in a deeper blue, the paint chalked and faded
+ * by the sun and scuffed along the bottom tier (refs at El Toro: 31, 52, 53, 07). q is the face's plan in feet,
+ * along it and up it.
+ */
+function lookLockersGlsl({ door, tier, from }: NonNullable<SpotLook['lockers']>) {
+  return /* glsl */ `// A box in a door's own coordinates (0-1 each way), its edges filtered over the pixel.
+float lookDoorBox(vec2 f, vec2 w, vec4 r) {
+  vec2 a = smoothstep(r.xy - w, r.xy + w, f) * (1.0 - smoothstep(r.zw - w, r.zw + w, f));
+  return a.x * a.y;
+}
+vec3 lookLockers(vec3 c, vec2 q, vec3 n) {
+  if (abs(n.y) > 0.5) return c;
+  vec2 g = vec2(q.x / ${num(door)}, (q.y - ${num(from)}) / ${num(tier)});
+  vec2 cell = floor(g), f = fract(g), w = max(fwidth(g), vec2(1e-4));
+  float h = hash(cell + 5.3);
+  // Each door a touch apart; one in sixteen or so a replacement in a deeper blue.
+  c *= 1.0 + 0.07 * (fract(h * 17.3) - 0.5);
+  c = mix(c, c * vec3(0.56, 0.7, 0.9), step(0.94, h));
+  // Chalky sun fade, in drifts across the bank, and the top tiers paler than the bottom.
+  c = mix(c, vec3(lookLuma(c)) * 1.08, 0.25 * smoothstep(0.35, 0.8, weather(q * 0.35)) + 0.05 * clamp(g.y / 5.0, 0.0, 1.0));
+  // Scuffed and dirty along the bottom tier, where feet and bags meet it.
+  c *= 1.0 - 0.16 * (1.0 - smoothstep(0.0, 1.2, g.y)) * (0.6 + 0.4 * noise(q * 1.7));
+  float detail = resolves(q, 7.0);
+  if (detail > 0.0) {
+    // The latch plate, a handle's shadow under it, and three vent slots at the top of each door.
+    float latch = lookDoorBox(f, w, vec4(0.7, 0.42, 0.86, 0.62));
+    float handle = lookDoorBox(f, w, vec4(0.74, 0.36, 0.82, 0.42));
+    float vents = lookDoorBox(f, w, vec4(0.2, 0.72, 0.62, 0.9)) * resolves(q, 16.0);
+    float slots = smoothstep(0.35, 0.65, abs(fract(f.y * 16.0) - 0.5) * 2.0);
+    c = mix(c, c * 0.42, detail * (latch * 0.85 + handle * 0.5));
+    c = mix(c, c * 0.55, vents * slots * 0.8);
+  }
+  // The gaps round every door: a dark line, filtered so a far bank settles into its average tone.
+  float gap = max(lookJoint(q.x, ${num(door)}, 0.04), lookJoint(q.y - ${num(from)}, ${num(tier)}, 0.04));
+  return c * (1.0 - 0.6 * gap);
 }
 `;
 }
