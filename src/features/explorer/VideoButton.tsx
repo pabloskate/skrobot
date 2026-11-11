@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
 import { TbAlertTriangle, TbCheck, TbDownload } from 'react-icons/tb';
 import type { RenderQuality, TrickVideoOptions } from '@skrobot/animations/three/video';
 import { videoFilename } from './explorer';
@@ -12,7 +13,7 @@ type Status =
   | { kind: 'saved' }
   | { kind: 'failed'; unsupported: boolean };
 
-/** How long "Saved" or a failure shows before the button resets. */
+/** How long "Saved" shows before the button resets. */
 const NOTICE_MS = 2400;
 /** Seconds the download link stays alive; Safari reads it after the click returns. */
 const LINK_LIFETIME_MS = 60_000;
@@ -42,7 +43,7 @@ export default function VideoButton({ video }: { video: Omit<TrickVideoOptions, 
   useEffect(() => () => job.current?.abort(), []);
 
   useEffect(() => {
-    if (status.kind !== 'saved' && status.kind !== 'failed') return;
+    if (status.kind !== 'saved') return;
     const timer = window.setTimeout(() => setStatus({ kind: 'idle' }), NOTICE_MS);
     return () => window.clearTimeout(timer);
   }, [status.kind]);
@@ -99,7 +100,7 @@ export default function VideoButton({ video }: { video: Omit<TrickVideoOptions, 
       <button
         type="button"
         className={`explorer-download ${status.kind}`}
-        onClick={() => { if (job.current) job.current.abort(); else setExportVideo({ ...video }); }}
+        onClick={() => { if (job.current) job.current.abort(); else { setStatus({ kind: 'idle' }); setExportVideo({ ...video }); } }}
         aria-label={aria}
         title={status.kind === 'failed' ? aria : undefined}
         style={{ '--progress': status.kind === 'filming' ? status.progress : 0 } as CSSProperties}
@@ -107,6 +108,14 @@ export default function VideoButton({ video }: { video: Omit<TrickVideoOptions, 
         {icon}
         <span className="explorer-download-label">{label}</span>
       </button>
+    {status.kind === 'failed' && createPortal(<div className="explorer-export-error" role="alert">
+      <p>
+      {status.unsupported
+        ? 'To download a smooth video, open the HTTPS site in an up-to-date browser.'
+        : 'The video could not be completed. Please try downloading again.'}
+      </p>
+      <button type="button" onClick={() => setStatus({ kind: 'idle' })}>Dismiss</button>
+    </div>, document.body)}
     {exportVideo && <ExportDialog video={exportVideo} onClose={() => setExportVideo(null)} onExport={quality => { void film(quality); }} />}
     </>
   );

@@ -27,15 +27,14 @@ import { soundtrackFor } from '../sound/soundtrack';
 import { planStage, stageFrame, type StageFrame } from '../stage/stage';
 import { STOCK_VIEW, stageView, tracked } from '../camera/view';
 import { WaterfrontFarImage } from '../sets/waterfront/waterfrontFar';
-import { canvasRecordingType, recordCanvasVideo } from './canvasRecording';
 
 /**
  * @skrobot/animations/three/video — films an attempt, landed or missed, to a video file.
  *
  * TrickScene3D's picture, drawn off screen one frame at a time at a steady
  * frame rate, however fast or slow the device draws, and encoded with
- * WebCodecs, or in real time with MediaRecorder where WebCodecs isn't available.
- * MP4 is preferred; MediaRecorder falls back to WebM if necessary.
+ * WebCodecs. No real-time recording fallback: slow rendering must never skip
+ * frames in a downloaded video. Browsers without an encoder cannot export.
  * The same stage, renderer, camera, and zoom as the live scene;
  * on the waterfront the far panorama, which the page layers under the
  * canvas, is painted under each frame instead (WaterfrontFarImage). The
@@ -79,10 +78,10 @@ export interface TrickVideoOptions {
   signal?: AbortSignal;
 }
 
-/** Thrown when neither WebCodecs nor canvas recording can encode a video. */
+/** Thrown when frame-by-frame video encoding is unavailable. */
 export class VideoUnsupportedError extends Error {
   constructor() {
-    super("This browser can't encode video.");
+    super("To download a smooth video, open the HTTPS site in an up-to-date browser.");
     this.name = 'VideoUnsupportedError';
   }
 }
@@ -102,8 +101,8 @@ const SAMPLE_RATE = 48_000;
 
 const hasWebCodecs = () => typeof VideoEncoder !== 'undefined' && typeof VideoFrame !== 'undefined';
 
-/** Whether this browser has a video encoder or a canvas recorder. */
-export const canRecordVideo = () => hasWebCodecs() || canvasRecordingType() !== null;
+/** Whether this browser exposes frame-by-frame encoding (codec support is checked at export). */
+export const canRecordVideo = () => hasWebCodecs();
 
 /** Films the attempt. The blob's MIME type identifies its format. Rejects when aborted. */
 export async function recordTrickVideo({
@@ -133,10 +132,9 @@ export async function recordTrickVideo({
   // Encoders want even dimensions.
   const width = Math.round(requestedWidth / 2) * 2;
   const height = Math.round(width / (STOCK_VIEW.width / STOCK_VIEW.height) / 2) * 2;
-  const codec = hasWebCodecs() ? await getFirstEncodableVideoCodec([...CODECS], { width, height, frameRate: fps }) : null;
-  const recordingType = codec ? null : canvasRecordingType();
-  if (!codec && !recordingType) throw new VideoUnsupportedError();
-  const audioCodec = codec && sound && typeof OfflineAudioContext !== 'undefined'
+  const codec = await getFirstEncodableVideoCodec([...CODECS], { width, height, frameRate: fps });
+  if (!codec) throw new VideoUnsupportedError();
+  const audioCodec = sound && typeof OfflineAudioContext !== 'undefined'
     ? await getFirstEncodableAudioCodec([...AUDIO_CODECS], { numberOfChannels: 2, sampleRate: SAMPLE_RATE, quality: new Quality({ bitrate: AUDIO_BITRATE }) })
     : null;
   signal?.throwIfAborted();
@@ -161,7 +159,9 @@ export async function recordTrickVideo({
     ctx.clearRect(0, 0, width, height);
     if (backdrop) ctx.drawImage(backdrop, 0, 0, width, height);
     // Copied in the same task it's drawn, while the WebGL canvas still holds the frame.
+    if (scene.renderer.getContext().isContextLost()) throw new Error('The graphics context was lost. Try exporting again.');
     scene.render(frame, camera, zoom, tripod);
+    if (scene.renderer.getContext().isContextLost()) throw new Error('The graphics context was lost. Try exporting again.');
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(glCanvas, 0, 0, width, height);
   };
@@ -171,15 +171,8 @@ export async function recordTrickVideo({
   try {
     await scene.ready;
     signal?.throwIfAborted();
-    if (!codec && recordingType) {
-      return await recordCanvasVideo({
-        canvas: film, mimeType: recordingType, duration: stage.end / rate, fps, bitrate, drawFrame, signal, onProgress,
-        audio: sound && typeof OfflineAudioContext !== 'undefined'
-          ? await renderSoundtrack(soundtrackFor(stage), stage.end, rate, SAMPLE_RATE) : undefined,
-      });
-    }
     const output = new Output({ format: new Mp4OutputFormat({ fastStart: 'in-memory' }), target: new BufferTarget() });
-    const source = new CanvasSource(film, { codec: codec!, quality: new Quality({ bitrate }) });
+    const source = new CanvasSource(film, { codec, quality: new Quality({ bitrate }) });
     output.addVideoTrack(source, { frameRate: fps });
     const audio = audioCodec ? new AudioBufferSource({ codec: audioCodec, quality: new Quality({ bitrate: AUDIO_BITRATE }) }) : null;
     if (audio) output.addAudioTrack(audio);

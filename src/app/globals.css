@@ -5403,6 +5403,34 @@ main:has(.rps-arena) > .screen {
   height: 18px;
 }
 
+.explorer-export-error {
+  position: fixed;
+  z-index: 1000;
+  bottom: max(24px, env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(420px, calc(100% - 32px));
+  box-sizing: border-box;
+  padding: 16px;
+  border: 1px solid currentColor;
+  border-radius: 12px;
+  background: #17191d;
+  color: #fff;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.explorer-export-error p { margin: 0 0 8px; }
+.explorer-export-error button {
+  min-height: 44px;
+  padding: 8px 12px;
+  background: transparent;
+  color: inherit;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
 /* Wide enough for "Download", so the pill holds still while it counts up. */
 @media (min-width: 520px) {
   .explorer-download {
