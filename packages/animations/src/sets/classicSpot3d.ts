@@ -8,14 +8,33 @@ import { StreetProps, type StreetPropPlacements } from './props/streetProps';
 import { wireMeshMaterial, type WireMesh } from './wireMesh';
 import { SET_SCALE } from './setScale';
 import { filmersFor, tripodStand, type SpotFilmers } from './tripods';
+import {
+  canopiesFromTrees, LOOK_BOX_SHADOW_GLSL, LOOK_GROUND_GLSL, MAX_CANOPIES, MAX_CONTACTS, resolveLook,
+  type Canopy, type ContactLine, type SpotLook,
+} from './surfaces';
 /** A spot's scenery and cameras, laid out in its own set units (setScale.ts): the stage draws and films it SET_SCALE bigger. */
 export interface ClassicSpotConfig {
   build: () => {
     ground: BufferGeometry; props: BufferGeometry;
+    /**
+     * Flat marks on the ground's own faces (slab joints, cracks, stains, paint), baked a hair proud of them.
+     * Drawn with the ground's material, so shade, contact darkening and the rider's shadow fall across them
+     * as they do across the ground underneath.
+     */
+    decals?: BufferGeometry;
     railSegments?: Array<{ a: Vec3; b: Vec3; radius: number }>;
-    shadowBoxes?: Array<{ min: Vec3; max: Vec3 }>;
+    /**
+     * Boxes that shade the ground and props. With `look`, a box may stand at an angle: `yaw` (radians, from +x
+     * toward +z) turns its frame about the vertical axis through the origin, and `min`/`max` are given in that
+     * frame (x' = x cos yaw + z sin yaw, z' = z cos yaw - x sin yaw).
+     */
+    shadowBoxes?: Array<{ min: Vec3; max: Vec3; yaw?: number }>;
     /** Diamond-mesh fence panels (wireMesh.ts), drawn per pixel in the see-through pass. */
     wireMesh?: WireMesh & { geometry: BufferGeometry };
+    /** With `look`: lines of contact darkening on the ground (walls' and curbs' feet, risers), up to 12. */
+    contacts?: ContactLine[];
+    /** With `look`: tree crowns that dapple the ground, up to 16; omitted, the street-prop trees' crowns. */
+    canopies?: Canopy[];
   };
   laneZ: number;
   ground: (x: number) => number;
@@ -38,7 +57,15 @@ export interface ClassicSpotConfig {
   stayUp?: readonly Obstacle[];
   /** Realistic trees and cars, parked or driving, loaded after the set (props/streetProps.ts). */
   streetProps?: StreetPropPlacements;
+  /**
+   * The realistic look (sets/surfaces.ts): procedural surfaces for solids
+   * 14-18, soft box shadows, contact darkening, tree dapple and the spot's
+   * own ink and haze. Omitted, the spot draws exactly as it always has.
+   */
+  look?: SpotLook;
 }
+
+type Look = ReturnType<typeof resolveLook>;
 
 /** Weathered baked surfaces receive the rider's projected shadow on their actual height. */
 function groundMaterial() {
@@ -105,6 +132,75 @@ function groundMaterial() {
   return material;
 }
 
+/**
+ * The look's ground: its surfaces, the rider's shadow and the rails' as
+ * stock, then soft box shadows and tree dapple, and contact darkening.
+ */
+function lookGroundMaterial(look: Look) {
+  const material = elToroPropMaterial({ ...look, propShadows: false });
+  Object.assign(material.uniforms, {
+    uShadow: { value: null }, uShadowY: { value: 0 },
+    uShadowOpacity: { value: new Vector3() },
+    uRailCount: { value: 0 }, uBoxCount: { value: 0 },
+    uRailA: { value: Array.from({ length: 48 }, () => new Vector4()) },
+    uRailB: { value: Array.from({ length: 48 }, () => new Vector4()) },
+    // The look's boxes carry their yaw's cosine and sine in the fourth components.
+    uBoxMin: { value: Array.from({ length: 12 }, () => new Vector4(0, 0, 0, 1)) },
+    uBoxMax: { value: Array.from({ length: 12 }, () => new Vector4()) },
+    uLook: { value: new Vector4(look.shadow, look.penumbra, look.contact, look.boxContact) },
+    uContactCount: { value: 0 },
+    uContactA: { value: Array.from({ length: MAX_CONTACTS }, () => new Vector4()) },
+    uContactB: { value: Array.from({ length: MAX_CONTACTS }, () => new Vector4()) },
+    uContactStep: { value: Array.from({ length: MAX_CONTACTS }, () => new Vector4()) },
+    uCanopyCount: { value: 0 },
+    uCanopy: { value: Array.from({ length: MAX_CANOPIES }, () => new Vector4()) },
+    uDapple: { value: look.dapple },
+  });
+  material.fragmentShader = material.fragmentShader.replace('      void main() {', /* glsl */ `
+    uniform sampler2D uShadow;
+    uniform float uShadowY;
+    uniform vec3 uShadowOpacity;
+    uniform mat4 projectionMatrix;
+    uniform int uRailCount;
+    uniform vec4 uRailA[48];
+    uniform vec4 uRailB[48];
+    ${LOOK_BOX_SHADOW_GLSL}
+    ${LOOK_GROUND_GLSL}
+    float railShadow(vec3 p) {
+      float shade = 0.0;
+      for (int i = 0; i < 48; i++) {
+        if (i >= uRailCount) break;
+        vec3 a = uRailA[i].xyz, seg = uRailB[i].xyz - a;
+        float len2 = max(dot(seg, seg), 0.001);
+        float t = clamp(dot(p - a, seg) / len2, 0.0, 1.0);
+        float s = max(0.0, dot(a + t * seg - p, SUN));
+        t = clamp(dot(p + s * SUN - a, seg) / len2, 0.0, 1.0);
+        s = max(0.0, dot(a + t * seg - p, SUN));
+        float d = length(p + s * SUN - a - t * seg);
+        float soft = 0.6 + 0.012 * s;
+        if (s > 0.0) shade = max(shade, 1.0 - smoothstep(uRailA[i].w - soft, uRailA[i].w + soft, d));
+      }
+      return shade;
+    }
+    vec3 surfaceShadow() {
+      vec3 at = vWorld + ((uShadowY - vWorld.y) / SUN.y) * SUN;
+      vec4 clip = projectionMatrix * viewMatrix * vec4(at, 1.0);
+      if (clip.w <= 0.0) return vec3(0.0);
+      vec2 uv = clip.xy / clip.w * 0.5 + 0.5;
+      if (any(lessThan(uv, vec2(0))) || any(greaterThan(uv, vec2(1)))) return vec3(0.0);
+      return texture(uShadow, uv).rgb;
+    }
+      void main() {`).replace('float haze =', /* glsl */ `
+    // Scenery and rails block a share of the sun; the rider's shadow keeps its stock weight.
+    vec3 s = surfaceShadow();
+    float scenery = max(max(lookBoxShadow(vLocal), lookDapple(vLocal)), 0.8 * uLook.x * railShadow(vLocal));
+    float rider = min(1.65 * (1.0 - (1.0 - uShadowOpacity.x * s.x) * (1.0 - uShadowOpacity.y * s.y) * (1.0 - uShadowOpacity.z * s.z)), 0.8);
+    color = lookShadow(color, n, 1.0 - (1.0 - scenery) * (1.0 - rider));
+    color *= 1.0 - lookContact(vLocal);
+    float haze =`);
+  return material;
+}
+
 const DEG = Math.PI / 180;
 /** Steepest the crane tilts down after a rider below it: past this it reads as a drone, not a filmer. */
 const MAX_STAY_UP_PITCH = 40;
@@ -128,10 +224,10 @@ export class ClassicSpot3D {
   readonly overlay = new Group();
   readonly overlayMaterials: ShaderMaterial[] = [];
   readonly shadowGeometry = null;
-  readonly propInk = '#70766e';
+  readonly propInk: string;
   private readonly sky = elToroSkyMaterial();
-  private readonly solid = elToroPropMaterial();
-  private readonly surface = groundMaterial();
+  private readonly solid: ShaderMaterial;
+  private readonly surface: ShaderMaterial;
   private readonly scenery = new Group();
   private readonly solids: Mesh[];
   private readonly streetProps: StreetProps | null;
@@ -144,6 +240,10 @@ export class ClassicSpot3D {
     const sky = new Mesh(skyGeometry, this.sky);
     sky.frustumCulled = false;
     sky.renderOrder = -100;
+    const look = config.look ? resolveLook(config.look) : null;
+    this.propInk = look?.ink ?? '#70766e';
+    this.solid = elToroPropMaterial(look ?? undefined);
+    this.surface = look ? lookGroundMaterial(look) : groundMaterial();
     const built = config.build();
     const u = this.surface.uniforms;
     const rails = (built.railSegments ?? []).slice(0, 48);
@@ -151,20 +251,53 @@ export class ClassicSpot3D {
     u.uRailCount.value = rails.length;
     u.uBoxCount.value = boxes.length;
     rails.forEach((r, i) => { u.uRailA.value[i].set(...r.a, r.radius); u.uRailB.value[i].set(...r.b, 0); });
-    boxes.forEach((b, i) => { u.uBoxMin.value[i].set(...b.min); u.uBoxMax.value[i].set(...b.max); });
+    // The look's boxes may stand at an angle (the stock shader's are square to the spot).
+    const cast = (uniforms: ShaderMaterial['uniforms']) => boxes.forEach((b, i) => {
+      if (look) {
+        uniforms.uBoxMin.value[i].set(...b.min, Math.cos(b.yaw ?? 0));
+        uniforms.uBoxMax.value[i].set(...b.max, Math.sin(b.yaw ?? 0));
+      } else {
+        uniforms.uBoxMin.value[i].set(...b.min);
+        uniforms.uBoxMax.value[i].set(...b.max);
+      }
+    });
+    cast(u);
+    if (look) {
+      if (look.propShadows) {
+        const p = this.solid.uniforms;
+        p.uBoxCount.value = boxes.length;
+        cast(p);
+      }
+      const contacts = (built.contacts ?? []).slice(0, MAX_CONTACTS);
+      u.uContactCount.value = contacts.length;
+      contacts.forEach((c, i) => {
+        u.uContactA.value[i].set(...c.a, c.reach);
+        u.uContactB.value[i].set(...c.b, c.strength ?? 0.3);
+        u.uContactStep.value[i].set(...(c.step ?? [0, 0, 0]), c.count ?? 1);
+      });
+      const canopies = (built.canopies ?? canopiesFromTrees(config.streetProps?.trees ?? [])).slice(0, MAX_CANOPIES);
+      u.uCanopyCount.value = canopies.length;
+      canopies.forEach((c, i) => u.uCanopy.value[i].set(...c.at, c.radius));
+    }
     const ground = new Mesh(built.ground, this.surface);
     const props = new Mesh(built.props, this.solid);
     ground.renderOrder = -50;
-    ground.frustumCulled = props.frustumCulled = false;
-    this.scenery.add(ground, props);
     this.solids = [ground, props];
+    if (built.decals) {
+      const decals = new Mesh(built.decals, this.surface);
+      decals.renderOrder = -49;
+      this.solids.push(decals);
+    }
+    for (const mesh of this.solids) mesh.frustumCulled = false;
+    this.scenery.add(...this.solids);
     if (built.wireMesh) {
       const mesh = new Mesh(built.wireMesh.geometry, wireMeshMaterial(built.wireMesh));
       mesh.frustumCulled = false;
       this.overlay.add(mesh);
       this.overlayMaterials.push(mesh.material as ShaderMaterial);
     }
-    this.streetProps = config.streetProps ? new StreetProps(config.streetProps) : null;
+    const haze = look ? { color: look.hazeColor, from: look.hazeFrom, to: look.hazeTo, amount: look.hazeAmount } : undefined;
+    this.streetProps = config.streetProps ? new StreetProps(config.streetProps, haze) : null;
     if (this.streetProps) this.scenery.add(this.streetProps.group);
     this.ready = this.streetProps?.ready ?? Promise.resolve();
     // Built in set units; the stage's are SET_SCALE bigger.

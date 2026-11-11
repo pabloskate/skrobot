@@ -133,6 +133,14 @@ export interface DropTerrain {
   /** Extra approach before the trick's crouch; short schoolyard landings have less room. */
   runUp?: number;
   /**
+   * A run-up that comes in off the pop's line and carves onto it (Carlsbad's,
+   * out of the classroom hallway): the rider rolls in at `yaw` (degrees from
+   * +x toward +z), carves round to the pop's heading over `over`, and rolls
+   * the last `straight` of it square to the lip (both along the path). The
+   * rider leans into the carve as its speed and curve ask.
+   */
+  carveIn?: { yaw: number; over: number; straight: number };
+  /**
    * A run-up that starts on a roll-in ramp's deck (`x`, its height ground(x)),
    * rolling at `speed`: the rider drops in and gains speed down it under
    * gravity, less what rolling and the air take, reaching the drop's speed at
@@ -482,6 +490,59 @@ export function landingJolt(plan: StairPlan): number {
   return Math.max(0, Math.min(1, (drop - JOLT_FROM) / (JOLT_FULL - JOLT_FROM)));
 }
 
+/** Steps of Simpson's rule along a carve-in's turn (even). */
+const CARVE_IN_STEPS = 16;
+
+/**
+ * A carve-in's run-up (terrain.carveIn) `s` along its path before the pop:
+ * where it is from the takeoff (down the route and across it, so both behind
+ * it) and its heading there, degrees from +x toward +z. Square to the pop
+ * over `straight`; before that the turn, eased in and out over `over` so the
+ * rider's lean builds and lets go smoothly; and the line in beyond. Null
+ * without one.
+ */
+function carveInAt(terrain: DropTerrain, s: number): { x: number; z: number; yaw: number } | null {
+  const carve = terrain.carveIn;
+  if (!carve) return null;
+  const to = terrain.entry?.yaw ?? 0;
+  const heading = (d: number) => to + (carve.yaw - to) * smoothstep((d - carve.straight) / carve.over);
+  const squared = Math.min(s, carve.straight);
+  let x = squared * Math.cos(rad(to));
+  let z = squared * Math.sin(rad(to));
+  const turning = Math.max(0, Math.min(s - carve.straight, carve.over));
+  if (turning > 0) {
+    let cx = 0;
+    let cz = 0;
+    for (let i = 0; i <= CARVE_IN_STEPS; i++) {
+      const w = i === 0 || i === CARVE_IN_STEPS ? 1 : i % 2 ? 4 : 2;
+      const a = rad(heading(carve.straight + (turning * i) / CARVE_IN_STEPS));
+      cx += w * Math.cos(a);
+      cz += w * Math.sin(a);
+    }
+    x += (cx * turning) / (3 * CARVE_IN_STEPS);
+    z += (cz * turning) / (3 * CARVE_IN_STEPS);
+  }
+  const beyond = Math.max(0, s - carve.straight - carve.over);
+  x += beyond * Math.cos(rad(carve.yaw));
+  z += beyond * Math.sin(rad(carve.yaw));
+  return { x: -x, z: -z, yaw: heading(s) };
+}
+
+/**
+ * How far a rider leans into a carve-in's turn, degrees toward +z: the lean
+ * that balances the turn at the route's speed, tan = v² / (r g). 0 off the
+ * turn, and without one.
+ */
+export function carveLean(plan: StairPlan, t: number): number {
+  const carve = plan.terrain.carveIn;
+  if (!carve || t >= plan.pop) return 0;
+  const u = (plan.speed * (plan.pop - t) - carve.straight) / carve.over;
+  if (u <= 0 || u >= 1) return 0;
+  // The heading turns by smoothstep's slope along the path; the rider comes back down it toward the pop.
+  const curve = (rad((plan.terrain.entry?.yaw ?? 0) - carve.yaw) * 6 * u * (1 - u)) / carve.over;
+  return (Math.atan((plan.speed * plan.speed * curve) / GRAVITY) * 180) / Math.PI;
+}
+
 /**
  * How far down the stairs (from the lip) the rider is. Full speed up to
  * touchdown; after it, the flatground ride away (rideAway: off a held line,
@@ -492,7 +553,10 @@ export function landingJolt(plan: StairPlan): number {
 export function stairDistance(plan: StairPlan, t: number, streetDist: number): number {
   const entry = plan.terrain.entry;
   if (plan.dropIn && t < dropInEnd(plan)) return alongDropIn(plan.dropIn, t, plan.dropIn.x);
-  if (t <= plan.pop) return plan.takeoff.x + plan.speed * Math.cos(rad(entry?.yaw ?? 0)) * (t - plan.pop);
+  if (t <= plan.pop) {
+    const carve = carveInAt(plan.terrain, plan.speed * (plan.pop - t));
+    return plan.takeoff.x + (carve ? carve.x : plan.speed * Math.cos(rad(entry?.yaw ?? 0)) * (t - plan.pop));
+  }
   if (t < plan.land) return plan.takeoff.x + plan.velocity.x * (t - plan.pop);
   if (plan.rollout) return alongRollout(plan.rollout, plan, t);
   return plan.terrain.run + plan.terrain.landPast + rideAway(plan, rolledAway(plan, streetDist)).x;
@@ -574,6 +638,9 @@ export function stairTrack(plan: StairPlan, t: number, streetDist: number) {
     // Wheel travel stays board-local when the entire route turns in the world.
     return { x, z: laneZ + (away?.z ?? 0), yaw: (away?.yaw ?? 0) + carving, travel: -POP_BEHIND + plan.speed * plan.flight + s };
   }
+  // Carving in off the line, the route is its own curve up to the pop.
+  const carve = t < plan.pop ? carveInAt(plan.terrain, plan.speed * (plan.pop - t)) : null;
+  if (carve) return { x, z: plan.takeoff.z + carve.z, yaw: carve.yaw, travel: runUpTravel(plan, t) };
   const z = !entry ? laneZ
     : t <= plan.pop ? plan.takeoff.z + plan.speed * Math.sin(rad(entry.yaw)) * (t - plan.pop)
     : plan.takeoff.z + plan.velocity.z * (t - plan.pop);

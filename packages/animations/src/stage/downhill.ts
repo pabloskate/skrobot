@@ -6,7 +6,7 @@ import { clearFeet } from '../board/footContact';
 import { rad, rotY, smoothstep, type V3 } from '../math';
 import { grindLane, handrailHeight, railTrack, type GrindPlan } from '../motion/grind';
 import { solveGrindRig } from '../motion/grindRig';
-import { carriedRig, kneeBetween, landingSpring, mapUpper, shiftRig } from '../motion/dynamics';
+import { carriedRig, kneeBetween, landingSpring, leanRig, mapUpper, shiftRig } from '../motion/dynamics';
 import { offLineRig } from '../motion/fall/kickOut';
 import type { Quat } from '../motion/fall/rotation';
 import { solveRig } from '../motion/rig';
@@ -20,6 +20,7 @@ import {
   stairClock,
   stairDeckHeight,
   stairTrack,
+  carveLean,
   terrainSurface,
   stairLift,
   type StairPlan,
@@ -261,7 +262,10 @@ export function stairRig(
   const rolling = stairs.dropIn != null && clock <= stairs.pop;
   const solved = clearFeet(onTheGround(offLine ? offLine(downhill) : downhill, stairs.terrain.slope || rolling ? undefined : stepUnder));
   const absorbed = absorbDrop(solved, stairs, clock, rise);
-  const banked = bankRig(posed(stageArms(stage, t, absorbed), stage.skater, headPose), stairs, clock, u, route.yaw);
+  const upright = posed(stageArms(stage, t, absorbed), stage.skater, headPose);
+  // Carving in off the line, the rider leans into the turn over the board (carveLean).
+  const leaned = leanRig(upright, carveLean(stairs, clock), { x: X0, y: upright.board.center.y, z: upright.board.center.z });
+  const banked = bankRig(leaned, stairs, clock, u, route.yaw);
   const carried = shiftRig(banked, { x: 0, y: -drop, z: 0 });
   // Feet already cleared the grip before the rigid bank transform. Resolve
   // terrain contact by carrying this complete posed skeleton, not by solving

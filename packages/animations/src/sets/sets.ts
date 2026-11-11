@@ -217,7 +217,7 @@ export const STAGE_SETS: readonly SetInfo[] = [
   },
   {
     id: 'carlsbad-gap', label: 'Carlsbad Gap', grinds: false,
-    description: 'Carlsbad High, California · The original grass gap beside the yellow-edged 11 stair, with its curved retaining wall and uphill landing. Dimensions estimated from archival photos.',
+    description: 'Carlsbad High, California · The original grass gap beside the yellow-edged 11 stair, with its low toe wall, curved curb and uphill landing. Dimensions estimated from archival photos.',
     terrain: stageTerrain(CARLSBAD_TERRAIN),
     rails: null, farPanorama: false, tripods: ['bottom', 'side', 'top'],
   },

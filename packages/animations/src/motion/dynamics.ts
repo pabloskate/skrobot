@@ -1,4 +1,4 @@
-import { add3, dot3, lerp3, norm3, rotY, rotZ, scale3, smoothstep, sub3, type V3 } from '../math';
+import { add3, dot3, lerp3, norm3, rotX, rotY, rotZ, scale3, smoothstep, sub3, type V3 } from '../math';
 import {
   LAND_OMEGA,
   LAND_ZETA,
@@ -162,6 +162,24 @@ export function tipRig(rig: Rig, deg: number, at: V3): Rig {
   if (!deg) return rig;
   const point = (p: V3) => add3(at, rotZ(sub3(p, at), deg));
   return mapBody(rig, point, (f) => turnedFrame(f, point, (d) => rotZ(d, deg)));
+}
+
+/**
+ * The body leaned `deg` about the world's x through `at`, toward +z for
+ * positive: into a carve, from the ankles. The soles stay flat where they
+ * stand (a gentle carve hardly tilts a deck on its trucks), so the lean is
+ * the ankles'. The board is the caller's.
+ */
+export function leanRig(rig: Rig, deg: number, at: V3): Rig {
+  if (!deg) return rig;
+  // y runs down the screen: a point over the pivot goes toward +z turned the other way round x.
+  const point = (p: V3) => add3(at, rotX(sub3(p, at), -deg));
+  return {
+    ...mapUpper(rig, point, (f) => turnedFrame(f, point, (d) => rotX(d, -deg))),
+    legs: rig.legs.map((l) => ({
+      ...l, hip: point(l.hip), knee: point(l.knee), ankle: point(l.ankle), shoe: moveFrame(l.shoe, sub3(point(l.shoe.origin), l.shoe.origin)),
+    })) as [LegRig, LegRig],
+  };
 }
 
 /**

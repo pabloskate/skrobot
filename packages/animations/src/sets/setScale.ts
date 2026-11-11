@@ -32,6 +32,7 @@ export function stageTerrain(terrain: DropTerrain): DropTerrain {
     ...(slope && { slope: (u: number) => slope(u / k) }),
     ...(entry && { entry: { ...entry, x: entry.x * k, z: entry.z * k } }),
     ...(dropIn && { dropIn: { x: dropIn.x * k, speed: dropIn.speed * k } }),
+    ...(terrain.carveIn && { carveIn: { ...terrain.carveIn, over: terrain.carveIn.over * k, straight: terrain.carveIn.straight * k } }),
   };
 }
 

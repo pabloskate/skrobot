@@ -1,6 +1,7 @@
 import { DoubleSide, GLSL3, ShaderMaterial, Vector2, Vector3, Vector4 } from 'three';
 import { glslRgb, SUN } from '../../three/materials';
-import { SET_SCALE } from '../setScale';
+import { SET_FOOT, SET_SCALE } from '../setScale';
+import { LOOK_BOX_SHADOW_GLSL, LOOK_REFLECT_GLSL, surfacesGlsl, type resolveLook } from '../surfaces';
 
 /** Deterministic, world-anchored materials: no texture downloads or camera-facing decals. */
 export const EL_TORO_NOISE = /* glsl */ `
@@ -26,8 +27,8 @@ float grain(vec2 p) {
 `;
 
 /** Baked mesh attributes stay compatible with the existing two-target outline renderer. */
-export function elToroPropMaterial() {
-  return new ShaderMaterial({
+export function elToroPropMaterial(look?: ReturnType<typeof resolveLook>) {
+  const material = new ShaderMaterial({
     glslVersion: GLSL3,
     side: DoubleSide,
     vertexShader: /* glsl */ `
@@ -105,6 +106,54 @@ export function elToroPropMaterial() {
       }
     `,
   });
+  return look ? withLook(material, look) : material;
+}
+
+/**
+ * The realistic look (sets/surfaces.ts) on top of the stock shader: solids
+ * 14-18 get their procedural surfaces, paint alpha darkens as occlusion,
+ * the haze is the spot's own and, if asked, props receive the shadow boxes.
+ */
+function withLook(material: ShaderMaterial, look: ReturnType<typeof resolveLook>) {
+  const swap = (source: string, from: string, to: string) => {
+    if (!source.includes(from)) throw new Error(`look: shader has no ${from}`);
+    return source.replace(from, to);
+  };
+  let vertex = material.vertexShader;
+  vertex = swap(vertex, 'flat out vec4 vInfo;', 'flat out vec4 vInfo;\n      out float vAo;');
+  vertex = swap(vertex, 'vInfo = aInfo;', 'vInfo = aInfo;\n        vAo = aColor.a;');
+  let fragment = material.fragmentShader;
+  fragment = swap(fragment, 'flat in vec4 vInfo;', 'flat in vec4 vInfo;\n      in float vAo;');
+  fragment = swap(fragment, '      void main() {', `${surfacesGlsl(look)}\n${look.propShadows ? LOOK_BOX_SHADOW_GLSL + LOOK_REFLECT_GLSL : ''}\n      void main() {`);
+  // Daylight: baked into flat paint (`new Bake(daylight)`), or here per pixel for every face (`light: 'shader'`).
+  const sunlit = look.light === 'shader' ? 'color *= lookDaylight(n);' : 'if (vBand.x < 1.5) color *= lookDaylight(n);';
+  if (look.light === 'shader') fragment = swap(fragment, 'if (vBand.x < 1.5) color *= 0.67 + 0.34 * max(dot(n, SUN), 0.0);', 'color *= lookDaylight(n);');
+  // Glass carries its own light (a reflection isn't shaded); every other surface is lit, then textured.
+  fragment = swap(fragment, 'if (id >= 60.0 && id <= 69.0) {', /* glsl */ `if (surface > 13.5 && surface < 19.5) {
+          if (abs(surface - 16.0) > 0.5) ${sunlit}
+          color = lookSurface(color, surface, p / ${SET_FOOT.toFixed(1)}, n, vWorld, vLocal / ${SET_FOOT.toFixed(1)});
+        } else if (id >= 60.0 && id <= 69.0) {`);
+  // Block walls: courses and joints.
+  fragment = swap(fragment, 'if (surface == 10.0) {', `if (surface == 10.0) {
+            color = lookMasonry(color, p / ${SET_FOOT.toFixed(1)}, n);`);
+  const open = look.soffit > 0 ? `1.0 - ${look.soffit.toFixed(3)} * (1.0 - lookSkyOpen(vLocal))` : '1.0';
+  fragment = swap(fragment, 'float haze = 0.72 * smoothstep(2400.0, 12000.0,', /* glsl */ `color *= vAo;
+        ${look.propShadows ? `if (abs(surface - 16.0) > 0.5) color = lookLit(color, n, lookBoxShadow(vLocal), ${open});` : ''}
+        float haze = ${look.hazeAmount.toFixed(4)} * smoothstep(${look.hazeFrom.toFixed(1)}, ${look.hazeTo.toFixed(1)},`);
+  fragment = swap(fragment, `color = mix(color, ${glslRgb('#c6d0cc')}, haze);`, `color = mix(color, ${glslRgb(look.hazeColor)}, haze);`);
+  material.vertexShader = vertex;
+  material.fragmentShader = fragment;
+  if (look.propShadows) {
+    material.uniforms = {
+      ...material.uniforms,
+      uBoxCount: { value: 0 },
+      // Corners, with the box's yaw (cosine, sine) in the fourth components (LOOK_BOX_SHADOW_GLSL).
+      uBoxMin: { value: Array.from({ length: 12 }, () => new Vector4(0, 0, 0, 1)) },
+      uBoxMax: { value: Array.from({ length: 12 }, () => new Vector4()) },
+      uLook: { value: new Vector4(look.shadow, look.penumbra, look.contact, look.boxContact) },
+    };
+  }
+  return material;
 }
 
 /** Southern California daylight and distant hills, without the plaza's graphic city backdrop. */

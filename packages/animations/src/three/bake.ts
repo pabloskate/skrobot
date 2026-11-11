@@ -1,7 +1,6 @@
 import { BufferGeometry, Float32BufferAttribute, GLSL3, NormalBlending, ShaderMaterial, Vector2 } from 'three';
 import { lambert, tone } from '../camera/camera';
-import type { V3 } from '../math';
-import { rgb, type RGB } from './materials';
+import { rgb, SUN, type RGB } from './materials';
 import { GLSL_DEPTH } from './depth';
 import type { Vec3 } from '../camera/view';
 
@@ -36,7 +35,69 @@ export interface Paint {
   lit?: { color: string; from: number; to: number };
 }
 
+/** How a baked face is lit by the sun, from its color and its normal (three's axes, y up). */
+export type Shade = (color: string, normal: Vec3) => string;
+
+/** The stock cel light: lit faces drift toward cream, turned-away faces toward purple. */
+export const celShade: Shade = (color, n) => tone(color, lambert({ x: n[0], y: -n[1], z: n[2] }));
+
+/**
+ * Neutral daylight, the realistic spots' bake (opt in with `new Bake(daylight)`):
+ * the sun, the open sky and light bounced off the ground, added in linear
+ * light and scaled so a sunlit flat face keeps exactly its authored color.
+ * Brightness changes, hue doesn't: a wall turned from the sun is the same
+ * paint, darker and a touch cooler (it's lit by the blue sky), never lavender.
+ */
+export const DAYLIGHT = {
+  /** Sky fill, relative to the sun on a face square to it. */
+  sky: 0.6,
+  /** Ground bounce at a face looking straight down, off pale paving. */
+  bounce: 0.3,
+  sunTint: [1.0, 0.985, 0.95] as RGB,
+  skyTint: [0.94, 0.98, 1.06] as RGB,
+  bounceTint: [1.03, 1.0, 0.95] as RGB,
+} as const;
+
+/** How much of the sun and the sky a face sees (0-1 each): under an eave, sun 0; in a deep reveal, sky 0.5. */
+export interface DaylightExposure {
+  sun?: number;
+  sky?: number;
+}
+
+const toLinear = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+const toSrgb = (c: number) => (c <= 0.0031308 ? c * 12.92 : 1.055 * c ** (1 / 2.4) - 0.055);
+const hex = (c: RGB) => '#' + c.map((v) => Math.round(Math.min(1, Math.max(0, v)) * 255).toString(16).padStart(2, '0')).join('');
+
+/** A face's daylight multiplier per channel (1 for a sunlit flat face), in linear light. */
+export function daylightIrradiance(n: Vec3, exposure: DaylightExposure = {}): RGB {
+  const m = Math.hypot(n[0], n[1], n[2]) || 1;
+  const [x, y, z] = [n[0] / m, n[1] / m, n[2] / m];
+  const sun = Math.max(0, x * SUN.x + y * SUN.y + z * SUN.z) * (exposure.sun ?? 1);
+  const sky = (0.5 + 0.5 * y) * DAYLIGHT.sky * (exposure.sky ?? 1);
+  const bounce = (0.5 - 0.5 * y) * DAYLIGHT.bounce * (exposure.sky ?? 1);
+  return [0, 1, 2].map((i) => (sun * DAYLIGHT.sunTint[i] + sky * DAYLIGHT.skyTint[i] + bounce * DAYLIGHT.bounceTint[i]) / FLAT[i]) as RGB;
+}
+/** A sunlit flat face's irradiance per channel, which daylight divides out so the authored color is what it shows. */
+const FLAT = [0, 1, 2].map((i) => SUN.y * DAYLIGHT.sunTint[i] + DAYLIGHT.sky * DAYLIGHT.skyTint[i]);
+
+/** `color` (as it looks sunlit on flat ground) on a face with normal `n` (three's axes), in neutral daylight. */
+export function daylight(color: string, n: Vec3, exposure?: DaylightExposure): string {
+  const e = daylightIrradiance(n, exposure);
+  const c = rgb(color);
+  return hex(c.map((v, i) => toSrgb(toLinear(v) * e[i])) as RGB);
+}
+
+type Corners = [Paint, Paint, Paint, Paint];
+
 export class Bake {
+  /** `shade` lights every sunlit box face (and `shaded`): the cel tone unless a spot opts into `daylight`. */
+  constructor(readonly shade: Shade = celShade) {}
+
+  /** `color` lit on a face with normal `n` (three's axes) by this bake's light. */
+  shaded(color: string, n: Vec3): string {
+    return this.shade(color, n);
+  }
+
   private readonly position: number[] = [];
   private readonly normal: number[] = [];
   private readonly corner: number[] = [];
@@ -73,6 +134,23 @@ export class Bake {
   }
 
   /**
+   * A quad whose corners are occluded by `ao` (1 open, 0 black), carried in
+   * the paint's alpha. Only the realistic look reads it (a spot's `look`,
+   * classicSpot3d.ts), darkening smoothly across the face: a slab's edge
+   * against a wall, the inside corner of a step. Overlay materials read
+   * alpha as transparency, so keep it to opaque scenery.
+   */
+  quadAo(a: Vec3, b: Vec3, c: Vec3, d: Vec3, n: Vec3, paint: Paint, ink: Ink, ao: [number, number, number, number]) {
+    this.quadCorners(a, b, c, d, n, [0, 1, 2, 3].map((k) => ({ ...paint, alpha: ao[k] })) as Corners, ink);
+  }
+
+  /** A quad with its own paint at each corner, blended smoothly across it (grass wear, a stain fading out). */
+  quadCorners(a: Vec3, b: Vec3, c: Vec3, d: Vec3, n: Vec3, paints: Corners, ink: Ink) {
+    const pts = [a, b, c, d];
+    for (const k of [0, 1, 2, 0, 2, 3]) this.vertex(pts[k], n, paints[k], ink);
+  }
+
+  /**
    * A box lying on the ground, its faces lit by the sun. Each face is its own part, so every visible edge is inked.
    * Three's y is up; `n` normals are three's, so the physics normal flips y.
    */
@@ -89,8 +167,7 @@ export class Bake {
     ];
     list.forEach((face, i) => {
       if (!faces.includes(face.key)) return;
-      const physics: V3 = { x: face.n[0], y: -face.n[1], z: face.n[2] };
-      const paint = { color: sunlit ? tone(face.color, lambert(physics)) : face.color };
+      const paint = { color: sunlit ? this.shade(face.color, face.n) : face.color };
       const faceInk = ink ? { ...ink, id: ink.id + i, priority: ink.priority + i } : NO_INK;
       const [a, b, c, d] = face.pts;
       this.quad(a, b, c, d, face.n, paint, faceInk);

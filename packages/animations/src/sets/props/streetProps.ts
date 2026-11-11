@@ -7,6 +7,7 @@ import {
   Matrix4,
   Mesh,
   Quaternion,
+  RepeatWrapping,
   TextureLoader,
   Vector3,
   type BufferGeometry,
@@ -15,28 +16,72 @@ import {
 } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { SUN, sceneMaterial } from '../../three/materials';
+import { glslRgb, SUN, sceneMaterial } from '../../three/materials';
 import type { Vec3 } from '../../camera/view';
 import { SET_FOOT, SET_SCALE } from '../setScale';
+import { treeMatrix, treeVariant, type TreePlacement, type TreeSpecies } from './trees';
+
+export { crownSpheres, treeCrowns, TREE_SPECIES_IDS, type CrownSphere, type TreePlacement, type TreeSpecies } from './trees';
 
 /**
- * Realistic street props for the classic spots: trees from Poly Haven scans
- * (CC0), rebuilt for phones by blender/build_tree.py, and cars modelled by
+ * Realistic street props for the classic spots: trees (a jacaranda from a
+ * Poly Haven scan (CC0), rebuilt for phones by blender/build_tree.py, and
+ * the species grown by blender/build_species.py; see trees.ts for the
+ * placement and crown-sphere math), and cars modelled by
  * blender/build_cars.py, parked or driving down the street on the
  * attempt's clock (`drive`). They load after the set is drawn
  * (`ready`) and are shaded in the set's own light: the same sun, the same
  * haze with distance, and no ink outline.
  */
 
+/**
+ * Each species' model and the texture each of its parts is drawn with.
+ * The jacaranda's nodes are `trunk`, `branches` and `leaves`; the grown
+ * species have a `bark` and a `leaves` node per variant, `a_bark`,
+ * `a_leaves`, `b_bark`... Their bark tiles round and up the trunk.
+ */
+interface TreeAssets {
+  model: string;
+  textures: Record<string, string>;
+  tiled: boolean;
+}
+
 // Each URL a literal, so bundlers (webpack, Vite) find and ship the file.
-const TREE = {
-  model: new URL('./assets/jacaranda.glb', import.meta.url).href,
-  trunk: new URL('./assets/jacaranda_trunk.jpg', import.meta.url).href,
-  branches: new URL('./assets/jacaranda_branches.jpg', import.meta.url).href,
-  leaves: new URL('./assets/jacaranda_leaves.webp', import.meta.url).href,
+const TREES: Record<TreeSpecies, TreeAssets> = {
+  jacaranda: {
+    model: new URL('./assets/jacaranda.glb', import.meta.url).href,
+    textures: {
+      trunk: new URL('./assets/jacaranda_trunk.jpg', import.meta.url).href,
+      branches: new URL('./assets/jacaranda_branches.jpg', import.meta.url).href,
+      leaves: new URL('./assets/jacaranda_leaves.webp', import.meta.url).href,
+    },
+    tiled: false,
+  },
+  eucalyptus: {
+    model: new URL('./assets/eucalyptus.glb', import.meta.url).href,
+    textures: {
+      bark: new URL('./assets/eucalyptus_bark.jpg', import.meta.url).href,
+      leaves: new URL('./assets/eucalyptus_leaves.webp', import.meta.url).href,
+    },
+    tiled: true,
+  },
+  ornamental: {
+    model: new URL('./assets/ornamental.glb', import.meta.url).href,
+    textures: {
+      bark: new URL('./assets/ornamental_bark.jpg', import.meta.url).href,
+      leaves: new URL('./assets/ornamental_leaves.webp', import.meta.url).href,
+    },
+    tiled: true,
+  },
+  fanPalm: {
+    model: new URL('./assets/fan_palm.glb', import.meta.url).href,
+    textures: {
+      bark: new URL('./assets/fan_palm_bark.jpg', import.meta.url).href,
+      leaves: new URL('./assets/fan_palm_leaves.webp', import.meta.url).href,
+    },
+    tiled: true,
+  },
 };
-/** The tree model's height (its units are metres). */
-const TREE_HEIGHT = 19.47;
 const CARS = new URL('./assets/cars.glb', import.meta.url).href;
 /** Set units per metre (the sets are laid out in feet of SET_FOOT units). */
 const METRE = SET_FOOT / 0.3048;
@@ -58,13 +103,6 @@ export interface CarPlacement {
   lap?: number;
 }
 
-/** A tree standing at `at` (the set's coordinates, y up), `height` world units tall, turned `yaw` degrees. */
-export interface TreePlacement {
-  at: Vec3;
-  height: number;
-  yaw: number;
-}
-
 export interface StreetPropPlacements {
   trees?: TreePlacement[];
   cars?: CarPlacement[];
@@ -72,6 +110,12 @@ export interface StreetPropPlacements {
 
 /** A mesh's role from its glTF node name ("leaves", "trunk", "sedan"…), whatever suffix a loader adds. */
 const meshName = (mesh: Mesh) => mesh.name.toLowerCase().replace(/[^a-z]/g, '');
+
+/** A tree mesh's variant and role from its node name: "a_bark" is variant 0's bark; "trunk" (the jacaranda) variant 0's trunk. */
+export function treePart(name: string): { variant: number; role: string } {
+  const match = /^(?:([a-z])_)?([a-z]+)/.exec(name.toLowerCase());
+  return { variant: match?.[1] ? match[1].charCodeAt(0) - 97 : 0, role: match?.[2] ?? '' };
+}
 
 /** Standing at `at`, turned `yaw` degrees about up, drawn `scale` times its modelled size. */
 const placement = (at: Vec3, yaw: number, scale: number) => new Matrix4().compose(
@@ -103,8 +147,21 @@ void main() {
 }
 `;
 
-/** The set's light: daylight and haze as the baked props have it (sets/elToro/elToroMaterials.ts). */
-const LIGHT = /* glsl */ `
+/** Distance haze: its color, where it starts and is full (set units), and how much at full. */
+export interface PropHaze {
+  color: string;
+  from: number;
+  to: number;
+  amount: number;
+}
+
+/** The set's light: daylight and haze as the baked props have it (sets/elToro/elToroMaterials.ts), or a spot's own haze. */
+function light(haze?: PropHaze) {
+  const fade = haze
+    ? `${haze.amount.toFixed(4)} * smoothstep(${haze.from.toFixed(1)}, ${haze.to.toFixed(1)},`
+    : '0.72 * smoothstep(2400.0, 12000.0,';
+  const color = haze ? glslRgb(haze.color) : 'vec3(0.776, 0.816, 0.8)';
+  return /* glsl */ `
 layout(location = 0) out vec4 outColor;
 layout(location = 1) out vec4 outInfo;
 in vec3 vWorld;
@@ -113,13 +170,14 @@ in vec2 vUv;
 in float vShade;
 const vec3 SUN = ${sun};
 vec3 hazed(vec3 color) {
-  float haze = 0.72 * smoothstep(2400.0, 12000.0, length(vWorld - cameraPosition) / ${SET_SCALE.toFixed(5)});
-  return mix(color, vec3(0.776, 0.816, 0.8), haze);
+  float haze = ${fade} length(vWorld - cameraPosition) / ${SET_SCALE.toFixed(5)});
+  return mix(color, ${color}, haze);
 }
 `;
+}
 
-function barkMaterial(map: Texture): ShaderMaterial {
-  return sceneMaterial(VERT, LIGHT + /* glsl */ `
+function barkMaterial(map: Texture, haze?: PropHaze): ShaderMaterial {
+  return sceneMaterial(VERT, light(haze) + /* glsl */ `
     uniform sampler2D uMap;
     void main() {
       vec3 n = normalize(vNormal);
@@ -133,8 +191,8 @@ function barkMaterial(map: Texture): ShaderMaterial {
 }
 
 /** Leaf clumps: cut out of the atlas, lit as one soft crown (the cards' normals point out of it), glowing through when backlit. */
-function leafMaterial(map: Texture): ShaderMaterial {
-  return sceneMaterial(VERT, LIGHT + /* glsl */ `
+function leafMaterial(map: Texture, haze?: PropHaze): ShaderMaterial {
+  return sceneMaterial(VERT, light(haze) + /* glsl */ `
     uniform sampler2D uMap;
     void main() {
       vec4 tex = texture(uMap, vUv);
@@ -154,7 +212,7 @@ function leafMaterial(map: Texture): ShaderMaterial {
 const CAR_SURFACES = ['PAINT', 'GLASS', 'TRIM', 'TIRE', 'RIM', 'HEAD', 'TAIL', 'PLATE'];
 
 /** Cars: paint and glass that mirror the sky, rubber, alloy, lamps; occlusion baked in the vertex colors. */
-function carMaterial(): ShaderMaterial {
+function carMaterial(haze?: PropHaze): ShaderMaterial {
   const surfaces = CAR_SURFACES.map((name, i) => `const float ${name} = ${i}.0;`).join('\n');
   return sceneMaterial(VERT.replace('out vec3 vWorld;', `
     out float vSurface;
@@ -169,7 +227,7 @@ function carMaterial(): ShaderMaterial {
       vPaint = instanceColor;
     #else
       vPaint = vec3(0.6);
-    #endif`), LIGHT + /* glsl */ `
+    #endif`), light(haze) + /* glsl */ `
     in float vSurface;
     in vec3 vPaint;
     ${surfaces}
@@ -225,7 +283,8 @@ export class StreetProps {
   private driven = 0;
   private disposed = false;
 
-  constructor(placements: StreetPropPlacements) {
+  /** `haze`: a spot's own distance haze (its realistic look); omitted, the stock haze every spot has. */
+  constructor(placements: StreetPropPlacements, private readonly haze?: PropHaze) {
     this.group.name = 'street-props';
     this.ready = this.load(placements).catch(() => {});
   }
@@ -235,32 +294,44 @@ export class StreetProps {
   }
 
   private async loadTrees(trees: TreePlacement[]): Promise<void> {
-    if (!trees.length) return;
+    const bySpecies = new Map<TreeSpecies, TreePlacement[]>();
+    for (const tree of trees) {
+      const species = tree.species ?? 'jacaranda';
+      bySpecies.set(species, [...(bySpecies.get(species) ?? []), tree]);
+    }
+    await Promise.all([...bySpecies].map(([species, placed]) => this.loadSpecies(TREES[species], placed)));
+  }
+
+  /** One species: each variant's parts drawn once per tree of that variant. */
+  private async loadSpecies(assets: TreeAssets, trees: TreePlacement[]): Promise<void> {
     const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
     const textures = new TextureLoader();
-    const [model, trunk, branches, leaves] = await Promise.all([
-      loader.loadAsync(TREE.model),
-      textures.loadAsync(TREE.trunk),
-      textures.loadAsync(TREE.branches),
-      textures.loadAsync(TREE.leaves),
+    const roles = Object.keys(assets.textures);
+    const [model, ...maps] = await Promise.all([
+      loader.loadAsync(assets.model),
+      ...roles.map((role) => textures.loadAsync(assets.textures[role])),
     ]);
     // Sampled as stored: the set's shaders work in display color, as its baked vertex colors are.
-    for (const t of [trunk, branches, leaves]) {
+    for (const t of maps) {
       t.flipY = false;
       t.anisotropy = 4;
       this.textures.push(t);
     }
+    if (assets.tiled) maps[roles.indexOf('bark')].wrapS = maps[roles.indexOf('bark')].wrapT = RepeatWrapping;
     if (this.disposed) {
       this.release(model.scene);
       return;
     }
-    const make: Record<string, () => ShaderMaterial> = {
-      trunk: () => barkMaterial(trunk),
-      branches: () => barkMaterial(branches),
-      leaves: () => leafMaterial(leaves),
-    };
-    const matrices = trees.map((tree) => placement(tree.at, tree.yaw, tree.height / TREE_HEIGHT));
-    this.instance(model.scene, matrices, (name) => (make[name] ?? make.trunk)());
+    const map = (role: string) => maps[roles.indexOf(role)] ?? maps[0];
+    const matrices = new Map<number, Matrix4[]>();
+    for (const tree of trees) {
+      const variant = treeVariant(tree);
+      matrices.set(variant, [...(matrices.get(variant) ?? []), treeMatrix(tree)]);
+    }
+    this.instance(model.scene, (name) => matrices.get(treePart(name).variant) ?? [], (name) => {
+      const { role } = treePart(name);
+      return role === 'leaves' ? leafMaterial(map('leaves'), this.haze) : barkMaterial(map(role), this.haze);
+    });
   }
 
   private async loadCars(cars: CarPlacement[]): Promise<void> {
@@ -277,7 +348,7 @@ export class StreetProps {
       if (!(object instanceof Mesh)) return;
       const placed = byModel.get(meshName(object));
       if (!placed) return;
-      const material = carMaterial();
+      const material = carMaterial(this.haze);
       material.vertexColors = object.geometry.hasAttribute('color');
       const geometry = object.geometry.clone().applyMatrix4(object.matrixWorld);
       const mesh = new InstancedMesh(geometry, material, placed.length);
@@ -309,15 +380,18 @@ export class StreetProps {
     for (const mesh of moved) mesh.instanceMatrix.needsUpdate = true;
   }
 
-  /** Every mesh of `scene` drawn once per matrix, in the material its name asks for. */
-  private instance(scene: Group, matrices: Matrix4[], material: (name: string) => ShaderMaterial) {
+  /** Every mesh of `scene` drawn once per matrix its name asks for, in the material its name asks for. */
+  private instance(scene: Group, place: (name: string) => Matrix4[], material: (name: string) => ShaderMaterial) {
     scene.updateMatrixWorld(true);
     scene.traverse((object) => {
       if (!(object instanceof Mesh)) return;
-      const m = material(meshName(object));
+      const matrices = place(object.name);
+      if (!matrices.length) return;
+      const m = material(object.name);
       m.vertexColors = object.geometry.hasAttribute('color');
       const geometry = object.geometry.clone().applyMatrix4(object.matrixWorld);
       const mesh = new InstancedMesh(geometry, m, matrices.length);
+      mesh.name = object.name;
       matrices.forEach((matrix, i) => mesh.setMatrixAt(i, matrix));
       this.add(mesh, geometry, m);
     });
