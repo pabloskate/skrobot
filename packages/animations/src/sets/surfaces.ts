@@ -562,7 +562,7 @@ vec3 lookStairWear(vec3 c, vec3 local, vec3 n) {
   if (u < -0.02 || u > ${num(x[1] - x[0])} + 0.02 || local.z < Z0 - 0.02 || local.z > Z1 + 0.02) return c;
   if (local.y > TOP - 0.02 || local.y < TOP - ${num(steps * riser)} + 0.02) return c;
   // Grime is grey-brown, not black or green; it darkens the concrete rather than replacing it.
-  vec3 grime = c * vec3(0.6, 0.59, 0.56);
+  vec3 grime = c * vec3(0.72, 0.71, 0.68);
   float rail = min(1.0, ${near});
   float edge = min(local.z - Z0, Z1 - local.z);
   vec2 q = local.zx;
@@ -573,17 +573,17 @@ vec3 lookStairWear(vec3 c, vec3 local, vec3 n) {
     vec2 r = vec2(local.z, d * RISER);
     // Blotches a foot or three across, each step its own, mostly over the lower part of the face.
     float blotch = noise(vec2(local.z * 0.55 + k * 3.17, k * 1.93)) * 0.6 + noise(vec2(local.z * 1.6 + 4.0, k * 2.31)) * 0.4;
-    float blot = smoothstep(0.52, 0.8, blotch + 0.14 * rail) * smoothstep(0.0, 0.5, d);
+    float blot = smoothstep(0.58, 0.86, blotch + 0.14 * rail) * smoothstep(0.0, 0.5, d);
     // Runs off the nose: narrow, wandering a little as they fall, fading out where their water gave out.
     float wander = noise(vec2(local.z * 1.3 + k * 2.3, d * 1.7 + k));
     float drip = noise(vec2(local.z * 4.2 + k * 7.7 + 0.8 * wander, k * 0.61));
     float reach = 0.35 + 0.65 * noise(vec2(local.z * 0.9 + 9.0, k * 4.1));
-    float run = smoothstep(0.5, 0.9, drip + 0.2 * blotch) * smoothstep(0.02, 0.2, d) * (1.0 - smoothstep(0.3 * reach, reach, d));
+    float run = smoothstep(0.58, 0.92, drip + 0.2 * blotch) * smoothstep(0.02, 0.2, d) * (1.0 - smoothstep(0.3 * reach, reach, d));
     // What boots and boards kick back: a ragged band at the foot.
     float foot = smoothstep(0.5 + 0.35 * (noise(vec2(local.z * 2.1, k * 5.3)) - 0.5), 1.0, d);
-    float stain = max(max(blot * (0.5 + 0.4 * noise(r * 6.0 + k)), run * 0.5), foot * 0.35);
+    float stain = max(max(blot * (0.5 + 0.4 * noise(r * 6.0 + k)), run * 0.4), foot * 0.25);
     stain = min(1.0, stain * (0.85 + 0.6 * rail));
-    c = mix(c, grime, stain * (0.6 + 0.3 * resolves(r, 3.0)));
+    c = mix(c, grime, stain * (0.5 + 0.25 * resolves(r, 3.0)));
     // The arris rubbed pale and round, chipped back here and there.
     float arris = 1.0 - smoothstep(0.04, 0.16, d);
     float chip = smoothstep(0.8, 0.9, noise(vec2(local.z * 3.3 + k * 11.0, k * 0.37))) * resolves(r, 8.0);
@@ -605,7 +605,7 @@ vec3 lookStairWear(vec3 c, vec3 local, vec3 n) {
     float back = 1.0 - smoothstep(0.0, 0.3 + 0.12 * noise(vec2(local.z * 1.7, k * 3.1)), along);
     float dust = back * (0.35 + 0.4 * ends) + 0.3 * ends * (1.0 - nose);
     dust *= 0.7 + 0.6 * noise(vec2(local.z * 0.8 + k * 5.1, along * 2.0 + k));
-    c = mix(c, c * vec3(0.85, 0.84, 0.81), min(dust, 1.0));
+    c = mix(c, c * vec3(0.89, 0.88, 0.85), min(dust, 1.0));
     // Specks: grit and old gum, gone before they sparkle.
     float specks = resolves(q, 22.0);
     if (specks > 0.0) c *= 1.0 - 0.28 * specks * smoothstep(0.86, 0.96, noise(q * 13.0 + k * 3.0));
