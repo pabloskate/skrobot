@@ -58,7 +58,7 @@ interface Props {
    */
   turn?: (from: SceneCamera, yaw: number, pitch: number) => SceneCamera;
   /** Shown over the picture until the viewer first moves the camera. */
-  hint: string;
+  hint?: string;
   /** Controls laid over the picture. */
   children?: ReactNode;
 }
@@ -221,7 +221,7 @@ export default function StageViewport({ scene, playhead, rate, onCamera, onZoom,
           <div className="explorer-scene-placeholder" />
         )}
       </div>
-      {!orbited && <span className="explorer-orbit-hint" aria-hidden>{hint}</span>}
+      {hint && !orbited && <span className="explorer-orbit-hint" aria-hidden>{hint}</span>}
       {children && (
         // Controls on the picture are pressed, not dragged or tapped through to the stage.
         <div className="explorer-stage-overlay" onPointerDown={(event) => event.stopPropagation()}>
