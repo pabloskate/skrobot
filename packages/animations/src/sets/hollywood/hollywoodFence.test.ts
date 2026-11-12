@@ -320,7 +320,7 @@ describe('Hollywood 16: the avenue', () => {
       expect(z).toBeGreaterThan(HOLLYWOOD_FAR_CURB_Z + 4 * F);
       const lane = Math.floor((HOLLYWOOD_CURB_Z - z) / HOLLYWOOD_LANE_WIDTH);
       // Keeping right: the near lanes run down the stairs' way (+x), the far ones back.
-      expect(car.yaw).toBe(lane < 2 ? 0 : 180);
+      expect(car.yaw).toBe(lane < 3 ? 0 : 180);
       // City speed, 20–40 mph.
       expect(car.speed / ((5280 * F) / 3600)).toBeGreaterThan(20);
       expect(car.speed / ((5280 * F) / 3600)).toBeLessThan(40);

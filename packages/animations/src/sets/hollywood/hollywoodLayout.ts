@@ -34,7 +34,7 @@ export const HOLLYWOOD_BUILDING_TOP = 7.8 * F;
 
 /** The north-facing twelve is more compact and steeper, not a scaled sixteen.
  * Both landings share the scene's estimated sidewalk datum. */
-export const HOLLYWOOD_WALKWAY = 42 * F;
+export const HOLLYWOOD_WALKWAY = 72 * F;
 export const HOLLYWOOD_12_LIP = -HOLLYWOOD_WALKWAY;
 export const HOLLYWOOD_12_STEPS = 12;
 export const HOLLYWOOD_12_DROP = HOLLYWOOD_DROP;
@@ -55,10 +55,10 @@ export const HOLLYWOOD_FENCE_TOP = -HOLLYWOOD_DROP + 7.25 * F;
 export const HOLLYWOOD_FENCE_TIPS = HOLLYWOOD_FENCE_TOP + 7;
 export const HOLLYWOOD_FENCE_START = HOLLYWOOD_12_LIP - HOLLYWOOD_12_RUN - 12 * F;
 export const HOLLYWOOD_FENCE_END = HOLLYWOOD_RUN + 12 * F;
-export const HOLLYWOOD_CURB_Z = HOLLYWOOD_LEFT_Z - 15 * F;
-/** Four eleven-foot lanes, two each way, between the curbs. */
-export const HOLLYWOOD_LANE_WIDTH = 11 * F;
-export const HOLLYWOOD_FAR_CURB_Z = HOLLYWOOD_CURB_Z - 4 * HOLLYWOOD_LANE_WIDTH;
+export const HOLLYWOOD_CURB_Z = HOLLYWOOD_LEFT_Z - 20 * F;
+/** Seven 11.3-foot lanes, including a centre turn lane, between the curbs. */
+export const HOLLYWOOD_LANE_WIDTH = 11.3 * F;
+export const HOLLYWOOD_FAR_CURB_Z = HOLLYWOOD_CURB_Z - 7 * HOLLYWOOD_LANE_WIDTH;
 /** The road, half a foot under the sidewalks (the curbs' height). */
 export const HOLLYWOOD_ROAD_Y = -HOLLYWOOD_DROP - 0.5 * F;
 
@@ -220,7 +220,7 @@ export const HOLLYWOOD_FILMERS: SpotFilmers = {
     fence: {
       line: fenceLine,
       stands: {
-        bottom: { u: 8 * F, z: HOLLYWOOD_CURB_Z + 1.5 * F, height: lower + 2.6 * F, frame: 22 * F, place: 0.45 },
+        bottom: { u: 8 * F, z: HOLLYWOOD_LEFT_Z - 13.5 * F, height: lower + 2.6 * F, frame: 22 * F, place: 0.45 },
         side: { u: 58 * F, z: HOLLYWOOD_FENCE_Z - 5 * F, height: lower + 5.5 * F, frame: 24 * F, place: 0.5 },
         top: { u: 2 * F, z: 3 * F, height: 5 * F, frame: 20 * F, place: 0.5 },
       },

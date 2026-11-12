@@ -12,12 +12,15 @@ import { SET_FOOT } from '../setScale';
  * - `eucalyptus`: a tall campus gum, pale mottled trunk, high drooping crown (45-60 ft).
  * - `ornamental`: a young street tree, thin trunk, a few upright limbs each ending in a loose tuft (12-18 ft).
  * - `fanPalm`: a Mexican fan palm, thin curved trunk, small head of fans over a skirt of dead fronds (50-70 ft).
+ * - `ficus`: an old Los Angeles street fig, smooth grey trunk clear to about 9 ft, stout limbs sweeping
+ *   out into a broad, dense, clipped crown, flat underneath; the crown sits a few feet off the trunk
+ *   toward +z at yaw 0, as street trees clipped back from the traffic grow (30-35 ft).
  *
- * The last three are grown by blender/build_species.py, three variants each.
+ * The last four are grown by blender/build_species.py, three variants each.
  */
-export type TreeSpecies = 'jacaranda' | 'eucalyptus' | 'ornamental' | 'fanPalm';
+export type TreeSpecies = 'jacaranda' | 'eucalyptus' | 'ornamental' | 'fanPalm' | 'ficus';
 
-export const TREE_SPECIES_IDS: readonly TreeSpecies[] = ['jacaranda', 'eucalyptus', 'ornamental', 'fanPalm'];
+export const TREE_SPECIES_IDS: readonly TreeSpecies[] = ['jacaranda', 'eucalyptus', 'ornamental', 'fanPalm', 'ficus'];
 
 /**
  * A tree standing at `at` (the set's coordinates, y up), turned `yaw` degrees.
@@ -103,6 +106,15 @@ export const TREE_SPECIES: Record<TreeSpecies, Species> = {
     ],
     width: 0.1,
     lean: 4,
+  },
+  ficus: {
+    variants: [
+      { height: 10.127, crowns: [[-0.29, 7.35, -1.446, 2.85], [-1.534, 7.35, 1.972, 2.85], [2.048, 7.35, 1.341, 2.85]] },
+      { height: 10.456, crowns: [[0.269, 7.6, -1.159, 2.95], [-2.069, 7.6, 1.627, 2.95], [1.513, 7.6, 2.259, 2.95]] },
+      { height: 9.935, crowns: [[0.161, 7.05, -1.314, 2.7], [-1.843, 7.05, 1.074, 2.7], [1.228, 7.05, 1.615, 2.7]] },
+    ],
+    width: 0.06,
+    lean: 2,
   },
 };
 

@@ -178,3 +178,108 @@ The twelve has its observed center pipe and wall-mounted pipe, with a concrete
 street-side cheek; no extra street-side handrail or fence-gap line is invented.
 The auditorium entrance stairs rise perpendicular to the shared walkway between
 the brick wings. Their detailed dimensions are also estimates.
+
+## 2012 shape pass (November 2026)
+
+The site now uses a 72 ft lip-to-lip platform, sidewalk kerb at z=-28 ft,
+seven 11.3 ft lanes and far kerb at -107.1 ft, in the sixteen's frame.
+The fence filmer previously expressed relative to the kerb remains at z=-21.5 ft.
+The supplied fixed-hardware fingerprint protects each flight in its own frame.
+
+School geometry lives in `hollywoodSchool.ts`: brick wings x=-88.5..-66 and
+-6..16.5, face z=8.07, top y=7.8; eleven entry risers spanning x=-66..-6,
+z=10..21, rising to y=6; capped sloping cheeks, six pale rails, five dark-red
+door bays, shallow canopy, and eight auditorium fins at 12.8 ft spacing.
+The auditorium is x=-108..36, z=25..110, top y=50. Its lower central wall is
+set back to z=31 to preserve the porch. No mural or other artwork is modeled.
+Court roofs occupy x=16.5..50 and -116..-88.5, z=7..36, underside y=1;
+the sixteen's school-side filmer remains clear beneath the roof. A low south
+block closes the walk at x=60..150, z=14..70.
+
+No black pickets remain between x=-69 and -3. Each fixed stair stretch uses
+its original lattice independently; extensions reach x=130 and -148 with
+sagging rails, a south gate division and open north gate leaves 65.5 ft beyond
+the twelve. Its street-side handrail is scenery ink 63 only.
+
+`hollywoodStreet.ts` supplies seven-lane paint, lamps, signals, a low-walled
+parking lot, plain billboard panels and a set-back white block, replacing the
+invented shop row and unsupported hydrant/bin/cabinet. Wells are at x=-112,
+-62,-36,-10,38,62,86 and z=-25.5: x=34 and 60 were shifted to keep trunks
+more than twelve feet from fixed filmers. The trees in them are the `ficus`
+species (see the dress pass below).
+Court interiors, signal heads, distant blocks and lamps remain simple shapes.
+
+## 2012 dress pass (November 2026)
+
+Colour, surface, wear, fixtures and the skyline over the fixed shapes. Nothing
+the rider touches, no filmer stand and no wall, roof or block moved.
+
+- **Palette.** Every paint lives in `hollywoodPalette.ts`, read by eye from
+  refs 01, 02, 15-17, 20, 04-07 (raw 2012 concrete), 41, 42, 38 (brick), 62-66
+  (retaining wall and sidewalk), 11, 28, 33, 50, 54 (auditorium) and 44, 80
+  (road). Nothing is sampled from a photo. The 2025 grey stair paint is left
+  out on purpose. The concrete is a warm pale buff: treads paler toward the
+  nose, risers a shade darker with a rubbed arris and a few drips. The brick is
+  an orange-brown (`#96654e` as the wall's mean) on grey-tan joints
+  (`#a89c8a`), low in contrast as 02, 41 and 42 show it: an earlier deep red
+  on pale joints read as crimson with white lines from every tripod. The road
+  is `#7f7b73`.
+- **Shading drawn into the face.** The retaining wall, the auditorium's
+  parapet streaks and its pebble panels are shaded per vertex in the wall's
+  own plane (`quadCorners`, alpha as AO): rain wash from the coping, rust
+  weeps, a splash band along the sidewalk, and a shadow line inside each fin.
+  None of them is a skin laid over the wall. The props material is
+  double-sided, and a second coplanar layer shades every pixel twice. For the
+  same reason the skyline's window bands are drawn as strips in the face
+  (`bandedFace`), not as glass boxes over stucco.
+- **Pebble panels.** These are the asphalt surface stood upright. Upright
+  faces sample the stones 2.5 times coarser and skip the road's weathered
+  binder (`lookAsphalt(c, q, road)`).
+- **Faces nobody sees are not built.** Box tools take a face list
+  (`'tbfkle'`). Buried bottoms, backs against walls, the faces of distant
+  blocks turned away from every camera, the hidden steps and ends of the entry
+  stair, lamp-post caps and fence-rail ends are all left out. Pickets beyond
+  the fixed stretches are two crossed planes. This keeps the scene at about
+  73.5k baked vertices per flight and the frame time under the shape pass's.
+  If you add a camera behind something, check its faces first.
+- **Wear, only where the photos show it.** Wax and board scuffs at both lips,
+  powerslide streaks on both landings, gum, hairline cracks, a patched slab,
+  rust weeps under the rail and mesh posts, runs down the cheeks and leaves in
+  the gutter. Every ground mark is in the decals layer, and
+  `hollywoodDecals.ts` drops any that would float, sink or lie under a wall.
+- **Street and skyline.** Lantern heads on the posts (50, 54), signal heads
+  on backplates, kerb and gutter grime, tree wells with heaved slabs, worn lane
+  lines, and stains and trench patches on the asphalt surface. Across Highland
+  there is a lot behind a low wall with parked cars, billboards on posts and
+  catwalks carrying plain colour blocks, banded blocks of several heights, and
+  rooftop units. Low blocks and a banded mid-rise close the views up each
+  flight. None of it is a real building, sign, name or logo. It stays off the
+  sidewalk strip (z -28..-8.65 ft) and at least 15 ft from every tree and palm.
+- **Guards.** `hollywoodDress.test.ts` checks that ground marks are only on
+  open paving, that no surfaced solid stands on the three rider lines or
+  within 8 ft of a filmer stand, that the one plate is the only lettering, and
+  that the skyline keeps its clearances. `hollywoodFixed.test.ts` is
+  unchanged.
+- **Street figs.** The seven wells hold the `ficus` species, grown by
+  `props/blender/build_species.py` like the other species (three variants,
+  three crown spheres each, 192 KB): the Indian laurel figs of Street View
+  63-66 and the 2012 clip (07), cut down in 2017. `hollywoodTrees.ts` plants
+  them 30.5-34.5 ft tall with the crown leaning over the sidewalk, and
+  `hollywoodCanopies` spends the look's 16 crown shadows on the spheres whose
+  shade lands on paving that flight's cameras see (the twelve uses 12).
+  `hollywoodTrees.test.ts` keeps trunks 12 ft from every filmer, crowns 13 ft
+  over the sidewalk and clear of the riders and of every tripod's sight line.
+
+### Known gaps
+
+- The fig crowns are shallower than the real ones, which hang to 10-12 ft and
+  hide their limbs; the 13 ft clearance is this model's choice, not a survey.
+- The stage sun throws the crowns' shade toward the street, so only the kerb
+  half of the sidewalk is dappled. In the photos the whole sidewalk is shaded.
+- The twelve is the scene turned half round under the same stage sun, so its
+  light comes from the opposite compass side to the sixteen's.
+- The retaining wall's streaks are faint from the street, the stair concrete
+  is smoother than the photos, and the far side of Highland is generic on
+  purpose: no real building, billboard or name.
+- The auditorium's mural, the 2025 grey stair paint and the apartment block
+  built across the street after 2014 are left out on purpose.

@@ -14,7 +14,7 @@ import {
 const F = SET_FOOT;
 const METRE = SET_FOOT / 0.3048;
 const FILES: Record<TreeSpecies, string> = {
-  jacaranda: 'jacaranda', eucalyptus: 'eucalyptus', ornamental: 'ornamental', fanPalm: 'fan_palm',
+  jacaranda: 'jacaranda', eucalyptus: 'eucalyptus', ornamental: 'ornamental', fanPalm: 'fan_palm', ficus: 'ficus',
 };
 const asset = (name: string) => fileURLToPath(new URL(`./assets/${name}`, import.meta.url));
 
@@ -60,7 +60,7 @@ describe('tree species', () => {
 
   it('models each new species at its real size, in three shapes', () => {
     const feet: Record<Exclude<TreeSpecies, 'jacaranda'>, [number, number]> = {
-      eucalyptus: [45, 60], ornamental: [12, 18], fanPalm: [50, 70],
+      eucalyptus: [45, 60], ornamental: [12, 18], fanPalm: [50, 70], ficus: [30, 35],
     };
     for (const [species, [lo, hi]] of Object.entries(feet) as Array<[keyof typeof feet, [number, number]]>) {
       const { variants } = TREE_SPECIES[species];

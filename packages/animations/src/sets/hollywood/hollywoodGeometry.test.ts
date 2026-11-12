@@ -62,7 +62,7 @@ describe('Hollywood High connected photograph-derived geometry', () => {
     } finally {
       material.dispose();
       built.ground.dispose();
-      built.props.dispose();
+      built.props.dispose(); built.decals.dispose();
     }
   });
 
@@ -100,7 +100,7 @@ describe('Hollywood High connected photograph-derived geometry', () => {
         expect(ray.intersectObject(mesh).some((hit) => hit.point.y > y + 0.2), `${flight} no hidden upper floor (${x}, ${z})`).toBe(false);
       }
     } finally {
-      material.dispose(); built.ground.dispose(); built.props.dispose();
+      material.dispose(); built.ground.dispose(); built.props.dispose(); built.decals.dispose();
     }
   });
 
@@ -125,7 +125,7 @@ describe('Hollywood High connected photograph-derived geometry', () => {
           expect(Math.max(...points.map(([, z]) => z))).toBe(HOLLYWOOD_RIGHT_Z);
         }
       }
-    } finally { built.ground.dispose(); built.props.dispose(); }
+    } finally { built.ground.dispose(); built.props.dispose(); built.decals.dispose(); }
   });
 
   it('keeps sixteen distinct risers across the whole flight at the modeled drop and run', () => {
@@ -154,7 +154,7 @@ describe('Hollywood High connected photograph-derived geometry', () => {
       });
       expect(Math.min(...risers.get(xs[xs.length - 1])!.map(([y]) => y))).toBe(-HOLLYWOOD_DROP);
     } finally {
-      built.ground.dispose(); built.props.dispose();
+      built.ground.dispose(); built.props.dispose(); built.decals.dispose();
     }
   });
 
@@ -179,7 +179,7 @@ describe('Hollywood High connected photograph-derived geometry', () => {
       expect(HOLLYWOOD_LANE_Z).toBeLessThan(0);
       expect(HOLLYWOOD_LANE_Z).toBeGreaterThan(HOLLYWOOD_LEFT_Z);
     } finally {
-      built.ground.dispose(); built.props.dispose();
+      built.ground.dispose(); built.props.dispose(); built.decals.dispose();
     }
   });
 
@@ -203,8 +203,15 @@ describe('Hollywood High connected photograph-derived geometry', () => {
       }
       expect(HOLLYWOOD_12_LANE_Z).toBeGreaterThan(0);
       expect(HOLLYWOOD_12_LANE_Z).toBeLessThan(HOLLYWOOD_RIGHT_Z);
-      expect(built.shadowBoxes.every(({ min, max }) => flight === 'sixteen' ? min[2] >= HOLLYWOOD_BUILDING_FACE : max[2] <= -HOLLYWOOD_BUILDING_FACE)).toBe(true);
-    } finally { built.ground.dispose(); built.props.dispose(); }
+      expect(built.shadowBoxes).toHaveLength(8);
+      const canonical = built.shadowBoxes.map(({ min, max }) => flight === 'sixteen' ? { min, max } : {
+        min: [HOLLYWOOD_12_LIP - max[0], min[1], -max[2]],
+        max: [HOLLYWOOD_12_LIP - min[0], max[1], -min[2]],
+      });
+      expect(canonical).toContainEqual({ min: [-108 * F, -8 * F, 31 * F], max: [36 * F, 50 * F, 110 * F] });
+      expect(canonical.filter(box => box.min[1] === F && box.max[1] === 2 * F)).toHaveLength(2);
+      expect(canonical.filter(box => box.max[1] === 7.8 * F)).toHaveLength(2);
+    } finally { built.ground.dispose(); built.props.dispose(); built.decals.dispose(); }
   });
 
   it('turns the same trees and moving traffic with the scene and places the twelve’s filmers on its street side', () => {
@@ -224,11 +231,11 @@ describe('Hollywood High connected photograph-derived geometry', () => {
     expect(north.filmers!.obstacles?.fence).toBeUndefined();
   });
 
-  it.each(FLIGHTS)('uses finite two-draw geometry within the mobile budget in the %s frame', (flight) => {
+  it.each(FLIGHTS)('uses finite three-bake geometry within the mobile budget in the %s frame', (flight) => {
     const built = buildHollywoodGeometry(flight);
     try {
       let count = 0;
-      for (const geometry of [built.ground, built.props]) {
+      for (const geometry of [built.ground, built.props, built.decals]) {
         const position = geometry.getAttribute('position');
         expect(position.count % 3).toBe(0);
         expect(position.count).toBeGreaterThan(0);
@@ -238,11 +245,13 @@ describe('Hollywood High connected photograph-derived geometry', () => {
         expect(Array.from(geometry.getAttribute('aCorner').array).every(value => value === 0)).toBe(true);
         count += position.count;
       }
-      expect(count).toBeLessThan(140_000);
+      expect(count).toBeLessThan(100_000);
       expect(built.railSegments.length).toBeLessThanOrEqual(48);
       expect(built.shadowBoxes.length).toBeLessThanOrEqual(12);
+      expect(built.contacts.length).toBeLessThanOrEqual(12);
+      expect(built.canopies.length).toBeLessThanOrEqual(16);
     } finally {
-      built.ground.dispose(); built.props.dispose();
+      built.ground.dispose(); built.props.dispose(); built.decals.dispose();
     }
   });
 

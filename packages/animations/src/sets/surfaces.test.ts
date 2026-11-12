@@ -6,7 +6,7 @@ import { Bake, celShade, DAYLIGHT, daylight, daylightIrradiance, NO_INK } from '
 import { rgb, SUN } from '../three/materials';
 import { ClassicSpot3D, type ClassicSpotConfig } from './classicSpot3d';
 import { elToroPropMaterial } from './elToro/elToroMaterials';
-import { canopiesFromTrees, MAX_CANOPIES, MAX_CONTACTS, resolveLook, stairContacts, SURFACE, surfaceInk, surfacesGlsl, type SpotLook } from './surfaces';
+import { canopiesFromTrees, lookSurfaceTest, MAX_CANOPIES, MAX_CONTACTS, resolveLook, stairContacts, SURFACE, surfaceInk, surfacesGlsl, type SpotLook } from './surfaces';
 import { SET_FOOT } from './setScale';
 
 const UP: Vec3 = [0, 1, 0];
@@ -86,7 +86,7 @@ describe('Bake shading', () => {
 });
 
 describe('look helpers', () => {
-  it('builds uninked surface inks for solids 14-21, under the 32 an ink can hold', () => {
+  it('builds uninked surface inks for solids 14-24, under the 32 an ink can hold', () => {
     for (const name of Object.keys(SURFACE) as Array<keyof typeof SURFACE>) {
       const ink = surfaceInk(name);
       expect(ink).toEqual({ id: 0, priority: 0, width: 0, kind: 0, solid: SURFACE[name] });
@@ -98,6 +98,17 @@ describe('look helpers', () => {
   it('adds soil and standing-seam roofing after the earlier surfaces, keeping their ids', () => {
     expect(SURFACE).toMatchObject({ grass: 14, concrete: 15, soil: 20, roofing: 21 });
     expect(new Set(Object.values(SURFACE)).size).toBe(Object.keys(SURFACE).length);
+  });
+
+  it('adds brick and asphalt after lockers, the last solids an ink can hold room for', () => {
+    expect(SURFACE).toMatchObject({ lockers: 22, brick: 23, asphalt: 24 });
+    expect(Math.max(...Object.values(SURFACE))).toBe(SURFACE.asphalt);
+    // Each decodes from a baked face as the shader does.
+    for (const solid of [SURFACE.brick, SURFACE.asphalt]) {
+      const bake = new Bake();
+      bake.quad([0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1], UP, { color: '#808080' }, { ...surfaceInk('concrete'), kind: 3, solid });
+      expect(Math.floor((bake.geometry().getAttribute('aInfo').getW(0) * 255) / 4 + 0.01)).toBe(solid);
+    }
   });
 
   it('places stair contacts at the first riser foot, repeating a tread down', () => {
@@ -128,6 +139,9 @@ describe('look helpers', () => {
     expect(filled).toContain('* 0.900 *');
   });
 });
+
+const BRICK: NonNullable<SpotLook['brick']> = { length: 7.625 / 12, height: 2.25 / 12, joint: 0.375 / 12, mortar: '#c6bbac', paint: '#ae7c64' };
+const ASPHALT: NonNullable<SpotLook['asphalt']> = { scale: 0.03, contrast: 0.16 };
 
 const spotConfig = (look?: SpotLook, extra: Partial<ReturnType<ClassicSpotConfig['build']>> = {}): ClassicSpotConfig => ({
   build: () => {
@@ -178,6 +192,47 @@ describe('the realistic look is opt in', () => {
     }
     // The GLSL itself only arrives through the look source.
     expect(surfacesGlsl(resolveLook({}))).toContain('lookSoil');
+  });
+
+  it('compiles brick and asphalt only for a spot whose look sets them, each falling through to plain paint elsewhere', () => {
+    const own = ['lookBrick', 'lookAsphalt', 'lookJointOver', 'abs(surface - 23.0)', 'abs(surface - 24.0)'];
+    const stock = materials(new ClassicSpot3D(spotConfig()));
+    const plain = materials(new ClassicSpot3D(spotConfig({ propShadows: true, lockers: { door: 1.25, tier: 6, from: 0 } })));
+    for (const m of [...stock, ...plain]) for (const word of own) expect(m.fragmentShader).not.toContain(word);
+    // A look without them dispatches exactly as before.
+    expect(plain[1].fragmentShader).toContain('if (surface > 13.5 && surface < 22.5) {');
+    expect(surfacesGlsl(resolveLook({}))).not.toContain('lookBrick');
+    const both = materials(new ClassicSpot3D(spotConfig({ propShadows: true, brick: BRICK, asphalt: ASPHALT })));
+    for (const m of both) {
+      expect(m.fragmentShader).toContain('vec3 lookBrick(vec3 c, vec2 q, vec3 n, vec3 local)');
+      expect(m.fragmentShader).toContain('vec3 lookAsphalt(vec3 c, vec2 q, bool road)');
+      // Level, it is the road with its weathered binder; upright, the aggregate panels' coarser stones without it.
+      expect(m.fragmentShader).toContain('return lookAsphalt(c, abs(n.y) > 0.5 ? local.xz : q * 0.4, abs(n.y) > 0.5);');
+      expect(m.fragmentShader).toContain('if (surface > 13.5 && surface < 21.5 || abs(surface - 23.0) < 0.5 || abs(surface - 24.0) < 0.5) {');
+      // Asphalt and brick are tested before the solids past roofing.
+      const body = m.fragmentShader.slice(m.fragmentShader.indexOf('vec3 lookSurface('));
+      expect(body.indexOf('return lookAsphalt(')).toBeLessThan(body.indexOf('return lookBrick('));
+      expect(body.indexOf('return lookBrick(')).toBeLessThan(body.indexOf('return lookRoofing('));
+    }
+    // One without the other: the missing one's solid isn't sent to lookSurface, so it stays plain paint.
+    expect(lookSurfaceTest(resolveLook({ brick: BRICK }))).toBe('surface > 13.5 && surface < 21.5 || abs(surface - 23.0) < 0.5');
+    expect(lookSurfaceTest(resolveLook({ asphalt: ASPHALT, lockers: { door: 1, tier: 6, from: 0 } }))).toBe('surface > 13.5 && surface < 22.5 || abs(surface - 24.0) < 0.5');
+    expect(surfacesGlsl(resolveLook({ asphalt: ASPHALT }))).not.toContain('lookBrick');
+    expect(surfacesGlsl(resolveLook({ brick: BRICK }))).not.toContain('lookAsphalt');
+  });
+
+  it('shares a brick face’s paint between brick and mortar, so the wall far off is exactly its paint', () => {
+    const glsl = surfacesGlsl(resolveLook({ brick: BRICK }));
+    const vec = (pattern: RegExp) => glsl.match(pattern)![1].split(',').map(Number);
+    const brick = vec(/vec3 brick = c \* vec3\(([^)]*)\)/), mortar = vec(/vec3 mortar = c \* vec3\(([^)]*)\)/);
+    const bed = BRICK.joint / (BRICK.height + BRICK.joint), head = BRICK.joint / (BRICK.length + BRICK.joint);
+    const share = bed + (1 - bed) * head;
+    for (let i = 0; i < 3; i++) expect((1 - share) * brick[i] + share * mortar[i]).toBeCloseTo(1, 3);
+    // Pale mortar, so the brick itself is deeper than the paint.
+    expect(mortar.every((m) => m > 1)).toBe(true);
+    expect(brick.every((b) => b < 1)).toBe(true);
+    // Courses three to eight inches: modular brick.
+    expect(glsl).toContain(`COURSE = ${(BRICK.height + BRICK.joint).toFixed(4)}`);
   });
 
   it('gives a spot with `look` its surfaces, shadows, contacts, canopies and knobs', () => {
@@ -269,5 +324,8 @@ describe('the realistic look is opt in', () => {
     const look = materials(new ClassicSpot3D(spotConfig({ propShadows: true })));
     expect(fragmentVectors(look[0].fragmentShader) - fragmentVectors(stock.fragmentShader)).toBe(3 * MAX_CONTACTS + MAX_CANOPIES + 4); // + uLook, uDapple and the two counts
     for (const m of look) expect(fragmentVectors(m.fragmentShader)).toBeLessThan(200);
+    // Brick and asphalt are compiled in as constants: no uniforms of their own.
+    const surfaced = materials(new ClassicSpot3D(spotConfig({ propShadows: true, brick: BRICK, asphalt: ASPHALT })));
+    surfaced.forEach((m, i) => expect(fragmentVectors(m.fragmentShader)).toBe(fragmentVectors(look[i].fragmentShader)));
   });
 });

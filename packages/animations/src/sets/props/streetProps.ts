@@ -81,6 +81,14 @@ const TREES: Record<TreeSpecies, TreeAssets> = {
     },
     tiled: true,
   },
+  ficus: {
+    model: new URL('./assets/ficus.glb', import.meta.url).href,
+    textures: {
+      bark: new URL('./assets/ficus_bark.jpg', import.meta.url).href,
+      leaves: new URL('./assets/ficus_leaves.webp', import.meta.url).href,
+    },
+    tiled: true,
+  },
 };
 const CARS = new URL('./assets/cars.glb', import.meta.url).href;
 /** Set units per metre (the sets are laid out in feet of SET_FOOT units). */

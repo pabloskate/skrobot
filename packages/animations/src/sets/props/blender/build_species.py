@@ -14,6 +14,12 @@ reads them by that name).
   upright limbs each ending in a loose tuft, sky between them (12-18 ft).
 - fan_palm: a Mexican fan palm (Washingtonia robusta): thin, slightly curved
   trunk, a small head of fans, a skirt of dead fronds (50-70 ft).
+- ficus: an old Los Angeles street fig (Indian laurel, Ficus microcarpa):
+  pale smooth trunk whitewashed at the foot, roots swelling out of the well,
+  clear to 9-10 ft, then a few stout limbs sweeping up and out into a broad,
+  dense, clipped crown, wider than tall, rounded on top and flat underneath,
+  sitting a little off the trunk toward glTF +z (away from the street when
+  planted at yaw 0) (30-35 ft).
 
     blender -b --factory-startup --python build_species.py -- <out dir> [species ...]
 
@@ -27,7 +33,7 @@ from mathutils import Vector, Matrix
 
 args = sys.argv[sys.argv.index("--") + 1:]
 OUT = args[0]
-WANT = args[1:] or ["eucalyptus", "ornamental", "fan_palm"]
+WANT = args[1:] or ["eucalyptus", "ornamental", "fan_palm", "ficus"]
 os.makedirs(OUT, exist_ok=True)
 UP = Vector((0, 0, 1))
 
@@ -551,6 +557,8 @@ def ornamental(letter, seed):
 
         out = (q - c).normalized() if (q - c).length > 1e-3 else UP.copy()
         n2 = Vector(rng.normal(0, 1, 3)).normalized()
+        if under:  # kept near level, so no card hangs below the clipped underside
+            n2 = (n2 * 0.45 + Vector((0, 0, -1 if n2.z < 0 else 1))).normalized()
         spin = Vector(rng.normal(0, 1, 3)).normalized()
         for n in (out, n2):
             card(leaves, q, n, spin, SIZE * rng.uniform(0.75, 1.2), int(rng.integers(4)), shade, light)
@@ -761,11 +769,307 @@ def fan_palm(letter, seed):
     return bark, leaves, spheres
 
 
+# ---------------------------------------------------------------- ficus
+def ficus_textures(rng):
+    """Bark: two tiles side by side, each tiling round the trunk on its own: u 0-0.5 the bare bark,
+    u 0.5-1 the whitewash painted on the trunk's foot. Leaves: four clumps of small glossy leaves."""
+    h, hw = 512, 128
+
+    half = lambda color: np.full((h, hw, 3), color)
+
+    # Bare bark: smooth, pale grey, softly mottled, ringed with fine wavy wrinkles, a little lichen.
+    bare = half((0.45, 0.42, 0.37))
+    bare = mixc(bare, (0.37, 0.345, 0.31), smooth(0.0, 1.0, fbm(h, hw, 22, rng, 3, stretch=(0.6, 1.0))) * 0.8)
+    bare = mixc(bare, (0.52, 0.50, 0.45), smooth(0.6, 1.4, fbm(h, hw, 10, rng, 3)) * 0.6)
+    bare = mixc(bare, (0.40, 0.42, 0.35), smooth(1.0, 1.7, fbm(h, hw, 7, rng, 3)) * 0.45)
+    wrinkle = noise(h, hw, 1.0, rng, stretch=(1.0, 0.07))
+    bare = mixc(bare, (0.29, 0.27, 0.24), smooth(1.3, 2.3, wrinkle) * 0.6)
+    bare *= (0.96 + 0.04 * fbm(h, hw, 2.0, rng, 2))[..., None]
+    # Whitewash: chalky, brushed up and down, the grey bark showing where it's thin or worn.
+    wash = half((0.64, 0.63, 0.60))
+    thin = smooth(0.5, 1.5, fbm(h, hw, 9, rng, 3, stretch=(0.25, 1.0)))
+    wash = mixc(wash, (0.46, 0.44, 0.40), thin * 0.7)
+    wash *= (0.97 + 0.03 * noise(h, hw, 1.2, rng, stretch=(0.06, 1.0)))[..., None]
+    wash = mixc(wash, (0.54, 0.52, 0.48), smooth(1.4, 2.2, fbm(h, hw, 4, rng, 2)) * 0.5)
+    save(np.concatenate([bare, wash], 1), "ficus_bark.jpg", 82)
+
+    S = 512
+    dark = [(0.14, 0.195, 0.10), (0.16, 0.22, 0.11), (0.12, 0.17, 0.09), (0.18, 0.235, 0.12), (0.15, 0.205, 0.09)]
+    fresh = [(0.25, 0.32, 0.13), (0.29, 0.355, 0.16), (0.23, 0.30, 0.12)]
+    leaf = lambda t: np.sin(math.pi * np.clip(t, 0, 1) ** 0.8) ** 0.6
+    tiles = []
+    # (leaves, share of fresh growth at the rim, how dark the deepest leaves are, twigs)
+    for t, (count, fresh_share, deep) in enumerate([(1050, 0.12, 0.5), (1150, 0.18, 0.5), (800, 0.45, 0.58), (1150, 0.0, 0.42)]):
+        cv = Canvas(S)
+        ph = rng.uniform(0, math.tau, 3)
+        rim = lambda a: 0.43 + 0.035 * math.sin(3 * a + ph[0]) + 0.025 * math.sin(5 * a + ph[1]) + 0.015 * math.sin(8 * a + ph[2])
+        for _ in range(7):
+            a0 = rng.uniform(0, math.tau)
+            pts = [np.array([0.5, 0.5]) + rng.normal(0, 0.05, 2)]
+            for i in range(5):
+                a0 += rng.normal(0, 0.25)
+                pts.append(pts[-1] + np.array([math.cos(a0), math.sin(a0)]) * 0.075)
+            cv.stroke(pts, 0.009, (0.24, 0.22, 0.18))
+        for i in range(count):
+            k = i / count  # painted back to front: earlier is deeper, darker
+            a = rng.uniform(0, math.tau)
+            r = rim(a) * rng.random() ** 0.45
+            at = np.array([0.5 + r * math.cos(a), 0.5 + r * math.sin(a)])
+            color = jitter(rng, dark[rng.integers(len(dark))], 0.08)
+            if rng.random() < fresh_share * (r / rim(a)) ** 2 * (0.4 + k):
+                color = jitter(rng, fresh[rng.integers(len(fresh))], 0.08)
+            color = color * (deep + (1 - deep) * k)
+            ang = a + rng.normal(0, 1.0)
+            length = rng.uniform(0.038, 0.06)
+            width = length * rng.uniform(0.42, 0.55)
+            cv.blade(at, ang, length, width, color, leaf, curve=rng.normal(0, 0.08), rib=0.84, tipshade=0.94)
+            if rng.random() < 0.6:
+                # The gloss: a bluish sheen down one half of the blade.
+                d = np.array([math.cos(ang), math.sin(ang)])
+                p = np.array([-d[1], d[0]]) * width * 0.2 * (1 if rng.random() < 0.5 else -1)
+                sheen = np.clip(color * 1.2 + np.array((0.03, 0.04, 0.05)) * (0.5 + k), 0, 1)
+                cv.blade(at + d * length * 0.15 + p, ang, length * 0.65, width * 0.36, sheen, leaf, rib=1.0)
+        tiles.append(cv.pixels())
+    sheet = atlas(tiles)
+    sheet[..., 3] = sheet[..., 3] > 0.5  # the shader cuts at half: a hard mask stores in half the bytes
+    save(sheet, "ficus_leaves.webp", 70)
+
+
+def fluted(b, pts, radius, sides, vscale, bands):
+    """A tube like Builder.tube, its ring radius `radius(i, angle)` (the trunk's flutes and root flare),
+    textured in bands: (first ring, last ring, u0, u1), the ring between two bands doubled."""
+    frames, frame, s, along = [], None, 0.0, []
+    for i, p in enumerate(pts):
+        t = (pts[min(i + 1, len(pts) - 1)] - pts[max(i - 1, 0)]).normalized()
+        if frame is None:
+            frame = Vector((1, 0, 0)) if abs(t.x) < 0.9 else t.orthogonal().normalized()
+        frame = (frame - t * frame.dot(t)).normalized()
+        frames.append((frame, t.cross(frame)))
+        if i:
+            s += (p - pts[i - 1]).length
+        along.append(s / vscale)
+    for first, last, u0, u1 in bands:
+        rings = []
+        for i in range(first, last + 1):
+            fa, fb = frames[i]
+            ring = []
+            for k in range(sides):
+                a = math.tau * k / sides
+                v = b.bm.verts.new(pts[i] + (fa * math.cos(a) + fb * math.sin(a)) * radius(i, a))
+                v[b.col] = (1.0, 1.0, 1.0, 1.0)
+                ring.append(v)
+            rings.append((ring, along[i]))
+        for (r0, v0), (r1, v1) in zip(rings[:-1], rings[1:]):
+            for k in range(sides):
+                k1 = (k + 1) % sides
+                face = b.bm.faces.new((r0[k], r0[k1], r1[k1], r1[k]))
+                ua, ub = u0 + (u1 - u0) * k / sides, u0 + (u1 - u0) * (k + 1) / sides
+                for loop, uv in zip(face.loops, ((ua, v0), (ub, v0), (ub, v1), (ua, v1))):
+                    loop[b.uv].uv = uv
+                face.smooth = True
+
+
+def bezier(p0, p1, p2, n):
+    return [p0 * (1 - t) ** 2 + p1 * 2 * t * (1 - t) + p2 * t * t for t in (i / n for i in range(n + 1))]
+
+
+def ficus(letter, seed):
+    """An old clipped street fig. The crown is built first as a lumpy flattened ball (lobes on its
+    surface, each a cluster of leaf cards), then the limbs are grown out of the trunk into it."""
+    rng = np.random.default_rng(seed)
+    form = {"a": dict(height=10.2, base=4.5, radius=3.6, clear=2.8, limbs=5, off=0.8, wash=1.05, twin=False),
+            "b": dict(height=10.6, base=4.65, radius=3.8, clear=3.0, limbs=4, off=1.0, wash=0.9, twin=True),
+            "c": dict(height=10.0, base=4.35, radius=3.4, clear=2.6, limbs=6, off=0.6, wash=1.2, twin=False)}[letter]
+    H, B, R = form["height"], form["base"], form["radius"]
+    k = H / 10.0
+    bark, leaves = Builder(), Builder()
+
+    # The crown: off the trunk toward -y (glTF +z), flat underneath from clipping, a full dome on top.
+    off_az = -math.pi / 2 + rng.uniform(-0.25, 0.25)
+    cc = Vector((math.cos(off_az) * form["off"], math.sin(off_az) * form["off"], 0.0))
+    top = H - 1.1 * k  # the skin's top: the corners of the cards on it reach about H
+    top_h = (top - B) * 0.64
+    cc.z = top - top_h
+    bot_h = cc.z - B
+    ph = rng.uniform(0, math.tau, 3)
+
+    def reach(a):
+        return R * (1 + 0.06 * math.sin(2 * a + ph[0]) + 0.05 * math.sin(3 * a + ph[1]) + 0.03 * math.sin(5 * a + ph[2]))
+
+    def surface(d):
+        """The crown's skin in direction `d` (unit) from its middle: a superellipse, squarer below."""
+        a = math.atan2(d.y, d.x)
+        hz = math.sqrt(max(0.0, 1 - d.z * d.z))
+        n = 2.1 if d.z >= 0 else 5.0
+        # Solve hz^n + |z|^n = 1 along the ray (|v| scaled): s * (hz, |z|) on the curve.
+        s = (hz ** n + abs(d.z) ** n) ** (-1 / n)
+        return cc + Vector((d.x * s * reach(a), d.y * s * reach(a), d.z * s * (top_h if d.z >= 0 else bot_h)))
+
+    def outward(p):
+        """The skin's normal near `p`: out of the crown's ellipsoid, flattened below."""
+        q = p - cc
+        a = math.atan2(q.y, q.x)
+        rr = reach(a)
+        vz = top_h if q.z >= 0 else bot_h * 0.6
+        return Vector((q.x / rr ** 2, q.y / rr ** 2, q.z / vz ** 2)).normalized()
+
+    # Lobes: clumps of foliage bulging out of the skin, spread evenly over it (a Fibonacci sphere).
+    n_lobes = int(34 * (R / 3.6) ** 2)
+    golden = math.pi * (3 - math.sqrt(5))
+    lobes = []
+    for i in range(n_lobes):
+        z = 1 - 2 * (i + 0.5) / n_lobes
+        a = i * golden + rng.uniform(-0.3, 0.3)
+        hz = math.sqrt(1 - z * z)
+        d = Vector((hz * math.cos(a), hz * math.sin(a), z + rng.uniform(-0.05, 0.05))).normalized()
+        Lr = rng.uniform(1.3, 1.8) * k
+        lobes.append((surface(d) - outward(surface(d)) * Lr * 0.6, Lr, d))
+
+    SIZE = 1.95 * k
+    clumps = []
+    for c, Lr, d in lobes:
+        out = outward(c)
+        under = d.z < -0.45
+        for _ in range(int(11.5 * (Lr / (1.55 * k)) ** 2) + 2):
+            while True:
+                v = Vector(rng.uniform(-1, 1, 3))
+                if 0.05 < v.length <= 1 and v.normalized().dot(out) > -0.25:
+                    break
+            v = v.normalized() * rng.random() ** 0.3
+            q = c + Vector((v.x * Lr, v.y * Lr, v.z * Lr * (0.55 if under else 0.8)))
+            if under:
+                q.z = max(q.z, B + rng.uniform(0.0, 0.25))
+            clumps.append((q, c, Lr, under))
+
+    for q, c, Lr, under in clumps:
+        rel = q - cc
+        a = math.atan2(rel.y, rel.x)
+        depth = min(1.0, math.sqrt((rel.x ** 2 + rel.y ** 2) / reach(a) ** 2 + rel.z ** 2 / (top_h if rel.z > 0 else bot_h) ** 2))
+        lift = min(1.0, max(0.0, (q.z - B) / (H - B)))
+        shade = (0.5 + 0.5 * depth ** 1.5) * (0.62 + 0.38 * lift)
+
+        def light(p, c=c):
+            return ((p - c).normalized() * 0.3 + outward(p) * 0.7).normalized()
+
+        n1 = (outward(q) + Vector(rng.normal(0, 0.35, 3))).normalized()
+        n2 = Vector(rng.normal(0, 1, 3)).normalized()
+        if under:  # kept near level, so no card hangs below the clipped underside
+            n2 = (n2 * 0.45 + Vector((0, 0, -1 if n2.z < 0 else 1))).normalized()
+        spin = Vector(rng.normal(0, 1, 3)).normalized()
+        if under or depth < 0.7:
+            tiles = (3, int(rng.integers(2)))
+        elif q.z > cc.z and rng.random() < 0.4:
+            tiles = (2, int(rng.integers(2)))
+        else:
+            tiles = (int(rng.integers(2)), 3 if rng.random() < 0.4 else int(rng.integers(2)))
+        # Most clumps get a second card across the first, for depth from every side.
+        crossed = rng.random() < 0.7
+        for n, tile in list(zip((n1, n2), tiles))[:2 if crossed else 1]:
+            card(leaves, q, n, spin, SIZE * rng.uniform(0.85, 1.15), tile, shade, light, flip=rng.random() < 0.5)
+
+    # The trunk: whitewashed at its foot, fluted, its roots flaring out over the well.
+    lean = Vector((cc.x, cc.y, 0)).normalized() * 0.06
+    fork = Vector((0, 0, form["clear"])) + lean * form["clear"]
+    r0 = 0.31 * k
+    flute_ph = rng.uniform(0, math.tau)
+
+    def trunk_r(z, a, r):
+        flare = 0.75 * math.exp(-max(z, 0.0) / 0.4)
+        return r * (1 + flare + (0.07 + 0.25 * flare) * math.cos(5 * a + flute_ph))
+
+    # One trunk, or (b) two grown together from the soil and parting at the fork.
+    if form["twin"]:
+        side = Vector((math.cos(off_az + 1.6), math.sin(off_az + 1.6), 0))
+        stems = [(side * 0.14, side), (-side * 0.14, -side)]
+    else:
+        stems = [(Vector((0, 0, 0)), None)]
+    tops = []
+    for st, side in stems:
+        rs = r0 * (0.74 if side else 1.0)
+        top = fork + (side * 0.42 if side else Vector()) + UP * (rng.uniform(-0.2, 0.2) if side else 0)
+        foot = Vector((st.x, st.y, -0.2))
+        pts = [foot.lerp(top, i / 8) + Vector((rng.normal(0, 0.02), rng.normal(0, 0.02), 0)) * (0 < i < 8) for i in range(9)]
+        if side:  # together to head height, then apart
+            for i, p in enumerate(pts):
+                t = i / 8
+                pts[i] = Vector((st.x * (1 - smooth(0.0, 0.5, np.array(t)).item() * 0.6), st.y * (1 - smooth(0.0, 0.5, np.array(t)).item() * 0.6), p.z)) \
+                    + side * 0.42 * smooth(0.5, 1.0, np.array(t)).item() + (top - fork - side * 0.42) * t
+        cut = max(2, min(7, int(round((form["wash"] + 0.2) / (top.z + 0.2) * 8))))
+        radius = lambda i, a, pts=pts, rs=rs, top=top: trunk_r(pts[i].z, a, rs * (1 - 0.18 * pts[i].z / top.z))
+        fluted(bark, pts, radius, 12, 4 * math.tau * rs, [(0, cut, 0.5, 1.0), (cut, len(pts) - 1, 0.0, 0.5)])
+        tops.append((pts[-1], side, rs * 0.82))
+    # Surface roots, swelling out of the soil past the well's edge.
+    for i in range(int(rng.integers(4, 7))):
+        a = i / 5 * math.tau + rng.uniform(-0.4, 0.4)
+        out = Vector((math.cos(a), math.sin(a), 0))
+        L = rng.uniform(0.45, 0.8) * k
+        pts = [out * r0 * 0.6 + UP * 0.18, out * (r0 + L * 0.35) + UP * 0.06, out * (r0 + L * 0.7) + UP * 0.02, out * (r0 + L) - UP * 0.08]
+        bark.tube(pts, [0.15 * k, 0.1 * k, 0.065 * k, 0.04 * k], 5, 4 * math.tau * 0.1, 0.0, 0.5)
+
+    # Limbs: stout, nearly as thick as the trunk they split from, sweeping out low under the crown,
+    # then boughs off them turning up into it.
+    def limb(pts, ra, rb, sides):
+        bark.tube(pts, [ra + (rb - ra) * i / (len(pts) - 1) for i in range(len(pts))], sides, 4 * math.tau * max(ra, 0.05), 0.0, 0.5)
+
+    n_l = form["limbs"]
+    l_az0 = rng.uniform(0, math.tau)
+    for l in range(n_l):
+        az = l_az0 + l / n_l * math.tau + rng.uniform(-0.35, 0.35)
+        dirh = Vector((math.cos(az), math.sin(az), 0))
+        top, side, rs = max(tops, key=lambda tp: dirh.dot(tp[1]) if tp[1] else 0)
+        start = top - UP * 0.2 + dirh * rs * 0.3
+        tip = Vector((cc.x, cc.y, 0)) + dirh * reach(az) * rng.uniform(0.62, 0.82)
+        tip.z = B + rng.uniform(0.3, 1.1) * k
+        horiz = (Vector((tip.x, tip.y, 0)) - Vector((start.x, start.y, 0))).length
+        tilt = math.radians(rng.uniform(55, 68))
+        ctrl = start + (dirh * math.sin(tilt) + UP * math.cos(tilt)) * horiz * 0.7
+        ctrl.z = min(ctrl.z, B - 0.35)
+        pts = bezier(start, ctrl, tip, 6)
+        limb(pts, rs * rng.uniform(0.66, 0.78), 0.07 * k, 7)
+        # Two or three boughs off its outer half, up into the lobes round and above its end.
+        for j in range(int(rng.integers(2, 4))):
+            i = min(len(pts) - 2, int(rng.uniform(0.5, 0.9) * (len(pts) - 1)))
+            at = pts[i]
+            baz = az + rng.uniform(-1.0, 1.0)
+            aim = at + Vector((math.cos(baz), math.sin(baz), rng.uniform(0.5, 1.2))) * 2.5
+            goal = min(lobes, key=lambda lb: (lb[0] - aim).length)[0] + Vector(rng.normal(0, 0.3, 3))
+            limb(bezier(at, at.lerp(goal, 0.5) + UP * 0.3, goal, 3), 0.09 * k, 0.03 * k, 4)
+
+    spheres = ficus_spheres(np.array([v.co[:] for v in leaves.bm.verts]), np.array([q[:] for q, _, _, _ in clumps]), B)
+    return bark, leaves, spheres
+
+
+def ficus_spheres(corners, clumps, floor):
+    """Three equal crown spheres resting on the clipped underside (none hangs below it: they cast the
+    shade, and the look has 16 for a whole spot), round the crown's middle: the smallest that holds
+    nine in ten of the leaf cards' corners within 1.25 radii, reaching no farther out than the leaves."""
+    mid = clumps[:, :2].mean(0)
+    out = np.percentile(np.linalg.norm(corners[:, :2], axis=1), 97)
+    for r in np.arange(2.4, 6.0, 0.05):
+        best = None
+        for d in np.arange(0.3, 3.0, 0.1):
+            for turn in np.linspace(0, math.tau / 3, 12, endpoint=False):
+                centres = [np.array([*(mid + d * np.array([math.cos(turn + j * math.tau / 3), math.sin(turn + j * math.tau / 3)])), floor + r])
+                           for j in range(3)]
+                if max(np.linalg.norm(c[:2]) for c in centres) + r > out:
+                    continue
+                held = np.zeros(len(corners), bool)
+                for c in centres:
+                    held |= np.linalg.norm(corners - c, axis=1) <= 1.25 * r
+                if best is None or held.mean() > best[0]:
+                    best = (held.mean(), centres)
+        if best and best[0] >= 0.9:
+            print("FICUS spheres r", round(r, 2), "held", round(best[0], 3), "reach", round(out, 2))
+            return [(c, r) for c in best[1]]
+    raise RuntimeError("no spheres hold the crown")
+
+
 # ---------------------------------------------------------------- build
 SPECIES = {
     "eucalyptus": (eucalyptus_textures, eucalyptus, 11),
     "ornamental": (ornamental_textures, ornamental, 23),
     "fan_palm": (palm_textures, fan_palm, 37),
+    "ficus": (ficus_textures, ficus, 41),
 }
 crowns_path = os.path.join(OUT, "crowns.json")
 crowns = json.load(open(crowns_path)) if os.path.exists(crowns_path) else {}

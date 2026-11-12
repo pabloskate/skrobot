@@ -9,6 +9,7 @@ Built by the scripts in `../blender/`; don't edit by hand.
 | `eucalyptus.glb`, `eucalyptus_bark.jpg`, `eucalyptus_leaves.webp` | Original, grown by `build_species.py`: three tall campus gums (45-60 ft), pale mottled trunks, high drooping crowns. |
 | `ornamental.glb`, `ornamental_bark.jpg`, `ornamental_leaves.webp` | Original, grown by `build_species.py`: three young street trees (12-18 ft), thin trunks forking at half height into loose, open tufts. |
 | `fan_palm.glb`, `fan_palm_bark.jpg`, `fan_palm_leaves.webp` | Original, grown by `build_species.py`: three Mexican fan palms (50-70 ft), thin curved trunks, small grey-green fan heads over skirts of dead fronds. |
+| `ficus.glb`, `ficus_bark.jpg`, `ficus_leaves.webp` | Original, grown by `build_species.py`: three Indian laurel figs (30-35 ft), the clipped Los Angeles street tree: broad flat-bottomed crowns of small dark glossy leaves on stout limbs, a fluted grey trunk whitewashed at its foot, roots lifting the well. The bark texture's left half is bare bark, its right half the whitewash. |
 
 The `build_species.py` models and textures are procedural: no scans or photos.
 Each GLB holds three variants as node pairs `a_bark`/`a_leaves`, `b_bark`/... .
@@ -25,12 +26,12 @@ Poly Haven assets are CC0: no attribution required.
 # The tree: download Poly Haven's jacaranda_tree glTF (1k) first.
 blender -b --factory-startup --python ../blender/build_tree.py -- <jacaranda_tree.gltf> <work dir> jacaranda
 blender -b --factory-startup --python ../blender/build_cars.py -- <work dir>
-# The other species (all three, or name some: eucalyptus ornamental fan_palm):
+# The other species (all four, or name some: eucalyptus ornamental fan_palm ficus):
 blender -b --factory-startup --python ../blender/build_species.py -- <work dir>
 # Then meshopt-compress each *.raw.glb into this folder (positions and UVs kept float):
 npx gltfpack@0.24.0 -i <work dir>/jacaranda.raw.glb -o jacaranda.glb -c -vpf -vtf -vn 10 -kn -km -kv
 npx gltfpack@0.24.0 -i <work dir>/cars.raw.glb -o cars.glb -c -vpf -vn 10 -kn -km -kv
-for t in eucalyptus ornamental fan_palm; do
+for t in eucalyptus ornamental fan_palm ficus; do
   npx gltfpack@0.24.0 -i <work dir>/$t.raw.glb -o $t.glb -c -vpf -vtf -vn 10 -kn -km -kv
 done
 # and copy the trees' textures (*_trunk/_branches/_bark.jpg, *_leaves.webp) here.

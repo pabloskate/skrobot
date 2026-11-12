@@ -41,6 +41,18 @@ export const SURFACE = {
    * each. Only a spot whose look sets `lockers` compiles it; elsewhere it falls through to roofing.
    */
   lockers: 22,
+  /**
+   * Running-bond face brick with recessed mortar, on a wall of any facing, the face's paint its mean colour. Only a
+   * spot whose look sets `brick` compiles it; elsewhere a face carrying it is shaded as plain paint.
+   */
+  brick: 23,
+  /**
+   * Street asphalt, projected from above: fine aggregate close up, tone drifting over yards, the face's paint its
+   * mean (paint wheel paths darker, patches another grey). On an upright face it reads as exposed-aggregate
+   * panels, its stones two and a half times coarser. Only a spot whose look sets `asphalt` compiles it; elsewhere a
+   * face carrying it is shaded as plain paint.
+   */
+  asphalt: 24,
 } as const;
 export type SurfaceName = keyof typeof SURFACE;
 
@@ -139,6 +151,19 @@ export interface SpotLook {
    */
   lockers?: { door: number; tier: number; from: number };
   /**
+   * The brick surface (SURFACE.brick), in feet: each brick `length` long and `height` high, laid with `joint`
+   * mortar between them, the courses counted from height 0 so walls on every facing line up. A face's paint is
+   * the wall's mean colour, brick and mortar together; `mortar` is the mortar's colour on a wall painted `paint`,
+   * so a wall painted darker or paler keeps the same balance. `spread` is how far one brick's tone wanders from
+   * the next (default 0.1).
+   */
+  brick?: { length: number; height: number; joint: number; mortar: string; paint: string; spread?: number };
+  /**
+   * The asphalt surface (SURFACE.asphalt): `scale` the aggregate's stone size in feet, `contrast` how much the
+   * stones stand out of the binder (small: 0.1 to 0.2).
+   */
+  asphalt?: { scale: number; contrast: number };
+  /**
    * Leaves patterned in three dimensions on foliage masses (solid 13). The stock pattern is one flat projection,
    * which stripes a rounded shrub down its sides; a spot planted with modelled shrubs asks for this instead.
    */
@@ -169,6 +194,8 @@ export function resolveLook(look: SpotLook) {
     gum: look.gum,
     mortar: look.mortar,
     lockers: look.lockers,
+    brick: look.brick,
+    asphalt: look.asphalt,
     foliage: look.foliage ?? false,
   };
 }
@@ -199,13 +226,23 @@ export function stairContacts(x0: number, y0: number, z0: number, z1: number, tr
 const vec3s = (c: readonly number[]) => `vec3(${c.map((v) => v.toFixed(3)).join(', ')})`;
 
 /**
+ * Which solids the look's shaders send to lookSurface (GLSL, `surface` the face's solid): 14 to roofing, lockers
+ * when the spot sets them, and brick and asphalt each only where the spot sets it. Any other solid keeps the stock
+ * paint shading, so a face tagged with a surface its spot doesn't configure is plain paint.
+ */
+export function lookSurfaceTest(look: Partial<Pick<Look, 'lockers' | 'brick' | 'asphalt'>>) {
+  const own = [look.brick ? ' || abs(surface - 23.0) < 0.5' : '', look.asphalt ? ' || abs(surface - 24.0) < 0.5' : ''].join('');
+  return `surface > 13.5 && surface < ${look.lockers ? '22.5' : '21.5'}${own}`;
+}
+
+/**
  * Procedural surfaces, chosen by solid (14-21), in the look's fill light. Needs
  * EL_TORO_NOISE (hash, noise, weather, grain), SUN and three's
  * cameraPosition. `q` is the face's planar coordinate in feet, `local` its
  * position in feet, `n` its normal, `world` the stage position.
  * Every feature finer than a pixel fades (grain's own fade, or `resolves`).
  */
-export function surfacesGlsl(look: Pick<Look, 'sky' | 'bounce'> & Partial<Pick<Look, 'propShadows' | 'marks' | 'markDepth' | 'stairs' | 'gum' | 'mortar' | 'lockers'>>) {
+export function surfacesGlsl(look: Pick<Look, 'sky' | 'bounce'> & Partial<Pick<Look, 'propShadows' | 'marks' | 'markDepth' | 'stairs' | 'gum' | 'mortar' | 'lockers' | 'brick' | 'asphalt'>>) {
   const flat = [0, 1, 2].map((i) => SUN.y * DAYLIGHT.sunTint[i] + look.sky * DAYLIGHT.skyTint[i]);
   // With prop shadows, glass looks for the boxes its reflection runs into (an eave over the window).
   const reflectBlocked = look.propShadows
@@ -221,6 +258,11 @@ export function surfacesGlsl(look: Pick<Look, 'sky' | 'bounce'> & Partial<Pick<L
   const gum = look.gum ? '  c = lookGum(c, q, flatwork);\n' : '';
   const stairs = look.stairs ? '  if (surface < 15.5) return lookStairWear(lookConcrete(c, q, n), local, n);\n' : '';
   const lockers = look.lockers ? '  if (surface > 21.5) return lookLockers(c, q, n);\n' : '';
+  // Asphalt and brick come before lockers, which take every solid past roofing.
+  // Upright, it is a wall of exposed aggregate: the same stones read two and a half times as coarse, without the
+  // road's weathered binder.
+  const asphalt = look.asphalt ? '  if (surface > 23.5) return lookAsphalt(c, abs(n.y) > 0.5 ? local.xz : q * 0.4, abs(n.y) > 0.5);\n' : '';
+  const brick = look.brick ? '  if (surface > 22.5) return lookBrick(c, q, n, local);\n' : '';
   const mortar = look.mortar
     ? `mix(c, c * ${vec3s(rgb(look.mortar).map((v, i) => v / rgb('#bda17e')[i]))}, joint)`
     : 'c * (1.0 - 0.32 * joint)';
@@ -508,7 +550,7 @@ vec3 lookRoofing(vec3 c, vec3 n, vec3 local) {
   return c * (1.0 + 0.22 * ridge - 0.38 * shade);
 }
 
-${look.stairs ? lookStairWearGlsl(look.stairs) : ''}${look.lockers ? lookLockersGlsl(look.lockers) : ''}vec3 lookSurface(vec3 c, float surface, vec2 q, vec3 n, vec3 world, vec3 local) {
+${look.stairs ? lookStairWearGlsl(look.stairs) : ''}${look.lockers ? lookLockersGlsl(look.lockers) : ''}${look.brick ? lookBrickGlsl(look.brick) : ''}${look.asphalt ? lookAsphaltGlsl(look.asphalt) : ''}vec3 lookSurface(vec3 c, float surface, vec2 q, vec3 n, vec3 world, vec3 local) {
   // Turf is projected from above, so a steep bank never stretches it or seams where faces turn.
   if (surface < 14.5) return lookGrass(c, local.xz);
 ${stairs}  if (surface < 15.5) return lookConcrete(c, q, n);
@@ -518,7 +560,7 @@ ${stairs}  if (surface < 15.5) return lookConcrete(c, q, n);
   if (surface < 19.5) return lookSiding(c, q, n);
   // Soil, like turf, is projected from above.
   if (surface < 20.5) return lookSoil(c, local.xz, n);
-${lockers}  return lookRoofing(c, n, local);
+${asphalt}${brick}${lockers}  return lookRoofing(c, n, local);
 }
 `;
 }
@@ -661,6 +703,111 @@ vec3 lookLockers(vec3 c, vec2 q, vec3 n) {
   // The gaps round every door: a dark line, filtered so a far bank settles into its average tone.
   float gap = max(lookJoint(q.x, ${num(door)}, 0.04), lookJoint(q.y - ${num(from)}, ${num(tier)}, 0.04));
   return c * (1.0 - 0.6 * gap);
+}
+`;
+}
+
+/**
+ * Face brick in running bond (SpotLook.brick, SURFACE.brick), from the photographs of Hollywood High's walls (refs
+ * there: 41, 42, 38, 12): bricks each a touch their own tone and hue, the odd one flashed dark or burnt pale, pale
+ * mortar a little recessed, so where the sun slants across the face the brick above shades the top of each bed
+ * joint. q is the face's plan and local its position, both in feet. Brick and mortar share out the face's paint, so
+ * once the bricks, then the courses, are too fine to resolve, the wall settles into exactly its paint: every
+ * feature fades into its mean before it can shimmer.
+ */
+function lookBrickGlsl({ length, height, joint, mortar, paint, spread = 0.1 }: NonNullable<SpotLook['brick']>) {
+  const period = length + joint, course = height + joint;
+  // How much of the face is mortar: every bed joint, and the head joints in the courses between them.
+  const bedShare = joint / course, headShare = joint / period;
+  const share = bedShare + (1 - bedShare) * headShare;
+  const mortarRatio = rgb(mortar).map((v, i) => v / rgb(paint)[i]);
+  const brickRatio = mortarRatio.map((m) => (1 - share * m) / (1 - share));
+  // One brick in thirty flashed darker in the kiln, one in eighteen burnt pale; scaled out so the bricks average 1.
+  const dark = [0.8, 0.74, 0.76], pale = [1.1, 1.1, 1.07];
+  const oddMean = dark.map((d, i) => 1 + 0.033 * (d - 1) + 0.055 * (pale[i] - 1));
+  const vec3n = (c: readonly number[]) => `vec3(${c.map(num).join(', ')})`;
+  return /* glsl */ `// Face brick: see lookBrickGlsl. A joint box-filtered over w, its coordinate's footprint, rather than its own fwidth.
+float lookJointOver(float x, float period, float width, float w) {
+  float h = max(w, 1e-4) * 0.5;
+  return clamp((lookJointArea(x + h, period, width) - lookJointArea(x - h, period, width)) / (2.0 * h), 0.0, 1.0);
+}
+vec3 lookBrick(vec3 c, vec2 q, vec3 n, vec3 local) {
+  // A cap or sill on a brick wall is cast, not laid.
+  if (abs(n.y) > 0.5) return lookConcrete(c, q, n);
+  const float PERIOD = ${num(period)}, COURSE = ${num(course)}, JOINT = ${num(joint)}, RECESS = ${num(0.4 * joint)};
+  // Along the wall whichever way it faces, so a brick is its own length on every facing, and up it from height 0,
+  // so the courses carry round every corner.
+  vec2 t = normalize(vec2(-n.z, n.x));
+  float along = dot(local.xz, t), up = local.y;
+  float row = floor(up / COURSE);
+  float x = along + 0.5 * PERIOD * mod(row, 2.0);
+  vec2 b = vec2(x, up);
+  // Footprints along and up the wall apart: a raking view keeps its courses after the bricks' ends have gone.
+  float wx = fwidth(along), wy = fwidth(up);
+  float bricksSeen = 1.0 - smoothstep(0.18, 0.55, max(wx / PERIOD, wy / COURSE));
+  float bedSeen = 1.0 - smoothstep(0.25, 0.6, wy / COURSE), headSeen = 1.0 - smoothstep(0.25, 0.6, wx / PERIOD);
+  float bed = mix(${num(bedShare)}, lookJointOver(up, COURSE, JOINT, wy), bedSeen);
+  float head = mix(${num(headShare)}, lookJointOver(x, PERIOD, JOINT, wx), headSeen);
+  float joint = bed + (1.0 - bed) * head;
+  // The wall's tone drifts a little over yards, as one delivery of brick ran into the next.
+  c *= 0.97 + 0.06 * weather(vec2(along, up) * 0.07 + 5.0);
+  // Each brick its own: tone wandering about the mean, a little more orange or more rose-brown, the odd one
+  // flashed or pale; across its face a cloudy fire skin, one end often darker where it stood nearer the fire, and
+  // iron specks. Each detail is zero on average, so it fades into nothing.
+  vec2 id = vec2(floor(x / PERIOD), row);
+  float h = hash(id + 3.7), hue = hash(id.yx + 11.3) - 0.5, odd = hash(id + 29.1);
+  vec3 own = (1.0 + ${num(spread)} * (2.0 * h - 1.0)) * vec3(1.0 + 0.09 * hue, 1.0, 1.0 - 0.09 * hue);
+  own *= mix(vec3(1.0), ${vec3n(dark)}, step(0.967, odd)) * mix(vec3(1.0), ${vec3n(pale)}, step(odd, 0.055)) / ${vec3n(oddMean)};
+  float flash = (hash(id + 47.0) - 0.5) * (2.0 * fract(x / PERIOD) - 1.0);
+  own *= 1.0 + resolves(b, 5.0) * (0.12 * (noise(b * 5.0 + id * 3.1) - 0.5) + 0.16 * flash);
+  own *= 1.0 - 0.35 * resolves(b, 30.0) * (smoothstep(0.84, 0.94, noise(b * 30.0 + id * 7.3)) - 0.0287);
+  vec3 brick = c * ${vec3n(brickRatio)} * mix(vec3(1.0), own, bricksSeen) * (1.0 + 0.12 * grain(b * 34.0));
+  vec3 mortar = c * ${vec3n(mortarRatio)} * (1.0 + 0.1 * grain(b * 22.0));
+  vec3 color = mix(brick, mortar, joint);
+  // The recess: where the sun slants across the face, the brick above shades the top of its bed joint and the
+  // brick on the sun's side one edge of each head joint, as deep as the slant allows; filtered and faded as the
+  // joints are, and gone where the sun is off the face.
+  float lit = dot(n, SUN);
+  if (lit > 0.0) {
+    float side = dot(vec3(t.x, 0.0, t.y), SUN);
+    float sy = min(JOINT, RECESS * SUN.y / lit), sx = min(JOINT, RECESS * abs(side) / lit);
+    float bedShade = mix(sy / COURSE, lookJointOver(up - 0.5 * (JOINT - sy), COURSE, sy, wy), bedSeen);
+    float headShade = mix(sx / PERIOD, lookJointOver(x - sign(side) * 0.5 * (JOINT - sx), PERIOD, sx, wx), headSeen);
+    color += (lookLit(mortar, n, 1.0, 1.0) - mortar) * (bedShade + (1.0 - bed) * headShade);
+  }
+  return color;
+}
+`;
+}
+
+/**
+ * Street asphalt (SpotLook.asphalt, SURFACE.asphalt), seen from above, from the photographs of Highland Avenue
+ * (refs at Hollywood High: 44, 13, 36, 09): old, sun-greyed binder with its stones worn into view, the tone
+ * drifting over yards. q is the plan in feet. The face's paint is the mean; every feature subtracts its own mean
+ * (the noise's measured share at that threshold), so as it fades with distance the road keeps exactly that tone.
+ */
+function lookAsphaltGlsl({ scale, contrast }: NonNullable<SpotLook['asphalt']>) {
+  return /* glsl */ `// Street asphalt: see lookAsphaltGlsl.
+vec3 lookAsphalt(vec3 c, vec2 q, bool road) {
+  const float STONE = ${num(scale)}, CONTRAST = ${num(contrast)};
+  if (road) {
+    // Older, sun-bleached binder paler and fresher or oil-soaked patches darker, over yards, then over a few feet.
+    c *= 0.89 + 0.22 * weather(q * 0.03 + 3.0) + 0.08 * (noise(q * 0.13 + 9.0) - 0.5);
+    // Ravelled and closed over a foot or so: the binder worn back from the stones in soft blotches.
+    c *= 1.0 + 0.06 * resolves(q, 1.2) * (noise(q * 0.85 + 4.0) - 0.5);
+  }
+  vec2 r1 = mat2(0.8, -0.6, 0.6, 0.8) * q / STONE, r2 = mat2(0.28, 0.96, -0.96, 0.28) * q / STONE;
+  // Stones a few together, where the mix came out more open or more closed.
+  c *= 1.0 + 0.6 * CONTRAST * resolves(q, 0.25 / STONE) * (noise(r1 * 0.25 + 1.3) - 0.5);
+  // Worn-through stones, pale and a little warm, the odd bigger one among them, and dark voids between them.
+  float stones = resolves(q, 1.0 / STONE);
+  if (stones > 0.0) {
+    float pale = smoothstep(0.72, 0.86, noise(r1 + 7.0)) - 0.1094 + 0.8 * (smoothstep(0.8, 0.92, noise(r2 * 0.5 + 3.0)) - 0.0492);
+    float dark = smoothstep(0.3, 0.16, noise(r2 * 1.6 + 2.0)) - 0.1226;
+    c *= 1.0 + stones * CONTRAST * (1.5 * pale * vec3(1.03, 1.0, 0.96) - 1.2 * dark);
+  }
+  // Sand between them, fading on its own.
+  return c * (1.0 + 0.8 * CONTRAST * grain(r2 * 2.7));
 }
 `;
 }
