@@ -130,9 +130,11 @@ function withLook(material: ShaderMaterial, look: ReturnType<typeof resolveLook>
   if (look.light === 'shader') fragment = swap(fragment, 'if (vBand.x < 1.5) color *= 0.67 + 0.34 * max(dot(n, SUN), 0.0);', 'color *= lookDaylight(n);');
   // Glass carries its own light (a reflection isn't shaded); every other surface is lit, then textured.
   // Lockers (solid 22) are a surface only where the spot compiles them in; elsewhere solids stop at roofing.
-  const lastSurface = look.lockers ? '22.5' : '21.5';
+  // Sash (solid 23) the same; like glass, it lights its own bars.
+  const lastSurface = look.sash ? '23.5' : look.lockers ? '22.5' : '21.5';
+  const unlit = look.sash ? 'abs(surface - 16.0) > 0.5 && surface < 22.5' : 'abs(surface - 16.0) > 0.5';
   fragment = swap(fragment, 'if (id >= 60.0 && id <= 69.0) {', /* glsl */ `if (surface > 13.5 && surface < ${lastSurface}) {
-          if (abs(surface - 16.0) > 0.5) ${sunlit}
+          if (${unlit}) ${sunlit}
           color = lookSurface(color, surface, p / ${SET_FOOT.toFixed(1)}, n, vWorld, vLocal / ${SET_FOOT.toFixed(1)});
         } else if (id >= 60.0 && id <= 69.0) {`);
   // Block walls: courses and joints.

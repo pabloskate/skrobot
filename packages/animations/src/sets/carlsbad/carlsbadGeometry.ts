@@ -22,7 +22,7 @@ import {
   carlsbadLawnBounds,
   carlsbadToeTop,
 } from './carlsbadLayout';
-import { stairContacts, SURFACE, type ContactLine } from '../surfaces';
+import { stairContacts, SURFACE, type ContactLine, type SpotLook } from '../surfaces';
 import { mixHex, PAVING, pavingColor, turfColor, valueNoise, type PavingPart } from './carlsbadWear';
 const tag = (solid: number, id = 0): Ink => ({
   solid,
@@ -253,7 +253,9 @@ function stairs(p: Bake, marks: Bake, rails: Segment[]) {
       quad(p, [a[0], 0, a[2]], [c[0], 0, c[2]], c, a, concrete, 15);
     }
     const low = carlsbadCheekTop(11 * F) / F;
-    box(p, point(11, -6, z - 0.45), point(12.2, low, z + 0.45), concrete, 15);
+    // The foot block stands an eighth of an inch proud of the terrain's cheek top and its step down to the
+    // landing: flush, the two coplanar faces z-fought into a flickering patch as the camera moved.
+    box(p, point(11, -6, z - 0.45), point(12.21, low + 0.01, z + 0.45), concrete, 15);
     const spine: Vec3[] = [];
     // P crook rises over the head post and returns to the descending pipe.
     const top: [[number, number], ...[number, number][]] = [
@@ -329,10 +331,26 @@ function wingFloor(p: Bake, u0: number, u1: number, v0: number, v1: number, y: n
   };
   p.quad(at(u0, v0), at(u1, v0), at(u1, v1), at(u0, v1), [0, 1, 0], { color }, tag(solid));
 }
+/** The wing's glazed bays: five 4.5 ft windows from u = 5.05, the run repeating every 41.6 ft down the wing. */
+const BAY = { from: 5.05, width: 4.5, period: 41.6, sill: 3.9, head: 8 } as const;
+/**
+ * The wing windows' pale steel sash, for the look to draw on their glass (SpotLook.sash): jambs, two mullions,
+ * head and sill rails and three transoms (refs/163's small panes). Bars an inch wide built as faces flickered in
+ * and out at a distance; drawn per pixel they settle into the window's average tone.
+ */
+export const CARLSBAD_SASH = {
+  yaw: CARLSBAD_WING_YAW,
+  from: BAY.from,
+  period: BAY.period,
+  width: BAY.width,
+  columns: [[-0.12, 0.12], [BAY.width - 0.12, BAY.width + 0.12], [BAY.width / 3 - 0.035, BAY.width / 3 + 0.035], [(2 * BAY.width) / 3 - 0.035, (2 * BAY.width) / 3 + 0.035]],
+  rows: [[BAY.sill, BAY.sill + 0.12], [BAY.head - 0.12, BAY.head], [5.27, 5.34], [6.12, 6.19], [7.02, 7.09]],
+  frame: '#e4e1d6',
+} satisfies NonNullable<SpotLook['sash']>;
 /** Facade paint, circa 2000 (refs/163, 03): cream render, a paler band below the sills, pale frames, dark doors. */
 const FACADE = {
   wainscot: '#e2ddd0',
-  frame: '#e4e1d6',
+  frame: CARLSBAD_SASH.frame,
   sill: '#5d665a',
   door: '#4f3f2e',
   doorFrame: '#3b3328',
@@ -350,8 +368,8 @@ function hallwayWing(p: Bake, shadows: ShadowBox[]) {
       if(u>-138) openings.push({a:u-1.75,b:u+1.75,sill:0,head:7,door:true});
     }
     for(let i=0;i<5;i++) {
-      const u=5.05+i*4.5-repeat*41.6;
-      if(u>-140) openings.push({a:u,b:u+4.5,sill:3.9,head:8,door:false});
+      const u=BAY.from+i*BAY.width-repeat*BAY.period;
+      if(u>-140) openings.push({a:u,b:u+BAY.width,sill:BAY.sill,head:BAY.head,door:false});
     }
   }
   openings.sort((a,b)=>a.a-b.a);
@@ -367,7 +385,7 @@ function hallwayWing(p: Bake, shadows: ShadowBox[]) {
     if(o.a>last+1e-8) blank(last,o.a);
     if(o.sill) wb([o.a,0,-17],[o.b,o.sill,-16.7],FACADE.wainscot);
     wb([o.a,o.head,-17],[o.b,9.4,-16.7]);
-    wb([o.a,o.sill,-16.95],[o.b,o.head,-16.88],o.door?FACADE.door:'#1d1713',o.door?18:16);
+    wb([o.a,o.sill,-16.95],[o.b,o.head,-16.88],o.door?FACADE.door:'#1d1713',o.door?18:SURFACE.sash);
     if (o.door) {
       // Dark steel frame, a kick plate, the room number plaque and a threshold onto the walk.
       for (const [u0,u1] of [[o.a,o.a+0.16],[o.b-0.16,o.b]]) wingQuad(p,u0,u1,0,o.head,fv,FACADE.doorFrame,18);
@@ -378,12 +396,7 @@ function hallwayWing(p: Bake, shadows: ShadowBox[]) {
       wingQuad(p,c-0.13,c+0.13,5.72,5.79,-16.855,'#3a3a36',17);
       wingFloor(p,o.a,o.b,-16.95,-16.45,0.018,'#8b8c84',18);
     } else {
-      // Pale steel sash: jambs, head and sill rails, two mullions and three transoms (refs/163's small panes).
-      const w=o.b-o.a;
-      for (const [u0,u1] of [[o.a,o.a+0.12],[o.b-0.12,o.b],[o.a+w/3-0.035,o.a+w/3+0.035],[o.a+2*w/3-0.035,o.a+2*w/3+0.035]])
-        wingQuad(p,u0,u1,o.sill,o.head,fv,FACADE.frame,18);
-      for (const [y0,y1] of [[o.sill,o.sill+0.12],[o.head-0.12,o.head],[5.27,5.34],[6.12,6.19],[7.02,7.09]])
-        wingQuad(p,o.a,o.b,y0,y1,fv-0.004,FACADE.frame,18);
+      // The pale steel sash is drawn on the glass (CARLSBAD_SASH).
       // The dark sill line (refs/03, 163): its top and front.
       wingFloor(p,o.a,o.b,-16.7,-16.52,3.9,FACADE.sill,17);
       wingQuad(p,o.a,o.b,3.76,3.9,-16.52,FACADE.sill,17);
