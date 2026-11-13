@@ -14,10 +14,11 @@ Next.js App Router web app deployed to **Cloudflare Workers via
 ```sh
 npm install
 cp .env.example .env.local   # add keys (see comments inside)
-npm run dev                  # http://100.74.88.58:3000 (Mac mini over Tailscale)
+npm run dev                  # http://127.0.0.1:3000 locally; Mac mini uses Tailscale
 ```
 
-The Mac mini is a server; connect your viewing device to the same Tailscale
+On a laptop, open `http://127.0.0.1:3000`. The Mac mini is a server; connect your
+viewing device to the same Tailscale
 network and open the printed Tailscale URL. `localhost` on your laptop or phone
 refers to that device, not the Mac mini.
 
@@ -28,9 +29,10 @@ npm run dev -- --port 3107    # http://100.74.88.58:3107/dream-tricks
 ```
 
 The web `dev`, `start`, and Cloudflare `preview` commands and the animation
-playground's `dev`/`preview` commands all bind to `100.74.88.58` by default.
-On another machine, override it in the shell, for example
-`SKROBOT_PREVIEW_HOST=127.0.0.1 npm run dev` for local-only development.
+playground's `dev`/`preview` commands use `scripts/preview-host.mjs`: bind to
+`100.74.88.58` when that address belongs to the current machine, otherwise
+`127.0.0.1`. Override it in the shell with `SKROBOT_PREVIEW_HOST`, for example
+`SKROBOT_PREVIEW_HOST=0.0.0.0 npm run dev` to access a laptop from another device.
 Keep a delivered prototype server running while it is being reviewed.
 
 Voice mode uses `GEMINI_API_KEY` server-side to mint an ephemeral token through

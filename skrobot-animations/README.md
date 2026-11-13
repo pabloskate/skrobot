@@ -25,10 +25,13 @@ npm install
 npm run dev
 ```
 
-Then open `http://100.74.88.58:5173` from a device on the same Tailscale network.
-The commands bind to the Mac mini's Tailscale IP and fail if the port is busy;
-use `npm run dev -- --port 3108` for another worktree. On another machine,
-set `SKROBOT_PREVIEW_HOST` in the command's environment. Leave delivered
+On a laptop, open `http://127.0.0.1:5173`. On the Mac mini, open
+`http://100.74.88.58:5173` from a device on the same Tailscale network.
+The commands bind to the Mac mini's Tailscale IP when it belongs to the current
+machine, otherwise to `127.0.0.1`, and fail if the port is busy;
+use `npm run dev -- --port 3108` for another worktree.
+Set `SKROBOT_PREVIEW_HOST` in the command's environment to override the address.
+Leave delivered
 playgrounds running for review; follow the hosting rules in the root `AGENTS.md`.
 
 ## How to use the playground

@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host \"${SKROBOT_PREVIEW_HOST:-100.74.88.58}\" --strictPort",
+    "dev": "vite --host \"$(node ../scripts/preview-host.mjs)\" --strictPort",
     "build": "tsc && vite build",
-    "preview": "vite preview --host \"${SKROBOT_PREVIEW_HOST:-100.74.88.58}\" --strictPort",
+    "preview": "vite preview --host \"$(node ../scripts/preview-host.mjs)\" --strictPort",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

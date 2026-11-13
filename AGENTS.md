@@ -19,7 +19,7 @@ Live API) for playing with earbuds at the skatepark.
 
 | Command | What it does |
 |---|---|
-| `npm run dev` | Next dev server on the Mac mini's Tailscale IP (Cloudflare bindings emulated via `initOpenNextCloudflareForDev`) |
+| `npm run dev` | Next dev server on the Mac mini's Tailscale IP when available, otherwise localhost (Cloudflare bindings emulated via `initOpenNextCloudflareForDev`) |
 | `npm run build` | `next build` — typecheck + production build (catches type errors, not logic bugs) |
 | `npm test` | Vitest unit tests — the behavioral check for the rules engine, RPS, trick resolver, and animation motion |
 | `npm run test:changed` | Only the tests your uncommitted changes reach |
@@ -33,7 +33,7 @@ Live API) for playing with earbuds at the skatepark.
 | `npm run mobile:ios` | Start the Expo native shell on iOS simulator/device |
 | `npm run mobile:android` | Start the Expo native shell on Android emulator/device |
 | `npm run native:parity-status` | Report whether required native device validation evidence is still pending |
-| `npm run preview` | Build the real Cloudflare worker and serve it on the Tailscale IP with wrangler |
+| `npm run preview` | Build the real Cloudflare worker and serve it on the Tailscale IP when available, otherwise localhost, with wrangler |
 | `npm run deploy` | Build + deploy to Cloudflare |
 | `npm run cf-typegen` | Generate Wrangler binding types to `/private/tmp` for comparison with `cloudflare-env.d.ts` |
 
@@ -166,15 +166,18 @@ the exact graph test in `src/architecture.test.ts`.
 
 ## Hosting previews on the Mac mini
 
-- This repository runs on a **Mac mini used as a server**. The user reviews it
+- Hosted previews run on a **Mac mini used as a server**. The user reviews it
   from other devices through Tailscale. Its address is **`100.74.88.58`**.
   A link to `localhost` or `127.0.0.1` points at the device opening the link,
   so it is not a usable handoff URL for this project.
 - Use the npm hosting commands: `dev`, `start`, and Cloudflare `preview` at the
   root, and `dev`/`preview` in `skrobot-animations`. They bind to the Tailscale
-  address by default. For another machine, set `SKROBOT_PREVIEW_HOST` in the
-  command's environment; for example, `SKROBOT_PREVIEW_HOST=127.0.0.1 npm run dev`
-  explicitly selects a local-only server.
+  address when it belongs to the current machine; otherwise they bind to
+  `127.0.0.1` for local development. `scripts/preview-host.mjs` selects the host.
+  Set `SKROBOT_PREVIEW_HOST` in the command's environment to override it;
+  for example, `SKROBOT_PREVIEW_HOST=0.0.0.0 npm run dev` allows access to a
+  laptop from another device. Local development on the laptop can use its
+  printed loopback URL; hosted Mac mini handoffs must use the Tailscale URL.
 - The main web preview is **`http://100.74.88.58:3000`**. A separate worktree
   must use its own free port, such as `npm run dev -- --port 3107`, and share
   the actual route, for example **`http://100.74.88.58:3107/dream-tricks`**.
