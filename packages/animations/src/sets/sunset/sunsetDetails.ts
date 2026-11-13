@@ -1,136 +1,186 @@
-import { Bake, NO_INK, type Ink } from '../../three/bake';
 import type { Vec3 } from '../../camera/view';
+import type { Bake } from '../../three/bake';
 import { hash2 } from '../setKit';
-import { mixHex } from '../../math';
+import { FT, IN, LEAVES, mixHex, tag, tube } from './sunsetKit';
+import { SUNSET_PAINT as PAINT } from './sunsetPalette';
 
-const LEAVES: Ink = { ...NO_INK, solid: 13 };
-const FOLIAGE = ['#486547', '#55764a', '#698653', '#3f6042', '#738b54'];
-const N: Vec3 = [0, 1, 0];
+/**
+ * Roof to Bank's planting and its one word of lettering: oleanders clipped into mounds on the planters and
+ * left to grow tall at the corner by the landing (the Skate Sonr photograph and the 2019 cover), weeds in the
+ * joint at the bank's foot, and the booth's OPEN sign. Leaves are modelled masses the look patterns in three
+ * dimensions, never camera-facing cards.
+ */
 
-/** A small physical stencil alphabet: signage remains legible from an orbit. */
+const FOLIAGE = tag(LEAVES);
+
+/**
+ * Every word the scene letters. Generic only: no business name, slogan or address (the location notice,
+ * docs/LOCATION_PRESENTATION.md); `sunsetLettering` refuses anything else and a test reads this list.
+ */
+export const SUNSET_LETTERING: readonly string[] = ['OPEN'];
+
+/** A small stencil alphabet, just the letters SUNSET_LETTERING needs. */
 const LETTERS: Record<string, string[]> = {
-  A: ['01110', '11011', '11011', '11111', '11011', '11011', '11011'],
-  B: ['11110', '11011', '11011', '11110', '11011', '11011', '11110'],
-  C: ['01111', '11000', '11000', '11000', '11000', '11000', '01111'],
-  D: ['11110', '11011', '11011', '11011', '11011', '11011', '11110'],
-  E: ['11111', '11000', '11000', '11110', '11000', '11000', '11111'],
-  F: ['11111', '11000', '11000', '11110', '11000', '11000', '11000'],
-  H: ['11011', '11011', '11011', '11111', '11011', '11011', '11011'],
-  I: ['11111', '00100', '00100', '00100', '00100', '00100', '11111'],
-  L: ['11000', '11000', '11000', '11000', '11000', '11000', '11111'],
-  M: ['10001', '11011', '11111', '10101', '10001', '10001', '10001'],
-  N: ['11001', '11001', '11101', '11111', '11011', '11011', '11001'],
   O: ['01110', '11011', '11011', '11011', '11011', '11011', '01110'],
   P: ['11110', '11011', '11011', '11110', '11000', '11000', '11000'],
-  R: ['11110', '11011', '11011', '11110', '11100', '11010', '11011'],
-  S: ['01111', '11000', '11000', '01110', '00011', '00011', '11110'],
-  T: ['11111', '00110', '00110', '00110', '00110', '00110', '00110'],
-  U: ['11011', '11011', '11011', '11011', '11011', '11011', '01110'],
-  W: ['10001', '10001', '10001', '10101', '11111', '11011', '10001'],
-  Y: ['10001', '11011', '01110', '00100', '00100', '00100', '00100'],
-  '0': ['01110', '11011', '11011', '11011', '11011', '11011', '01110'],
-  '1': ['00100', '01100', '00100', '00100', '00100', '00100', '01110'],
-  '%': ['11001', '11010', '00100', '00100', '01000', '10110', '00110'],
-  '7': ['11111', '00011', '00110', '00110', '01100', '01100', '01100'],
-  '9': ['01110', '11011', '11011', '01111', '00011', '00011', '01110'],
-  '5': ['11111', '11000', '11000', '11110', '00011', '00011', '11110'],
+  E: ['11111', '11000', '11000', '11110', '11000', '11000', '11111'],
+  N: ['11001', '11001', '11101', '11111', '11011', '11011', '11001'],
 };
 
-export function sunsetLettering(props: Bake, text: string, origin: Vec3, right: Vec3, scale: number, color = '#f3ede0') {
+/** Raised letters along `right` from `origin` (their top left), each pixel `scale` square. */
+export function sunsetLettering(props: Bake, text: string, origin: Vec3, right: Vec3, scale: number, color: string) {
+  if (!SUNSET_LETTERING.includes(text)) throw new Error(`Roof to Bank letters only generic words, not "${text}"`);
   const n: Vec3 = [-right[2], 0, right[0]];
   const at = (x: number, y: number): Vec3 => [origin[0] + right[0] * x, origin[1] + y, origin[2] + right[2] * x];
   for (let k = 0; k < text.length; k++) {
-    const letter = LETTERS[text[k]];
-    if (!letter) continue;
-    letter.forEach((row, y) => {
-      // Merge adjacent filled pixels into a stroke, keeping the draw inexpensive.
+    LETTERS[text[k]].forEach((row, y) => {
+      // Adjacent filled pixels merge into one stroke.
       for (let x = 0; x < row.length;) {
         if (row[x] !== '1') { x++; continue; }
         let end = x + 1;
         while (row[end] === '1') end++;
-        const x0 = (k * 6 + x) * scale;
-        const x1 = (k * 6 + end) * scale;
-        const y0 = -(y + 1) * scale;
-        const y1 = -y * scale;
-        props.quad(at(x0, y0), at(x1, y0), at(x1, y1), at(x0, y1), n, { color }, NO_INK);
+        const x0 = (k * 6 + x) * scale, x1 = (k * 6 + end) * scale, y0 = -(y + 1) * scale, y1 = -y * scale;
+        props.quad(at(x0, y0), at(x1, y0), at(x1, y1), at(x0, y1), n, { color }, tag('metal'));
         x = end;
       }
     });
   }
 }
 
-/** Folded lanceolate oleander leaves, never camera-facing sprites. */
-function leaf(props: Bake, p: Vec3, length: number, angle: number, color: string) {
+/**
+ * One rounded mass of foliage, `rx` × `rz` across and `h` tall over its foot at `y`, its outline wobbled and its
+ * underside darker. Normals are the ellipsoid's own, smooth across the mass, so the look's light rounds it
+ * instead of breaking it into facets; leaves are patterned on it by the look.
+ */
+function mass(props: Bake, cx: number, y: number, cz: number, rx: number, rz: number, h: number, seed: number, color: string, rings = 5, around = 12) {
+  const point = (i: number, j: number) => {
+    const lat = (Math.PI / 2) * (i / rings), lon = (j / around) * Math.PI * 2;
+    const wob = 0.86 + 0.28 * hash2(seed, i === rings ? 0 : i * 32 + (j % around), 901);
+    const d: Vec3 = [Math.cos(lat) * Math.cos(lon), Math.sin(lat), Math.cos(lat) * Math.sin(lon)];
+    const n: Vec3 = [d[0] / rx, d[1] / h + 0.25 / h, d[2] / rz];
+    const m = Math.hypot(...n);
+    return { at: [cx + d[0] * rx * wob, y + d[1] * h * wob, cz + d[2] * rz * wob] as Vec3, n: [n[0] / m, n[1] / m, n[2] / m] as Vec3 };
+  };
+  const tone = (i: number, j: number) => mixHex(color, PAINT.oleanderDark, 0.45 * (1 - i / rings) + 0.15 * hash2(seed, i * 32 + (j % around), 902));
+  for (let i = 0; i < rings; i++) for (let j = 0; j < around; j++) {
+    const corners: Array<[number, number]> = [[i, j], [i + 1, j], [i + 1, j + 1], [i, j], [i + 1, j + 1], [i, j + 1]];
+    for (const [a, b] of corners) {
+      const { at, n } = point(a, b);
+      props.vertex(at, n, { color: tone(a, b) }, FOLIAGE);
+    }
+  }
+}
+
+/** A narrow oleander leaf from `p`, `length` long, pointing `angle` round and `rise` up. */
+function leaf(props: Bake, p: Vec3, length: number, angle: number, rise: number, color: string) {
   const dx = Math.cos(angle), dz = Math.sin(angle);
-  const tip: Vec3 = [p[0] + dx * length, p[1] + length * 0.38, p[2] + dz * length];
-  const middle: Vec3 = [p[0] + dx * length * 0.45, p[1] + length * 0.34, p[2] + dz * length * 0.45];
-  const width = length * 0.13;
-  for (const sign of [-1, 1]) {
-    const side: Vec3 = [middle[0] - dz * width * sign, middle[1], middle[2] + dx * width * sign];
-    props.triangle(p, side, tip, N, { color }, LEAVES);
+  const tip: Vec3 = [p[0] + dx * length, p[1] + rise * length, p[2] + dz * length];
+  const mid: Vec3 = [p[0] + dx * length * 0.45, p[1] + rise * length * 0.5, p[2] + dz * length * 0.45];
+  const w = length * 0.12;
+  for (const s of [-1, 1]) {
+    const side: Vec3 = [mid[0] - dz * w * s, mid[1], mid[2] + dx * w * s];
+    props.triangle(p, side, tip, [dx * 0.3, 0.9, dz * 0.3], { color }, FOLIAGE);
   }
 }
 
-/** Dense trimmed shrubs with branching stems and a broken-leaf silhouette. */
-export function sunsetShrub(props: Bake, x: number, y: number, z: number, radius: number, seed: number, rootY = y - 15) {
-  for (let stem = 0; stem < 9; stem++) {
-    const angle = stem * 2.399;
-    const sx = x + Math.cos(angle) * radius * 0.5;
-    const sz = z + Math.sin(angle) * radius * 0.62;
-    const sy = y + radius * (0.5 + hash2(seed, stem, 835) * 0.4);
-    props.tube([[x, rootY, z], [sx, sy, sz]], [2, 0.6], { color: '#746f52' }, NO_INK, 5);
-    for (let level = 0; level < 5; level++) {
-      for (let k = 0; k < 5; k++) {
-        const a = k * 1.256 + stem;
-        const p: Vec3 = [sx + Math.cos(a) * radius * 0.24, sy - level * 7, sz + Math.sin(a) * radius * 0.24];
-        leaf(props, p, 16 + hash2(seed + level, k, 836) * 10, a, FOLIAGE[(stem + k + level) % FOLIAGE.length]);
-      }
-    }
-  }
-  // Dense shaded cores are faceted volumes; individual leaves break their outlines.
-  for (let mound = 0; mound < 6; mound++) {
-    const a = mound * 2.399;
-    const cx = x + Math.cos(a) * radius * 0.45;
-    const cz = z + Math.sin(a) * radius * 0.48;
-    const cy = y + radius * (0.38 + 0.4 * hash2(seed, mound, 847));
-    const r = radius * (0.4 + 0.22 * hash2(seed, mound, 848));
-    for (let ring = 0; ring < 4; ring++) {
-      const lat0 = -Math.PI / 2 + ring * Math.PI / 4;
-      const lat1 = lat0 + Math.PI / 4;
-      const point = (lat: number, angle: number): Vec3 => [cx + Math.cos(lat) * Math.cos(angle) * r, cy + Math.sin(lat) * r * 0.72, cz + Math.cos(lat) * Math.sin(angle) * r];
-      for (let k = 0; k < 8; k++) {
-        const a0 = k * Math.PI / 4, a1 = a0 + Math.PI / 4;
-        const color = FOLIAGE[(k + ring + mound) % FOLIAGE.length];
-        props.quad(point(lat0, a0), point(lat0, a1), point(lat1, a1), point(lat1, a0), N, { color }, LEAVES);
-      }
+/** A cluster of oleander flowers: a few pale five-petalled stars on the crown's surface. */
+function blooms(props: Bake, at: Vec3, seed: number, color: string) {
+  for (let k = 0; k < 4; k++) {
+    const a = k * 2.4 + seed;
+    const c: Vec3 = [at[0] + Math.cos(a) * 2.2 * IN, at[1] + hash2(seed, k, 903) * 2 * IN, at[2] + Math.sin(a) * 2.2 * IN];
+    const r = 1.1 * IN;
+    for (let p = 0; p < 5; p++) {
+      const t0 = (p / 5) * Math.PI * 2, t1 = t0 + 0.9;
+      props.triangle(c, [c[0] + Math.cos(t0) * r, c[1] + 0.3 * IN, c[2] + Math.sin(t0) * r], [c[0] + Math.cos(t1) * r, c[1] + 0.3 * IN, c[2] + Math.sin(t1) * r], [0, 1, 0], { color }, FOLIAGE);
     }
   }
 }
 
-/** Tall palms behind the low commercial roofs establish Sunset Boulevard. */
-export function sunsetPalm(props: Bake, x: number, y: number, z: number, height: number, seed: number) {
-  const lean = 24 * (hash2(seed, 0, 839) - 0.5);
-  const crown: Vec3 = [x + lean, y + height, z + 13];
-  props.tube([[x, y, z], [x + lean * 0.3, y + height * 0.4, z + 4], crown], [9, 6, 4], { color: '#8e8270' }, NO_INK, 9);
-  for (let r = 0; r < 25; r++) {
-    const h = height * r / 25;
-    props.tube([[x + lean * h / height, y + h, z + 13 * h / height], [x + lean * h / height, y + h + 2, z + 13 * h / height]], [8 - r * 0.13, 8 - r * 0.13], { color: '#716e57' }, NO_INK, 8);
+/**
+ * Oleanders clipped into a long mound over a planter (the Skate Sonr photograph): overlapping masses `halfZ`
+ * along it and `halfX` across, `h` tall from `y`, a fringe of loose leaves breaking the clipped outline and a
+ * few white flower clusters.
+ */
+export function oleanderMound(props: Bake, x: number, y: number, z: number, halfX: number, halfZ: number, h: number, seed: number) {
+  const count = 4;
+  for (let m = 0; m < count; m++) {
+    const t = (m + 0.5) / count - 0.5;
+    const cz = z + t * 2 * halfZ * 0.72, cx = x + (hash2(seed, m, 904) - 0.5) * halfX * 0.3;
+    const color = m % 2 ? PAINT.oleander : mixHex(PAINT.oleander, PAINT.oleanderLight, 0.4);
+    mass(props, cx, y, cz, halfX * (0.85 + 0.2 * hash2(seed, m, 905)), halfZ * 0.42, h * (0.85 + 0.25 * hash2(seed, m, 906)), seed * 7 + m, color);
   }
-  for (let frond = 0; frond < 13; frond++) {
-    const angle = frond * 2.399 + seed;
-    const reach = 100 + hash2(seed, frond, 841) * 75;
-    const dx = Math.cos(angle), dz = Math.sin(angle);
-    const stem: Vec3[] = [];
-    for (let k = 0; k <= 5; k++) {
-      const t = k / 5;
-      stem.push([crown[0] + dx * reach * t, crown[1] + 48 * Math.sin(t * Math.PI) - 45 * t * t, crown[2] + dz * reach * t]);
+  for (let k = 0; k < 80; k++) {
+    const a = k * 2.399 + seed, s = hash2(seed, k, 907);
+    const lz = z + (s - 0.5) * 2 * halfZ * 0.95, lx = x + Math.cos(a) * halfX * 0.9;
+    const ly = y + h * (0.45 + 0.5 * hash2(seed, k, 908));
+    leaf(props, [lx, ly, lz], (5 + 3 * hash2(seed, k, 909)) * IN, a, 0.35 + 0.4 * hash2(seed, k, 910), k % 3 ? PAINT.oleanderLight : PAINT.oleander);
+  }
+  for (let k = 0; k < 5; k++) {
+    const a = k * 1.9 + seed;
+    blooms(props, [x + Math.cos(a) * halfX * 0.6, y + h * (0.85 + 0.15 * hash2(seed, k, 911)), z + (hash2(seed, k, 912) - 0.5) * 1.6 * halfZ], seed + k, PAINT.bloomWhite);
+  }
+}
+
+/**
+ * A tall, loose oleander (the 2019 cover's, at the corner by the landing): woody stems rising out of a dark
+ * clump, a dozen small crowns of foliage stacked up and out along them so the outline is lumpy, not a ball,
+ * long leaves sprouting from every crown and clusters of white flowers. `height` to its top, `spread` its
+ * radius, rooted at `rootY`.
+ */
+export function oleanderTree(props: Bake, x: number, rootY: number, z: number, height: number, spread: number, seed: number) {
+  for (let s = 0; s < 7; s++) {
+    const a = s * 2.399 + seed, r = spread * (0.25 + 0.3 * hash2(seed, s, 913));
+    const top: Vec3 = [x + Math.cos(a) * r, rootY + height * (0.55 + 0.3 * hash2(seed, s, 914)), z + Math.sin(a) * r];
+    tube(props, [[x, rootY, z], [x + Math.cos(a) * r * 0.4, rootY + height * 0.3, z + Math.sin(a) * r * 0.4], top], [1.6 * IN, 1.1 * IN, 0.6 * IN], '#6f6a50', tag(0), 5, false);
+  }
+  mass(props, x, rootY, z, spread * 0.95, spread * 0.9, height * 0.55, seed, PAINT.oleanderDark);
+  const crowns: Array<{ at: Vec3; r: number }> = [];
+  for (let m = 0; m < 13; m++) {
+    const a = m * 2.399 + seed, out = Math.sqrt((m + 0.5) / 13);
+    const r = spread * (0.12 + 0.62 * out * (0.8 + 0.3 * hash2(seed, m, 915)));
+    const up = height * (0.3 + 0.42 * (1 - out * 0.7) * (0.75 + 0.45 * hash2(seed, m, 916)));
+    const rr = spread * (0.32 + 0.14 * hash2(seed, m, 917));
+    const at: Vec3 = [x + Math.cos(a) * r, rootY + up, z + Math.sin(a) * r];
+    crowns.push({ at, r: rr });
+    mass(props, at[0], at[1] - rr * 0.35, at[2], rr, rr * 0.9, rr * 1.15, seed * 11 + m, m % 3 ? PAINT.oleander : PAINT.oleanderLight, 4, 10);
+  }
+  // Long leaves sprouting from every crown's surface, upward and out, and flowers at the tops.
+  crowns.forEach(({ at, r }, m) => {
+    for (let k = 0; k < 9; k++) {
+      const a = k * 2.399 + m, lift = 0.2 + 0.7 * hash2(seed + m, k, 931);
+      const p: Vec3 = [at[0] + Math.cos(a) * r * 0.85, at[1] + r * (lift - 0.1), at[2] + Math.sin(a) * r * 0.85];
+      leaf(props, p, (6 + 3 * hash2(seed + m, k, 933)) * IN, a + (hash2(seed + m, k, 934) - 0.5), 0.2 + 0.7 * lift, k % 3 ? PAINT.oleander : PAINT.oleanderLight);
     }
-    props.tube(stem, [3, 2.8, 2.1, 1.4, 0.8, 0.1], { color: '#667545' }, NO_INK, 5, false);
-    for (let k = 1; k <= 13; k++) {
-      const t = k / 14;
-      const p: Vec3 = [crown[0] + dx * reach * t, crown[1] + 48 * Math.sin(t * Math.PI) - 45 * t * t, crown[2] + dz * reach * t];
-      const length = 38 * Math.sin(t * Math.PI) + 9;
-      for (const side of [-1, 1]) leaf(props, p, length, angle + side * 1.05, mixHex('#536a43', '#8b9157', t * 0.55));
+    if (m % 2 === 0) blooms(props, [at[0], at[1] + r * 0.75, at[2]], seed + m * 3, PAINT.bloomWhite);
+  });
+}
+
+/** A tuft of grass and weeds, a few blades fanned from its root at `y`, some dried to straw. */
+export function weedTuft(props: Bake, x: number, y: number, z: number, seed: number, size = 1) {
+  const blades = 4 + Math.floor(5 * hash2(seed, 0, 924));
+  const dry = hash2(seed, 1, 925) > 0.55;
+  for (let k = 0; k < blades; k++) {
+    const a = k * 2.4 + seed;
+    const lean = 0.2 + 0.5 * hash2(seed, k, 926);
+    const h = (3 + 6 * hash2(seed, k, 927)) * IN * size;
+    const tip: Vec3 = [x + Math.cos(a) * lean * h, y + h, z + Math.sin(a) * lean * h];
+    const w = 0.35 * IN;
+    props.triangle([x - Math.sin(a) * w, y, z + Math.cos(a) * w], [x + Math.sin(a) * w, y, z - Math.cos(a) * w], tip, [Math.cos(a) * 0.4, 0.8, Math.sin(a) * 0.4],
+      { color: dry || k % 4 === 3 ? mixHex(PAINT.weedDry, PAINT.weed, 0.25 * hash2(seed, k, 928)) : mixHex(PAINT.weed, PAINT.oleanderDark, 0.3 * hash2(seed, k, 929)) }, FOLIAGE);
+  }
+}
+
+/**
+ * Low groundcover over a planted bed (ivy and ice plant, as LA's banks are planted): a field of shallow, smooth
+ * mounds `x0`…`x1` by `z0`…`z1` at `y`, kept a foot in from the edges.
+ */
+export function groundcover(props: Bake, x0: number, x1: number, z0: number, z1: number, y: number, seed: number) {
+  const step = 3.2 * FT;
+  for (let x = x0 + step * 0.4, i = 0; x < x1; x += step, i++) {
+    for (let z = z0 + step * 0.4, j = 0; z < z1; z += step, j++) {
+      const jx = (hash2(seed + i, j, 940) - 0.5) * step * 0.5, jz = (hash2(seed + i, j, 941) - 0.5) * step * 0.5;
+      const r = step * (0.7 + 0.25 * hash2(seed + i, j, 942));
+      mass(props, x + jx, y - 0.5 * IN, z + jz, r, r * (0.8 + 0.4 * hash2(seed + i, j, 943)), (0.7 + 0.6 * hash2(seed + i, j, 944)) * FT, seed * 31 + i * 7 + j, (i + j) % 3 ? PAINT.oleanderDark : PAINT.oleander, 3, 8);
     }
   }
 }

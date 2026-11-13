@@ -90,18 +90,20 @@ photographed features.
 
 ## Contextual street life
 
-`sunsetStreetscape.ts` adds lived-in context that is composed, not surveyed:
+The set adds lived-in context that is composed, not surveyed:
 traffic on Sunset that keeps right (the inner near lane and both far lanes;
-the curb lane stays empty because the rollout reaches about twelve feet into
-it), cars being dried in the bays with their roofs over the bank crest, cars
-waiting in the side lot with its stall lines, vacuum stations, cashier booth,
-towel cart and puddles, coiled hoses on the bay columns, rooftop units and
-vents behind the roof approach, lane oil, tar-sealed cracks, manholes, gum,
-a hydrant with red curb, a bus bench and stop, a city trash can, a row of
-shopfronts with abstract sign lettering across the boulevard, a mini-mall past
-the lot, palms and street trees, and wooden power poles in the alley. Wheel
-marks and repainted patches on the bank follow its slope. Cars and trees are
-the shared realistic street props; everything else is baked geometry.
+the curb lane stays empty by the landing because the rollout reaches about
+twelve feet into it), cars being dried in the bays with their roofs over the
+bank crest, cars waiting in the side lot with its stall lines, vacuum stations,
+cashier booth, towel cart and puddles, coiled hoses on the bay posts, rooftop
+units and vents behind the roof approach, lane oil, tar-sealed cracks,
+manholes, gum, a hydrant with red curb, a bus bench and stop, a city trash
+can, cobra-head streetlights, a row of shopfronts with blank sign bands
+across the boulevard, a mini-mall past the lot, fan palms and street figs,
+wooden power poles in the alley, a low city behind it and hills beyond.
+Wheel marks and repainted patches on the bank follow its slope. Cars and
+trees are the shared realistic street props; everything else is baked
+geometry. "Realistic look" below lists where each part lives.
 
 ## Geometry and motion contract
 
@@ -132,10 +134,10 @@ world-scale dimensions for collision and motion, in set units that `SET_SCALE`
 takes onto the riders' units. The riders keep their own scale; the larger obstacle therefore produces the corresponding
 flight, drop and rollout rather than enlarging the rider with the scene.
 
-The environment merges into one ground and one prop mesh plus the shared sky.
-It uses El Toro's weathered material family, real 3D foliage and lettering,
-static canopy/planter shadows, and the shared projected rider shadows. No
-camera-facing foliage or image textures are required.
+The environment merges into one ground mesh, one prop mesh, one decal mesh
+and a wire-mesh overlay, plus the shared sky and street props, drawn under the
+realistic look (below) with the shared projected rider shadows. No
+camera-facing foliage or image textures are used.
 
 Verification: `npx vitest run packages/animations/src/sets/sunset/sunset.test.ts`
 checks the derivative, bank/sidewalk continuity, landing region, agreement
@@ -143,7 +145,10 @@ between rendered vertices and the ride surface, finite geometry, and the
 140,000-vertex mobile budget. It also checks that all bank-profile vertices
 start at x≥0, both crest ends have the same height, the rendered roof lies
 to the left of the landing from the street, and the roof approach and
-right-hand bank landing sample their respective surfaces.
+right-hand bank landing sample their respective surfaces. The realistic look's
+tests keep the shader budgets, lift every level decal 0.2 to 1 unit over the
+drawn floor, keep trees and cars off the riding surfaces, the rollout and the
+buildings, and check that the scene letters no business name or logo.
 
 The route contributes a 90° turn to every trick, independently of the trick's
 own rotation. The roof approach has route yaw -90° and the downhill landing
@@ -154,3 +159,22 @@ center follows a ballistic drop with horizontal travel across both axes; the
 landing scrubs cross-bank motion as the wheels face downhill. Stage regressions
 check all approach stances, additional trick rotations, surface clearance,
 and position continuity at pop/touchdown.
+
+## Realistic look (November 2026)
+
+Roof to Bank is drawn under the realistic look shared with El Toro, Hollywood High, Carlsbad Gap and Wallenberg (`SUNSET_LOOK` in `sunset3d.ts`, built on `CARLSBAD_LOOK`; `sets/surfaces.ts` lights and textures each face by its surface). It shows a generic Sunset Boulevard car wash, not the business: no name, slogan, address, logo, circular badges or "Speedwash" lettering, and the canopy keeps its sage and cream. The layout, physics, terrain and cameras are unchanged (`sunsetLayout.ts`); the set is still authored at 1/`SUNSET_SCALE` and baked to world size, so a real foot in the scenery code is `FT` and decals lie 0.3, 0.6 and 0.9 world units proud.
+
+Sources inspected for this pass, read by eye and not shipped: the Skate Sonr wide photograph of the bank and planters in hard sun, the 2019 cover photograph from the bank's foot, the CCS visitors' photograph, the 2003 photographs, and the user's seven frames from the roof and the street (October 2026). From them: a pale, slightly cool grey bank whose paint is streaked down the fall line by the board-formed concrete under it, with patches where tags were painted out and grime at the toe; a thin galvanized coping and flashing over the fascia, a drip band along its foot, a pale soffit with strip lights and slim posts; board-formed grey planters with clipped oleanders; a tall loose oleander with white flowers at the corner by the landing; weeds in the joint at the toe; white stucco with terracotta tile behind the roof's end; fan palms, dense dark trees and the hills behind; a streetlight past the bank's tapered end.
+
+- **Paint** (`sunsetPalette.ts`) is each surface's sunlit colour, read by eye from those photographs, not sampled.
+- **The bank** (`sunset3d.ts`): painted render on a grid fine along the frontage by the landing and coarser past it, sixteen rows through the toe, smooth normals. Its paint is baked into its vertex colours (`bankTone` in `sunsetWear.ts`): fall-line streaks, broad tone drift, painted-out patches, drips under the canopy's edge, faint wheel marks and chips down the landing, grime over the toe. Decals layered on a steep face fight at a distance and read as grey dashes. The shoulders behind the crest are a concrete cap and a bed under ivy-like groundcover, with painted retaining walls down to the street.
+- **Planters** (`sunset3d.ts`): board-formed boxes, each six-inch board its own tone (`boardTone`), a cap round the rim, soil, and clipped oleander mounds (`sunsetDetails.ts`). The tall corner oleander keeps the size of the shrub it replaced so it doesn't block the side tripods.
+- **Wear** (`sunsetWear.ts`) goes on the decals: sidewalk panels, cracks, the wash's dried run-off, stains; the curb's worn top, grimy edge, gutter pan and red curb; lane paint, oil down each lane, polished wheel paths, trench patches, a utility cut, tar-sealed cracks, manholes and skids; the lot's stalls, oil and puddles; the apron's tyre tracks; the roof deck's laps, patches, ponding and scuffs along the approach. A test keeps every level decal 0.2 to 1 unit above the drawn floor (`sunsetFloor`).
+- **The canopy** (`sunsetBuildings.ts`): round the front and both ends, a galvanized coping flush with the deck's edge, proud flashing, sage fascia panels with dark joints, chalked by the sun and streaked down from the coping with rust at the fasteners (`fasciaTone`, in vertex colours), and a cream drip band. Under it: the soffit and strip lights, posts and joists, plumbing and hoses, the crest's cap with a pipe guard rail, and the bays' floor. Behind: the wash building in painted block (the look's masonry) with doors and glazing, rooftop units and vents.
+- **Neighbours** (`sunsetBuildings.ts`): the white stucco house with a terracotta tile roof and eyebrow, grilled windows and a chimney; the billboard on its post with a catwalk and lamp arms, its face a plain field between campaigns; the mini-mall; stucco and brick shopfronts across Sunset with dark glass, awnings and blank sign bands; a low city behind the alley; and the hills.
+- **Street life** (`sunsetStreetscape.ts`): hydrant, bus bench and stop, city can, two cobra-head streetlights, weeds at the toe kept well off the line, the lot's vacuums, booth (its OPEN sign is the only lettering) and towel cart, chain link round the lot drawn per pixel (`wireMesh.ts`), and the alley's wooden poles and lines.
+- **Trees and cars** (`sunsetTrees.ts`): Mexican fan palms in the alley and at the far sidewalk's ends, street figs between them, figs and gums behind the lot and past the billboard; traffic in its existing lanes, cars in the bays and the lot, three parked at the near curb far left of the landing. Tree shade uses the crowns' own spheres nearest the landing, the corner oleander first. A test keeps trees and cars off the roof, the bank, the rollout and every building.
+- **Shade**: contact darkening along the bank's toe, each planter, the bays' back wall and cap, the shoulder wall, the houses, the mini-mall, the shopfronts and the curb; shadow boxes for the canopy, its fascia, the wash building, the houses, the billboard and the planters; rail shadows for the guard rail, the billboard's catwalk rail, the streetlights and the bus stop's post. All inside the look's budgets (tested).
+- **No branding** (tested): `SUNSET_LETTERING` lists the only words the scene letters (OPEN), `sunsetLettering` refuses anything else, and no string in the set's source spells the business's name, slogan or address.
+
+The curb is drawn flush, a worn top and a gutter pan, rather than six inches above the street, because the street's height is part of the rollout. A raised curb would mean changing the riding surface, which this pass leaves alone.

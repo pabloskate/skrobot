@@ -1,8 +1,17 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { DoubleSide, Mesh, MeshBasicMaterial, Raycaster, Vector3 } from 'three';
 import { projectThree, stageView } from '../../camera/view';
 import { SET_FOOT } from '../elToro/stairs';
-import { buildSunsetGeometry } from './sunset3d';
+import { Bake } from '../../three/bake';
+import { MAX_CANOPIES, MAX_CONTACTS } from '../surfaces';
+import { BANK_INK, buildSunsetGeometry } from './sunset3d';
+import { BUILDING_PLANS } from './sunsetBuildings';
+import { SUNSET_LETTERING, sunsetLettering } from './sunsetDetails';
+import { SCALE, sunsetFloor } from './sunsetKit';
+import { SUNSET_CARS, SUNSET_TREES } from './sunsetTrees';
 import {
   SUNSET_BANK_END, SUNSET_BANK_START, SUNSET_BANK_TOP, SUNSET_BANK_Z0,
   SUNSET_BANK_Z1, SUNSET_DROP, SUNSET_GRADE, SUNSET_LAND_X, SUNSET_LANE_Z, SUNSET_POP_X, SUNSET_POP_Z, SUNSET_ROOF_BACK, SUNSET_ROOF_Z0, SUNSET_ROOF_Z1,
@@ -82,8 +91,8 @@ describe('Sunset roof-to-bank geometry', () => {
       const bankXs = new Set<number>();
       const crestEnds = new Set<number>();
       for (let i = 0; i < positions.count; i++) {
-        // Unoutlined concrete with material class 10 belongs to the bank.
-        if (info.getX(i) !== 0 || Math.abs(info.getW(i) * 255 - 40) > 0.01) continue;
+        // The bank's unoutlined painted render (BANK_INK: id 0, solid 17) is the riding profile.
+        if (info.getX(i) !== BANK_INK.id || Math.abs(info.getW(i) * 255 - 4 * (BANK_INK.solid ?? 0)) > 0.01) continue;
         const x = positions.getX(i), y = positions.getY(i), z = positions.getZ(i);
         expect(y).toBeCloseTo(sunsetGround(x), 4);
         expect(z).toBeGreaterThanOrEqual(SUNSET_BANK_Z0);
@@ -142,6 +151,90 @@ describe('Sunset roof-to-bank geometry', () => {
     } finally {
       geometry.ground.dispose();
       geometry.props.dispose();
+    }
+  });
+  it('stays inside the realistic look\'s shader budgets', () => {
+    const { ground, props, decals, wireMesh, railSegments, shadowBoxes, contacts, canopies } = buildSunsetGeometry();
+    try {
+      expect(railSegments.length).toBeLessThanOrEqual(48);
+      expect(shadowBoxes.length).toBeLessThanOrEqual(12);
+      expect(contacts.length).toBeLessThanOrEqual(MAX_CONTACTS);
+      expect(canopies.length).toBeLessThanOrEqual(MAX_CANOPIES);
+      const count = [ground, props, decals, wireMesh.geometry].reduce((n, g) => n + g.getAttribute('position').count, 0);
+      expect(count).toBeLessThan(140_000);
+    } finally {
+      for (const g of [ground, props, decals, wireMesh.geometry]) g.dispose();
+    }
+  });
+
+  it('lays every level decal a hair over the drawn floor, never in it, and layers apart', () => {
+    const { decals, ground, props, wireMesh } = buildSunsetGeometry();
+    const material = new MeshBasicMaterial({ side: DoubleSide });
+    try {
+      // The floor the decals measure from is the floor the ground mesh draws: roof, sidewalks, street, lot, apron.
+      const mesh = new Mesh(ground, material);
+      const F = SET_FOOT;
+      for (const [x, z] of [[-20 * F, 0], [15 * F, SUNSET_LANE_Z], [30 * F, 0], [70 * F, 900], [-20 * F, -60 * F], [-20 * F, 100 * F]]) {
+        const hit = new Raycaster(new Vector3(x, 10 * F, z), new Vector3(0, -1, 0)).intersectObject(mesh)[0];
+        expect(hit.point.y, `floor at ${x / F}, ${z / F} ft`).toBeCloseTo(sunsetFloor(x, z), 3);
+      }
+      const position = decals.getAttribute('position'), normal = decals.getAttribute('normal');
+      let level = 0;
+      // Each triangle at its middle, so a mark along an edge is judged by the floor it lies on.
+      for (let i = 0; i < position.count; i += 3) {
+        if (normal.getY(i) < 0.98) continue;
+        const [x, y, z] = [0, 1, 2].map((axis) => [0, 1, 2].reduce((sum, k) => sum + position.getComponent(i + k, axis), 0) / 3);
+        const lift = y - sunsetFloor(x, z);
+        const where = `decal at ${(x / F).toFixed(1)}, ${(z / F).toFixed(1)} ft`;
+        expect(lift, where).toBeGreaterThan(0.2);
+        expect(lift, where).toBeLessThan(1);
+        level++;
+      }
+      expect(level).toBeGreaterThan(300);
+    } finally {
+      material.dispose();
+      for (const g of [ground, props, decals, wireMesh.geometry]) g.dispose();
+    }
+  });
+
+  it('keeps the trees and cars off the roof, the bank, the landing, the rollout and the buildings', () => {
+    const F = SET_FOOT;
+    const inside = (x: number, z: number, [x0, x1, z0, z1]: readonly [number, number, number, number]) =>
+      x > x0 * SCALE && x < x1 * SCALE && z > z0 * SCALE && z < z1 * SCALE;
+    const taperEnd = SUNSET_BANK_Z0 - 12 * F * SCALE;
+    const placed = [...SUNSET_TREES.map(({ at }) => ({ at, tree: true, speed: 0 })), ...SUNSET_CARS.map(({ at, speed }) => ({ at, tree: false, speed: speed ?? 0 }))];
+    for (const { at, tree, speed } of placed) {
+      const [x, y, z] = at;
+      const label = `${tree ? 'tree' : 'car'} at ${(x / F).toFixed(0)}, ${(z / F).toFixed(0)} ft`;
+      // Not on the bank or its tapered end, nor on the roof's deck.
+      expect(x > SUNSET_BANK_START - 2 * F && x < SUNSET_BANK_END && z > taperEnd && z < SUNSET_BANK_Z1, label).toBe(false);
+      expect(y > -F && x > SUNSET_ROOF_BACK && x < 0 && z > SUNSET_ROOF_Z0 && z < SUNSET_ROOF_Z1, label).toBe(false);
+      // The rollout runs down the sidewalk and some twelve feet into the curb lane; a driving car stays past it
+      // wherever it is along the street.
+      const reach = SUNSET_SIDEWALK_END + 15 * F;
+      if (speed) expect(x, label).toBeGreaterThan(reach);
+      else expect(x > SUNSET_BANK_END && x < reach && Math.abs(z - SUNSET_LANE_Z) < 40 * F, label).toBe(false);
+      // Not inside a building: trees nowhere, cars only drying in the bays under the canopy.
+      for (const [name, plan] of Object.entries(BUILDING_PLANS)) {
+        const bay = !tree && name === 'wash' && y < SUNSET_BANK_TOP && x > SUNSET_ROOF_BACK + 100 * SCALE && x < -60 * SCALE;
+        if (!bay) expect(inside(x, z, plan), `${label} in the ${name}`).toBe(false);
+      }
+    }
+  });
+
+  it('carries no business name, slogan, address or logo lettering', () => {
+    const brand = /sunset|car\s*wash|speed\s*wash|hand\s*wash|100\s*%|7955/i;
+    // The only words the scene letters are generic ones.
+    for (const word of SUNSET_LETTERING) {
+      expect(word).toMatch(/^[A-Z]{1,6}$/);
+      expect(word).not.toMatch(brand);
+    }
+    expect(() => sunsetLettering(new Bake(), 'SUNSET', [0, 0, 0], [1, 0, 0], 1, '#ffffff')).toThrow();
+    // No string in the set's source spells the business's name, slogan or address (imports aside).
+    const dir = dirname(fileURLToPath(import.meta.url));
+    for (const file of readdirSync(dir).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'))) {
+      const source = readFileSync(join(dir, file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '').replace(/from '[^']*'/g, '');
+      for (const literal of source.match(/'[^'\n]*'|"[^"\n]*"|`[^`]*`/g) ?? []) expect(literal, `${file}: ${literal}`).not.toMatch(brand);
     }
   });
 });
