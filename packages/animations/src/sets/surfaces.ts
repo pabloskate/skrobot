@@ -149,9 +149,11 @@ export interface SpotLook {
    * A straight stair falling along +x, in feet: concrete faces inside its box get worn noses, grime run down
    * the risers, dust and litter at the backs and ends of the treads, chips and specks, all per pixel so no two
    * steps match. The first riser stands at x[0] from height `top`; `tread` and `riser` are one step. Compiled
-   * in as constants, no uniforms.
+   * in as constants, no uniforms. `then`, if given, is where the first riser of a second, identical flight
+   * stands (x, feet): a nine-flat-nine, the second flight falling on from the first's foot after a level landing,
+   * which is left plain.
    */
-  stairs?: { x: [number, number]; z: [number, number]; top: number; tread: number; riser: number; rails?: number[] };
+  stairs?: { x: [number, number]; z: [number, number]; top: number; tread: number; riser: number; rails?: number[]; then?: number };
   /** Gum trodden flat into level paving: spots to a hundred square feet (default none). */
   gum?: number;
   /** Mortar between concrete blocks, as it would sit in a wall painted the stock block buff (default: joints only shade). */
@@ -627,15 +629,23 @@ vec3 lookGum(vec3 c, vec2 q, float flatwork) {
  * chipped; dust lies at the back of each tread and thickest toward its ends, where leaves collect; the step
  * ends standing out of the dirt are dirty at their feet.
  */
-function lookStairWearGlsl({ x, z, top, tread, riser, rails = [] }: NonNullable<SpotLook['stairs']>) {
+function lookStairWearGlsl({ x, z, top, tread, riser, rails = [], then }: NonNullable<SpotLook['stairs']>) {
   const steps = Math.round((x[1] - x[0]) / tread) + 1;
   const near = rails.map((r) => `exp(-pow((local.z - ${num(r)}) / 0.9, 2.0))`).join(' + ') || '0.0';
+  // A second flight (`then`) is the first one again, a whole flight lower: from half a tread before its first
+  // riser, measure from that riser and its top.
+  const consts = then === undefined
+    ? `const float TREAD = ${num(tread)}, RISER = ${num(riser)}, TOP = ${num(top)};`
+    : `const float TREAD = ${num(tread)}, RISER = ${num(riser)};\n  float TOP = ${num(top)};`;
+  const second = then === undefined
+    ? ''
+    : `  if (local.x > ${num(then - tread / 2)}) { u = local.x - ${num(then)}; TOP -= ${num(steps * riser)}; }\n`;
   return /* glsl */ `// A stair's own wear: see lookStairWearGlsl.
 vec3 lookStairWear(vec3 c, vec3 local, vec3 n) {
-  const float TREAD = ${num(tread)}, RISER = ${num(riser)}, TOP = ${num(top)};
+  ${consts}
   const float Z0 = ${num(z[0])}, Z1 = ${num(z[1])};
   float u = local.x - ${num(x[0])};
-  if (u < -0.02 || u > ${num(x[1] - x[0])} + 0.02 || local.z < Z0 - 0.02 || local.z > Z1 + 0.02) return c;
+${second}  if (u < -0.02 || u > ${num(x[1] - x[0])} + 0.02 || local.z < Z0 - 0.02 || local.z > Z1 + 0.02) return c;
   if (local.y > TOP - 0.02 || local.y < TOP - ${num(steps * riser)} + 0.02) return c;
   // Grime is grey-brown, not black or green; it darkens the concrete rather than replacing it.
   vec3 grime = c * vec3(0.72, 0.71, 0.68);
