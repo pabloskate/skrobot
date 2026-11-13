@@ -172,15 +172,20 @@ export function weedTuft(props: Bake, x: number, y: number, z: number, seed: num
 
 /**
  * Low groundcover over a planted bed (ivy and ice plant, as LA's banks are planted): a field of shallow, smooth
- * mounds `x0`…`x1` by `z0`…`z1` at `y`, kept a foot in from the edges.
+ * mounds `x0`…`x1` by `z0`…`z1` at `y`. Every mound, wobble and all, stays inside the bed: one spilling past
+ * its edge hangs over whatever is beyond (the bank's crest) and is cut off along it in jagged steps.
  */
 export function groundcover(props: Bake, x0: number, x1: number, z0: number, z1: number, y: number, seed: number) {
   const step = 3.2 * FT;
+  // A mass's wobble reaches 1.14 of its radius.
+  const room = (c: number, lo: number, hi: number) => Math.max(0, Math.min(c - lo, hi - c)) / 1.14;
   for (let x = x0 + step * 0.4, i = 0; x < x1; x += step, i++) {
     for (let z = z0 + step * 0.4, j = 0; z < z1; z += step, j++) {
-      const jx = (hash2(seed + i, j, 940) - 0.5) * step * 0.5, jz = (hash2(seed + i, j, 941) - 0.5) * step * 0.5;
-      const r = step * (0.7 + 0.25 * hash2(seed + i, j, 942));
-      mass(props, x + jx, y - 0.5 * IN, z + jz, r, r * (0.8 + 0.4 * hash2(seed + i, j, 943)), (0.7 + 0.6 * hash2(seed + i, j, 944)) * FT, seed * 31 + i * 7 + j, (i + j) % 3 ? PAINT.oleanderDark : PAINT.oleander, 3, 8);
+      const cx = x + (hash2(seed + i, j, 940) - 0.5) * step * 0.5, cz = z + (hash2(seed + i, j, 941) - 0.5) * step * 0.5;
+      const rx = Math.min(step * (0.7 + 0.25 * hash2(seed + i, j, 942)), room(cx, x0, x1));
+      const rz = Math.min(rx * (0.8 + 0.4 * hash2(seed + i, j, 943)), room(cz, z0, z1));
+      if (rx < 0.5 * FT || rz < 0.5 * FT) continue;
+      mass(props, cx, y - 0.5 * IN, cz, rx, rz, (0.7 + 0.6 * hash2(seed + i, j, 944)) * FT, seed * 31 + i * 7 + j, (i + j) % 3 ? PAINT.oleanderDark : PAINT.oleander, 3, 8);
     }
   }
 }

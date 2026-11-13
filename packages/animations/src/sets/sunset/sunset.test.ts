@@ -197,6 +197,23 @@ describe('Sunset roof-to-bank geometry', () => {
     }
   });
 
+  it('grows nothing over the crest: no prop sinks into the upper bank', () => {
+    // Planting spilling past the shoulders' beds hangs over the crest, and the bank cuts it off in jagged steps.
+    const { ground, props, decals, wireMesh } = buildSunsetGeometry();
+    try {
+      const position = props.getAttribute('position');
+      const sunk: string[] = [];
+      for (let i = 0; i < position.count; i++) {
+        const [x, y, z] = [position.getX(i), position.getY(i), position.getZ(i)];
+        if (x < SUNSET_BANK_START + 6 || x > SUNSET_BANK_START + 3.5 * SET_FOOT || z < SUNSET_BANK_Z0 || z > SUNSET_BANK_Z1) continue;
+        if (y < sunsetGround(x) - 0.5) sunk.push(`${(x / SET_FOOT).toFixed(1)}, ${(y / SET_FOOT).toFixed(1)}, ${(z / SET_FOOT).toFixed(1)} ft`);
+      }
+      expect(sunk.slice(0, 5)).toEqual([]);
+    } finally {
+      for (const g of [ground, props, decals, wireMesh.geometry]) g.dispose();
+    }
+  });
+
   it('keeps the trees and cars off the roof, the bank, the landing, the rollout and the buildings', () => {
     const F = SET_FOOT;
     const inside = (x: number, z: number, [x0, x1, z0, z1]: readonly [number, number, number, number]) =>
