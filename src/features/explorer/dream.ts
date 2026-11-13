@@ -65,13 +65,13 @@ export const DREAM_SPOTS: readonly DreamSpot[] = [
       { ...rail('12 rail'), id: 'twelve-rail', set: 'hollywood-high-12' },
     ],
   },
+  { id: 'carlsbad-gap', name: setInfo('carlsbad-gap').label, where: 'Carlsbad High · California', feature: 'Grass gap beside the 11 stair · uphill landing', lines: [gap('Over the grass')] },
   { id: 'wallenberg', name: setInfo('wallenberg').label, where: 'San Francisco', feature: 'The four block gap', lines: [gap('Four block')] },
   { id: 'sunset-car-wash', name: setInfo('sunset-car-wash').label, where: 'Redesigned setting', feature: 'Off the roof into the bank', lines: [gap('Roof to bank')] },
   { id: 'lyon-25', name: setInfo('lyon-25').label, where: 'Redesigned courtyard', feature: '25 stairs · 14.76 ft down, 21.29 ft across', lines: [gap('25 stairs')] },
   { id: 'leap-of-faith', name: setInfo('leap-of-faith').label, where: 'Point Loma High · San Diego', feature: 'Over the rail · 14.3 ft courtyard drop', lines: [gap('Over the rail')] },
   { id: 'miami-triangle', name: setInfo('miami-triangle').label, where: 'Redesigned park', feature: 'Gap to the triangular bank, or its edges', lines: [gap('Gap to bank'), gap('Over the triangle', 'triangle'), rail('Down an edge')] },
   { id: 'uc-davis-gap', name: setInfo('uc-davis-gap').label, where: 'Roessler Hall · UC Davis', feature: 'Ivy gap · approx. 24 ft 4 in across, 10 ft down', lines: [gap('Over the ivy')] },
-  { id: 'carlsbad-gap', name: setInfo('carlsbad-gap').label, where: 'Carlsbad High · California', feature: 'Grass gap beside the 11 stair · uphill landing', lines: [gap('Over the grass')] },
   { id: 'emage-20', name: setInfo('emage-20').label, where: 'Denver · Colorado', feature: '20 stair and side rail', lines: [gap('20 stair'), rail('Side rail', 'side')] },
 ];
 

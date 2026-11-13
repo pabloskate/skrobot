@@ -141,10 +141,10 @@ export const leapOfFaithGround = (x: number) => leapOfFaithSurface(x, leapOfFait
  * style's popHeight, in place of any style's own, all lower): 2 is the lowest pop that keeps
  * every flip and spin 0.2 ft clear. An impossible's board wraps round the
  * back foot, its middle swinging out toward the rail and its free end down
- * past the sole as it comes round: it takes 2.5.
+ * past the sole as it comes round: it takes 2.6.
  */
 const LEAP_OF_FAITH_POP = 2;
-const LEAP_OF_FAITH_POP_WRAP = 2.5;
+const LEAP_OF_FAITH_POP_WRAP = 2.6;
 /** A trick's pop over the stair rail; without one, the most any takes. */
 function leapOfFaithPop(base?: string): number {
   return base === undefined || base === 'Impossible' ? LEAP_OF_FAITH_POP_WRAP : LEAP_OF_FAITH_POP;

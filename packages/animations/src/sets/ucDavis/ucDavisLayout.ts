@@ -132,11 +132,11 @@ export const UC_DAVIS_FILMERS: SpotFilmers = {
     stands: {
       bottom: { u: UC_DAVIS_RUN + 52 * F, z: -F, height: -UC_DAVIS_DROP + 4 * F, frame: 21 * F, place: 0.55 },
       side: { u: UC_DAVIS_RUN + 16 * F, z: 20 * F, height: -UC_DAVIS_DROP + 5.5 * F, frame: 22 * F, place: 0.55 },
-      top: { u: -3 * F, z: 10 * F, height: 5.8 * F, frame: 21.5 * F, place: 0.54 },
+      top: { u: -3 * F, z: 10 * F, height: 5.8 * F, frame: 18 * F, place: 0.58 },
     },
     across: {
       // Nearer the line than its mirror image, keeping the board in sight over the lip a moment longer.
-      top: { u: -3 * F, z: -7 * F, height: 5.8 * F, frame: 21.5 * F, place: 0.54 },
+      top: { u: -3 * F, z: -7 * F, height: 5.8 * F, frame: 18 * F, place: 0.58 },
     },
   },
 };

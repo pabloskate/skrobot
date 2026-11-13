@@ -27,7 +27,7 @@ import {
 
 describe('Dream Tricks', () => {
   it('offers only the landmark spots, each line one the spot can skate', () => {
-    expect(DREAM_SPOTS.map((spot) => spot.id)).toEqual(['el-toro', 'hollywood-high', 'wallenberg', 'sunset-car-wash', 'lyon-25', 'leap-of-faith', 'miami-triangle', 'uc-davis-gap', 'carlsbad-gap', 'emage-20']);
+    expect(DREAM_SPOTS.map((spot) => spot.id)).toEqual(['el-toro', 'hollywood-high', 'carlsbad-gap', 'wallenberg', 'sunset-car-wash', 'lyon-25', 'leap-of-faith', 'miami-triangle', 'uc-davis-gap', 'emage-20']);
     for (const spot of DREAM_SPOTS) {
       const info = setInfo(spot.id);
       expect(info.terrain, spot.id).not.toBeNull();
@@ -77,7 +77,7 @@ describe('Dream Tricks', () => {
       { ...withDreamSpot(DREAM_DEFAULT, 'sunset-car-wash'), trick: '360 Flip', rider: 'goofy' as const, camera: 'tripod-bottom' as const },
       { ...withDreamSpot(DREAM_DEFAULT, 'lyon-25'), trick: 'Heelflip', stance: 'nollie' as const, rider: 'goofy' as const, camera: 'tripod-top' as const },
       { ...withDreamSpot(DREAM_DEFAULT, 'leap-of-faith'), trick: 'Ollie', skater: 'realistic' as const, camera: 'tripod-side' as const },
-      { ...withDreamLine(withDreamSpot(DREAM_DEFAULT, 'miami-triangle'), DREAM_SPOTS[6].lines[1]), trick: 'Heelflip', skater: 'realistic' as const, camera: 'tripod-top' as const },
+      { ...withDreamLine(withDreamSpot(DREAM_DEFAULT, 'miami-triangle'), dreamSpot('miami-triangle').lines[1]), trick: 'Heelflip', skater: 'realistic' as const, camera: 'tripod-top' as const },
       { ...withDreamSpot(DREAM_DEFAULT, 'uc-davis-gap'), trick: 'Ollie', skater: 'realistic' as const, stance: 'switch' as const, rider: 'goofy' as const, camera: 'tripod-side' as const },
       { ...withDreamSpot(DREAM_DEFAULT, 'carlsbad-gap'), trick: 'Heelflip', skater: 'realistic' as const, stance: 'nollie' as const, rider: 'goofy' as const, camera: 'tripod-bottom' as const },
       { ...withDreamSpot(DREAM_DEFAULT, 'emage-20'), trick: 'Kickflip', skater: 'realistic' as const, stance: 'switch' as const, rider: 'goofy' as const, camera: 'tripod-top' as const },
@@ -93,7 +93,7 @@ describe('Dream Tricks', () => {
     expect(rail).toMatchObject({ mode: 'grinds', rail: 'center' });
     expect(dreamLine(rail).label).toBe('16 rail');
     expect(withDreamLine(rail, DREAM_SPOTS[1].lines[0])).toMatchObject({ mode: 'flatground', obstacle: 'stairs', trick: 'Kickflip' });
-    const triangle = withDreamLine(withDreamSpot(DREAM_DEFAULT, 'miami-triangle'), DREAM_SPOTS[6].lines[1]);
+    const triangle = withDreamLine(withDreamSpot(DREAM_DEFAULT, 'miami-triangle'), dreamSpot('miami-triangle').lines[1]);
     expect(triangle).toMatchObject({ mode: 'flatground', obstacle: 'triangle', trick: 'Kickflip' });
     expect(dreamLine(triangle).label).toBe('Over the triangle');
     expect(dreamLine(withDreamSpot(triangle, 'miami-triangle')).label).toBe('Gap to bank');
@@ -157,7 +157,7 @@ describe('Dream Tricks', () => {
     expect(withDreamSpot(railAtToro, 'hollywood-high')).toMatchObject({ set: 'hollywood-high', mode: 'flatground', obstacle: 'stairs' });
     // Miami starts on its gap, and grinds down whichever edge the trick takes.
     expect(withDreamSpot(railAtToro, 'miami-triangle')).toMatchObject({ set: 'miami-triangle', mode: 'flatground', obstacle: 'stairs' });
-    const edge = withDreamLine(withDreamSpot(railAtToro, 'miami-triangle'), DREAM_SPOTS[6].lines[2]);
+    const edge = withDreamLine(withDreamSpot(railAtToro, 'miami-triangle'), dreamSpot('miami-triangle').lines[2]);
     expect(edge).toMatchObject({ set: 'miami-triangle', mode: 'grinds', rail: 'center' });
     expect(dreamLine(edge).label).toBe('Down an edge');
     expect(dreamStateFromSearch('?set=miami-triangle&grind=boardslide')).toMatchObject({ set: 'miami-triangle', mode: 'grinds' });
