@@ -1,285 +1,395 @@
-"""Model everyday parked cars for the street sets: a sedan, a hatchback and an SUV.
+"""Build phone-sized realistic street cars from CC0 BlenderKit source models.
 
-Each body is lofted from cross-sections along its length (rounded below
-the beltline, the greenhouse leaning in above it), smoothed with a
-subdivision surface, its wheel arches cut out; then wheels, lights, grille,
-mirrors and plates are added. Every part carries a surface number (paint,
-glass, trim, tire, rim, lamps, plate) in a vertex attribute, and ambient
-occlusion is baked into the vertex colors, so each car draws as one mesh in
-one material: the vertex color carries the occlusion in red and the surface
-number (/8) in green. Paint color is the instance's own (streetProps.ts).
+Follows the same pipeline as build_tree.py: imports high-detail CC0 1.0 Public
+Domain automotive models (a modern street coupe/sedan, a stock compact
+sportback/hatchback with its aftermarket wing removed, and a classic boxy SUV),
+strips all badges/emblems/text, replaces 90k-poly tread-block tire soup with
+clean revolved tires fitted to the original alloy rims, simplifies dense meshes
+to a mobile budget (~42k-67k tris per car), maps every material to CAR_SURFACES
+(streetProps.ts), bakes Cycles ambient occlusion against a ground plane into
+vertex color red, and packs the surface id (/16) into vertex color green.
 
-    blender -b --factory-startup --python build_cars.py -- <out dir>
+CC0 1.0 sources (BlenderKit cc_zero):
+  - sedan:     bd89753e-31e2-4223-8d86-3b850115c10f
+  - hatchback: 1d0e2c6c-2889-4009-9be5-628f3f04229c
+  - suv:       8063f534-1304-45f9-8c0e-a4e3c8714f6d
+
+    blender -b --factory-startup --python build_cars.py -- <src dir> <out dir>
 """
-import bpy, bmesh, os, sys, math
-from mathutils import Vector
-from mathutils.bvhtree import BVHTree
+import bpy, bmesh, os, sys, math, json, uuid, urllib.request
+from mathutils import Vector, Matrix
 
-OUT = sys.argv[sys.argv.index("--") + 1]
+args = sys.argv[sys.argv.index("--") + 1:]
+if len(args) == 1:
+    SRC_DIR = os.path.join(args[0], "src")
+    OUT = args[0]
+else:
+    SRC_DIR, OUT = args[0], args[1]
+os.makedirs(SRC_DIR, exist_ok=True)
 os.makedirs(OUT, exist_ok=True)
-for o in list(bpy.data.objects):
-    bpy.data.objects.remove(o, do_unlink=True)
 
-# Surface numbers, shared with streetProps.ts.
-PAINT, GLASS, TRIM, TIRE, RIM, HEAD, TAIL, PLATE = range(8)
+# Surface numbers, shared with streetProps.ts (CAR_SURFACES).
+PAINT, GLASS, TRIM, TIRE, RIM, HEAD, TAIL, PLATE, CHROME, AMBER = range(10)
 
-
-def lerp_keys(keys, s):
-    """Piecewise-linear value at s from [(s, value), ...] sorted by s."""
-    if s <= keys[0][0]:
-        return keys[0][1]
-    for (s0, v0), (s1, v1) in zip(keys, keys[1:]):
-        if s <= s1:
-            t = (s - s0) / (s1 - s0)
-            return v0 + (v1 - v0) * t
-    return keys[-1][1]
-
-
-# Profiles along the car, s = 0 at the rear bumper, 1 at the front. Heights in metres.
-CARS = {
-    "sedan": dict(
-        length=4.72, width=1.82, wheelbase=2.80, wheel=0.33, front_overhang=0.95,
-        bottom=[(0, 0.30), (0.08, 0.20), (0.92, 0.20), (1, 0.32)],
-        belt=[(0, 0.86), (0.04, 0.99), (0.20, 1.02), (0.30, 1.0), (0.62, 0.98), (0.92, 0.86), (1, 0.70)],
-        roof=[(0, 0.86), (0.04, 0.99), (0.17, 1.03), (0.33, 1.42), (0.55, 1.45), (0.66, 1.03), (1, 0.70)],
-        half=[(0, 0.80), (0.05, 0.88), (0.5, 0.91), (0.94, 0.88), (1, 0.74)],
-        glass=(0.18, 0.65), pillars=[0.445],
-    ),
-    "hatchback": dict(
-        length=4.20, width=1.78, wheelbase=2.60, wheel=0.32, front_overhang=0.88,
-        bottom=[(0, 0.32), (0.06, 0.21), (0.92, 0.21), (1, 0.33)],
-        belt=[(0, 0.95), (0.05, 1.02), (0.62, 1.0), (0.92, 0.88), (1, 0.72)],
-        roof=[(0, 0.95), (0.03, 1.10), (0.10, 1.44), (0.55, 1.48), (0.67, 1.03), (1, 0.72)],
-        half=[(0, 0.80), (0.05, 0.86), (0.5, 0.89), (0.94, 0.86), (1, 0.73)],
-        glass=(0.04, 0.66), pillars=[0.18, 0.44],
-    ),
-    "suv": dict(
-        length=4.75, width=1.90, wheelbase=2.82, wheel=0.37, front_overhang=0.95,
-        bottom=[(0, 0.42), (0.07, 0.30), (0.92, 0.30), (1, 0.44)],
-        belt=[(0, 1.10), (0.04, 1.16), (0.62, 1.12), (0.9, 1.05), (1, 0.92)],
-        roof=[(0, 1.10), (0.02, 1.30), (0.06, 1.72), (0.58, 1.76), (0.70, 1.15), (1, 0.92)],
-        half=[(0, 0.86), (0.05, 0.93), (0.5, 0.95), (0.95, 0.93), (1, 0.82)],
-        glass=(0.03, 0.69), pillars=[0.17, 0.44],
-    ),
+CC0_SOURCES = {
+    "sedan": ("bd89753e-31e2-4223-8d86-3b850115c10f", 4.78),
+    "hatchback": ("1d0e2c6c-2889-4009-9be5-628f3f04229c", 4.32),
+    "suv": ("8063f534-1304-45f9-8c0e-a4e3c8714f6d", 3.94),
 }
 
-RING = 18     # points round a cross-section
-SLICES = 22   # cross-sections along the car
+
+def ensure_source(label, asset_id):
+    """Use cached <label>.blend in SRC_DIR, or fetch CC0 blend from BlenderKit."""
+    path = os.path.join(SRC_DIR, f"{label}.blend")
+    if os.path.exists(path):
+        return path
+    url = f"https://www.blenderkit.com/api/v1/assets/{asset_id}/?format=json"
+    asset = json.loads(urllib.request.urlopen(url).read())
+    assert asset["license"] == "cc_zero", f"Expected cc_zero, got {asset['license']}"
+    files = {f["fileType"]: f for f in asset["files"] if not f["isThumbnail"]}
+    chosen = files.get("resolution_0_5K") or files.get("blend")
+    sep = "&" if "?" in chosen["downloadUrl"] else "?"
+    dl = json.loads(urllib.request.urlopen(f"{chosen['downloadUrl']}{sep}scene_uuid={uuid.uuid4()}").read())
+    req = urllib.request.Request(dl["filePath"], headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req) as resp, open(path, "wb") as fp:
+        fp.write(resp.read())
+    return path
 
 
-def section(p, s):
-    """Cross-section at s: points (y, z) round from the bottom center, counter-clockwise seen from the front."""
-    half = lerp_keys(p["half"], s) * p["width"] / 1.82
-    bottom, belt, roof = lerp_keys(p["bottom"], s), lerp_keys(p["belt"], s), lerp_keys(p["roof"], s)
-    cabin = roof - belt
-    top_half = half * 0.74  # the greenhouse leans in (tumblehome)
-    pts = []
-    # Lower body: a squared ellipse from the bottom middle round the side to the beltline.
-    for i in range(8):
-        a = -math.pi / 2 + (i / 7) * math.pi / 2  # bottom middle → side → beltline corner
-        c, si = math.cos(a), math.sin(a)
-        y = half * math.copysign(abs(c) ** 0.35, c)
-        z = (bottom + belt) / 2 + (belt - bottom) / 2 * math.copysign(abs(si) ** 0.6, si)
-        pts.append((y, z))
-    # Shoulder, then the greenhouse side up to the roof's edge, then across the roof.
-    pts.append((half * 0.97, belt + 0.02))
-    if cabin > 0.02:
-        pts.append((top_half + (half - top_half) * 0.15, belt + cabin * 0.85))
-        pts.append((top_half * 0.92, roof - 0.01))
-    else:
-        pts.append((half * 0.9, belt + 0.03))
-        pts.append((half * 0.75, belt + 0.04))
-    pts.append((0.0, roof + (0.015 if cabin > 0.02 else 0.04)))
-    # The other side, mirrored.
-    right = pts[1:-1]
-    full = pts + [(-y, z) for (y, z) in reversed(right)]
-    return full
+def connected_islands(bm):
+    seen, out = set(), []
+    bm.faces.ensure_lookup_table()
+    for f in bm.faces:
+        if f.index in seen:
+            continue
+        stack, grp = [f], []
+        seen.add(f.index)
+        while stack:
+            g = stack.pop()
+            grp.append(g)
+            for e in g.edges:
+                for h in e.link_faces:
+                    if h.index not in seen:
+                        seen.add(h.index)
+                        stack.append(h)
+        out.append(grp)
+    return out
 
 
-def surface_of(p, s, k, n):
-    """Which surface a body face is: glass in the greenhouse sides and screens, paint elsewhere."""
-    g0, g1 = p["glass"]
-    cabin = lerp_keys(p["roof"], s) - lerp_keys(p["belt"], s)
-    side_glass = k in (8, 9, n - 10, n - 9)
-    if g0 < s < g1 and cabin > 0.12:
-        if side_glass and all(abs(s - q) > 0.018 for q in p["pillars"]):
-            return GLASS
-        # Windshield and rear window: the roof's slopes.
-        roof_k = k in (10, 11, n - 11)
-        slope = abs(lerp_keys(p["roof"], min(1, s + 0.02)) - lerp_keys(p["roof"], max(0, s - 0.02))) / 0.04
-        if roof_k and slope > 2.0:
-            return GLASS
-    return PAINT
-
-
-def body(name, p):
-    bm = bmesh.new()
+def add_revolved_tire(bm_tire, x0, x1, cy, cz, r_in, r_out, segs=36):
+    """Add a smooth, watertight revolved tire along axle X between x0..x1 around (cy, cz)."""
+    cx = (x0 + x1) * 0.5
+    hw = (x1 - x0) * 0.5
+    sh = r_out - max(0.014, (r_out - r_in) * 0.22)
+    rmid = (r_in + r_out) * 0.5
+    # Closed cross-section loop in (local_x, radius).
+    prof = [
+        (-hw * 0.78, r_in),
+        (-hw * 0.98, rmid),
+        (-hw * 0.94, sh),
+        (-hw * 0.72, r_out),
+        (0.0, r_out + 0.003),
+        (hw * 0.72, r_out),
+        (hw * 0.94, sh),
+        (hw * 0.98, rmid),
+        (hw * 0.78, r_in),
+    ]
     rings = []
-    for j in range(SLICES + 1):
-        s = j / SLICES
-        x = (s - 0.5) * p["length"]
-        rings.append([bm.verts.new((x, y, z)) for (y, z) in section(p, s)])
-    # Each end turns in on itself in a small inset ring before it's capped, so the
-    # smoothing rounds the bumper over instead of pinching a big flat cap.
-    def inset(ring, dx):
-        # Narrowed to a thin upright sliver: the bumper wraps round to it, and its cap is too thin to pinch.
-        pts = [v.co.copy() for v in ring]
-        mid = sum(pts, Vector()) / len(pts)
-        return [bm.verts.new((p.x + dx, mid.y + (p.y - mid.y) * 0.08, mid.z + (p.z - mid.z) * 0.8)) for p in pts]
-    rings.insert(0, inset(rings[0], -0.06))
-    rings.append(inset(rings[-1], 0.06))
-    n = len(rings[0])
-    surf = bm.faces.layers.int.new("surface")
-    for j in range(len(rings) - 1):
-        s = min(1.0, max(0.0, (j - 0.5) / SLICES))
-        for k in range(n):
-            a, b = rings[j][k], rings[j][(k + 1) % n]
-            c, d = rings[j + 1][(k + 1) % n], rings[j + 1][k]
-            f = bm.faces.new((a, d, c, b))
-            f[surf] = surface_of(p, s, k, n)
-    # Close the ends.
-    for ring, flip in ((rings[0], False), (rings[-1], True)):
-        f = bm.faces.new(list(reversed(ring)) if not flip else ring)
-        f[surf] = PAINT
-    # Faces out, whichever way round the loft wound them.
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-    me = bpy.data.meshes.new(name)
-    bm.to_mesh(me)
-    bm.free()
-    obj = bpy.data.objects.new(name, me)
-    bpy.context.scene.collection.objects.link(obj)
-    for f in me.polygons:
-        f.material_index = 0
-    sub = obj.modifiers.new("sub", 'SUBSURF')
-    sub.levels = 2
+    for i in range(segs):
+        a = i * math.tau / segs
+        ca, sa = math.cos(a), math.sin(a)
+        rings.append([bm_tire.verts.new((cx + lx, cy + ca * pr, cz + sa * pr)) for (lx, pr) in prof])
+    n = len(prof)
+    for i in range(segs):
+        ni = (i + 1) % segs
+        for j in range(n):
+            nj = (j + 1) % n
+            bm_tire.faces.new((rings[i][j], rings[ni][j], rings[ni][nj], rings[i][nj]))
+
+
+def surface_for_sedan(obj_name, mat_name):
+    if obj_name == "Circle":
+        return CHROME
+    if mat_name.startswith("Carbon fiber"):
+        return PAINT
+    if mat_name in ("Material.004", "Material.022"):
+        return GLASS
+    if mat_name in ("Material.009", "Material.011"):
+        return HEAD
+    if mat_name in ("Material.005", "Material.007", "Material.010"):
+        return TAIL
+    if mat_name in ("tire", "Material.002"):
+        return TIRE
+    if mat_name in ("disk.001", "disk.002", "bolt"):
+        return RIM
+    return TRIM
+
+
+def surface_for_hatchback(obj_name, mat_name, face_center_z):
+    if mat_name == "carpaint":
+        return PAINT
+    if mat_name in ("Glass_Rough", "mirror"):
+        return GLASS
+    if mat_name == "Black_Glass":
+        return GLASS if face_center_z > 0.80 else TRIM
+    if mat_name == "WhiteLight":
+        return HEAD
+    if mat_name == "RedLight":
+        return TAIL
+    if mat_name == "BlinkerGlass":
+        return AMBER
+    if mat_name == "Heated Metal":
+        return CHROME
+    if mat_name == "tire":
+        return TIRE
+    if mat_name in ("disk.001", "bolt"):
+        return RIM
+    return TRIM
+
+
+def surface_for_suv(obj_name, mat_name):
+    if mat_name == "Car Paint":
+        return PAINT
+    if mat_name == "Black Opaque  Glass":
+        return GLASS
+    if mat_name in ("Condensation on chrome", "Chrome"):
+        return CHROME
+    if mat_name in ("Automotive led lights", "Automotive led lights.001"):
+        return HEAD
+    if mat_name == "Carlight triangle chrome red":
+        return TAIL
+    if mat_name == "Carlight triangle chrome orange":
+        return AMBER
+    if mat_name == "TireProcedural":
+        return TIRE
+    if obj_name.startswith("Front tire") and mat_name in ("Material", "Material.001"):
+        return RIM
+    return TRIM
+
+
+def decimate_mesh_obj(obj, ratio):
+    if ratio >= 0.999 or len(obj.data.polygons) < 80:
+        return
     bpy.context.view_layer.objects.active = obj
-    bpy.ops.object.modifier_apply(modifier="sub")
-    return obj
+    dec = obj.modifiers.new("dec", 'DECIMATE')
+    dec.ratio = ratio
+    bpy.ops.object.modifier_apply(modifier="dec")
 
 
-def cylinder(name, center, radius, width, verts=32, axis='Y'):
-    bpy.ops.mesh.primitive_cylinder_add(vertices=verts, radius=radius, depth=width, location=center,
-                                        rotation=(math.pi / 2, 0, 0) if axis == 'Y' else (0, 0, 0))
-    o = bpy.context.active_object
-    o.name = name
-    return o
+def load_and_convert(label, blend_path, target_length):
+    """Import source .blend, de-badge, simplify to mobile budget, and return one surface-tagged object."""
+    keep = {o.name for o in bpy.data.objects if o.name.startswith("__built_")}
+    for o in list(bpy.data.objects):
+        if o.name not in keep:
+            bpy.data.objects.remove(o, do_unlink=True)
+    for me in list(bpy.data.meshes):
+        if me.users == 0:
+            bpy.data.meshes.remove(me)
+    for m in list(bpy.data.materials):
+        if m.users == 0:
+            bpy.data.materials.remove(m)
 
+    with bpy.data.libraries.load(blend_path, link=False) as (data_from, data_to):
+        data_to.objects = list(data_from.objects)
 
-def tag(obj, surface):
-    me = obj.data
-    if "surface" not in me.attributes:
-        me.attributes.new("surface", 'INT', 'FACE')
-    vals = [surface] * len(me.polygons)
-    me.attributes["surface"].data.foreach_set("value", vals)
+    imported = []
+    for o in data_to.objects:
+        if o is None:
+            continue
+        bpy.context.scene.collection.objects.link(o)
+        imported.append(o)
 
+    bpy.context.view_layer.update()
 
-def build(name, p):
-    car = body(name, p)
-    half_w = p["width"] / 2
-    wheel_x = [p["length"] / 2 - p["front_overhang"], p["length"] / 2 - p["front_overhang"] - p["wheelbase"]]
-    r = p["wheel"]
-    # Wheel arches.
-    for x in wheel_x:
-        for side in (1, -1):
-            cut = cylinder("arch", (x, side * half_w, r + 0.02), r + 0.06, 0.7)
-            mod = car.modifiers.new("arch", 'BOOLEAN')
-            mod.object = cut
-            mod.operation = 'DIFFERENCE'
-            mod.solver = 'EXACT'
-            bpy.context.view_layer.objects.active = car
-            bpy.ops.object.modifier_apply(modifier="arch")
-            bpy.data.objects.remove(cut, do_unlink=True)
-    parts = [car]
-    # Wheels: a rounded tire, a rim with five spokes, a dark well behind.
-    for x in wheel_x:
-        for side in (1, -1):
-            y = side * (half_w - 0.14)
-            tire = cylinder("tire", (x, y, r), r, 0.22, 28)
-            bev = tire.modifiers.new("bev", 'BEVEL'); bev.width = 0.05; bev.segments = 3
-            bpy.ops.object.modifier_apply(modifier="bev")
-            tag(tire, TIRE)
-            rim = cylinder("rim", (x, y + side * 0.112, r), r * 0.64, 0.02, 24)
-            tag(rim, RIM)
-            parts += [tire, rim]
-            for k in range(5):
-                a = k * math.tau / 5
-                bpy.ops.mesh.primitive_cube_add(size=1, location=(x + math.cos(a) * r * 0.32, y + side * 0.125, r + math.sin(a) * r * 0.32),
-                                                rotation=(0, -a, 0))
-                spoke = bpy.context.active_object
-                spoke.scale = (r * 0.62, 0.02, 0.05)
-                bpy.ops.object.transform_apply(scale=True)
-                tag(spoke, TRIM)
-                parts.append(spoke)
-            well = cylinder("well", (x, side * (half_w - 0.32), r + 0.03), r + 0.05, 0.12, 24)
-            tag(well, TRIM)
-            parts.append(well)
-    L = p["length"] / 2
-    belt_front, belt_rear = lerp_keys(p["belt"], 0.97), lerp_keys(p["belt"], 0.03)
-    bottom_front, bottom_rear = lerp_keys(p["bottom"], 0.98), lerp_keys(p["bottom"], 0.02)
-    # Trim sits on the body's actual surface: found by casting at it from outside.
-    tree = BVHTree.FromObject(car, bpy.context.evaluated_depsgraph_get())
+    drop_sedan = {"Text", "Circle.001", "Circle.004", "Plane.008", "Plane.072", "Plane.076", "Plane.009"}
+    mesh_objs = []
+    for o in imported:
+        if o.type != 'MESH' or o.hide_render:
+            continue
+        if label == "sedan" and any(o.name == d or o.name.startswith(d + ".") for d in drop_sedan):
+            continue
+        if label == "suv" and (o.name == "Chrome.002" or o.name.startswith("Chrome.002.")):
+            continue
 
-    def onto(origin, direction):
-        hit, *_ = tree.ray_cast(Vector(origin), Vector(direction), 10.0)
-        return hit
+        for m in list(o.modifiers):
+            if m.type == 'WIREFRAME':
+                o.modifiers.remove(m)
+            elif m.type == 'SUBSURF':
+                if label == "suv":
+                    lvl = 0
+                else:
+                    lvl = 0 if len(o.data.polygons) > 500 else 1
+                m.levels = lvl
+                m.render_levels = lvl
+        mesh_objs.append(o)
 
-    def box(center, size, surface, rot=(0, 0, 0)):
-        bpy.ops.mesh.primitive_cube_add(size=1, location=center, rotation=rot)
-        o = bpy.context.active_object
-        o.scale = size
-        bpy.ops.object.transform_apply(scale=True)
-        bev = o.modifiers.new("bev", 'BEVEL'); bev.width = min(size) * 0.3; bev.segments = 2
-        bpy.ops.object.modifier_apply(modifier="bev")
-        tag(o, surface)
-        parts.append(o)
-        return o
+    deps = bpy.context.evaluated_depsgraph_get()
+    buckets = {s: bmesh.new() for s in range(10)}
+    wheel_buckets = {s: bmesh.new() for s in (TIRE, RIM, TRIM)}
 
-    def on_end(y, z, size, surface, front, proud=0.3):
-        """A part on the nose (front) or tail, `proud` of its depth standing out of the body."""
-        sign = 1 if front else -1
-        hit = onto((sign * (L + 2), y, z), (-sign, 0, 0))
-        if hit is None:
-            return
-        box((hit.x - sign * size[0] * (0.5 - proud), y, z), size, surface)
+    for o in mesh_objs:
+        eo = o.evaluated_get(deps)
+        me = eo.to_mesh()
+        if not len(me.polygons):
+            eo.to_mesh_clear()
+            continue
+        mw = eo.matrix_world.copy()
+        raw_mats = [ms.material.name if ms.material else "" for ms in eo.material_slots]
 
-    lamp_z = (belt_front + bottom_front) / 2 + 0.1
-    tail_z = (belt_rear + bottom_rear) / 2 + 0.12
-    for side in (1, -1):
-        on_end(side * half_w * 0.66, lamp_z, (0.1, half_w * 0.36, 0.08), HEAD, True)
-        on_end(side * half_w * 0.7, tail_z, (0.1, half_w * 0.32, 0.1), TAIL, False)
-        # Mirrors on the doors at the base of the windshield.
-        mx = (p["glass"][1] - 0.5) * p["length"] - 0.12
-        mz = lerp_keys(p["belt"], p["glass"][1]) + 0.06
-        hit = onto((mx, side * (half_w + 2), mz), (0, -side, 0))
-        if hit is not None:
-            box((mx, hit.y + side * 0.07, mz), (0.16, 0.16, 0.11), PAINT)
-    on_end(0, lamp_z - 0.03, (0.08, half_w * 0.72, 0.15), TRIM, True)            # grille
-    on_end(0, bottom_front + 0.13, (0.04, 0.52, 0.12), PLATE, True, 0.6)           # front plate
-    on_end(0, tail_z - 0.12, (0.04, 0.52, 0.12), PLATE, False, 0.6)               # rear plate
-    on_end(0, bottom_front + 0.03, (0.12, half_w * 1.6, 0.09), TRIM, True, 0.25)  # lower bumper lips
-    on_end(0, bottom_rear + 0.03, (0.12, half_w * 1.6, 0.09), TRIM, False, 0.25)
-    # The body's own surfaces (paint, glass) came with the loft, as its face attribute.
+        bm = bmesh.new()
+        bm.from_mesh(me)
+        eo.to_mesh_clear()
+        bm.transform(mw)
+
+        if label == "hatchback" and o.name.startswith("body"):
+            drop_faces = set()
+            for f in bm.faces:
+                mn = raw_mats[f.material_index] if f.material_index < len(raw_mats) else ""
+                if any(mn.startswith(k) for k in ("Emblem", "WingBolts", "Clear Plastic", "ClearPlastic")):
+                    drop_faces.add(f)
+            for grp in connected_islands(bm):
+                ys = [v.co.y for f in grp for v in f.verts]
+                zs = [v.co.z for f in grp for v in f.verts]
+                if (min(ys) > 1.95 and min(zs) > 1.00) or max(zs) > 1.48:
+                    drop_faces.update(grp)
+            if drop_faces:
+                bmesh.ops.delete(bm, geom=list(drop_faces), context='FACES')
+
+        is_wheel = any(k in o.name for k in ("Sports wheel", "Wheel", "Front tire"))
+
+        # On sedan & hatchback, replace 90k-poly tread-block tire soup with a clean revolved tire!
+        revolve_tire = is_wheel and label in ("sedan", "hatchback")
+        tire_pts = []
+        rim_pts = []
+
+        bm.verts.ensure_lookup_table()
+        bm.faces.ensure_lookup_table()
+        for f in bm.faces:
+            mn = raw_mats[f.material_index] if f.material_index < len(raw_mats) else ""
+            if label == "sedan":
+                surf = surface_for_sedan(o.name, mn)
+            elif label == "hatchback":
+                if mn.startswith("Emblem"):
+                    continue
+                surf = surface_for_hatchback(o.name, mn, f.calc_center_median().z)
+            else:
+                surf = surface_for_suv(o.name, mn)
+
+            if revolve_tire and surf == TIRE:
+                for v in f.verts:
+                    tire_pts.append(v.co.copy())
+                continue
+            if revolve_tire and surf == RIM:
+                for v in f.verts:
+                    rim_pts.append(v.co.copy())
+
+            target_bm = wheel_buckets[surf] if (is_wheel and surf in wheel_buckets) else buckets[surf]
+            new_verts = [target_bm.verts.new(v.co) for v in f.verts]
+            try:
+                target_bm.faces.new(new_verts)
+            except ValueError:
+                pass
+
+        if revolve_tire and tire_pts:
+            x0 = min(p.x for p in tire_pts)
+            x1 = max(p.x for p in tire_pts)
+            y0, y1 = min(p.y for p in tire_pts), max(p.y for p in tire_pts)
+            z0, z1 = min(p.z for p in tire_pts), max(p.z for p in tire_pts)
+            cy, cz = (y0 + y1) * 0.5, (z0 + z1) * 0.5
+            r_out = max(y1 - y0, z1 - z0) * 0.5
+            if rim_pts:
+                r_rim = max(math.hypot(p.y - cy, p.z - cz) for p in rim_pts)
+                r_in = min(r_out * 0.84, max(r_out * 0.58, r_rim - 0.008))
+            else:
+                r_in = r_out * 0.72
+            add_revolved_tire(wheel_buckets[TIRE], x0, x1, cy, cz, r_in, r_out, segs=36)
+
+        bm.free()
+
+    for o in list(bpy.data.objects):
+        if not o.name.startswith("__built_"):
+            bpy.data.objects.remove(o, do_unlink=True)
+
+    # Tuned decimation ratios so the three cars land around ~42k-67k clean tris (~1.35 MB total GLB).
+    body_ratios = {
+        "sedan": {PAINT: 0.32, TRIM: 0.15, GLASS: 0.60, HEAD: 0.75, TAIL: 0.60, CHROME: 0.25},
+        "hatchback": {PAINT: 0.36, TRIM: 0.24, GLASS: 0.75, HEAD: 0.85, TAIL: 0.75, CHROME: 0.20, AMBER: 1.0},
+        "suv": {PAINT: 0.32, TRIM: 0.09, CHROME: 0.12, GLASS: 0.60, HEAD: 0.25, TAIL: 0.35, AMBER: 0.40},
+    }[label]
+    wheel_ratios = {
+        "sedan": {TIRE: 1.0, RIM: 0.045, TRIM: 0.02},
+        "hatchback": {TIRE: 1.0, RIM: 0.045, TRIM: 0.02},
+        "suv": {TIRE: 0.055, RIM: 0.09, TRIM: 0.06},
+    }[label]
+
+    parts = []
+    for is_whl, bdict, rdict in ((False, buckets, body_ratios), (True, wheel_buckets, wheel_ratios)):
+        for surf, bm in bdict.items():
+            if not len(bm.faces):
+                bm.free()
+                continue
+            bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-4)
+            bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+            me = bpy.data.meshes.new(f"part_{surf}_{is_whl}")
+            bm.to_mesh(me)
+            bm.free()
+            obj = bpy.data.objects.new(me.name, me)
+            bpy.context.scene.collection.objects.link(obj)
+            decimate_mesh_obj(obj, rdict.get(surf, 0.5))
+
+            bm2 = bmesh.new()
+            bm2.from_mesh(obj.data)
+            sharp = [e for e in bm2.edges if len(e.link_faces) == 2 and e.calc_face_angle(0.0) > math.radians(58.0)]
+            if sharp:
+                bmesh.ops.split_edges(bm2, edges=sharp)
+            bm2.to_mesh(obj.data)
+            bm2.free()
+
+            obj.data.attributes.new("surface", 'INT', 'FACE')
+            obj.data.attributes["surface"].data.foreach_set("value", [surf] * len(obj.data.polygons))
+            parts.append(obj)
+
     bpy.ops.object.select_all(action='DESELECT')
-    for o in parts:
-        o.select_set(True)
-    bpy.context.view_layer.objects.active = car
+    for p in parts:
+        p.select_set(True)
+    bpy.context.view_layer.objects.active = parts[0]
     bpy.ops.object.join()
-    bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.mesh.normals_make_consistent(inside=False)
-    bpy.ops.object.mode_set(mode='OBJECT')
+    car = bpy.context.active_object
+    car.name = f"__built_{label}"
+    car.data.materials.clear()
+
+    # Rotate +90 deg about Z so nose (-Y in all 3 sources) points +X, center X/Y, ground Z at 0, scale uniformly.
+    rot = Matrix.Rotation(math.pi / 2, 4, 'Z')
+    car.data.transform(rot)
+    xs = [v.co.x for v in car.data.vertices]
+    ys = [v.co.y for v in car.data.vertices]
+    zs = [v.co.z for v in car.data.vertices]
+    cx = (min(xs) + max(xs)) * 0.5
+    cy = (min(ys) + max(ys)) * 0.5
+    min_z = min(zs)
+    cur_len = max(xs) - min(xs)
+    scale = target_length / cur_len
+    xform = Matrix.Scale(scale, 4) @ Matrix.Translation(Vector((-cx, -cy, -min_z)))
+    car.data.transform(xform)
+    car.data.update()
+
+    for poly in car.data.polygons:
+        poly.use_smooth = True
+
     return car
 
 
-def split_surfaces(obj):
-    """Separate vertices where surfaces meet, so a per-vertex surface number is exact."""
+def finalize_surface_attribute(obj):
+    """Ensure vertices are separated across surface boundaries and store _SURFACE per vertex."""
     bm = bmesh.new()
     bm.from_mesh(obj.data)
     layer = bm.faces.layers.int.get("surface")
     edges = [e for e in bm.edges if len(e.link_faces) == 2 and e.link_faces[0][layer] != e.link_faces[1][layer]]
-    bmesh.ops.split_edges(bm, edges=edges)
+    if edges:
+        bmesh.ops.split_edges(bm, edges=edges)
     bm.to_mesh(obj.data)
     bm.free()
+
     me = obj.data
     vals = [0] * len(me.polygons)
     me.attributes["surface"].data.foreach_get("value", vals)
@@ -292,6 +402,16 @@ def split_surfaces(obj):
     me.attributes.remove(me.attributes["surface"])
 
 
+for o in list(bpy.data.objects):
+    bpy.data.objects.remove(o, do_unlink=True)
+
+built = []
+for label, (asset_id, target_len) in CC0_SOURCES.items():
+    blend_path = ensure_source(label, asset_id)
+    car = load_and_convert(label, blend_path, target_len)
+    finalize_surface_attribute(car)
+    built.append(car)
+
 scene = bpy.context.scene
 scene.render.engine = 'CYCLES'
 scene.cycles.samples = 64
@@ -299,45 +419,46 @@ scene.cycles.device = 'CPU'
 if scene.world is None:
     scene.world = bpy.data.worlds.new("w")
 scene.world.light_settings.distance = 1.2
-built = []
-for i, (name, p) in enumerate(CARS.items()):
-    car = build(name, p)
-    # The body's lofted faces keep their glass tags; the join merged the attribute.
-    split_surfaces(car)
-    for poly in car.data.polygons:
-        poly.use_smooth = True
-    car.location = (0, i * 4.0, 0)
-    bpy.ops.object.select_all(action='DESELECT')
-    car.select_set(True)
-    bpy.context.view_layer.objects.active = car
+
+for i, car in enumerate(built):
+    clean_name = car.name.replace("__built_", "")
+    car.name = clean_name
+    car.data.name = clean_name
+    car.location = (0, i * 5.0, 0)
     attr = car.data.color_attributes.new("Col", 'FLOAT_COLOR', 'POINT')
     car.data.color_attributes.active_color = attr
-    built.append(car)
-# A ground for the occlusion under the cars.
-bpy.ops.mesh.primitive_plane_add(size=40, location=(0, 4, 0))
+
+bpy.ops.mesh.primitive_plane_add(size=50, location=(0, 5.0, 0))
 ground = bpy.context.active_object
+
 for car in built:
     bpy.ops.object.select_all(action='DESELECT')
     car.select_set(True)
     bpy.context.view_layer.objects.active = car
     bpy.ops.object.bake(type='AO', target='VERTEX_COLORS')
     car.location = (0, 0, 0)
-    # Occlusion in red; the surface number (/8) in green, so it survives packing as a color.
     me = car.data
     surface = [0.0] * len(me.vertices)
     me.attributes["_SURFACE"].data.foreach_get("value", surface)
     col = [0.0] * (len(me.vertices) * 4)
     me.color_attributes["Col"].data.foreach_get("color", col)
     for i, sv in enumerate(surface):
-        col[i * 4 + 1] = (sv + 0.5) / 8.0
+        col[i * 4 + 1] = (sv + 0.5) / 16.0
         col[i * 4 + 2] = 0.0
     me.color_attributes["Col"].data.foreach_set("color", col)
     me.attributes.remove(me.attributes["_SURFACE"])
-    print("CAR", car.name, "verts", len(car.data.vertices), "tris", sum(len(f.vertices) - 2 for f in car.data.polygons))
+    xs = [v.co.x for v in me.vertices]
+    ys = [v.co.y for v in me.vertices]
+    zs = [v.co.z for v in me.vertices]
+    tris = sum(len(f.vertices) - 2 for f in me.polygons)
+    print(f"CAR {car.name:10s} verts={len(me.vertices):6d} tris={tris:6d} size=({max(xs)-min(xs):.2f}, {max(ys)-min(ys):.2f}, {max(zs)-min(zs):.2f})")
+
 bpy.data.objects.remove(ground, do_unlink=True)
+shared_mat = bpy.data.materials.new("car")
 for car in built:
     car.data.materials.clear()
-    car.data.materials.append(bpy.data.materials.new("car"))
+    car.data.materials.append(shared_mat)
+
 bpy.ops.object.select_all(action='DESELECT')
 for car in built:
     car.select_set(True)

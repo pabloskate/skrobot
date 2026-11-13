@@ -169,6 +169,49 @@ describe('tree models', () => {
   }
 });
 
+describe('car models', () => {
+  it('ships sedan, hatchback, and suv grounded at real-world metre sizes with baked AO and surface tags', async () => {
+    await MeshoptDecoder.ready;
+    const bytes = readFileSync(asset('cars.glb'));
+    const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    const gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).parseAsync(buffer, '');
+    const parts = meshes(gltf.scene);
+    expect([...parts.keys()].sort()).toEqual(['hatchback', 'sedan', 'suv']);
+
+    const bounds: Record<string, { len: [number, number]; wid: [number, number]; hgt: [number, number] }> = {
+      sedan: { len: [4.5, 5.0], wid: [1.8, 2.2], hgt: [1.3, 1.6] },
+      hatchback: { len: [4.1, 4.5], wid: [1.8, 2.1], hgt: [1.2, 1.5] },
+      suv: { len: [3.8, 4.5], wid: [1.8, 2.2], hgt: [1.8, 2.2] },
+    };
+    gltf.scene.traverse((o) => {
+      if (!(o instanceof Mesh)) return;
+      const pts = parts.get(o.name)!;
+      const xs = pts.map((p) => p.x);
+      const ys = pts.map((p) => p.y);
+      const zs = pts.map((p) => p.z);
+      const b = bounds[o.name];
+      expect(Math.min(...ys)).toBeCloseTo(0, 2);
+      expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThanOrEqual(b.len[0]);
+      expect(Math.max(...xs) - Math.min(...xs)).toBeLessThanOrEqual(b.len[1]);
+      expect(Math.max(...zs) - Math.min(...zs)).toBeGreaterThanOrEqual(b.wid[0]);
+      expect(Math.max(...zs) - Math.min(...zs)).toBeLessThanOrEqual(b.wid[1]);
+      expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThanOrEqual(b.hgt[0]);
+      expect(Math.max(...ys) - Math.min(...ys)).toBeLessThanOrEqual(b.hgt[1]);
+
+      const color = o.geometry.getAttribute('color');
+      expect(color).toBeDefined();
+      const surfaces = new Set<number>();
+      for (let i = 0; i < color.count; i++) {
+        surfaces.add(Math.floor(color.getY(i) * 16 - 0.5 + 0.5));
+      }
+      expect(surfaces.has(0)).toBe(true); // PAINT
+      expect(surfaces.has(1)).toBe(true); // GLASS
+      expect(surfaces.has(3)).toBe(true); // TIRE
+      expect(surfaces.has(4)).toBe(true); // RIM
+    });
+  });
+});
+
 describe('StreetProps trees', () => {
   afterEach(() => vi.restoreAllMocks());
 

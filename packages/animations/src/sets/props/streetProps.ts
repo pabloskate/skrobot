@@ -216,10 +216,10 @@ function leafMaterial(map: Texture, haze?: PropHaze): ShaderMaterial {
   `, { uMap: { value: map } }, { side: DoubleSide });
 }
 
-/** Surface numbers, carried ×1/8 in the car models' vertex color green (blender/build_cars.py). */
-const CAR_SURFACES = ['PAINT', 'GLASS', 'TRIM', 'TIRE', 'RIM', 'HEAD', 'TAIL', 'PLATE'];
+/** Surface numbers, carried ×1/16 in the car models' vertex color green (blender/build_cars.py). */
+const CAR_SURFACES = ['PAINT', 'GLASS', 'TRIM', 'TIRE', 'RIM', 'HEAD', 'TAIL', 'PLATE', 'CHROME', 'AMBER'];
 
-/** Cars: paint and glass that mirror the sky, rubber, alloy, lamps; occlusion baked in the vertex colors. */
+/** Cars: paint and glass that mirror the sky, rubber, alloy, chrome, lamps; occlusion baked in the vertex colors. */
 function carMaterial(haze?: PropHaze): ShaderMaterial {
   const surfaces = CAR_SURFACES.map((name, i) => `const float ${name} = ${i}.0;`).join('\n');
   return sceneMaterial(VERT.replace('out vec3 vWorld;', `
@@ -227,7 +227,7 @@ function carMaterial(haze?: PropHaze): ShaderMaterial {
     out vec3 vPaint;
     out vec3 vWorld;`).replace('vUv = uv;', `vUv = vec2(0.0);
     #ifdef USE_COLOR
-      vSurface = color.g * 8.0 - 0.5;
+      vSurface = color.g * 16.0 - 0.5;
     #else
       vSurface = 0.0;
     #endif
@@ -251,28 +251,39 @@ function carMaterial(haze?: PropHaze): ShaderMaterial {
       float nl = max(dot(n, SUN), 0.0);
       float nv = max(dot(n, eye), 0.0);
       vec3 r = reflect(-eye, n);
+      vec3 h = normalize(SUN + eye);
+      float nh = max(dot(n, h), 0.0);
       float ao = vShade;
-      float spec = pow(max(dot(n, normalize(SUN + eye)), 0.0), 90.0);
+      float spec = pow(nh, 100.0);
+      float sheen = pow(nh, 22.0);
       vec3 color;
       if (id == PAINT) {
-        float fres = 0.05 + 0.6 * pow(1.0 - nv, 4.0);
-        color = vPaint * (0.42 + 0.62 * nl) * ao;
-        color = mix(color, sky(r) * ao, fres) + vec3(0.9) * spec * nl;
+        float fres = 0.04 + 0.55 * pow(1.0 - nv, 4.2);
+        color = vPaint * (0.40 + 0.62 * nl + 0.14 * sheen * nl) * ao;
+        color = mix(color, sky(r) * ao, fres) + vec3(0.95) * spec * nl;
       } else if (id == GLASS) {
-        float fres = 0.18 + 0.7 * pow(1.0 - nv, 3.0);
-        color = mix(vec3(0.05, 0.065, 0.075), sky(r), fres) * ao + vec3(1.0) * spec * nl;
+        float fres = 0.20 + 0.72 * pow(1.0 - nv, 3.0);
+        color = mix(vec3(0.025, 0.035, 0.045), sky(r), fres) * ao + vec3(1.0) * pow(nh, 140.0) * nl;
       } else if (id == RIM) {
-        color = mix(vec3(0.55, 0.56, 0.57), sky(r), 0.45) * (0.5 + 0.5 * nl) * ao + vec3(0.6) * spec;
+        color = mix(vec3(0.60, 0.62, 0.64), sky(r), 0.48) * (0.52 + 0.48 * nl) * ao + vec3(0.75) * spec * nl;
+      } else if (id == CHROME) {
+        color = mix(vec3(0.78, 0.80, 0.82), sky(r), 0.72) * (0.65 + 0.35 * nl) * ao + vec3(1.0) * pow(nh, 120.0) * nl;
       } else if (id == HEAD) {
-        color = mix(vec3(0.82, 0.83, 0.8), sky(r), 0.35) * ao + vec3(0.8) * spec;
+        float fres = 0.15 + 0.45 * pow(1.0 - nv, 3.0);
+        color = mix(vec3(0.84, 0.86, 0.88) * (0.7 + 0.3 * nl), sky(r), fres) * ao + vec3(0.95) * spec * nl;
       } else if (id == TAIL) {
-        color = vec3(0.55, 0.06, 0.05) * (0.6 + 0.4 * nl) * ao + vec3(0.5) * spec;
+        float fres = 0.12 + 0.45 * pow(1.0 - nv, 3.5);
+        color = mix(vec3(0.56, 0.04, 0.04) * (0.62 + 0.38 * nl), sky(r), fres) * ao + vec3(0.85) * spec * nl;
+      } else if (id == AMBER) {
+        float fres = 0.12 + 0.40 * pow(1.0 - nv, 3.5);
+        color = mix(vec3(0.78, 0.36, 0.04) * (0.65 + 0.35 * nl), sky(r), fres) * ao + vec3(0.75) * spec * nl;
       } else if (id == PLATE) {
-        color = vec3(0.84, 0.84, 0.8) * (0.55 + 0.45 * nl) * ao;
+        color = vec3(0.85, 0.85, 0.81) * (0.58 + 0.42 * nl) * ao;
       } else {
-        // Trim and tires: dark rubber and plastic.
-        float base = id == TIRE ? 0.07 : 0.1;
-        color = vec3(base) * (0.6 + 0.6 * nl) * ao + vec3(0.12) * spec * nl;
+        // Trim and tires: dark rubber and satin plastic.
+        float base = id == TIRE ? 0.055 : 0.075;
+        float s = id == TIRE ? 0.04 : 0.10;
+        color = vec3(base) * (0.58 + 0.56 * nl) * ao + vec3(s) * sheen * nl;
       }
       outColor = vec4(hazed(color), 1.0);
       outInfo = vec4(0.0);
