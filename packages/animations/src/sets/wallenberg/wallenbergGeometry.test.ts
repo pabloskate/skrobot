@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { DoubleSide, Mesh, MeshBasicMaterial, Raycaster, Vector3 } from 'three';
 import { Bake } from '../../three/bake';
+import { canopiesFromTrees, MAX_CANOPIES, MAX_CONTACTS } from '../surfaces';
 import { buildWallenbergBlocks, buildWallenbergGeometry } from './wallenbergGeometry';
+import { WALLENBERG_CARS, WALLENBERG_TREES } from './wallenbergTrees';
 import {
   SET_FOOT, WALLENBERG_DROP, WALLENBERG_END_Z, WALLENBERG_CORNER_R, WALLENBERG_FLIGHTS, WALLENBERG_RISERS, WALLENBERG_RUN, WALLENBERG_SIDE_STAIRS_Z0,
-  WALLENBERG_STEPS, WALLENBERG_TREAD, sideStairHeight, wallenbergGround, wallenbergLevel, wallenbergSurface,
+  WALLENBERG_STEPS, WALLENBERG_TREAD, WALLENBERG_GYM_BACK_X, WALLENBERG_GYM_FAR_Z, WALLENBERG_GYM_X, WALLENBERG_GYM_Z, WALLENBERG_RAMP,
+  sideStairHeight, wallenbergGround, wallenbergLevel, wallenbergSurface,
 } from './wallenbergLayout';
 
 describe('Wallenberg landmark geometry', () => {
@@ -118,4 +121,54 @@ describe('Wallenberg landmark geometry', () => {
       props.dispose();
     }
   });
+
+  it('stays inside the realistic look\'s shader budgets', () => {
+    const { ground, props, decals, wireMesh, railSegments, shadowBoxes, contacts } = buildWallenbergGeometry();
+    try {
+      expect(railSegments.length).toBeLessThanOrEqual(48);
+      expect(shadowBoxes.length).toBeLessThanOrEqual(12);
+      expect(contacts.length).toBeLessThanOrEqual(MAX_CONTACTS);
+      expect(canopiesFromTrees(WALLENBERG_TREES).length).toBeLessThanOrEqual(MAX_CANOPIES);
+      const count = [ground, props, decals, wireMesh.geometry].reduce((n, g) => n + g.getAttribute('position').count, 0);
+      expect(count).toBeLessThan(120_000);
+    } finally {
+      for (const g of [ground, props, decals, wireMesh.geometry]) g.dispose();
+    }
+  });
+
+  it('lays every level decal a hair over the ground, never in it, and layers apart', () => {
+    const { decals, ground, props, wireMesh } = buildWallenbergGeometry();
+    try {
+      const position = decals.getAttribute('position'), normal = decals.getAttribute('normal');
+      let level = 0;
+      // Each triangle at its middle, so marks along an edge (the ledge's cap) are judged by the ground they lie on.
+      for (let i = 0; i < position.count; i += 3) {
+        if (normal.getY(i) < 0.98) continue;
+        const [x, y, z] = [0, 1, 2].map((axis) => [0, 1, 2].reduce((sum, k) => sum + position.getComponent(i + k, axis), 0) / 3);
+        // Under the roll-in's sheet is out of sight; everywhere else a decal floats 0.2 to 1 unit proud.
+        if (x < 0 && Math.abs(z) <= WALLENBERG_RAMP.halfWidth + 1) continue;
+        const lift = y - wallenbergSurface(x, z);
+        const where = `decal at ${(x / SET_FOOT).toFixed(1)}, ${(z / SET_FOOT).toFixed(1)} ft`;
+        expect(lift, where).toBeGreaterThan(0.2);
+        expect(lift, where).toBeLessThan(1);
+        level++;
+      }
+      expect(level).toBeGreaterThan(300);
+    } finally {
+      for (const g of [ground, props, decals, wireMesh.geometry]) g.dispose();
+    }
+  });
+
+  it('keeps the trees and parked cars off the line, the blocks, the gym and the filmers\' stands', () => {
+    const F = SET_FOOT;
+    for (const { at } of [...WALLENBERG_TREES, ...WALLENBERG_CARS]) {
+      const [x, , z] = at;
+      const label = `${(x / F).toFixed(0)}, ${(z / F).toFixed(0)} ft`;
+      // Not on the blocks, the alley, the roll-in or the yard in front of the blocks.
+      expect(x < -60 * F || x > WALLENBERG_RUN + 100 * F || z > WALLENBERG_SIDE_STAIRS_Z0 + 15 * F, label).toBe(true);
+      // Not inside the gym.
+      expect(x > WALLENBERG_GYM_BACK_X && x < WALLENBERG_GYM_X && z > WALLENBERG_GYM_Z && z < WALLENBERG_GYM_FAR_Z, label).toBe(false);
+    }
+  });
 });
+
