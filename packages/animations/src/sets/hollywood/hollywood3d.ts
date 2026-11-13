@@ -635,6 +635,8 @@ export const HOLLYWOOD_LOOK: SpotLook = {
   // Old Highland Avenue asphalt: 3/8 in stones worn into view (refs 44, 13, 36).
   asphalt: { scale: 0.03, contrast: 0.16 },
   foliage: true,
+  // Carlsbad's wing sash is Carlsbad's alone.
+  sash: undefined,
   stairs: {
     x: [0, HOLLYWOOD_RUN / F], z: [HOLLYWOOD_LEFT_Z / F, HOLLYWOOD_RIGHT_Z / F],
     top: 0, tread: HOLLYWOOD_TREAD / F, riser: HOLLYWOOD_RISER / F,

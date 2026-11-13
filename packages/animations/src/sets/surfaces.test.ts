@@ -86,7 +86,7 @@ describe('Bake shading', () => {
 });
 
 describe('look helpers', () => {
-  it('builds uninked surface inks for solids 14-24, under the 32 an ink can hold', () => {
+  it('builds uninked surface inks below the 32 an ink can hold', () => {
     for (const name of Object.keys(SURFACE) as Array<keyof typeof SURFACE>) {
       const ink = surfaceInk(name);
       expect(ink).toEqual({ id: 0, priority: 0, width: 0, kind: 0, solid: SURFACE[name] });
@@ -100,11 +100,11 @@ describe('look helpers', () => {
     expect(new Set(Object.values(SURFACE)).size).toBe(Object.keys(SURFACE).length);
   });
 
-  it('adds brick and asphalt after lockers, the last solids an ink can hold room for', () => {
-    expect(SURFACE).toMatchObject({ lockers: 22, brick: 23, asphalt: 24 });
-    expect(Math.max(...Object.values(SURFACE))).toBe(SURFACE.asphalt);
+  it('adds brick, asphalt and sash after lockers', () => {
+    expect(SURFACE).toMatchObject({ lockers: 22, brick: 23, asphalt: 24, sash: 25 });
+    expect(Math.max(...Object.values(SURFACE))).toBe(SURFACE.sash);
     // Each decodes from a baked face as the shader does.
-    for (const solid of [SURFACE.brick, SURFACE.asphalt]) {
+    for (const solid of [SURFACE.brick, SURFACE.asphalt, SURFACE.sash]) {
       const bake = new Bake();
       bake.quad([0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1], UP, { color: '#808080' }, { ...surfaceInk('concrete'), kind: 3, solid });
       expect(Math.floor((bake.geometry().getAttribute('aInfo').getW(0) * 255) / 4 + 0.01)).toBe(solid);
@@ -219,6 +219,12 @@ describe('the realistic look is opt in', () => {
     expect(lookSurfaceTest(resolveLook({ asphalt: ASPHALT, lockers: { door: 1, tier: 6, from: 0 } }))).toBe('surface > 13.5 && surface < 22.5 || abs(surface - 24.0) < 0.5');
     expect(surfacesGlsl(resolveLook({ asphalt: ASPHALT }))).not.toContain('lookBrick');
     expect(surfacesGlsl(resolveLook({ brick: BRICK }))).not.toContain('lookAsphalt');
+    // Carlsbad's sash takes its own solid, past brick and asphalt, and is tested before them.
+    const sash = { yaw: 0, from: 0, period: 4, width: 4, columns: [[0, 0.1]] as [number, number][], rows: [[0, 0.1]] as [number, number][], frame: '#cccccc' };
+    expect(lookSurfaceTest(resolveLook({ sash, brick: BRICK }))).toBe('surface > 13.5 && surface < 21.5 || abs(surface - 23.0) < 0.5 || abs(surface - 25.0) < 0.5');
+    const sashed = surfacesGlsl(resolveLook({ sash, brick: BRICK }));
+    expect(sashed.indexOf('return lookSash(')).toBeLessThan(sashed.indexOf('return lookBrick('));
+    expect(surfacesGlsl(resolveLook({ brick: BRICK }))).not.toContain('lookSash');
   });
 
   it('shares a brick face’s paint between brick and mortar, so the wall far off is exactly its paint', () => {

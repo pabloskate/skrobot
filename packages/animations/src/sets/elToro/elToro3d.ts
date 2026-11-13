@@ -39,6 +39,8 @@ export const EL_TORO_LOOK: SpotLook = {
   mortar: '#c4b49a',
   lockers: { door: 1, tier: 9.5 / 8, from: 9.5 / 16 },
   foliage: true,
+  // Carlsbad's wing sash is Carlsbad's alone.
+  sash: undefined,
 };
 
 /**

@@ -53,6 +53,12 @@ export const SURFACE = {
    * face carrying it is shaded as plain paint.
    */
   asphalt: 24,
+  /**
+   * Window glass with its steel sash drawn on it: the glass as `glass`, the jambs, mullions and rails filtered
+   * over the pixel so a far window settles into its average tone instead of flickering. Only a spot whose look
+   * sets `sash` compiles it.
+   */
+  sash: 25,
 } as const;
 export type SurfaceName = keyof typeof SURFACE;
 
@@ -164,6 +170,13 @@ export interface SpotLook {
    */
   asphalt?: { scale: number; contrast: number };
   /**
+   * The sash surface (SURFACE.sash), in feet, along a facade turned `yaw` degrees from +x toward +z (u along it,
+   * as the spot's plan turns it). Windows `width` wide repeat from `from`, in groups that repeat every `period`;
+   * `columns` are the vertical bars across one window (u from its left edge; a bar may reach past either edge,
+   * into the next), `rows` the horizontal bars (heights), `frame` their paint.
+   */
+  sash?: { yaw: number; from: number; period: number; width: number; columns: [number, number][]; rows: [number, number][]; frame: string };
+  /**
    * Leaves patterned in three dimensions on foliage masses (solid 13). The stock pattern is one flat projection,
    * which stripes a rounded shrub down its sides; a spot planted with modelled shrubs asks for this instead.
    */
@@ -196,6 +209,7 @@ export function resolveLook(look: SpotLook) {
     lockers: look.lockers,
     brick: look.brick,
     asphalt: look.asphalt,
+    sash: look.sash,
     foliage: look.foliage ?? false,
   };
 }
@@ -227,11 +241,11 @@ const vec3s = (c: readonly number[]) => `vec3(${c.map((v) => v.toFixed(3)).join(
 
 /**
  * Which solids the look's shaders send to lookSurface (GLSL, `surface` the face's solid): 14 to roofing, lockers
- * when the spot sets them, and brick and asphalt each only where the spot sets it. Any other solid keeps the stock
+ * when the spot sets them, and brick, asphalt and sash each only where the spot sets it. Any other solid keeps the stock
  * paint shading, so a face tagged with a surface its spot doesn't configure is plain paint.
  */
-export function lookSurfaceTest(look: Partial<Pick<Look, 'lockers' | 'brick' | 'asphalt'>>) {
-  const own = [look.brick ? ' || abs(surface - 23.0) < 0.5' : '', look.asphalt ? ' || abs(surface - 24.0) < 0.5' : ''].join('');
+export function lookSurfaceTest(look: Partial<Pick<Look, 'lockers' | 'brick' | 'asphalt' | 'sash'>>) {
+  const own = [look.brick ? ' || abs(surface - 23.0) < 0.5' : '', look.asphalt ? ' || abs(surface - 24.0) < 0.5' : '', look.sash ? ' || abs(surface - 25.0) < 0.5' : ''].join('');
   return `surface > 13.5 && surface < ${look.lockers ? '22.5' : '21.5'}${own}`;
 }
 
@@ -242,7 +256,7 @@ export function lookSurfaceTest(look: Partial<Pick<Look, 'lockers' | 'brick' | '
  * position in feet, `n` its normal, `world` the stage position.
  * Every feature finer than a pixel fades (grain's own fade, or `resolves`).
  */
-export function surfacesGlsl(look: Pick<Look, 'sky' | 'bounce'> & Partial<Pick<Look, 'propShadows' | 'marks' | 'markDepth' | 'stairs' | 'gum' | 'mortar' | 'lockers' | 'brick' | 'asphalt'>>) {
+export function surfacesGlsl(look: Pick<Look, 'sky' | 'bounce'> & Partial<Pick<Look, 'propShadows' | 'marks' | 'markDepth' | 'stairs' | 'gum' | 'mortar' | 'lockers' | 'brick' | 'asphalt' | 'sash'>>) {
   const flat = [0, 1, 2].map((i) => SUN.y * DAYLIGHT.sunTint[i] + look.sky * DAYLIGHT.skyTint[i]);
   // With prop shadows, glass looks for the boxes its reflection runs into (an eave over the window).
   const reflectBlocked = look.propShadows
@@ -258,7 +272,8 @@ export function surfacesGlsl(look: Pick<Look, 'sky' | 'bounce'> & Partial<Pick<L
   const gum = look.gum ? '  c = lookGum(c, q, flatwork);\n' : '';
   const stairs = look.stairs ? '  if (surface < 15.5) return lookStairWear(lookConcrete(c, q, n), local, n);\n' : '';
   const lockers = look.lockers ? '  if (surface > 21.5) return lookLockers(c, q, n);\n' : '';
-  // Asphalt and brick come before lockers, which take every solid past roofing.
+  const sash = look.sash ? '  if (surface > 24.5) return lookSash(c, n, world, q, local);\n' : '';
+  // Sash, asphalt and brick come before lockers, which take every solid past roofing.
   // Upright, it is a wall of exposed aggregate: the same stones read two and a half times as coarse, without the
   // road's weathered binder.
   const asphalt = look.asphalt ? '  if (surface > 23.5) return lookAsphalt(c, abs(n.y) > 0.5 ? local.xz : q * 0.4, abs(n.y) > 0.5);\n' : '';
@@ -550,7 +565,7 @@ vec3 lookRoofing(vec3 c, vec3 n, vec3 local) {
   return c * (1.0 + 0.22 * ridge - 0.38 * shade);
 }
 
-${look.stairs ? lookStairWearGlsl(look.stairs) : ''}${look.lockers ? lookLockersGlsl(look.lockers) : ''}${look.brick ? lookBrickGlsl(look.brick) : ''}${look.asphalt ? lookAsphaltGlsl(look.asphalt) : ''}vec3 lookSurface(vec3 c, float surface, vec2 q, vec3 n, vec3 world, vec3 local) {
+${look.stairs ? lookStairWearGlsl(look.stairs) : ''}${look.lockers ? lookLockersGlsl(look.lockers) : ''}${look.brick ? lookBrickGlsl(look.brick) : ''}${look.asphalt ? lookAsphaltGlsl(look.asphalt) : ''}${look.sash ? lookSashGlsl(look.sash) : ''}vec3 lookSurface(vec3 c, float surface, vec2 q, vec3 n, vec3 world, vec3 local) {
   // Turf is projected from above, so a steep bank never stretches it or seams where faces turn.
   if (surface < 14.5) return lookGrass(c, local.xz);
 ${stairs}  if (surface < 15.5) return lookConcrete(c, q, n);
@@ -560,7 +575,7 @@ ${stairs}  if (surface < 15.5) return lookConcrete(c, q, n);
   if (surface < 19.5) return lookSiding(c, q, n);
   // Soil, like turf, is projected from above.
   if (surface < 20.5) return lookSoil(c, local.xz, n);
-${asphalt}${brick}${lockers}  return lookRoofing(c, n, local);
+${sash}${asphalt}${brick}${lockers}  return lookRoofing(c, n, local);
 }
 `;
 }
@@ -808,6 +823,33 @@ vec3 lookAsphalt(vec3 c, vec2 q, bool road) {
   }
   // Sand between them, fading on its own.
   return c * (1.0 + 0.8 * CONTRAST * grain(r2 * 2.7));
+}
+`;
+}
+
+/**
+ * Window glass in a steel sash (SpotLook.sash, SURFACE.sash): the glass as lookGlass draws it, and over it the
+ * jambs, mullions and rails, each box-filtered over the pixel. Bars an inch wide drawn as faces of their own
+ * flicker in and out once they are finer than a pixel; filtered, a far window settles into its average tone.
+ * The bars take the daylight the glass skips.
+ */
+function lookSashGlsl({ yaw, from, period, width, columns, rows, frame }: NonNullable<SpotLook['sash']>) {
+  const a = (yaw * Math.PI) / 180;
+  const spans = (x: string, h: string, bars: [number, number][]) =>
+    bars.map(([lo, hi]) => `bar = max(bar, lookSpan(${x}, ${num(lo)}, ${num(hi)}, ${h}));`).join('\n  ');
+  return /* glsl */ `// How much of a pixel (x - h to x + h) the span lo-hi covers.
+float lookSpan(float x, float lo, float hi, float h) {
+  return clamp((min(x + h, hi) - max(x - h, lo)) / (2.0 * h), 0.0, 1.0);
+}
+vec3 lookSash(vec3 c, vec3 n, vec3 world, vec2 q, vec3 local) {
+  vec3 glass = lookGlass(c, n, world, q, local);
+  float u = local.x * ${num(Math.cos(a))} + local.z * ${num(Math.sin(a))};
+  float w = mod(mod(u - ${num(from)}, ${num(period)}), ${num(width)});
+  float hu = max(fwidth(u), 1e-4) * 0.5, hy = max(fwidth(local.y), 1e-4) * 0.5;
+  float bar = 0.0;
+  ${spans('w', 'hu', columns)}
+  ${spans('local.y', 'hy', rows)}
+  return mix(glass, ${glslRgb(frame)} * lookDaylight(n), bar);
 }
 `;
 }

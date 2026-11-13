@@ -10,6 +10,7 @@ import { planStage, stageFrame } from '../../stage/stage';
 import { isFiniteFrame } from '../../testing';
 import type { RiderStance, Stance } from '../../types';
 import { SET_SCALE } from '../setScale';
+import { SURFACE } from '../surfaces';
 import { setInfo, setTimeline } from '../sets';
 import { Carlsbad3D } from './carlsbad3d';
 import { buildCarlsbadGeometry } from './carlsbadGeometry';
@@ -254,7 +255,7 @@ describe('Carlsbad: the original grass gap and uphill landing', () => {
         expect(Math.floor((packed * 255) / 4 + 0.01)).toBe(15);
       }
       const yaw=CARLSBAD_WING_YAW*Math.PI/180;
-      for (const [u,y,v,solid] of [[3.3,3,-16.88,18],[-12.3,3,-16.88,18],[8,5,-16.88,16],[8,2,-16.7,17]]) {
+      for (const [u,y,v,solid] of [[3.3,3,-16.88,18],[-12.3,3,-16.88,18],[8,5,-16.88,SURFACE.sash],[8,2,-16.7,17]]) {
         const [x,z]=carlsbadWingPoint(u,-14);
         const hit=new Raycaster(new Vector3(x,y*F,z),new Vector3(Math.sin(yaw),0,-Math.cos(yaw))).intersectObject(props)[0];
         expect((hit.point.z*Math.cos(yaw)-hit.point.x*Math.sin(yaw))/F).toBeCloseTo(v,4);

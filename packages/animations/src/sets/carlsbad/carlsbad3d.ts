@@ -4,7 +4,7 @@ import { SUN } from '../../three/materials';
 import { ClassicSpot3D } from '../classicSpot3d';
 import { crownSpheres } from '../props/trees';
 import { MAX_CANOPIES, type Canopy, type SpotLook } from '../surfaces';
-import { buildCarlsbadGeometry } from './carlsbadGeometry';
+import { buildCarlsbadGeometry, CARLSBAD_SASH } from './carlsbadGeometry';
 import {
   CARLSBAD_DROP, CARLSBAD_FILMERS, CARLSBAD_FOOT as F, CARLSBAD_LANE_Z, CARLSBAD_RUN,
   carlsbadGround, carlsbadLanding, carlsbadPaved, carlsbadUpperEdge,
@@ -26,6 +26,8 @@ export const CARLSBAD_LOOK: SpotLook = {
   dapple: 0.85,
   // Urethane marks where boards roll to the lip, land and roll away (refs/155, 03).
   marks: [{ x: [-14, -0.5], z: [-3, 3] }, { x: [13.5, 34], z: [-6, 4.5] }],
+  // The wing windows' steel sash, drawn on the glass so far windows don't flicker.
+  sash: CARLSBAD_SASH,
 };
 
 /** Paving the cameras look at: the landing, the lower paths and the curved path round the lobe, and the upper pad by the lip. */
