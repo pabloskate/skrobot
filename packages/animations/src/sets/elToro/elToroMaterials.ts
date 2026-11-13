@@ -129,7 +129,7 @@ function withLook(material: ShaderMaterial, look: ReturnType<typeof resolveLook>
   const sunlit = look.light === 'shader' ? 'color *= lookDaylight(n);' : 'if (vBand.x < 1.5) color *= lookDaylight(n);';
   if (look.light === 'shader') fragment = swap(fragment, 'if (vBand.x < 1.5) color *= 0.67 + 0.34 * max(dot(n, SUN), 0.0);', 'color *= lookDaylight(n);');
   // Glass carries its own light (a reflection isn't shaded); every other surface is lit, then textured.
-  // Lockers, brick, asphalt and sash (solids 22-25) are surfaces only where the spot compiles them in
+  // Lockers, brick, asphalt, sash and pavers (solids 22-26) are surfaces only where the spot compiles them in
   // (lookSurfaceTest). Sash, like glass, lights its own bars.
   const unlit = look.sash ? 'abs(surface - 16.0) > 0.5 && abs(surface - 25.0) > 0.5' : 'abs(surface - 16.0) > 0.5';
   fragment = swap(fragment, 'if (id >= 60.0 && id <= 69.0) {', /* glsl */ `if (${lookSurfaceTest(look)}) {

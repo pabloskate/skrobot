@@ -1,59 +1,49 @@
-import type { Vec3 } from '../../camera/view';
 import { ClassicSpot3D } from '../classicSpot3d';
-import type { CarPlacement, StreetPropPlacements } from '../props/streetProps';
-import { buildMiamiGeometry, MIAMI_BOULEVARD, MIAMI_SOUTHBOUND, miamiBoulevard, miamiParkingStall } from './miamiGeometry';
+import { CARLSBAD_LOOK } from '../carlsbad/carlsbad3d';
+import type { SpotLook } from '../surfaces';
+import { buildMiamiGeometry } from './miamiGeometry';
 import {
-  MIAMI_DROP, MIAMI_FILMERS, MIAMI_FOOT as F, MIAMI_PLAZA_Y, MIAMI_SLAB_GRADE, MIAMI_SLAB_LIP_X, miamiGround,
+  MIAMI_DROP, MIAMI_FILMERS, MIAMI_SLAB_GRADE, MIAMI_SLAB_LIP_X, miamiGround,
 } from './miamiLayout';
+import { MIAMI_PAINT as PAINT } from './miamiPalette';
+import { MIAMI_CARS, MIAMI_TREES, miamiCanopies } from './miamiTrees';
 
 export { buildMiamiGeometry } from './miamiGeometry';
-
-/** World units a second for a mile an hour. */
-const MPH = (5280 * F) / 3600;
-/** Each driving car comes round again out of sight, down the boulevard. */
-const LAP = 1400 * F;
-const lane = (k: number) => MIAMI_BOULEVARD.kerb + (k + 0.5) * 12.5 * F;
-const farLane = (k: number) => MIAMI_BOULEVARD.medianEnd + (k + 0.5) * 12 * F;
+export { MIAMI_TRAFFIC } from './miamiTrees';
 
 /**
- * Biscayne's traffic keeps right: northbound in the lanes by the park,
- * southbound beyond the median.
+ * Bay-front Miami's light: a high subtropical sun through humid air, hazier and bluer at a distance than
+ * Carlsbad's, the shade lifted by bright paving (the clips in docs/MIAMI_TRIANGLE_REFERENCE.md). The realistic
+ * look, with the plaza's clay pavers and the boulevard's asphalt.
  */
-export const MIAMI_TRAFFIC: CarPlacement[] = ([
-  [lane(1), -300, 'sedan', '#c9c5bb', 34], [lane(2), 250, 'suv', '#1f2428', 31], [lane(0), 650, 'hatchback', '#8c1e22', 28],
-  [lane(3), -700, 'sedan', '#9aa3a6', 36],
-  [farLane(0), 100, 'suv', '#e2e0d8', 33], [farLane(1), -500, 'sedan', '#2e3f55', 30], [farLane(2), 500, 'hatchback', '#6b2a2c', 35],
-] as const).map(([across, along, model, paint, mph]) => ({
-  at: miamiBoulevard(along * F, across), model, paint,
-  yaw: across > MIAMI_BOULEVARD.median ? MIAMI_SOUTHBOUND : MIAMI_SOUTHBOUND + 180,
-  speed: mph * MPH, lap: LAP,
-}));
-
-/** Cars nosed into the park's car park beyond the plaza's left side. */
-const PARKED: CarPlacement[] = ([
-  [0, 'sedan', '#d8d5cc'], [1, 'suv', '#43505a'], [3, 'sedan', '#1d1f22'], [4, 'hatchback', '#b8bcbd'],
-  [5, 'suv', '#e6e3da'], [7, 'sedan', '#7a1f25'], [8, 'sedan', '#2c3a4f'], [10, 'suv', '#9a9c98'],
-  [11, 'hatchback', '#cfc9b8'], [12, 'sedan', '#30302d'], [14, 'suv', '#5f6a70'],
-] as const).map(([k, model, paint]) => ({ at: miamiParkingStall(k) as Vec3, yaw: 225, model, paint }));
-
-export const MIAMI_STREET_PROPS: StreetPropPlacements = {
-  cars: [...MIAMI_TRAFFIC, ...PARKED],
-  // Broad shade trees in the park behind the terrace.
-  trees: [
-    { at: [-118 * F, MIAMI_PLAZA_Y, -40 * F], height: 34 * F, yaw: 40 },
-    { at: [-130 * F, MIAMI_PLAZA_Y, 35 * F], height: 30 * F, yaw: 160 },
-  ],
+export const MIAMI_LOOK: SpotLook = {
+  ...CARLSBAD_LOOK,
+  haze: { color: '#d3dde1', from: 60, to: 1100, amount: 0.55 },
+  fill: { sky: 0.72, bounce: 0.95 },
+  // Urethane marks where the bank line rolls off onto the pavers and the over line lands and rolls away.
+  marks: [{ x: [13, 32], z: [-3.5, 3.5] }],
+  markDepth: 0.16,
+  gum: 1.5,
+  // Square clay pavers about eight inches, on pale sanded joints (Muska's and Edge's frames).
+  pavers: { size: 7.6 / 12, joint: 0.4 / 12, jointColor: PAINT.joint, paint: PAINT.paver, spread: 0.09 },
+  asphalt: { scale: 0.028, contrast: 0.13 },
+  foliage: true,
+  sash: undefined,
 };
 
 export class Miami3D extends ClassicSpot3D {
   constructor() {
     super({
-      build: buildMiamiGeometry,
+      build: () => {
+        const built = buildMiamiGeometry();
+        return { ...built, canopies: miamiCanopies(built.canopies) };
+      },
       laneZ: 0, ground: miamiGround,
       grade: MIAMI_SLAB_GRADE, run: MIAMI_SLAB_LIP_X, drop: MIAMI_DROP,
       framing: 0.85,
-      streetProps: MIAMI_STREET_PROPS,
+      streetProps: { cars: MIAMI_CARS, trees: MIAMI_TREES },
       filmers: MIAMI_FILMERS,
+      look: MIAMI_LOOK,
     });
   }
 }

@@ -13,8 +13,10 @@ presentation changes, not a claim of legal clearance.
   face and edges remain. Memorial inscriptions, emblem, artist lettering and
   tower are removed. The deck has a narrower rectangular rear, a pointed nose
   and low garden seating instead of the memorial's equilateral platform and
-  triangular planting bed. The plaza uses one stone tile color with subtle
-  grout lines, without patchwork tile colors or decorative stains.
+  triangular planting bed. The plaza is laid in one family of weathered clay
+  pavers with sanded joints and everyday stains (irrigation rust, water, oil),
+  not patchwork tile colors or decorative patterns. The bank is plain cast
+  concrete; the surroundings are a generic bay-front park and skyline.
 - **Hollywood High (16 and 12)** keeps its name and riding obstacles; its auditorium wall is
   plain rather than reproducing the portrait mural.
 

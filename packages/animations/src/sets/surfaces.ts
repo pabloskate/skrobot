@@ -59,6 +59,12 @@ export const SURFACE = {
    * sets `sash` compiles it.
    */
   sash: 25,
+  /**
+   * Square clay pavers laid in a grid square to the spot's axes, on level ground: sanded joints and each paver a
+   * touch its own tone, the face's paint their mean. Upright it is plain concrete. Only a spot whose look sets
+   * `pavers` compiles it; elsewhere a face carrying it is shaded as plain paint.
+   */
+  pavers: 26,
 } as const;
 export type SurfaceName = keyof typeof SURFACE;
 
@@ -177,6 +183,13 @@ export interface SpotLook {
    */
   sash?: { yaw: number; from: number; period: number; width: number; columns: [number, number][]; rows: [number, number][]; frame: string };
   /**
+   * The paver surface (SURFACE.pavers), in feet: each paver `size` square, laid on `joint` sanded joints from the
+   * spot's origin. A face's paint is the paving's mean colour, pavers and joints together; `jointColor` is the
+   * joints' colour on paving painted `paint`. `spread` is how far one paver's tone wanders from the next (default
+   * 0.08).
+   */
+  pavers?: { size: number; joint: number; jointColor: string; paint: string; spread?: number };
+  /**
    * Leaves patterned in three dimensions on foliage masses (solid 13). The stock pattern is one flat projection,
    * which stripes a rounded shrub down its sides; a spot planted with modelled shrubs asks for this instead.
    */
@@ -210,6 +223,7 @@ export function resolveLook(look: SpotLook) {
     brick: look.brick,
     asphalt: look.asphalt,
     sash: look.sash,
+    pavers: look.pavers,
     foliage: look.foliage ?? false,
   };
 }
@@ -244,8 +258,11 @@ const vec3s = (c: readonly number[]) => `vec3(${c.map((v) => v.toFixed(3)).join(
  * when the spot sets them, and brick, asphalt and sash each only where the spot sets it. Any other solid keeps the stock
  * paint shading, so a face tagged with a surface its spot doesn't configure is plain paint.
  */
-export function lookSurfaceTest(look: Partial<Pick<Look, 'lockers' | 'brick' | 'asphalt' | 'sash'>>) {
-  const own = [look.brick ? ' || abs(surface - 23.0) < 0.5' : '', look.asphalt ? ' || abs(surface - 24.0) < 0.5' : '', look.sash ? ' || abs(surface - 25.0) < 0.5' : ''].join('');
+export function lookSurfaceTest(look: Partial<Pick<Look, 'lockers' | 'brick' | 'asphalt' | 'sash' | 'pavers'>>) {
+  const own = [
+    look.brick ? ' || abs(surface - 23.0) < 0.5' : '', look.asphalt ? ' || abs(surface - 24.0) < 0.5' : '',
+    look.sash ? ' || abs(surface - 25.0) < 0.5' : '', look.pavers ? ' || abs(surface - 26.0) < 0.5' : '',
+  ].join('');
   return `surface > 13.5 && surface < ${look.lockers ? '22.5' : '21.5'}${own}`;
 }
 
@@ -256,7 +273,7 @@ export function lookSurfaceTest(look: Partial<Pick<Look, 'lockers' | 'brick' | '
  * position in feet, `n` its normal, `world` the stage position.
  * Every feature finer than a pixel fades (grain's own fade, or `resolves`).
  */
-export function surfacesGlsl(look: Pick<Look, 'sky' | 'bounce'> & Partial<Pick<Look, 'propShadows' | 'marks' | 'markDepth' | 'stairs' | 'gum' | 'mortar' | 'lockers' | 'brick' | 'asphalt' | 'sash'>>) {
+export function surfacesGlsl(look: Pick<Look, 'sky' | 'bounce'> & Partial<Pick<Look, 'propShadows' | 'marks' | 'markDepth' | 'stairs' | 'gum' | 'mortar' | 'lockers' | 'brick' | 'asphalt' | 'sash' | 'pavers'>>) {
   const flat = [0, 1, 2].map((i) => SUN.y * DAYLIGHT.sunTint[i] + look.sky * DAYLIGHT.skyTint[i]);
   // With prop shadows, glass looks for the boxes its reflection runs into (an eave over the window).
   const reflectBlocked = look.propShadows
@@ -273,6 +290,8 @@ export function surfacesGlsl(look: Pick<Look, 'sky' | 'bounce'> & Partial<Pick<L
   const stairs = look.stairs ? '  if (surface < 15.5) return lookStairWear(lookConcrete(c, q, n), local, n);\n' : '';
   const lockers = look.lockers ? '  if (surface > 21.5) return lookLockers(c, q, n);\n' : '';
   const sash = look.sash ? '  if (surface > 24.5) return lookSash(c, n, world, q, local);\n' : '';
+  // Pavers take the last solid, so they're tested before sash and everything below it.
+  const pavers = look.pavers ? '  if (surface > 25.5) return lookPavers(c, q, n);\n' : '';
   // Sash, asphalt and brick come before lockers, which take every solid past roofing.
   // Upright, it is a wall of exposed aggregate: the same stones read two and a half times as coarse, without the
   // road's weathered binder.
@@ -565,7 +584,7 @@ vec3 lookRoofing(vec3 c, vec3 n, vec3 local) {
   return c * (1.0 + 0.22 * ridge - 0.38 * shade);
 }
 
-${look.stairs ? lookStairWearGlsl(look.stairs) : ''}${look.lockers ? lookLockersGlsl(look.lockers) : ''}${look.brick ? lookBrickGlsl(look.brick) : ''}${look.asphalt ? lookAsphaltGlsl(look.asphalt) : ''}${look.sash ? lookSashGlsl(look.sash) : ''}vec3 lookSurface(vec3 c, float surface, vec2 q, vec3 n, vec3 world, vec3 local) {
+${look.stairs ? lookStairWearGlsl(look.stairs) : ''}${look.lockers ? lookLockersGlsl(look.lockers) : ''}${look.brick ? lookBrickGlsl(look.brick) : ''}${look.asphalt ? lookAsphaltGlsl(look.asphalt) : ''}${look.sash ? lookSashGlsl(look.sash) : ''}${look.pavers ? lookPaversGlsl(look.pavers) : ''}vec3 lookSurface(vec3 c, float surface, vec2 q, vec3 n, vec3 world, vec3 local) {
   // Turf is projected from above, so a steep bank never stretches it or seams where faces turn.
   if (surface < 14.5) return lookGrass(c, local.xz);
 ${stairs}  if (surface < 15.5) return lookConcrete(c, q, n);
@@ -575,7 +594,7 @@ ${stairs}  if (surface < 15.5) return lookConcrete(c, q, n);
   if (surface < 19.5) return lookSiding(c, q, n);
   // Soil, like turf, is projected from above.
   if (surface < 20.5) return lookSoil(c, local.xz, n);
-${sash}${asphalt}${brick}${lockers}  return lookRoofing(c, n, local);
+${pavers}${sash}${asphalt}${brick}${lockers}  return lookRoofing(c, n, local);
 }
 `;
 }
@@ -823,6 +842,50 @@ vec3 lookAsphalt(vec3 c, vec2 q, bool road) {
   }
   // Sand between them, fading on its own.
   return c * (1.0 + 0.8 * CONTRAST * grain(r2 * 2.7));
+}
+`;
+}
+
+/**
+ * Square clay pavers (SpotLook.pavers, SURFACE.pavers), from the Bayfront clips (Muska's, Nix's and Edge's frames
+ * in docs/MIAMI_TRIANGLE_REFERENCE.md): sun-faded clay squares on pale sanded joints, each paver a little its own
+ * tone and hue, the odd one darker. q is the plan in feet. The paving's own weathering (stains, marks, gum) is the
+ * concrete's, laid under the pattern. Pavers and joints share out the face's paint, and every joint is box-filtered
+ * over the pixel, so far off the paving settles into exactly its paint instead of shimmering.
+ */
+function lookPaversGlsl({ size, joint, jointColor, paint, spread = 0.08 }: NonNullable<SpotLook['pavers']>) {
+  const period = size + joint;
+  const along = joint / period;
+  const share = along + (1 - along) * along;
+  const jointRatio = rgb(jointColor).map((v, i) => v / rgb(paint)[i]);
+  const paverRatio = jointRatio.map((m) => (1 - share * m) / (1 - share));
+  const vec3n = (c: readonly number[]) => `vec3(${c.map(num).join(', ')})`;
+  return /* glsl */ `// Clay pavers: see lookPaversGlsl.
+float lookPaverJoint(float x, float period, float width, float w) {
+  float h = max(w, 1e-4) * 0.5;
+  return clamp((lookJointArea(x + h, period, width) - lookJointArea(x - h, period, width)) / (2.0 * h), 0.0, 1.0);
+}
+vec3 lookPavers(vec3 c, vec2 q, vec3 n) {
+  // The concrete's weathering as a ratio on a neutral grey: clay paint fed to it directly would read as
+  // safety-yellow paint and chip back to grey.
+  vec3 base = c * lookConcrete(vec3(0.5), q, n) / 0.5;
+  if (abs(n.y) < 0.5) return base;
+  const float PERIOD = ${num(period)}, JOINT = ${num(joint)};
+  vec2 w = fwidth(q);
+  float seen = 1.0 - smoothstep(0.18, 0.55, max(w.x, w.y) / PERIOD);
+  float jx = mix(${num(along)}, lookPaverJoint(q.x, PERIOD, JOINT, w.x), 1.0 - smoothstep(0.25, 0.6, w.x / PERIOD));
+  float jz = mix(${num(along)}, lookPaverJoint(q.y, PERIOD, JOINT, w.y), 1.0 - smoothstep(0.25, 0.6, w.y / PERIOD));
+  float j = jx + (1.0 - jx) * jz;
+  // Each paver its own: tone about the mean, a little warmer or a little rosier, one in twenty fired darker;
+  // each detail averages out, so it fades into nothing.
+  vec2 id = floor(q / PERIOD);
+  float h = hash(id + 5.3), hue = hash(id.yx + 19.7) - 0.5, odd = step(0.95, hash(id + 33.1));
+  vec3 own = (1.0 + ${num(spread)} * (2.0 * h - 1.0)) * vec3(1.0 + 0.06 * hue, 1.0, 1.0 - 0.06 * hue) * (1.0 - 0.12 * (odd - 0.05));
+  vec2 f = q / PERIOD;
+  own *= 1.0 + 0.08 * resolves(q, 4.0) * (noise(f * 3.0 + id * 1.7) - 0.5);
+  vec3 paver = base * ${vec3n(paverRatio)} * mix(vec3(1.0), own, seen);
+  vec3 sand = base * ${vec3n(jointRatio)};
+  return mix(paver, sand, j);
 }
 `;
 }

@@ -102,7 +102,7 @@ describe('look helpers', () => {
 
   it('adds brick, asphalt and sash after lockers', () => {
     expect(SURFACE).toMatchObject({ lockers: 22, brick: 23, asphalt: 24, sash: 25 });
-    expect(Math.max(...Object.values(SURFACE))).toBe(SURFACE.sash);
+    expect(Math.max(...Object.values(SURFACE))).toBe(SURFACE.pavers);
     // Each decodes from a baked face as the shader does.
     for (const solid of [SURFACE.brick, SURFACE.asphalt, SURFACE.sash]) {
       const bake = new Bake();
@@ -239,6 +239,27 @@ describe('the realistic look is opt in', () => {
     expect(brick.every((b) => b < 1)).toBe(true);
     // Courses three to eight inches: modular brick.
     expect(glsl).toContain(`COURSE = ${(BRICK.height + BRICK.joint).toFixed(4)}`);
+  });
+
+  it('compiles pavers only for a spot whose look sets them, tested first, sharing the paint with their joints', () => {
+    const PAVERS = { size: 0.7, joint: 0.02, jointColor: '#cdbba7', paint: '#b98a72' };
+    expect(SURFACE.pavers).toBe(26);
+    expect(surfacesGlsl(resolveLook({}))).not.toContain('lookPavers');
+    expect(surfacesGlsl(resolveLook({ brick: BRICK, asphalt: ASPHALT }))).not.toContain('lookPavers');
+    expect(lookSurfaceTest(resolveLook({}))).toBe('surface > 13.5 && surface < 21.5');
+    expect(lookSurfaceTest(resolveLook({ pavers: PAVERS }))).toBe('surface > 13.5 && surface < 21.5 || abs(surface - 26.0) < 0.5');
+    const sash = { yaw: 0, from: 0, period: 4, width: 4, columns: [[0, 0.1]] as [number, number][], rows: [[0, 0.1]] as [number, number][], frame: '#cccccc' };
+    const glsl = surfacesGlsl(resolveLook({ pavers: PAVERS, sash, brick: BRICK, asphalt: ASPHALT, lockers: { door: 1, tier: 6, from: 0 } }));
+    const body = glsl.slice(glsl.indexOf('vec3 lookSurface('));
+    // Its solid is the last, so it's tested before sash, which would take it.
+    expect(body.indexOf('return lookPavers(')).toBeGreaterThan(0);
+    expect(body.indexOf('return lookPavers(')).toBeLessThan(body.indexOf('return lookSash('));
+    const own = surfacesGlsl(resolveLook({ pavers: PAVERS }));
+    const vec = (pattern: RegExp) => own.match(pattern)![1].split(',').map(Number);
+    const paver = vec(/vec3 paver = base \* vec3\(([^)]*)\)/), sand = vec(/vec3 sand = base \* vec3\(([^)]*)\)/);
+    const along = PAVERS.joint / (PAVERS.size + PAVERS.joint), share = along + (1 - along) * along;
+    for (let i = 0; i < 3; i++) expect((1 - share) * paver[i] + share * sand[i]).toBeCloseTo(1, 3);
+    expect(sand.every((m) => m > 1)).toBe(true);
   });
 
   it('gives a spot with `look` its surfaces, shadows, contacts, canopies and knobs', () => {
