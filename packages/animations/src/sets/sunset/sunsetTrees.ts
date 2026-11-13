@@ -3,16 +3,17 @@ import type { CarModel, CarPlacement } from '../props/streetProps';
 import { crownSpheres, type TreePlacement, type TreeSpecies } from '../props/trees';
 import { SET_FOOT } from '../setScale';
 import { MAX_CANOPIES, type Canopy } from '../surfaces';
-import { BANK_END, BAY_FLOOR, F, FT, LANES, LANE_Z, LOWER, ROAD, SCALE, SIDEWALK_END, TAPER_END } from './sunsetKit';
+import { BANK_END, BANK_Z0, BAY_FLOOR, F, FT, LANES, LANE_Z, LOWER, ROAD, SCALE, SIDEWALK_END, TAPER_END } from './sunsetKit';
 import { FAR_TREE_Z } from './sunsetWear';
 
 /**
  * Roof to Bank's trees and cars, in the set's world coordinates (authored positions times SCALE). Mexican fan
  * palms stand over the roofs behind the wash and at the ends of the far sidewalk, Sunset's street figs between
- * them, dark figs and a gum crowd the alley behind the side lot (the user's side frame), and a gum stands past
- * the billboard. Traffic keeps right on the boulevard, cars dry in the bays with their roofs over the bank's
- * crest, others wait in the lot, and a few are parked at the near curb well left of the landing. Nothing
- * stands on the roof's approach, the bank, the landing, the rollout or inside a building.
+ * them, dark figs and a gum crowd the alley behind the side lot (the user's side frame), tall figs stand past
+ * the bank's right-hand end over the shoulder's hedge, and a gum stands past the billboard. Traffic keeps
+ * right on the boulevard, cars dry in the bays with their roofs over the bank's crest, others wait in the
+ * lot, and a few are parked at the near curb well left of the landing. Nothing stands on the roof's
+ * approach, the bank, the landing, the rollout or inside a building.
  */
 
 type Row = readonly [x: number, z: number, feet: number, yaw: number, seed: number];
@@ -38,6 +39,8 @@ const FIGS_FAR: Row[] = FAR_TREE_Z.filter((_, i) => i !== 0 && i !== 5).map((z, 
 /** The dark trees crowding the alley behind the lot, and a gum past the billboard. */
 const ALLEY_FIGS: Row[] = [[-900, -1300, 32, 210, 531], [-1000, -1950, 34, 300, 532]];
 const GUMS: Row[] = [[-1000, -1640, 56, 70, 541], [-1050, 2350, 60, 180, 542]];
+/** Past the bank's right-hand end, just outside the shoulder's wall: tall dark figs over the hedge (the street views). */
+const END_FIGS: Row[] = [[-440, BANK_Z0 - 3 * FT, 34, 120, 551], [-300, BANK_Z0 - 3.5 * FT, 28, 20, 552]];
 
 export const SUNSET_TREES: TreePlacement[] = [
   ...plant('fanPalm', PALMS_BEHIND, ROAD),
@@ -45,6 +48,7 @@ export const SUNSET_TREES: TreePlacement[] = [
   ...plant('ficus', FIGS_FAR, LOWER),
   ...plant('ficus', ALLEY_FIGS, ROAD),
   ...plant('eucalyptus', GUMS, ROAD),
+  ...plant('ficus', END_FIGS, LOWER),
 ];
 
 /**

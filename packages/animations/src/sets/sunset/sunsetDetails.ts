@@ -171,21 +171,24 @@ export function weedTuft(props: Bake, x: number, y: number, z: number, seed: num
 }
 
 /**
- * Low groundcover over a planted bed (ivy and ice plant, as LA's banks are planted): a field of shallow, smooth
- * mounds `x0`…`x1` by `z0`…`z1` at `y`. Every mound, wobble and all, stays inside the bed: one spilling past
- * its edge hangs over whatever is beyond (the bank's crest) and is cut off along it in jagged steps.
+ * A clipped hedge along x from `x0` to `x1` on the line `z`, `half` deep either side and `h` tall from `y`:
+ * tall, narrow masses overlapping along it, upright at the foot and rounded over the top as a hedge is
+ * trimmed, a fringe of loose leaves breaking the clipped outline. Every mass, wobble and all, stays between its
+ * ends, so it never hangs past them.
  */
-export function groundcover(props: Bake, x0: number, x1: number, z0: number, z1: number, y: number, seed: number) {
-  const step = 3.2 * FT;
+export function hedge(props: Bake, x0: number, x1: number, z: number, half: number, h: number, y: number, seed: number) {
+  const step = 2.4 * FT;
+  const count = Math.max(1, Math.round((x1 - x0) / step));
   // A mass's wobble reaches 1.14 of its radius.
-  const room = (c: number, lo: number, hi: number) => Math.max(0, Math.min(c - lo, hi - c)) / 1.14;
-  for (let x = x0 + step * 0.4, i = 0; x < x1; x += step, i++) {
-    for (let z = z0 + step * 0.4, j = 0; z < z1; z += step, j++) {
-      const cx = x + (hash2(seed + i, j, 940) - 0.5) * step * 0.5, cz = z + (hash2(seed + i, j, 941) - 0.5) * step * 0.5;
-      const rx = Math.min(step * (0.7 + 0.25 * hash2(seed + i, j, 942)), room(cx, x0, x1));
-      const rz = Math.min(rx * (0.8 + 0.4 * hash2(seed + i, j, 943)), room(cz, z0, z1));
-      if (rx < 0.5 * FT || rz < 0.5 * FT) continue;
-      mass(props, cx, y - 0.5 * IN, cz, rx, rz, (0.7 + 0.6 * hash2(seed + i, j, 944)) * FT, seed * 31 + i * 7 + j, (i + j) % 3 ? PAINT.oleanderDark : PAINT.oleander, 3, 8);
-    }
+  const r = Math.min(0.75 * step * 1.6, (x1 - x0) / 2) / 1.14;
+  for (let m = 0; m < count; m++) {
+    const cx = Math.min(x1 - r * 1.14, Math.max(x0 + r * 1.14, x0 + ((m + 0.5) * (x1 - x0)) / count));
+    const color = m % 3 ? PAINT.oleanderDark : PAINT.oleander;
+    mass(props, cx, y - 0.5 * IN, z + (hash2(seed, m, 945) - 0.5) * 0.2 * half, r, half * (0.9 + 0.12 * hash2(seed, m, 946)), h * (0.92 + 0.12 * hash2(seed, m, 947)), seed * 13 + m, color);
+  }
+  for (let k = 0, n = Math.round(count * 14); k < n; k++) {
+    const a = k * 2.399 + seed, side = Math.cos(a) > 0 ? 1 : -1;
+    const lx = x0 + r + (x1 - x0 - 2 * r) * hash2(seed, k, 948), lz = z + side * half * 0.92;
+    leaf(props, [lx, y + h * (0.25 + 0.68 * hash2(seed, k, 949)), lz], (5 + 3 * hash2(seed, k, 950)) * IN, side > 0 ? Math.PI / 2 : -Math.PI / 2, 0.2 + 0.5 * hash2(seed, k, 951), k % 3 ? PAINT.oleander : PAINT.oleanderLight);
   }
 }

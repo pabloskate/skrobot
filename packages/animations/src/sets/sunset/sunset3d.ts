@@ -5,10 +5,10 @@ import { ClassicSpot3D } from '../classicSpot3d';
 import { CARLSBAD_LOOK } from '../carlsbad/carlsbad3d';
 import type { Canopy, ContactLine, SpotLook } from '../surfaces';
 import { CAP_BACK, backdrop, billboard, canopy, hills, houses, miniMall, storefronts, washBuilding } from './sunsetBuildings';
-import { groundcover, oleanderMound, oleanderTree } from './sunsetDetails';
+import { hedge, oleanderMound, oleanderTree } from './sunsetDetails';
 import {
   BANK_END, BANK_START, BANK_TOP, BANK_Z0, BANK_Z1, BAY_FLOOR, CHAIN_LINK, F, FAR_FRONT, FT, LANE_Z, LOWER, PAVING, ROAD,
-  ROOF_BACK, ROOF_Z0, ROOF_Z1, SCALE, SIDEWALK_END, TAPER_END, TOE_START, LEAVES,
+  ROOF_BACK, ROOF_Z0, ROOF_Z1, SCALE, SIDEWALK_END, TAPER_END, TOE_START,
   bankSlope, bankY, floor, mixHex, part, solidBox, tag, toneWall, toWorld, type PavingKind, type RailShadow, type ShadowBox,
 } from './sunsetKit';
 import * as layout from './sunsetLayout';
@@ -135,35 +135,29 @@ function bank(ground: Bake) {
   }
 }
 
-/** The narrow top cap behind the crest, and the planted bed behind it, on either side of the canopy. */
+/** How far back the shoulders either side of the canopy run behind the crest. */
 const SHOULDER_BACK = -430;
-const BED = BANK_TOP - 7;
+/** The clipped hedge along the right-hand shoulder's outer edge, past the bank's end: its line (z) and half-width. */
+export const HEDGE_Z = BANK_Z0 + 2.2 * FT, HEDGE_HALF = 1.6 * FT;
 
 /**
- * The shoulders either side of the canopy, behind the crest: a narrow cap at the crest's height, a planted bed
- * a few inches under it, and the painted retaining walls round them down to the street.
+ * The shoulders either side of the canopy, behind the crest: bare concrete at the crest's height, as the
+ * frames show the top past the canopy's ends, with painted retaining walls down to the street. Nothing grows
+ * at the crest. Past the bank's right-hand end a clipped hedge runs along the shoulder's outer edge, with tall
+ * figs standing over it (`SUNSET_TREES`), the green the street views show beyond the bank's end.
  */
 function shoulders(ground: Bake, props: Bake) {
   const wall = (s: number, t: number) => mixHex(PAINT.capWall, PAINT.bankGrime, 0.45 * Math.max(0, 1 - t / 0.25) + 0.1 * Math.sin(s / 37));
   for (const [z0, z1, outer] of [[BANK_Z0, ROOF_Z0, -1], [ROOF_Z1, BANK_Z1, 1]] as const) {
-    floor(ground, BANK_START - 10, BANK_START, z0, z1, BANK_TOP, PAINT.cap, CONCRETE);
-    floor(ground, SHOULDER_BACK, BANK_START - 10, z0, z1, BED, PAINT.oleanderDark, tag(LEAVES));
-    groundcover(props, SHOULDER_BACK, BANK_START - 14, z0, z1, BED, z0 > 0 ? 61 : 62);
-    props.quad([BANK_START - 10, BED, z0], [BANK_START - 10, BED, z1], [BANK_START - 10, BANK_TOP, z1], [BANK_START - 10, BANK_TOP, z0], [-1, 0, 0], { color: PAINT.capWall }, CONCRETE);
+    floor(ground, SHOULDER_BACK, BANK_START, z0, z1, BANK_TOP, PAINT.cap, CONCRETE);
     const zo = outer < 0 ? z0 : z1;
-    toneWall(props, [SHOULDER_BACK, zo], [BANK_START - 10, zo], LOWER, BED, [0, 0, outer], 3 * FT, [0, 0.25, 1], wall, part(90, 'stucco', 3));
-    toneWall(props, [BANK_START - 10, zo], [BANK_START, zo], LOWER, BANK_TOP, [0, 0, outer], 3 * FT, [0, 0.25, 1], wall, part(90, 'stucco', 3));
-    toneWall(props, [SHOULDER_BACK, z0], [SHOULDER_BACK, z1], LOWER, BED, [-1, 0, 0], 3 * FT, [0, 0.25, 1], wall, part(96, 'stucco', 3));
+    toneWall(props, [SHOULDER_BACK, zo], [BANK_START, zo], LOWER, BANK_TOP, [0, 0, outer], 3 * FT, [0, 0.25, 1], wall, part(90, 'stucco', 3));
+    toneWall(props, [SHOULDER_BACK, z0], [SHOULDER_BACK, z1], LOWER, BANK_TOP, [-1, 0, 0], 3 * FT, [0, 0.25, 1], wall, part(96, 'stucco', 3));
   }
   // Where the bays' floor stands over the street, its plinth's ends face the shoulders and the lot.
   solidBox(props, [ROOF_BACK + 5, LOWER, ROOF_Z0], [SHOULDER_BACK, BAY_FLOOR - 6, ROOF_Z1], PAINT.capWall, PAINT.capWall, tag('stucco'), 'fk');
-  // Planting behind the crest: oleanders grown tall on the right, clipped low on the narrow left.
-  oleanderTree(props, -250, BED, -420, 10 * FT, 5 * FT, 21);
-  oleanderTree(props, -300, BED, -660, 11 * FT, 5.5 * FT, 22);
-  oleanderMound(props, -150, BED, -260, 3 * FT, 5 * FT, 4.5 * FT, 23);
-  // Under where the top filmer stands across the line, as the mound above is under their own stand.
-  oleanderMound(props, -120, BED, -440, 3 * FT, 4.5 * FT, 5.2 * FT, 25);
-  oleanderMound(props, -200, BED, (ROOF_Z1 + BANK_Z1) / 2, 1.8 * FT, 8 * FT, 3.5 * FT, 24);
+  // The hedge stops well short of the crest, so it never hangs over the bank.
+  hedge(props, SHOULDER_BACK + 1 * FT, BANK_START - 4 * FT, HEDGE_Z, HEDGE_HALF, 6.5 * FT, BANK_TOP, 27);
 }
 
 /** The three box planters on the frontage, left of the landing, their fronts close to the sidewalk. */
