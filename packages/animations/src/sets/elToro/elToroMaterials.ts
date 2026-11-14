@@ -132,8 +132,19 @@ function withLook(material: ShaderMaterial, look: ReturnType<typeof resolveLook>
   // Lockers, brick, asphalt, sash and pavers (solids 22-26) are surfaces only where the spot compiles them in
   // (lookSurfaceTest). Sash, like glass, lights its own bars.
   const unlit = look.sash ? 'abs(surface - 16.0) > 0.5 && abs(surface - 25.0) > 0.5' : 'abs(surface - 16.0) > 0.5';
+  // Wall wear (SpotLook.walls): a face baked with wallQuad says where each pixel is on its wall in the corner
+  // slot, and marks itself with a band of 3 or more; its paint, on concrete or painted render, is weathered
+  // before it is lit and textured.
+  if (look.walls) {
+    vertex = swap(vertex, 'flat out vec4 vInfo;', 'flat out vec4 vInfo;\n      out vec3 vWall;');
+    vertex = swap(vertex, 'vInfo = aInfo;', 'vInfo = aInfo;\n        vWall = aCorner;');
+    fragment = swap(fragment, 'flat in vec4 vInfo;', 'flat in vec4 vInfo;\n      in vec3 vWall;');
+  }
+  const walls = look.walls ? /* glsl */ `lookOnWall = vBand.x > 2.5 && (abs(surface - 15.0) < 0.5 || abs(surface - 17.0) < 0.5);
+          if (lookOnWall) color = lookWallWear(color, vWall / ${SET_FOOT.toFixed(1)}, vBand);
+          ` : '';
   fragment = swap(fragment, 'if (id >= 60.0 && id <= 69.0) {', /* glsl */ `if (${lookSurfaceTest(look)}) {
-          if (${unlit}) ${sunlit}
+          ${walls}if (${unlit}) ${sunlit}
           color = lookSurface(color, surface, p / ${SET_FOOT.toFixed(1)}, n, vWorld, vLocal / ${SET_FOOT.toFixed(1)});
         } else if (id >= 60.0 && id <= 69.0) {`);
   // Block walls: courses and joints.

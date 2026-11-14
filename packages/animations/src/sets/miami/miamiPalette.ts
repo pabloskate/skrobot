@@ -31,7 +31,6 @@ export const MIAMI_PAINT = {
   wallFresh: '#ecebe2',
   wallPeeled: '#bdbaae',
   wallGrime: '#8e8b80',
-  wallRust: '#a8805e',
   wallJoint: '#c4c1b4',
   coping: '#c7c6bd',
   copingWorn: '#adaca3',
@@ -41,7 +40,6 @@ export const MIAMI_PAINT = {
   bankSide: '#a9a9a2',
   bankUnder: '#8a8a84',
   bankWax: '#6f6f69',
-  bankChip: '#cfcfc8',
   pedestal: '#9d9c95',
 
   // Planting: Bermuda-type turf, sea-grape and ficus hedges, flowering shrubs, mulch.

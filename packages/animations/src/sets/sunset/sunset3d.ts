@@ -3,19 +3,19 @@ import type { Vec3 } from '../../camera/view';
 import { Bake, type Ink } from '../../three/bake';
 import { ClassicSpot3D } from '../classicSpot3d';
 import { CARLSBAD_LOOK } from '../carlsbad/carlsbad3d';
-import type { Canopy, ContactLine, SpotLook } from '../surfaces';
+import { wallVertex, type Canopy, type ContactLine, type SpotLook, type WallAt } from '../surfaces';
 import { CAP_BACK, backdrop, billboard, canopy, hills, houses, miniMall, storefronts, washBuilding } from './sunsetBuildings';
 import { hedge, oleanderMound, oleanderTree } from './sunsetDetails';
 import {
   BANK_END, BANK_START, BANK_TOP, BANK_Z0, BANK_Z1, BAY_FLOOR, CHAIN_LINK, F, FAR_FRONT, FT, LANE_Z, LOWER, PAVING, ROAD,
   ROOF_BACK, ROOF_Z0, ROOF_Z1, SCALE, SIDEWALK_END, TAPER_END, TOE_START,
-  bankSlope, bankY, floor, mixHex, part, solidBox, tag, toneWall, toWorld, type PavingKind, type RailShadow, type ShadowBox,
+  bankSlope, bankY, floor, part, solidBox, tag, toneWall, toWorld, type PavingKind, type RailShadow, type ShadowBox,
 } from './sunsetKit';
 import * as layout from './sunsetLayout';
 import { SUNSET_PAINT as PAINT } from './sunsetPalette';
 import { buildSunsetStreetscape } from './sunsetStreetscape';
 import { SUNSET_CARS, SUNSET_TREES, sunsetCanopies } from './sunsetTrees';
-import { bankTone, boardTone, buildSunsetWear } from './sunsetWear';
+import { bankUse, buildSunsetWear } from './sunsetWear';
 
 /**
  * Los Angeles' hazy afternoon on Sunset Boulevard, warmer and thicker than Carlsbad's (the Skate Sonr
@@ -35,6 +35,10 @@ export const SUNSET_LOOK: SpotLook = {
   brick: { length: 8 / 12, height: 2.25 / 12, joint: 0.375 / 12, mortar: PAINT.mortar, paint: PAINT.brick, spread: 0.1 },
   // Sun-faded boulevard asphalt, its stones showing.
   asphalt: { scale: 0.03, contrast: 0.15 },
+  // The bank, its ends, the shoulder walls and the planters: grey paint over concrete formed in six-inch boards
+  // down the fall line, painted out in patches, dripped on from the crest, dirty at the toe; chips show pale.
+  // A storey high, so its patches, runs and dirt are twice a curb's.
+  walls: { bare: PAINT.bankChip, coats: 0.06, damp: 0.3, fall: 0.5, scale: 2 },
   foliage: true,
   sash: undefined,
 };
@@ -79,14 +83,17 @@ function roofDeck(ground: Bake) {
   floor(ground, ROOF_BACK, 0, ROOF_Z0, ROOF_Z1, 0, PAINT.roof, tag('stucco', 89));
 }
 
-/** Columns along the frontage: close where the cameras look at the landing, wider toward the far end. */
+/**
+ * Columns along the frontage: every couple of feet round the landing, where the line's wear fades in and out
+ * across the bank, and wide either side of it. The bank's paint is flat, so its grid only carries its shape.
+ */
 function bankColumns(): number[] {
-  const fine0 = Math.max(BANK_Z0, LANE_Z - 30 * FT), fine1 = LANE_Z + 25 * FT;
+  const fine0 = Math.max(BANK_Z0, LANE_Z - 12 * FT), fine1 = LANE_Z + 12 * FT;
   const zs = new Set<number>([BANK_Z0, BANK_Z1]);
   const span = (a: number, b: number, step: number) => { const n = Math.max(1, Math.round((b - a) / step)); for (let k = 0; k <= n; k++) zs.add(a + ((b - a) * k) / n); };
-  if (fine0 > BANK_Z0) span(BANK_Z0, fine0, 1.2 * FT);
-  span(fine0, fine1, 0.4 * FT);
-  span(fine1, BANK_Z1, 1.2 * FT);
+  if (fine0 > BANK_Z0) span(BANK_Z0, fine0, 8 * FT);
+  span(fine0, fine1, 2 * FT);
+  span(fine1, BANK_Z1, 8 * FT);
   return [...zs].sort((a, b) => a - b);
 }
 
@@ -100,38 +107,54 @@ function bankRows(): number[] {
 
 /**
  * The bank: one profile for the whole frontage and the open landing past the roof's end, crest six feet under
- * the roof, smooth normals down its fall, its paint and wear in its vertex colours (`bankTone`); the tapered
- * right-hand end beside the lot, and the left end's face over the apron.
+ * the roof, smooth normals down its fall, painted one flat grey; the tapered right-hand end beside the lot, and
+ * the left end's face over the apron. Its weathering is the look's wall wear (SpotLook.walls), drawn per pixel
+ * from where each vertex says it is on the bank: along the frontage, down the slope from the crest, up it from
+ * the toe, and how near the landing (`bankUse`).
  */
 function bank(ground: Bake) {
   const xs = bankRows(), zs = bankColumns();
-  const vertex = (x: number, z: number, ink: Ink, color = bankTone(x, z)) => {
-    const slope = bankSlope(x), length = Math.hypot(slope, 1);
-    ground.vertex([x, bankY(x), z], [-slope / length, 1 / length, 0], { color }, ink);
+  // How far down the slope each row is from the crest, and the whole slope's length.
+  const fallen = [0];
+  for (let i = 1; i < xs.length; i++) fallen.push(fallen[i - 1] + Math.hypot(xs[i] - xs[i - 1], bankY(xs[i]) - bankY(xs[i - 1])));
+  const length = fallen[fallen.length - 1];
+  // A place on the bank for the wear, at the world's size (the set is baked SCALE bigger than authored).
+  const where = (i: number, z: number, use = 0): WallAt => ({ along: z * SCALE, up: (length - fallen[i]) * SCALE, down: fallen[i] * SCALE, use });
+  const paint = { color: PAINT.bank };
+  const vertex = (i: number, z: number) => {
+    const x = xs[i], slope = bankSlope(x), m = Math.hypot(slope, 1);
+    wallVertex(ground, [x, bankY(x), z], [-slope / m, 1 / m, 0], paint, BANK_INK, where(i, z, bankUse(x, z)), 'bank');
   };
   for (let i = 0; i + 1 < xs.length; i++) {
     for (let j = 0; j + 1 < zs.length; j++) {
-      const [a, b, z0, z1] = [xs[i], xs[i + 1], zs[j], zs[j + 1]];
-      for (const [x, z] of [[a, z1], [b, z1], [b, z0], [a, z1], [b, z0], [a, z0]]) vertex(x, z, BANK_INK);
+      const [z0, z1] = [zs[j], zs[j + 1]];
+      for (const [k, z] of [[i, z1], [i + 1, z1], [i + 1, z0], [i, z1], [i + 1, z0], [i, z0]]) vertex(k, z);
     }
   }
-  // The right-hand end tapers down beside the lot, outside the rider's route.
+  // The right-hand end tapers down beside the lot, outside the rider's route: the same paint, its foot along
+  // the lot's edge.
   for (let i = 0; i + 1 < xs.length; i++) {
     const a = xs[i], b = xs[i + 1];
-    const p0: Vec3 = [a, bankY(a), BANK_Z0], p1: Vec3 = [b, bankY(b), BANK_Z0], p2: Vec3 = [b, LOWER, TAPER_END], p3: Vec3 = [a, LOWER, TAPER_END];
+    const pts: Vec3[] = [[a, bankY(a), BANK_Z0], [b, bankY(b), BANK_Z0], [b, LOWER, TAPER_END], [a, LOWER, TAPER_END]];
     const mid = (a + b) / 2;
     const gradient = -(bankY(mid) - LOWER) / (TAPER_END - BANK_Z0);
-    const length = Math.hypot(bankSlope(mid), 1, gradient);
-    const n: Vec3 = [-bankSlope(mid) / length, 1 / length, -gradient / length];
-    const top = bankTone(mid, BANK_Z0 - 4 * FT), foot = mixHex(top, PAINT.bankGrime, 0.4);
-    ground.quadCorners(p0, p1, p2, p3, n, [{ color: top }, { color: top }, { color: foot }, { color: foot }], BANK_SIDE);
+    const m = Math.hypot(bankSlope(mid), 1, gradient);
+    const n: Vec3 = [-bankSlope(mid) / m, 1 / m, -gradient / m];
+    const at: WallAt[] = [where(i, BANK_Z0), where(i + 1, BANK_Z0), { ...where(i + 1, TAPER_END), up: 0 }, { ...where(i, TAPER_END), up: 0 }];
+    for (const k of [0, 1, 2, 0, 2, 3]) wallVertex(ground, pts[k], n, paint, BANK_SIDE, at[k], 'painted');
   }
-  // The taper's back, facing the shoulder, and the left end's upright face over the apron.
+  // The taper's back, facing the shoulder, and the left end's upright face over the apron: a wall under the
+  // bank's profile, its foot on the apron.
   ground.quad([BANK_START, LOWER, TAPER_END], [BANK_START, LOWER, BANK_Z0], [BANK_START, BANK_TOP, BANK_Z0], [BANK_START, LOWER, TAPER_END], [-1, 0, 0], { color: PAINT.capWall }, BANK_SIDE);
+  const end = part(88, 'stucco', 3);
   for (let i = 0; i + 1 < xs.length; i++) {
     const a = xs[i], b = xs[i + 1];
-    ground.quadCorners([b, LOWER, BANK_Z1], [a, LOWER, BANK_Z1], [a, bankY(a), BANK_Z1], [b, bankY(b), BANK_Z1], [0, 0, 1],
-      [{ color: PAINT.bankGrime }, { color: PAINT.bankGrime }, { color: PAINT.bankEnd }, { color: PAINT.bankEnd }], part(88, 'stucco', 3));
+    const [ha, hb] = [bankY(a) - LOWER, bankY(b) - LOWER];
+    const pts: Vec3[] = [[b, LOWER, BANK_Z1], [a, LOWER, BANK_Z1], [a, bankY(a), BANK_Z1], [b, bankY(b), BANK_Z1]];
+    // Along it from the crest out to the toe, started well clear of the bank's own wear.
+    const s = (x: number) => (400 * FT + x) * SCALE;
+    const at: WallAt[] = [{ along: s(b), up: 0, down: hb * SCALE }, { along: s(a), up: 0, down: ha * SCALE }, { along: s(a), up: ha * SCALE, down: 0 }, { along: s(b), up: hb * SCALE, down: 0 }];
+    for (const k of [0, 1, 2, 0, 2, 3]) wallVertex(ground, pts[k], [0, 0, 1], { color: PAINT.bankEnd }, end, at[k], 'painted');
   }
 }
 
@@ -142,17 +165,19 @@ export const HEDGE_Z = BANK_Z0 + 2.2 * FT, HEDGE_HALF = 1.6 * FT;
 
 /**
  * The shoulders either side of the canopy, behind the crest: bare concrete at the crest's height, as the
- * frames show the top past the canopy's ends, with painted retaining walls down to the street. Nothing grows
+ * frames show the top past the canopy's ends, with painted retaining walls down to the street, weathered by
+ * the look's wall wear. Nothing grows
  * at the crest. Past the bank's right-hand end a clipped hedge runs along the shoulder's outer edge, with tall
  * figs standing over it (`SUNSET_TREES`), the green the street views show beyond the bank's end.
  */
 function shoulders(ground: Bake, props: Bake) {
-  const wall = (s: number, t: number) => mixHex(PAINT.capWall, PAINT.bankGrime, 0.45 * Math.max(0, 1 - t / 0.25) + 0.1 * Math.sin(s / 37));
+  const wall = () => PAINT.capWall;
   for (const [z0, z1, outer] of [[BANK_Z0, ROOF_Z0, -1], [ROOF_Z1, BANK_Z1, 1]] as const) {
     floor(ground, SHOULDER_BACK, BANK_START, z0, z1, BANK_TOP, PAINT.cap, CONCRETE);
     const zo = outer < 0 ? z0 : z1;
-    toneWall(props, [SHOULDER_BACK, zo], [BANK_START, zo], LOWER, BANK_TOP, [0, 0, outer], 3 * FT, [0, 0.25, 1], wall, part(90, 'stucco', 3));
-    toneWall(props, [SHOULDER_BACK, z0], [SHOULDER_BACK, z1], LOWER, BANK_TOP, [-1, 0, 0], 3 * FT, [0, 0.25, 1], wall, part(96, 'stucco', 3));
+    // One face each: their paint is flat, and each starts somewhere of its own along the wear.
+    toneWall(props, [SHOULDER_BACK, zo], [BANK_START, zo], LOWER, BANK_TOP, [0, 0, outer], 400 * FT, [0, 1], wall, part(90, 'stucco', 3), 0, { kind: 'painted', from: (outer < 0 ? 600 : 700) * FT });
+    toneWall(props, [SHOULDER_BACK, z0], [SHOULDER_BACK, z1], LOWER, BANK_TOP, [-1, 0, 0], 400 * FT, [0, 1], wall, part(96, 'stucco', 3), 0, { kind: 'painted', from: (outer < 0 ? 800 : 900) * FT });
   }
   // Where the bays' floor stands over the street, its plinth's ends face the shoulders and the lot.
   solidBox(props, [ROOF_BACK + 5, LOWER, ROOF_Z0], [SHOULDER_BACK, BAY_FLOOR - 6, ROOF_Z1], PAINT.capWall, PAINT.capWall, tag('stucco'), 'fk');
@@ -168,18 +193,20 @@ export const CORNER_OLEANDER = [BANK_END - 77, ROOF_Z0 + 106] as const;
 
 /**
  * The planters punctured into the bank (the Skate Sonr photograph): board-formed concrete boxes, each six-inch
- * board of the formwork its own shade (`boardTone`), a cap round the rim, soil, and oleanders clipped into a
- * mound; the tall oleander at the corner by the landing (the 2019 cover).
+ * board of the formwork its own shade and dirty at the foot (the look's wall wear, cast), a cap round the rim,
+ * soil, and oleanders clipped into a mound; the tall oleander at the corner by the landing (the 2019 cover).
  */
 function planters(props: Bake, boxes: ShadowBox[]) {
   PLANTER_Z.forEach((z, i) => {
     const [x0, x1, top] = [PLANTER_X0, PLANTER_X1, PLANTER_TOP];
-    // Six-inch boards, counted along the face.
-    const board = (s: number, t: number) => boardTone(Math.floor(s / (0.5 * FT)) + i * 31, t);
+    // One face a side: the boards, and every planter's own weathering, are drawn by the look.
+    const board = () => PAINT.planter;
     const ink = part(160 + i * 4, 'concrete', 3);
-    toneWall(props, [x1, z + 54], [x1, z - 54], LOWER + 2, top, [1, 0, 0], 0.5 * FT, [0, 0.3, 1], board, ink);
-    toneWall(props, [x0, z - 54], [x1, z - 54], LOWER + 2, top, [0, 0, -1], 0.5 * FT, [0, 0.3, 1], board, { ...ink, id: ink.id + 1 });
-    toneWall(props, [x1, z + 54], [x0, z + 54], LOWER + 2, top, [0, 0, 1], 0.5 * FT, [0, 0.3, 1], board, { ...ink, id: ink.id + 2 });
+    const side = (a: [number, number], c: [number, number], n: Vec3, k: number) =>
+      toneWall(props, a, c, LOWER + 2, top, n, 400 * FT, [0, 1], board, { ...ink, id: ink.id + k }, 0, { kind: 'cast', from: (1000 + i * 90 + k * 30) * FT });
+    side([x1, z + 54], [x1, z - 54], [1, 0, 0], 0);
+    side([x0, z - 54], [x1, z - 54], [0, 0, -1], 1);
+    side([x1, z + 54], [x0, z + 54], [0, 0, 1], 2);
     solidBox(props, [x0 - 1, top, z - 55], [x1 + 1, top + 3, z + 55], PAINT.planterCap, PAINT.planterCap, { ...ink, id: ink.id + 3 }, 'tfke');
     floor(props, x0 + 6, x1 - 6, z - 48, z + 48, top + 1, PAINT.soil, SOIL);
     oleanderMound(props, (x0 + x1) / 2, top + 1, z, 2.8 * FT, 3.4 * FT, 3.6 * FT, i + 1);

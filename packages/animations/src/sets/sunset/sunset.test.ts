@@ -6,7 +6,7 @@ import { DoubleSide, Mesh, MeshBasicMaterial, Raycaster, Vector3 } from 'three';
 import { projectThree, stageView } from '../../camera/view';
 import { SET_FOOT } from '../elToro/stairs';
 import { Bake } from '../../three/bake';
-import { MAX_CANOPIES, MAX_CONTACTS } from '../surfaces';
+import { MAX_CANOPIES, MAX_CONTACTS, WALL } from '../surfaces';
 import { BANK_INK, buildSunsetGeometry } from './sunset3d';
 import { BUILDING_PLANS } from './sunsetBuildings';
 import { SUNSET_LETTERING, sunsetLettering } from './sunsetDetails';
@@ -82,7 +82,25 @@ describe('Sunset roof-to-bank geometry', () => {
         expect(normals.count).toBe(positions.count);
         expect(Array.from(positions.array).every(Number.isFinite)).toBe(true);
         expect(Array.from(normals.array).every(Number.isFinite)).toBe(true);
-        expect(Array.from(mesh.getAttribute('aCorner').array).every((v) => v === 0)).toBe(true);
+        // Nothing is drawn in the picture plane: the corner slot is used only by wall faces (band 3 or more),
+        // for where they are on their wall (along it, above its foot, below its top), which the look's wall
+        // wear reads.
+        const corner = mesh.getAttribute('aCorner'), band = mesh.getAttribute('aBand');
+        let walls = 0, stray = 0, off = 0;
+        for (let v = 0; v < corner.count; v++) {
+          const [along, up, down] = [corner.getX(v), corner.getY(v), corner.getZ(v)];
+          if (band.getX(v) < 2.5) {
+            if (along !== 0 || up !== 0 || down !== 0) stray++;
+            continue;
+          }
+          walls++;
+          // On its wall, between its foot and its top, at the world's size: nothing here is taller than the
+          // bank's slope is long (under 18 real feet).
+          if (!Number.isFinite(along) || Math.min(up, down) < -1e-6 || up + down > 18 * SET_FOOT) off++;
+        }
+        expect(stray).toBe(0);
+        expect(off).toBe(0);
+        expect(walls).toBeGreaterThan(50);
         count += positions.count;
       }
       expect(count).toBeLessThan(140_000);
@@ -95,6 +113,13 @@ describe('Sunset roof-to-bank geometry', () => {
         if (info.getX(i) !== BANK_INK.id || Math.abs(info.getW(i) * 255 - 4 * (BANK_INK.solid ?? 0)) > 0.01) continue;
         const x = positions.getX(i), y = positions.getY(i), z = positions.getZ(i);
         expect(y).toBeCloseTo(sunsetGround(x), 4);
+        // Every vertex of it is a ridden bank to the wall wear (WALL.bank), and knows how far down the slope
+        // it is: nothing at the crest, the whole slope at the toe, where nothing is left above the foot.
+        const [up, down] = [geometry.ground.getAttribute('aCorner').getY(i), geometry.ground.getAttribute('aCorner').getZ(i)];
+        expect(geometry.ground.getAttribute('aBand').getX(i)).toBe(WALL.bank);
+        if (x === 0) expect(down).toBe(0);
+        if (x === SUNSET_BANK_END) expect(up).toBeCloseTo(0, 6);
+        expect(up + down).toBeGreaterThan(Math.hypot(SUNSET_BANK_END, SUNSET_DROP + SUNSET_BANK_TOP));
         expect(z).toBeGreaterThanOrEqual(SUNSET_BANK_Z0);
         expect(z).toBeLessThanOrEqual(SUNSET_BANK_Z1);
         // The frontage and exposed landing share one crest at x=0. No

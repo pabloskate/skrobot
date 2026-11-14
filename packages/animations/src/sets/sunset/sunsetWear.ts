@@ -11,9 +11,11 @@ import { SUNSET_PAINT as PAINT } from './sunsetPalette';
  * Roof to Bank's wear. Level marks go on the decals (the ground's material, 0.3, 0.6 or 0.9 world units proud
  * by layer): the sidewalk's panels, cracks and the wash's dried run-off, the gutter and curb, Sunset's lane
  * paint, oil, wheel paths, skids, patches and tar-sealed cracks, the lot's stalls and puddles, the apron's
- * tyre tracks, the roof deck's laps, ponding and scuffs along the approach. The bank and the canopy's fascia
- * carry theirs in their own vertex colours (`bankTone`, `fasciaTone`): marks layered on a steep face fight at a
- * distance and read as grey dashes. Read from the Skate Sonr, cover and CCS photographs.
+ * tyre tracks, the roof deck's laps, ponding and scuffs along the approach. The bank, its ends, the shoulder
+ * walls and the planters are weathered per pixel by the look's wall wear (SUNSET_LOOK's `walls`; `bankUse`
+ * says where the bank is ridden): marks layered on a steep face fight at a distance and read as grey dashes,
+ * and tones baked into its vertices smear into soft smudges. The canopy's fascia carries its own in its vertex
+ * colours (`fasciaTone`). Read from the Skate Sonr, cover and CCS photographs.
  */
 
 const ASPHALT = tag('asphalt');
@@ -255,48 +257,16 @@ export function buildSunsetWear(decals: Bake) {
 
 /* ----- Wear baked into faces ----- */
 
-/** Painted-out tags and repairs on the bank: [z from, z to, x from, x to] in real feet, and fresh (1) or old (0). */
-const BANK_PATCHES: ReadonlyArray<[number, number, number, number, number]> = [
-  [-41, -33, 2.5, 8, 1], [-27, -22, 1, 5.5, 0], [-12, -4, 4, 10.5, 1], [6, 14, 0.8, 6, 0], [21, 30, 3, 9.5, 1],
-  [38, 44, 1.5, 7, 0], [55, 66, 2, 8.5, 1], [74, 80, 4, 10, 0], [-35, -30, 8.5, 11, 0], [30, 36, 7, 10.8, 1],
-];
-
 /** Smooth 0 to 1 between edges `a` and `b`. */
 const ramp = (a: number, b: number, v: number) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 /**
- * The bank's paint at (x, z) authored: grey rolled over board-formed concrete, its ridges paler and furrows
- * darker in streaks down the fall line, patches of fresher or older grey where tags were painted out, drips
- * from the canopy's edge down the crest, wheel marks down the landing, and grime gathering over the toe. Baked
- * into the bank's own vertex colours.
+ * How hard the bank is ridden at (x, z) authored (0-1, the look's wall wear): wheels land a few feet below the
+ * crest, within a few feet either side of the line, and roll out down it, leaving their urethane in streaks
+ * down the fall line and the odd chip where a truck hangs up.
  */
-export function bankTone(x: number, z: number): string {
-  const X = Math.max(0, x / FT), Z = z / FT;
-  // Board-form streaks: thin ridges and furrows a few inches to a foot apart, running straight down the slope.
-  const s = valueNoise(Z / 0.45, X / 14 + 3.1) * 0.65 + valueNoise(Z / 0.2 + 17, X / 9) * 0.35;
-  let c = PAINT.bank as string;
-  c = mixHex(c, PAINT.bankRidge, ramp(0.6, 0.8, s) * 0.5);
-  c = mixHex(c, PAINT.bankFurrow, ramp(0.4, 0.22, s) * 0.45);
-  // Broad tone drift over tens of feet, where coats were rolled on different days.
-  c = mixHex(c, valueNoise(Z / 14 + 5, 1.7) > 0.5 ? PAINT.bankPatchOld : PAINT.bankPatch, 0.25 * Math.abs(valueNoise(Z / 14 + 5, 1.7) - 0.5) * 2);
-  for (const [z0, z1, x0, x1, fresh] of BANK_PATCHES) {
-    const inside = Math.min(ramp(z0 - 0.3, z0 + 0.3, Z), ramp(z1 + 0.3, z1 - 0.3, Z), ramp(x0 - 0.3, x0 + 0.3, X), ramp(x1 + 0.3, x1 - 0.3, X));
-    if (inside > 0) c = mixHex(c, fresh ? PAINT.bankPatch : PAINT.bankPatchOld, 0.75 * inside);
-  }
-  // Drips off the canopy's edge, darkest at the crest, a few dozen down the frontage.
-  const drip = ramp(0.7, 0.86, valueNoise(Z / 0.4 + 31, 2.2)) * ramp(4.5, 0, X) * (Z > -9 && Z < 88.5 ? 1 : 0.3);
-  c = mixHex(c, PAINT.bankGrime, 0.3 * drip);
-  // Wheel marks down the landing: thin dark streaks either side of the line.
-  const landing = ramp(9, 4, Math.abs(Z - LANE_Z / FT)) * ramp(1.5, 3, X);
-  const mark = ramp(0.8, 0.9, valueNoise(Z / 0.25 + 47, X / 8)) * landing;
-  c = mixHex(c, PAINT.bankScuff, 0.25 * mark);
-  // Chips knocked pale near the line, where trucks hang up.
-  const chip = ramp(0.86, 0.93, valueNoise(Z / 0.35 + 61, X / 0.6)) * landing;
-  c = mixHex(c, PAINT.bankChip, 0.7 * chip);
-  // Grime over the toe and a foot up the face, its reach wandering along the frontage.
-  const reach = 1.4 + 1.2 * valueNoise(Z / 4 + 9, 0.5);
-  const grime = ramp(12 - reach, 12, X);
-  return mixHex(c, PAINT.bankGrime, 0.6 * grime);
+export function bankUse(x: number, z: number): number {
+  return ramp(9, 4, Math.abs(z - LANE_Z) / FT) * ramp(1.5, 3, x / FT);
 }
 
 /**
@@ -314,10 +284,4 @@ export function fasciaTone(z: number, t: number, panel = 12.5 * FT): string {
   const rust = ramp(0.97, 1, seam) * ramp(0.55, 0.9, t);
   c = mixHex(c, PAINT.rust, 0.35 * rust);
   return mixHex(c, PAINT.streak, 0.25 * ramp(0.25, 0, t));
-}
-
-/** The planter boards' tone: each six-inch board of the formwork a shade apart, dirtier toward the foot. */
-export function boardTone(k: number, t: number): string {
-  const c = mixHex(PAINT.planter, PAINT.planterBoard, hash2(k, 3, 360));
-  return mixHex(c, PAINT.bankGrime, 0.35 * ramp(0.3, 0, t));
 }

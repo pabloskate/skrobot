@@ -114,7 +114,25 @@ describe('Wallenberg landmark geometry', () => {
         expect(geometry.getAttribute('normal').count).toBe(position.count);
         expect(Array.from(position.array).every(Number.isFinite)).toBe(true);
         expect(Array.from(geometry.getAttribute('normal').array).every(Number.isFinite)).toBe(true);
-        expect(Array.from(geometry.getAttribute('aCorner').array).every(n => n === 0)).toBe(true);
+        // Nothing is drawn in the picture plane: the corner slot is used only by wall faces (band 3 or more),
+        // for where they are on their wall (along it, above its foot, below its top), which the look's wall
+        // wear reads.
+        const corner = geometry.getAttribute('aCorner'), band = geometry.getAttribute('aBand');
+        let walls = 0, stray = 0, off = 0;
+        for (let v = 0; v < position.count; v++) {
+          const [along, up, down] = [corner.getX(v), corner.getY(v), corner.getZ(v)];
+          if (band.getX(v) < 2.5) {
+            if (along !== 0 || up !== 0 || down !== 0) stray++;
+            continue;
+          }
+          walls++;
+          // A wall's corner is on it: at its foot or its lip, and no taller than a curb (15 in).
+          if (!Number.isFinite(along) || Math.min(up, down) < -1e-6 || up + down > 1.26 * SET_FOOT) off++;
+        }
+        expect(stray).toBe(0);
+        expect(off).toBe(0);
+        // The four curbs' faces are in the ground; no prop carries wall wear.
+        expect(walls > 0).toBe(geometry === ground);
       }
     } finally {
       ground.dispose();

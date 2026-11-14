@@ -1,6 +1,6 @@
 import type { Vec3 } from '../camera/view';
 import { glslRgb, rgb, SUN } from '../three/materials';
-import { DAYLIGHT, type Ink } from '../three/bake';
+import { DAYLIGHT, type Bake, type Ink, type Paint } from '../three/bake';
 import { treeHeight, type TreePlacement } from './props/trees';
 import { SET_FOOT } from './setScale';
 
@@ -192,6 +192,21 @@ export interface SpotLook {
    */
   pavers?: { size: number; joint: number; jointColor: string; paint: string; spread?: number };
   /**
+   * Weathering on concrete and painted-render walls baked with `wallQuad` or `wallVertex`, drawn per pixel from
+   * where the pixel is on its wall (along it, above its foot, below its top edge): coats of paint in roller
+   * patches, paint flaked back to the concrete where boards hit, splash-back at the foot, runs from the top
+   * edge, a rubbed and waxed arris; on a ridden bank, wheel streaks down the fall line instead of the wax.
+   * Faces baked any other way, and spots that don't set this, are untouched. `bare` is the concrete under the
+   * paint; `coats` how far one coat's tone is from the next (default 0.035); `damp` (0-1) how wet the foot is
+   * kept, from dust and splash-back (0) to a sprinkler's mildew band (1); `rust` (0-1) the iron stain well water
+   * leaves low on the wall; `boards` and `panel` (feet) the form boards' height and the form panels' length on
+   * painted board-formed walls, each leaving a faint line; `fall` (feet) the width of form boards stood upright,
+   * or laid down a bank's fall line, on every wall, each a touch its own tone; `scale` how big the walls are to
+   * their wear (default 1, for curbs and low walls; about 2 for a bank a storey high): roller patches, runs and
+   * the dirt's reach grow with it.
+   */
+  walls?: { bare: string; coats?: number; damp?: number; rust?: number; boards?: number; panel?: number; fall?: number; scale?: number };
+  /**
    * Leaves patterned in three dimensions on foliage masses (solid 13). The stock pattern is one flat projection,
    * which stripes a rounded shrub down its sides; a spot planted with modelled shrubs asks for this instead.
    */
@@ -226,6 +241,7 @@ export function resolveLook(look: SpotLook) {
     asphalt: look.asphalt,
     sash: look.sash,
     pavers: look.pavers,
+    walls: look.walls,
     foliage: look.foliage ?? false,
   };
 }
@@ -253,6 +269,39 @@ export function stairContacts(x0: number, y0: number, z0: number, z1: number, tr
   return { a: [x0, y0 - riser, z0], b: [x0, y0 - riser, z1], reach, strength, step: [tread, -riser, 0], count: steps };
 }
 
+/** Where a wall face's corner is on its wall, in set units: along it, above the ground at its foot, below its top edge (down a bank's slope, the distances along it). */
+export interface WallAt {
+  along: number;
+  up: number;
+  down: number;
+  /** How hard boards and trucks hit the wall here (0-1): flaked paint, scuffs, a waxed arris. */
+  use?: number;
+}
+
+/**
+ * What a wall is, to the look's wall wear, as the band that marks its faces (plain flat paint is 2): cast
+ * concrete only stains; a painted wall also flakes back to the look's bare concrete; a painted bank is a slope
+ * that is ridden, so where it is used it takes wheel streaks down its fall line, not wax along its top.
+ */
+export const WALL = { cast: 3, painted: 4, bank: 5 } as const;
+export type WallKind = keyof typeof WALL;
+
+/**
+ * One corner of a face that carries the look's wall wear (SpotLook.walls): it says where it is on its wall,
+ * which rides to the shader in the slots flat scenery leaves free (the picture-plane corner, and the split
+ * band, whose 3 or more marks the face). Distances are in set units as drawn (a set authored at another scale
+ * gives them at the world's). Keep `along` running on round a corner so the wear does too. A spot whose look
+ * has no `walls` draws the face as plain paint.
+ */
+export function wallVertex(b: Bake, p: Vec3, n: Vec3, paint: Paint, ink: Ink, at: WallAt, kind: WallKind = 'painted') {
+  b.vertex(p, n, paint, ink, [at.along, at.up, at.down], [WALL[kind], Math.min(1, Math.max(0, at.use ?? 0))]);
+}
+
+/** A flat face of a wall that carries the look's wall wear: `wallVertex` at each corner. */
+export function wallQuad(b: Bake, pts: readonly [Vec3, Vec3, Vec3, Vec3], n: Vec3, paint: Paint | readonly [Paint, Paint, Paint, Paint], ink: Ink, at: readonly [WallAt, WallAt, WallAt, WallAt], kind: WallKind = 'painted') {
+  for (const k of [0, 1, 2, 0, 2, 3]) wallVertex(b, pts[k], n, 'color' in paint ? paint : paint[k], ink, at[k], kind);
+}
+
 const vec3s = (c: readonly number[]) => `vec3(${c.map((v) => v.toFixed(3)).join(', ')})`;
 
 /**
@@ -275,7 +324,7 @@ export function lookSurfaceTest(look: Partial<Pick<Look, 'lockers' | 'brick' | '
  * position in feet, `n` its normal, `world` the stage position.
  * Every feature finer than a pixel fades (grain's own fade, or `resolves`).
  */
-export function surfacesGlsl(look: Pick<Look, 'sky' | 'bounce'> & Partial<Pick<Look, 'propShadows' | 'marks' | 'markDepth' | 'stairs' | 'gum' | 'mortar' | 'lockers' | 'brick' | 'asphalt' | 'sash' | 'pavers'>>) {
+export function surfacesGlsl(look: Pick<Look, 'sky' | 'bounce'> & Partial<Pick<Look, 'propShadows' | 'marks' | 'markDepth' | 'stairs' | 'gum' | 'mortar' | 'lockers' | 'brick' | 'asphalt' | 'sash' | 'pavers' | 'walls'>>) {
   const flat = [0, 1, 2].map((i) => SUN.y * DAYLIGHT.sunTint[i] + look.sky * DAYLIGHT.skyTint[i]);
   // With prop shadows, glass looks for the boxes its reflection runs into (an eave over the window).
   const reflectBlocked = look.propShadows
@@ -302,9 +351,11 @@ export function surfacesGlsl(look: Pick<Look, 'sky' | 'bounce'> & Partial<Pick<L
   const mortar = look.mortar
     ? `mix(c, c * ${vec3s(rgb(look.mortar).map((v, i) => v / rgb('#bda17e')[i]))}, joint)`
     : 'c * (1.0 - 0.32 * joint)';
+  // A wall with its own wear (SpotLook.walls) has its own runs from the top edge, not the stock streaks.
+  const streaked = look.walls ? 'flatwork < 1.0 && !lookOnWall' : 'flatwork < 1.0';
   return /* glsl */ `
 ${reflectBlocked}
-float lookMarkZone(vec2 q) {
+${look.walls ? '// Whether the face being shaded carries wall wear (set per pixel, before its surface is drawn).\nbool lookOnWall = false;\n' : ''}float lookMarkZone(vec2 q) {
   float m = -1.0;
   ${zones}
   return clamp(m, 0.0, 1.0);
@@ -410,7 +461,7 @@ ${look.gum ? lookGumGlsl(look.gum) : ''}vec3 lookConcrete(vec3 c, vec2 q, vec3 n
   float stain = smoothstep(0.66, 0.86, noise(q * 0.12 + 21.0) * 0.7 + noise(q * 0.29 + 5.0) * 0.3) * (0.6 + 0.4 * noise(q * 1.1));
   c *= 1.0 - 0.075 * stain;
   // Cast walls: rain streaks running down them.
-  if (flatwork < 1.0) c *= 1.0 - (1.0 - flatwork) * 0.11 * smoothstep(0.42, 0.9, noise(vec2(q.x * 1.6, q.y * 0.12 + 2.0)));
+  if (${streaked}) c *= 1.0 - (1.0 - flatwork) * 0.11 * smoothstep(0.42, 0.9, noise(vec2(q.x * 1.6, q.y * 0.12 + 2.0)));
   // Urethane marks where boards land and roll away: long thin strokes along the roll, a pair's worth here and there.
   float zone = flatwork * lookMarkZone(q);
   if (zone > 0.0) {
@@ -586,7 +637,7 @@ vec3 lookRoofing(vec3 c, vec3 n, vec3 local) {
   return c * (1.0 + 0.22 * ridge - 0.38 * shade);
 }
 
-${look.stairs ? lookStairWearGlsl(look.stairs) : ''}${look.lockers ? lookLockersGlsl(look.lockers) : ''}${look.brick ? lookBrickGlsl(look.brick) : ''}${look.asphalt ? lookAsphaltGlsl(look.asphalt) : ''}${look.sash ? lookSashGlsl(look.sash) : ''}${look.pavers ? lookPaversGlsl(look.pavers) : ''}vec3 lookSurface(vec3 c, float surface, vec2 q, vec3 n, vec3 world, vec3 local) {
+${look.stairs ? lookStairWearGlsl(look.stairs) : ''}${look.walls ? lookWallWearGlsl(look.walls) : ''}${look.lockers ? lookLockersGlsl(look.lockers) : ''}${look.brick ? lookBrickGlsl(look.brick) : ''}${look.asphalt ? lookAsphaltGlsl(look.asphalt) : ''}${look.sash ? lookSashGlsl(look.sash) : ''}${look.pavers ? lookPaversGlsl(look.pavers) : ''}vec3 lookSurface(vec3 c, float surface, vec2 q, vec3 n, vec3 world, vec3 local) {
   // Turf is projected from above, so a steep bank never stretches it or seams where faces turn.
   if (surface < 14.5) return lookGrass(c, local.xz);
 ${stairs}  if (surface < 15.5) return lookConcrete(c, q, n);
@@ -706,6 +757,139 @@ ${second}  if (u < -0.02 || u > ${num(x[1] - x[0])} + 0.02 || local.z < Z0 - 0.0
   float k = floor(u / TREAD);
   float d = clamp((TOP - (k + 1.0) * RISER - local.y) / (0.55 * RISER) + 1.0, 0.0, 1.0);
   return mix(c, grime * 0.92, smoothstep(0.25, 1.0, d) * (0.5 + 0.3 * noise(vec2(local.x * 2.0, k))));
+}
+`;
+}
+
+/**
+ * A wall's weathering (SpotLook.walls), per pixel, on faces baked with `wallQuad` or `wallVertex`. `w` is the
+ * pixel on its wall in feet (along it, above its foot, below its top edge), `band` the face's kind (WALL: 3
+ * cast concrete, 4 painted, 5 a painted bank that is ridden) and how hard it is used there (0-1). It works on
+ * the face's paint before the light and the surface's own grain go on, so every mark sits in the surface, and
+ * each one is filtered over the pixel or faded as it goes subpixel. Wear follows what makes it: paint is rolled
+ * on in rectangles, flakes where boards hit, dirt splashes up from the ground in a ragged band, water runs down
+ * from the top edge in narrow streaks that give out, and the top arris is rubbed pale, or waxed dark where it
+ * is skated; a bank takes its wheels' urethane in streaks down its fall line.
+ */
+function lookWallWearGlsl({ bare, coats = 0.035, damp = 0, rust = 0, boards = 0, panel = 0, fall = 0, scale = 1 }: NonNullable<SpotLook['walls']>) {
+  const wet = Math.min(1, Math.max(0, damp));
+  // Dust and splash-back are grey-brown; a foot kept wet goes greener and darker, and reaches higher.
+  const grime = [0.8, 0.79, 0.75].map((v, i) => v + ([0.76, 0.8, 0.7][i] - v) * wet);
+  const forms = boards > 0 ? /* glsl */ `
+    // Board-formed: each board a touch its own tone, and a fine line where two met.
+    float board = floor(down / ${num(boards)} + 0.5);
+    c *= 1.0 + 0.03 * resolves(p, ${num(1.5 / boards)}) * (hash(vec2(board, floor(along / ${num(panel || 8)})) + 61.0) - 0.5);
+    c *= 1.0 - 0.07 * lookJoint(down + ${num(boards / 2)}, ${num(boards)}, 0.014);` : '';
+  const panels = panel > 0 ? /* glsl */ `
+    // The joint between one form panel and the next.
+    c *= 1.0 - 0.13 * lookJoint(along, ${num(panel)}, 0.035);` : '';
+  const planks = fall > 0 ? /* glsl */ `
+  // Form boards stood upright, or laid down a bank's fall line: each a touch its own tone, the grain of one
+  // wandering a little down its length, and a fine line where two met.
+  float plank = floor(along / ${num(fall)});
+  c *= 1.0 + resolves(p, ${num(1.5 / fall)}) * (0.036 * (hash(vec2(plank, 71.0)) - 0.5) + 0.028 * (noise(vec2(plank * 3.7, down * 0.35)) - 0.5));
+  c *= 1.0 - 0.05 * lookJoint(along, ${num(fall)}, 0.014);` : '';
+  const rusted = rust > 0 ? /* glsl */ `
+  // Iron from well water: an orange-brown stain low on the wall, in the stretches the sprinklers reach.
+  float iron = smoothstep(0.5, 0.78, noise(vec2(along * 0.43 + 11.0, 3.0))) * (1.0 - smoothstep(0.0, 2.6 * reach, up));
+  c *= mix(vec3(1.0), vec3(1.0, 0.87, 0.72), ${num(0.55 * rust)} * iron * (0.6 + 0.4 * noise(p * 3.0 + 5.0)));` : '';
+  // A big wall's patches, runs and dirt are bigger: SIZE scales their lengths, and the runs' width by half of it.
+  return /* glsl */ `// A wall's own wear: see lookWallWearGlsl.
+const float LOOK_WALL_SIZE = ${num(scale)};
+// One roller-painted rectangle in some cells of a row along the wall, kept inside its cell: how far its coat's
+// tone is from the wall's (-1 to 1), 0 outside it. Its edges wander a little, as a roller leaves them. On a
+// wall tall feet high it sits low on a curb, and anywhere a roller reaches on a bank.
+float lookCoat(vec2 p, float tall, float cell, float salt, float px) {
+  cell *= LOOK_WALL_SIZE;
+  float id = floor(p.x / cell);
+  float h = hash(vec2(id, salt));
+  if (h < 0.42) return 0.0;
+  vec2 r = p + 0.03 * (vec2(noise(p * 6.0 + salt), noise(p * 6.0 + salt + 9.1)) - 0.5);
+  float f = r.x - id * cell;
+  float x0 = cell * (0.05 + 0.3 * fract(h * 7.3)), x1 = cell * (0.6 + 0.35 * fract(h * 13.7));
+  float y0 = 0.5 * fract(h * 29.1) * fract(h * 3.7) + max(0.0, 0.5 * (tall - 7.0)) * fract(h * 19.3);
+  float y1 = y0 + (0.8 + 2.8 * fract(h * 41.3)) * LOOK_WALL_SIZE;
+  float aa = px + 0.004;
+  float inside = smoothstep(x0 - aa, x0 + aa, f) * (1.0 - smoothstep(x1 - aa, x1 + aa, f))
+    * smoothstep(y0 - aa, y0 + aa, r.y) * (1.0 - smoothstep(y1 - aa, y1 + aa, r.y));
+  return inside * (2.0 * fract(h * 91.7) - 1.0);
+}
+// Dirty water run down from the top edge: one narrow streak in some cells along the wall, wandering a little
+// and narrowing as it falls, most short and a few long, on a wall tall feet high: few reach the ground, and
+// on a low wall they give out part way down it. Its cover of the pixel (aa wide along the wall).
+float lookRun(float along, float down, float tall, float cell, float salt, float aa) {
+  cell *= LOOK_WALL_SIZE;
+  float id = floor(along / cell);
+  float h = hash(vec2(id, salt));
+  if (h < 0.5) return 0.0;
+  float len = min((0.22 + 1.7 * fract(h * 17.3) * fract(h * 5.9)) * LOOK_WALL_SIZE, tall * (0.35 + 0.5 * fract(h * 23.9)));
+  float cx = (id + 0.2 + 0.6 * fract(h * 31.7)) * cell + 0.035 * (noise(vec2(down * 2.3 + id, salt)) - 0.5);
+  float wide = (0.01 + 0.034 * fract(h * 53.1)) * (0.5 + 0.5 * LOOK_WALL_SIZE) * (1.0 - 0.55 * smoothstep(0.0, len, down));
+  float a = 0.5 * max(aa, wide);
+  float cover = clamp((min(along + a, cx + wide) - max(along - a, cx - wide)) / (2.0 * a), 0.0, 1.0);
+  return cover * (1.0 - smoothstep(0.3 * len, len, down)) * (0.55 + 0.45 * fract(h * 77.7));
+}
+vec3 lookWallWear(vec3 c, vec3 w, vec2 band) {
+  float along = w.x, up = max(w.y, 0.0), down = max(w.z, 0.0);
+  float painted = step(3.5, band.x), bank = step(4.5, band.x), use = clamp(band.y, 0.0, 1.0);
+  vec2 p = vec2(along, up);
+  // Feet to the pixel, across the wall and up it.
+  float px = max(length(dFdx(p)), length(dFdy(p)));
+  float fine = 1.0 - smoothstep(0.012, 0.045, px);
+  // Coats of paint: rectangles rolled over what was there, each a touch fresher or older than the last.
+  if (painted > 0.5) {
+    float coat = lookCoat(p, up + down, 5.3, 3.0, px) + 0.7 * lookCoat(p + vec2(2.1, 0.0), up + down, 3.7, 8.0, px);
+    c *= (1.0 + ${num(coats)} * coat) * vec3(1.0 - 0.012 * coat, 1.0, 1.0 + 0.016 * coat);${forms}${panels}
+  }${planks}
+  // The top edge: how near it the pixel is, in its top inch and in its top few.
+  float arris = 1.0 - smoothstep(0.012, 0.075, down);
+  float lip = 1.0 - smoothstep(0.03, 0.26 + 0.2 * noise(vec2(along * 1.7, 4.0)), down);
+  // Splash-back at the foot: a ragged band of dirt, darkest where the wall meets the ground, its reach
+  // wandering along the wall, and specks thrown higher.
+  float reach = ${num((0.24 + 0.3 * wet) * scale)} * (0.45 + 1.1 * noise(vec2(along * 0.37 + 5.0, 2.0)));
+  float ragged = reach * (0.65 + 0.7 * noise(vec2(along * 2.9, 7.0)));
+  float foot = (1.0 - smoothstep(0.12 * ragged, ragged, up)) * (0.6 + 0.5 * noise(p * vec2(4.0, 9.0) + 31.0));
+  if (fine > 0.0) foot = max(foot, 0.5 * fine * smoothstep(0.84, 0.94, noise(p * 27.0)) * (1.0 - smoothstep(0.0, 3.2 * reach, up)));
+  // Stains a foot or three across where the wet stands longest, low on the wall and mottled.
+  float blotch = noise(vec2(along * 0.55 + 3.17, 1.93)) * 0.6 + noise(vec2(along * 1.6 + 4.0, up * 1.1 + 2.31)) * 0.4;
+  foot = max(foot, 0.45 * smoothstep(0.56, 0.84, blotch) * (1.0 - smoothstep(0.15, 1.5, up)) * (0.55 + 0.45 * noise(p * 6.0 + 3.0)));
+  c = mix(c, c * ${vec3s(grime)}, ${num(0.55 + 0.15 * wet)} * min(foot, 1.0));${rusted}
+  // Runs from the top edge, where the water off the top takes its dirt down the face.
+  float aa = max(fwidth(along), 1e-4);
+  float run = max(lookRun(along, down, up + down, 0.9, 5.0, aa), lookRun(along + 0.37, down, up + down, 1.7, 13.0, aa));
+  c = mix(c, c * vec3(0.88, 0.87, 0.84), run * smoothstep(0.0, 0.03, down));
+  if (painted > 0.5) {
+    // Paint flaked back to the concrete: chips along the top arris anywhere, and small ragged flakes where
+    // boards hit a wall, thickest under its lip. Wheels only mark a bank; they don't flake it.
+    float want = use * mix(0.06 + 0.16 * lip, 0.0, bank) + 0.08 * arris;
+    if (want > 0.004) {
+      float flake = noise(p * 4.7 + 17.0) * 0.42 + noise(p * 12.3 + 3.0) * 0.34 + noise(p * 29.0) * 0.24;
+      float soft = 0.012 + 7.0 * px;
+      float peel = smoothstep(0.78 - want - soft, 0.78 - want + soft, flake);
+      c = mix(c, ${glslRgb(bare)} * (0.95 + 0.1 * noise(p * 2.3 + 1.0)), 0.85 * peel);
+    }
+  } else {
+    // Cast concrete chips pale along its arris.
+    float chip = smoothstep(0.8, 0.88, noise(vec2(along * 3.7 + 2.0, 0.37))) * arris * resolves(p, 8.0);
+    c = mix(c, c * 1.14, chip);
+  }
+  // The arris itself, rounded off, catches the light.
+  c *= 1.0 + 0.05 * arris * (1.0 - use);
+  if (use > 0.004) {
+    if (bank > 0.5) {
+      // A bank that is ridden: urethane in long thin streaks down the fall line, where wheels land and roll.
+      float streak = smoothstep(0.76, 0.9, noise(vec2(along * 11.0 + 3.0, down * 0.22))) * smoothstep(0.35, 0.7, noise(vec2(along, down) * 0.3 + 8.0));
+      c *= 1.0 - 0.11 * use * streak * resolves(p, 11.0);
+    } else {
+      // Where a wall is skated its arris is dark with wax and urethane, and boards leave thin scuffs along
+      // the face under it.
+      float wax = use * lip * (0.5 + 0.5 * noise(vec2(along * 3.3, down * 9.0)));
+      c = mix(c, c * vec3(0.6, 0.59, 0.57), 0.62 * wax);
+      float stroke = smoothstep(0.76, 0.9, noise(vec2(along * 0.9 + 3.0, down * 17.0))) * smoothstep(0.4, 0.7, noise(vec2(along, down) * 0.8 + 8.0));
+      c *= 1.0 - 0.07 * use * stroke * resolves(p, 17.0);
+    }
+  }
+  return c;
 }
 `;
 }

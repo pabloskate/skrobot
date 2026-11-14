@@ -2,7 +2,7 @@ import type { BufferGeometry } from 'three';
 import type { Vec3 } from '../../camera/view';
 import { Bake } from '../../three/bake';
 import { hash2 } from '../setKit';
-import { stairContacts, type ContactLine } from '../surfaces';
+import { stairContacts, wallQuad, type ContactLine } from '../surfaces';
 import { buildAnnex, buildGym, buildNeighbourhood } from './wallenbergBuildings';
 import {
   CHAIN_LINK, F, INCH, LEAVES, STEEL, UP, chainLink, face, floor, meshPanel, mixHex, normalOf, part, pipe, solidBox, tag, tube,
@@ -37,7 +37,7 @@ import {
   wallenbergSurface,
 } from './wallenbergLayout';
 import { WALLENBERG_PAINT as PAINT } from './wallenbergPalette';
-import { buildWallenbergWear, faceTone } from './wallenbergWear';
+import { buildWallenbergWear, faceUse } from './wallenbergWear';
 
 const FAR = 1000 * F;
 const ASPHALT = tag('asphalt');
@@ -95,30 +95,36 @@ function fan(b: Bake, outline: Plan[], height: (x: number) => number, color: str
 }
 
 /**
- * The face standing along a plan line, facing its outer (lower) side, from
+ * Curb `i`'s face standing along a plan line, facing its outer (lower) side, from
  * whatever lies outside it up to `top`: full height along the treads,
  * shrinking as the slope beside it rises, gone where the slope is level.
+ * Its paint is flat; its wear is the look's (SpotLook.walls), drawn per pixel
+ * from where each corner says it is on the curb: how far along the face
+ * (running on round the corner), over the ground at its foot, under its lip.
  */
-function curbFace(b: Bake, path: Plan[], top: number, tone: (p: Plan, t: number) => string, ink = CONCRETE) {
+function curbFace(b: Bake, path: Plan[], top: number, i: number, ink = CONCRETE) {
   const below = path.map((p, k) => {
     const [a, c] = [path[Math.max(0, k - 1)], path[Math.min(path.length - 1, k + 1)]];
     const length = Math.hypot(c[0] - a[0], c[1] - a[1]);
     const z = Math.min(WALLENBERG_SIDE_STAIRS_Z0 - 1, p[1] + ((c[0] - a[0]) / length) * 0.5);
     return Math.min(top, wallenbergSurface(p[0] - ((c[1] - a[1]) / length) * 0.5, z));
   });
-  // Rows up the face, so its paint can grime toward the foot.
-  const rows = [0, 0.15, 0.35, 0.6, 1];
+  // Each curb starts somewhere of its own along the wear, so no two weather alike.
+  let along = i * 137 * F;
+  const paint = { color: PAINT.face };
   for (let k = 0; k + 1 < path.length; k++) {
-    if (below[k] >= top - 0.01 && below[k + 1] >= top - 0.01) continue;
     const [a, c] = [path[k], path[k + 1]];
     const length = Math.hypot(c[0] - a[0], c[1] - a[1]);
+    const from = along;
+    along += length;
+    if (below[k] >= top - 0.01 && below[k + 1] >= top - 0.01) continue;
     const n: Vec3 = [-(c[1] - a[1]) / length, 0, (c[0] - a[0]) / length];
-    const ya = (t: number) => below[k] + (top - below[k]) * t, yc = (t: number) => below[k + 1] + (top - below[k + 1]) * t;
-    for (let r = 0; r + 1 < rows.length; r++) {
-      const [t0, t1] = [rows[r], rows[r + 1]];
-      b.quadCorners([a[0], ya(t0), a[1]], [a[0], ya(t1), a[1]], [c[0], yc(t1), c[1]], [c[0], yc(t0), c[1]], n,
-        [{ color: tone(a, t0) }, { color: tone(a, t1) }, { color: tone(c, t1) }, { color: tone(c, t0) }], ink);
-    }
+    const [ha, hc] = [top - below[k], top - below[k + 1]];
+    const [ua, uc] = [faceUse(i, a[1]), faceUse(i, c[1])];
+    wallQuad(b, [[a[0], below[k], a[1]], [a[0], top, a[1]], [c[0], top, c[1]], [c[0], below[k + 1], c[1]]], n, paint, ink, [
+      { along: from, up: 0, down: ha, use: ua }, { along: from, up: ha, down: 0, use: ua },
+      { along, up: hc, down: 0, use: uc }, { along, up: 0, down: hc, use: uc },
+    ]);
   }
 }
 
@@ -133,8 +139,8 @@ export function topCurbPath(): Plan[] {
  * The four curbs, three tall blocks and the short street curb, with off-white
  * painted faces and broad asphalt treads, and the slope beside them: the top
  * two end in rounded corners, their sides sinking into the asphalt rising
- * past them toward the gate, while the lower two run on. Caps, paint, buffing
- * and grime are the wear's (wallenbergWear.ts), drawn on the decals.
+ * past them toward the gate, while the lower two run on. The caps' wear is
+ * on the decals (wallenbergWear.ts); the faces' is the look's wall wear.
  */
 export function buildWallenbergBlocks(ground: Bake, props: Bake) {
   const [meet0, meet1] = [slopeMeets(0), slopeMeets(1)];
@@ -155,15 +161,15 @@ export function buildWallenbergBlocks(ground: Bake, props: Bake) {
   floor(ground, T, 2 * T, -FAR, WALLENBERG_SIDE_STAIRS_Z0, wallenbergLevel(2), PAINT.tread, ASPHALT);
   floor(ground, 2 * T, 3 * T, -FAR, WALLENBERG_SIDE_STAIRS_Z0, wallenbergLevel(3), PAINT.tread, ASPHALT);
   // Faces, each curb its own part.
-  const tone = (i: number) => (p: Plan, t: number) => faceTone(i, p[1], t);
-  curbFace(ground, topCurbPath(), 0, tone(0), curbInk(0));
-  curbFace(ground, curbLine(1, meet1), wallenbergLevel(1), tone(1), curbInk(1));
+  curbFace(ground, topCurbPath(), 0, 0, curbInk(0));
+  curbFace(ground, curbLine(1, meet1), wallenbergLevel(1), 1, curbInk(1));
   for (let i = 2; i < WALLENBERG_STEPS; i++) {
-    // Close enough along to carry the paint's patches where the cameras see it; one long quad on out of sight.
+    // Cut every few feet where the line crosses, so its wear fades in and out along the face; one long quad on
+    // out of sight.
     const path: Plan[] = [];
-    for (let z = WALLENBERG_SIDE_STAIRS_Z0; z > -WALLENBERG_NEAR; z -= 1.25 * F) path.push([i * T, z]);
+    for (let z = WALLENBERG_SIDE_STAIRS_Z0; z > -WALLENBERG_NEAR; z -= 2.5 * F) path.push([i * T, z]);
     path.push([i * T, -WALLENBERG_NEAR], [i * T, -FAR]);
-    curbFace(ground, path, wallenbergLevel(i), tone(i), curbInk(i));
+    curbFace(ground, path, wallenbergLevel(i), i, curbInk(i));
   }
   weeds(props);
   // The slope: past the alley's ledge, past the top curb's end, past the second's, flat beyond the gate.

@@ -20,8 +20,9 @@ import { WALLENBERG_PAINT as PAINT } from './wallenbergPalette';
 
 /**
  * Wallenberg's wear, drawn on the decals (the ground's material, a hair proud of it): the curbs' caps worn
- * pale and waxed dark where the line crosses them (the faces' paint, buff and grime are in their own
- * colours: wallenbergGeometry.ts's faceTone, since layered decals on a wall fight at a distance), the treads polished along the line and patched with fresh sealer, tyre
+ * pale and waxed dark where the line crosses them (the faces' paint, buff and grime are the look's wall
+ * wear, drawn per pixel: layered decals on a wall fight at a distance, and tones baked into its vertices
+ * smear into soft bands), the treads polished along the line and patched with fresh sealer, tyre
  * tracks and oil up the court-side slope, cracks across the yard. Read from the 51-inch shot, the
  * FindSkateSpots photograph and the roll-in stills.
  */
@@ -258,24 +259,10 @@ export function buildWallenbergWear(decals: Bake, props: Bake) {
 }
 
 /**
- * The paint on curb `i`'s face at `z` along it, `t` up it (0 its foot, 1 its top): off-white over generations
- * of paint, in broad patches of fresher and older buff (the 2020 photographs show the faces patchy), scraped
- * grey low down along the line where boards slap it, grime gathering toward the foot. Baked into the face's
- * own vertex colours.
+ * How hard curb `i`'s face is used at `z` along it (0-1, the look's wall wear): boards that come up short slap
+ * the faces where the line crosses them, flaking the paint and scuffing it, and wax the lips. Never the whole
+ * way: nobody grinds these, they only get hit.
  */
-export function faceTone(i: number, z: number, t: number): string {
-  const Z = z / F;
-  // Buff: patches several feet long where the noise rises over a threshold, fresher or older by a second noise.
-  const patchy = valueNoise(Z / 4.5 + i * 11.3, i * 5.7 + 0.5);
-  const buff = Math.min(1, Math.max(0, (patchy - 0.5) / 0.06));
-  const fresh = valueNoise(Z / 7 + i * 3.1 + 40, i * 2.3);
-  let c = mixHex(PAINT.face, fresh > 0.5 ? PAINT.faceBuff : PAINT.faceBuffOld, buff * (t < 0.06 ? 0.4 : 1));
-  // Scrapes along the line, low on the face.
-  const near = Math.max(0, 1 - Math.abs(z - LINE_Z) / lineWidth(i));
-  const scrape = near * Math.max(0, valueNoise(Z * 1.3 + i * 9, t * 3 + i) - 0.5) * 2 * (t > 0.1 && t < 0.7 ? 1 : 0);
-  c = mixHex(c, PAINT.facePeeled, 0.55 * scrape);
-  // Grime toward the foot, its reach wandering along the face.
-  const reach = 0.25 + 0.25 * valueNoise(Z / 3 + i * 3.1, i * 7.9);
-  const grime = Math.max(0, 1 - t / reach) ** 1.4;
-  return mixHex(c, PAINT.faceGrime, 0.62 * grime);
+export function faceUse(i: number, z: number): number {
+  return 0.5 * Math.max(0, 1 - Math.abs(z - LINE_Z) / lineWidth(i));
 }

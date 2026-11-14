@@ -13,8 +13,9 @@ import { MIAMI_PAINT as PAINT } from './miamiPalette';
  * Triangle Bank's weathering. Wear on level ground goes on the decals (the ground's material, a hair proud of
  * it): irrigation rust fanned out from the planters, water and oil stains, landing scuffs on the pavers, the deck's
  * saw-cut joints, worn lane and cracks, wax and peeled paint on the rim, wax down the bank's edges. Wear on the
- * upright faces (paint, peeling, mildew at the foot) is baked into their own vertex colours (wallTone, bankSideTone),
- * since decals layered on a wall fight at a distance. Read by eye from the clips in
+ * upright faces (paint, peeling, mildew at the foot, form joints) is the look's wall wear, drawn per pixel
+ * (MIAMI_LOOK's `walls`): decals layered on a wall fight at a distance, and tones baked into its vertices smear
+ * into soft bands. Read by eye from the clips in
  * docs/MIAMI_TRIANGLE_REFERENCE.md: peeling white paint on the box (Carpenter), grimy wall feet and stained clay
  * paving (Muska, Edge, Appleyard), the waxed concrete edges every grind leaves.
  */
@@ -49,40 +50,6 @@ export function paverTone(x: number, z: number): string {
   const fromWall = (x - MIAMI_WALL_X) / F, fromSide = (plazaReach(x) - Math.abs(z)) / F;
   const damp = Math.max(0, 1 - fromWall / 5) ** 1.5 * 0.55 + Math.max(0, 1 - fromSide / 6) ** 1.5 * 0.45;
   return mixHex(c, PAINT.waterStain, Math.min(0.6, damp));
-}
-
-/**
- * White paint on a board-formed concrete wall at `s` along it, `h` above its foot (the ground it stands in),
- * `height` its visible height: generations of paint, in broad patches of fresher white where it's been painted
- * over; peeled back to the grey concrete in flakes, more toward `peelAt` (0-1, how hard boards hit it there) and
- * toward its top edge; and the dark mildew band the sprinklers keep wet along its foot, its reach wandering.
- */
-export function wallTone(seed: number, s: number, h: number, height: number, peelAt = 0.15): string {
-  const S = s / F, t = Math.max(0, Math.min(1, h / Math.max(1, height)));
-  const fresh = valueNoise(S / 6 + seed * 3.7, seed * 1.3);
-  let c = mixHex(PAINT.wall, PAINT.wallFresh, Math.max(0, Math.min(1, (fresh - 0.55) / 0.08)) * 0.6);
-  // Peeling where boards hit: near `peelAt`'s end and up toward the top edge, in flakes rather than patches.
-  const flakes = valueNoise(S / 0.9 + seed * 5.1, (h / F) / 0.6 + seed);
-  const peel = Math.max(0, Math.min(1, (flakes - (0.9 - 0.3 * peelAt * t)) / 0.06)) * Math.max(0.2, t);
-  c = mixHex(c, PAINT.wallPeeled, 0.7 * peel);
-  // Mildew and splash-back at the foot.
-  const reach = (0.6 + 0.7 * valueNoise(S / 3 + seed * 2.3, seed * 4.1)) * F;
-  const mildew = Math.max(0, 1 - h / reach) ** 1.6;
-  c = mixHex(c, PAINT.wallGrime, 0.55 * mildew);
-  // A faint rust tint where the irrigation reaches highest.
-  return mixHex(c, PAINT.wallRust, 0.18 * mildew * valueNoise(S / 2 + 7, seed));
-}
-
-/**
- * The bank's plumb sides at `s` along an edge, `t` up the side (0 underside, 1 the top arris): cast concrete,
- * waxed dark along the arris where every grind has run, the arris chipped pale here and there, grime low down.
- */
-export function bankSideTone(seed: number, s: number, t: number, waxed: boolean): string {
-  const S = s / F;
-  let c = mixHex(PAINT.bankSide, PAINT.bankUnder, Math.max(0, 0.45 - t) * 0.9);
-  if (waxed) c = mixHex(c, PAINT.bankWax, Math.max(0, (t - 0.6) / 0.4) ** 1.5 * (0.55 + 0.35 * valueNoise(S * 1.5 + seed, 3)));
-  const chip = valueNoise(S * 2.3 + seed * 7, 11) > 0.8 && t > 0.75 ? 0.6 : 0;
-  return mixHex(c, PAINT.bankChip, chip);
 }
 
 /**

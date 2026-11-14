@@ -2,7 +2,7 @@ import type { Vec3 } from '../../camera/view';
 import { NO_INK, type Bake, type Ink, type Paint } from '../../three/bake';
 import { INK_PROP } from '../../three/materials';
 import { SET_FOOT } from '../setScale';
-import { SURFACE, type SurfaceName } from '../surfaces';
+import { SURFACE, wallVertex, type SurfaceName, type WallKind } from '../surfaces';
 import * as layout from './sunsetLayout';
 
 /**
@@ -162,10 +162,13 @@ export function solidBox(b: Bake, min: Vec3, max: Vec3, side: string, top: strin
 
 /**
  * An upright face from `a` to `c` (plan), `y0` to `y1`, facing `n`, cut into columns about `step` wide and the
- * given rows (0 its foot, 1 its top) so its wear can live in its vertex colours: `tone(s, t)` is the paint `s`
- * along it from `a` (plus `s0`) and `t` up it. Decals layered on a wall fight at a distance; this doesn't.
+ * given rows (0 its foot, 1 its top) so its tone can drift in its vertex colours: `tone(s, t)` is the paint `s`
+ * along it from `a` (plus `s0`) and `t` up it. With `wear` (what kind of wall it is, and where along the wear
+ * it starts, so no two weather alike) its corners carry their place on the wall for the look's wall wear, which
+ * draws dirt, runs, patches and form boards per pixel: tones baked into the vertices smear into soft bands, and
+ * decals layered on a wall fight at a distance.
  */
-export function toneWall(b: Bake, a: Plan, c: Plan, y0: number, y1: number, n: Vec3, step: number, rows: readonly number[], tone: (s: number, t: number) => string, ink: Ink, s0 = 0) {
+export function toneWall(b: Bake, a: Plan, c: Plan, y0: number, y1: number, n: Vec3, step: number, rows: readonly number[], tone: (s: number, t: number) => string, ink: Ink, s0 = 0, wear?: { kind: WallKind; from?: number }) {
   const length = Math.hypot(c[0] - a[0], c[1] - a[1]);
   const columns = Math.max(1, Math.round(length / step));
   const at = (k: number, t: number): Vec3 => [a[0] + ((c[0] - a[0]) * k) / columns, y0 + (y1 - y0) * t, a[1] + ((c[1] - a[1]) * k) / columns];
@@ -173,8 +176,18 @@ export function toneWall(b: Bake, a: Plan, c: Plan, y0: number, y1: number, n: V
     const sa = s0 + (length * k) / columns, sc = s0 + (length * (k + 1)) / columns;
     for (let r = 0; r + 1 < rows.length; r++) {
       const [t0, t1] = [rows[r], rows[r + 1]];
-      b.quadCorners(at(k, t0), at(k + 1, t0), at(k + 1, t1), at(k, t1), n,
-        [{ color: tone(sa, t0) }, { color: tone(sc, t0) }, { color: tone(sc, t1) }, { color: tone(sa, t1) }], ink);
+      if (!wear) {
+        b.quadCorners(at(k, t0), at(k + 1, t0), at(k + 1, t1), at(k, t1), n,
+          [{ color: tone(sa, t0) }, { color: tone(sc, t0) }, { color: tone(sc, t1) }, { color: tone(sa, t1) }], ink);
+        continue;
+      }
+      // Where each corner is on the wall, at the world's size (the set is baked SCALE bigger than authored).
+      const corners = [[k, sa, t0], [k + 1, sc, t0], [k + 1, sc, t1], [k, sa, t1]] as const;
+      for (const i of [0, 1, 2, 0, 2, 3]) {
+        const [col, s, t] = corners[i];
+        wallVertex(b, at(col, t), n, { color: tone(s, t) }, ink,
+          { along: ((wear.from ?? 0) + s) * SCALE, up: (y1 - y0) * t * SCALE, down: (y1 - y0) * (1 - t) * SCALE }, wear.kind);
+      }
     }
   }
 }

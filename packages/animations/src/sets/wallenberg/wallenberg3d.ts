@@ -16,9 +16,11 @@ import { WALLENBERG_CARS, WALLENBERG_TREES } from './wallenbergTrees';
 export const WALLENBERG_LOOK: SpotLook = {
   ...CARLSBAD_LOOK,
   haze: { color: '#cfd8dd', from: 45, to: 800, amount: 0.55 },
-  // The curbs' caps and faces carry their own wear (wallenbergWear.ts); the treads are asphalt, which the
-  // marks never touch.
+  // The curbs' caps carry their own wear (wallenbergWear.ts); the treads are asphalt, which the marks never
+  // touch.
   marks: [],
+  // The curbs' painted faces: buffed in patches, flaked to grey where boards hit, dirty at the foot.
+  walls: { bare: PAINT.facePeeled, coats: 0.05 },
   gum: 2,
   // The gym's painted block: joints a shade under the cream, filled by coats of paint.
   mortar: '#b09675',

@@ -27,6 +27,9 @@ export const MIAMI_LOOK: SpotLook = {
   // Square clay pavers about eight inches, on pale sanded joints (Muska's and Edge's frames).
   pavers: { size: 7.6 / 12, joint: 0.4 / 12, jointColor: PAINT.joint, paint: PAINT.paver, spread: 0.09 },
   asphalt: { scale: 0.028, contrast: 0.13 },
+  // Board-formed walls painted white: six-inch form boards in six-foot panels, flaked to grey where boards hit
+  // them, their feet kept damp and a little rusty by the sprinklers.
+  walls: { bare: PAINT.wallPeeled, coats: 0.03, damp: 0.7, rust: 0.5, boards: 0.5, panel: 6 },
   foliage: true,
   sash: undefined,
 };

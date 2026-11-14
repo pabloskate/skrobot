@@ -12,8 +12,6 @@ export const WALLENBERG_PAINT = {
   platform: '#6f706b',
   face: '#d6d5ca',
   facePeeled: '#a7a69c',
-  faceBuff: '#efeee7',
-  faceBuffOld: '#c4c3b8',
   faceGrime: '#8d8c84',
   cap: '#c9c8be',
   capWax: '#77776f',

@@ -18,7 +18,7 @@ import {
 import { MIAMI_PAINT as PAINT } from './miamiPalette';
 import { MIAMI_POTS, buildPark } from './miamiPark';
 import { hedge, mulchRing, palm, palmCrown, shrubMound, type PalmKind } from './miamiTrees';
-import { bankSideTone, bankTone, buildMiamiWear, paverTone, plazaReach, wallTone } from './miamiWear';
+import { bankTone, buildMiamiWear, paverTone, plazaReach } from './miamiWear';
 
 export { MIAMI_BOULEVARD, MIAMI_SOUTHBOUND, miamiBoulevard, miamiParkingStall } from './miamiBuildings';
 
@@ -55,8 +55,8 @@ export interface MiamiBuilt {
   canopies: Canopy[];
 }
 
-/** A form joint in a board-formed wall: a shade darker than the paint either side, dirt held in it. */
-const formJoint = (c: string) => mixHex(c, PAINT.wallGrime, 0.3);
+/** Board-formed walls are painted one white; their weathering is the look's wall wear, drawn per pixel. */
+const whitewash = () => PAINT.wall;
 
 /** The palms planted in this bake, for their shade (miamiTrees.ts's miamiCanopies). */
 type Planted = Canopy[];
@@ -168,13 +168,15 @@ function buildPlaza(ground: Bake, props: Bake) {
       poly(props, [[x0, PLAZA + STAND_OFF, side * edge], [x1, PLAZA + STAND_OFF, side * edge], [x1, PLAZA + STAND_OFF, side * plazaReach(x1)]], UP, paverTone(x0 + STEP / 2, side * edge), PAVERS);
       const z0 = side * edge, z1 = side * (edge + 7 * F);
       const top = PLAZA + 1.5 * F;
-      const seed = k * 2 + (side > 0 ? 1 : 0) + 50;
-      const tone = (s: number, _t: number, y: number) => wallTone(seed, s, y - PLAZA, 1.5 * F, 0);
+      // Each face starts somewhere of its own along the wear.
+      const from = (k * 2 + (side > 0 ? 1 : 0) + 50) * 43 * F;
+      const planter = (a: Plan, c: Plan, out: Vec3, face: number) =>
+        toneWall(props, a, c, PLAZA, top, out, whitewash, PLANTER_INK, { step: STEP, wear: { from: from + face * 11 * F } });
       // The face toward the plaza, the step's end, and the far ends.
-      toneWall(props, [x0, z0], [x1, z0], PLAZA, top, [0, 0, -side], tone, PLANTER_INK, { step: 2.5 * F, rows: [0, 0.3, 1] });
-      toneWall(props, [x1, z0], [x1, z1], PLAZA, top, [1, 0, 0], tone, PLANTER_INK, { step: 3.5 * F, rows: [0, 0.3, 1] });
-      toneWall(props, [x0, z0], [x0, z1], PLAZA, top, [-1, 0, 0], tone, PLANTER_INK, { step: 3.5 * F, rows: [0, 1] });
-      toneWall(props, [x0, z1], [x1, z1], PLAZA, top, [0, 0, side], tone, PLANTER_INK, { step: STEP, rows: [0, 1] });
+      planter([x0, z0], [x1, z0], [0, 0, -side], 0);
+      planter([x1, z0], [x1, z1], [1, 0, 0], 1);
+      planter([x0, z0], [x0, z1], [-1, 0, 0], 2);
+      planter([x0, z1], [x1, z1], [0, 0, side], 3);
       const zs: [number, number] = [Math.min(z0, z1), Math.max(z0, z1)];
       level(props, [[x0 + 0.5 * F, zs[0] + 0.5 * F], [x1 - 0.5 * F, zs[0] + 0.5 * F], [x1 - 0.5 * F, zs[1] - 0.5 * F], [x0 + 0.5 * F, zs[1] - 0.5 * F]], top - 1.5, PAINT.mulch, SOIL);
       // The coping round the top, worn grey along its edge.
@@ -226,21 +228,21 @@ function buildLawns(ground: Bake, props: Bake, plant: (at: Vec3, height: number,
     }
   }
   // The planter walls round the lawns: the plaza's, the two ends and the back. Board-formed and painted white,
-  // their faces' weathering in their own colours; coped in pale concrete.
+  // weathered by the look's wall wear; coped in pale concrete.
   const cap = (plan: Plan[]) => level(ground, plan, MIAMI_WALL_TOP, PAINT.coping, WALL_INK);
-  const wallFace = (a: Plan, c: Plan, out: Vec3, seed: number, step = 1.5 * F) =>
-    toneWall(ground, a, c, PLAZA, MIAMI_WALL_TOP, out, (s, _t, y) => wallTone(seed, s, y - PLAZA, 1.5 * F, 0.05), WALL_INK,
-      { step, rows: [0, 0.18, 0.45, 1], joints: Array.from({ length: 30 }, (_, k) => (k + 1) * 5 * F), joint: formJoint });
+  const wallFace = (a: Plan, c: Plan, out: Vec3, seed: number, use?: (s: number) => number) =>
+    toneWall(ground, a, c, PLAZA, MIAMI_WALL_TOP, out, whitewash, WALL_INK, { step: use ? 2 * F : 40 * F, wear: { from: seed * 53 * F, use } });
   cap([[MIAMI_WALL_X - MIAMI_WALL_THICK, -H], [MIAMI_WALL_X, -H], [MIAMI_WALL_X, H], [MIAMI_WALL_X - MIAMI_WALL_THICK, H]]);
-  wallFace([MIAMI_WALL_X, -H], [MIAMI_WALL_X, H], [1, 0, 0], 1, 1 * F);
+  // The plaza's wall takes the odd board under the line, where a trick comes up short.
+  wallFace([MIAMI_WALL_X, -H], [MIAMI_WALL_X, H], [1, 0, 0], 1, (s) => 0.4 * Math.max(0, 1 - Math.abs(s - H) / (6 * F)));
   for (const side of [-1, 1]) {
     const zo = side * H, zi = side * (H - MIAMI_WALL_THICK);
     cap([[BACK, zi], [MIAMI_WALL_X - MIAMI_WALL_THICK, zi], [MIAMI_WALL_X - MIAMI_WALL_THICK, zo], [BACK, zo]]);
-    wallFace([BACK, zo], [MIAMI_WALL_X, zo], [0, 0, side], side + 3, 3 * F);
+    wallFace([BACK, zo], [MIAMI_WALL_X, zo], [0, 0, side], side + 3);
     poly(ground, [[MIAMI_WALL_X, PLAZA, zo], [MIAMI_WALL_X, PLAZA, zo - side * 0.01], [MIAMI_WALL_X, MIAMI_WALL_TOP, zo - side * 0.01], [MIAMI_WALL_X, MIAMI_WALL_TOP, zo]], [1, 0, 0], PAINT.wall, WALL_INK);
     const zt = side * TERRACE_HALF;
     cap([[BACK, zt], [BACK + MIAMI_WALL_THICK, zt], [BACK + MIAMI_WALL_THICK, zi], [BACK, zi]]);
-    wallFace([BACK, zt], [BACK, zo], [-1, 0, 0], side + 6, 3 * F);
+    wallFace([BACK, zt], [BACK, zo], [-1, 0, 0], side + 6);
   }
 
   // Sea-grape hedges along the deck's faces, kept back from the tip, and red and pink flowering shrubs along
@@ -305,7 +307,8 @@ function rimTone(x: number, z: number): string {
 
 /**
  * The deck: its bare concrete field, the rideable rim (each band cut along every edge so its paint can peel near
- * the tip), and its board-formed faces, painted white, peeling near the tip and mildewed where the lawn meets them.
+ * the tip), and its board-formed faces, painted white: the look's wall wear flakes them near the tip, where
+ * boards hit, and keeps them damp along the lawn's line, which each face's corners carry.
  */
 function buildTerrace(ground: Bake, shadows: ShadowBox[]) {
   level(ground, deckRing(MIAMI_RIM_WIDTH).map(([x, , z]) => [x, z] as Plan), 0, PAINT.deck, TERRACE_INK);
@@ -333,15 +336,14 @@ function buildTerrace(ground: Bake, shadows: ShadowBox[]) {
     const face = (s: number) => [-s * Math.cos(Math.PI / 6), side * s * Math.sin(Math.PI / 6)] as Plan;
     // The lawn's height against the face, so the mildew follows it.
     const lawnAt = (s: number) => { const [x, z] = face(s); return miamiLawn(x + out[0] * 0.5 * F, z + out[2] * 0.5 * F); };
-    toneWall(ground, [0, 0], [MIAMI_TERRACE_SHOULDER, side * TERRACE_HALF], foot, MIAMI_RIM_HEIGHT, out,
-      (s, _t, y) => wallTone(side + 10, s, y - lawnAt(s), MIAMI_RIM_HEIGHT - lawnAt(s), Math.max(0, 1 - s / (12 * F))), TERRACE_INK,
-      { step: 1 * F, rows: [0, 0.2, 0.4, 0.6, 0.8, 1], joints: Array.from({ length: 6 }, (_, k) => (k + 1) * 6 * F), joint: formJoint });
+    toneWall(ground, [0, 0], [MIAMI_TERRACE_SHOULDER, side * TERRACE_HALF], foot, MIAMI_RIM_HEIGHT, out, whitewash, TERRACE_INK,
+      { step: 1 * F, wear: { from: (side + 10) * 61 * F, ground: lawnAt, use: (s) => Math.max(0, 1 - s / (12 * F)) } });
     const rear = (s: number) => miamiLawn(MIAMI_TERRACE_SHOULDER - s, side * (TERRACE_HALF + 0.5 * F));
-    toneWall(ground, [MIAMI_TERRACE_SHOULDER, side * TERRACE_HALF], [BACK, side * TERRACE_HALF], foot, MIAMI_RIM_HEIGHT, [0, 0, side],
-      (s, _t, y) => wallTone(side + 14, s, y - rear(s), MIAMI_RIM_HEIGHT - rear(s), 0), TERRACE_INK, { step: 2.5 * F, rows: [0, 0.3, 0.6, 1] });
+    toneWall(ground, [MIAMI_TERRACE_SHOULDER, side * TERRACE_HALF], [BACK, side * TERRACE_HALF], foot, MIAMI_RIM_HEIGHT, [0, 0, side], whitewash, TERRACE_INK,
+      { step: 2.5 * F, wear: { from: (side + 14) * 61 * F, ground: rear } });
   }
-  toneWall(ground, [BACK, TERRACE_HALF], [BACK, -TERRACE_HALF], PLAZA, MIAMI_RIM_HEIGHT, [-1, 0, 0],
-    (s, _t, y) => wallTone(18, s, y - PLAZA, MIAMI_RIM_HEIGHT - PLAZA, 0), TERRACE_INK, { step: 2.5 * F, rows: [0, 0.15, 0.4, 1] });
+  toneWall(ground, [BACK, TERRACE_HALF], [BACK, -TERRACE_HALF], PLAZA, MIAMI_RIM_HEIGHT, [-1, 0, 0], whitewash, TERRACE_INK,
+    { step: 40 * F, wear: { from: 18 * 61 * F } });
   // The deck casts its shadow onto the lawn in steps, from boxes inside it.
   for (const [a, b] of [[-5 * F, -1.5 * F], [-12 * F, -5 * F], [-24 * F, -12 * F]]) {
     const half = miamiTerraceHalf(b);
@@ -352,7 +354,8 @@ function buildTerrace(ground: Bake, shadows: ShadowBox[]) {
 /**
  * The bank: a plain cast-concrete triangular plate (its riding face and edges are the spot's, unchanged), on a
  * plain board-formed plinth. Its face is a fan of small triangles so its wear (polish down the middle, wax along
- * the edges, dirt toward the low end) can vary across it; the sides carry their own wax and chips.
+ * the edges, dirt toward the low end) can vary across it; the sides are darker toward the underside, and the
+ * look's wall wear waxes and chips the two arrises every grind runs down.
  */
 function buildSlab(ground: Bake, props: Bake, shadows: ShadowBox[]) {
   const half = MIAMI_SLAB_SIDE / 2;
@@ -379,19 +382,22 @@ function buildSlab(ground: Bake, props: Bake, shadows: ShadowBox[]) {
   for (const [a, c, waxed] of [[apex, right, true], [right, left, false], [left, apex, true]] as const) {
     const out: Vec3 = [a[2] - c[2], 0, c[0] - a[0]];
     const m = Math.hypot(out[0], out[2]);
+    // Clear of the ground, so no dirt gathers at their foot.
     toneWall(ground, [a[0], a[2]], [c[0], c[2]], [down(a)[1], down(c)[1]], [a[1], c[1]], [out[0] / m, 0, out[2] / m],
-      (s, t) => bankSideTone(waxed ? 3 : 7, s, t, waxed), SLAB_INK, { step: 0.75 * F, rows: [0, 0.4, 0.75, 1] });
+      (_s, t) => mixHex(PAINT.bankSide, PAINT.bankUnder, Math.max(0, 0.45 - t) * 0.9), SLAB_INK,
+      { step: 40 * F, rows: [0, 0.45, 1], wear: { painted: false, from: (waxed ? a[2] > c[2] ? 3 : 5 : 7) * 29 * F, ground: null, use: () => (waxed ? 1 : 0) } });
   }
   const under: Vec3 = [-n[0], -n[1], 0];
   poly(ground, [down(apex), down(right), down(left)], under, PAINT.bankUnder, SLAB_INK);
-  // The plinth, its top following the plate's underside; in the plate's shade all day, darker toward its foot.
+  // The plinth, its top following the plate's underside; in the plate's shade all day, dirty at its foot.
   const u = (x: number) => miamiSlabTop(x) - MIAMI_SLAB_THICK;
   const p0 = MIAMI_PEDESTAL_X0, p1 = MIAMI_PEDESTAL_X1, ph = MIAMI_PEDESTAL_HALF;
-  const plinth = (_s: number, t: number) => mixHex(PAINT.pedestal, PAINT.wallGrime, Math.max(0, 0.35 - t) * 1.2);
-  toneWall(props, [p0, -ph], [p1, -ph], PLAZA, [u(p0), u(p1)], [0, 0, -1], plinth, PEDESTAL_INK, { step: 1 * F, rows: [0, 0.35, 1] });
-  toneWall(props, [p1, ph], [p0, ph], PLAZA, [u(p1), u(p0)], [0, 0, 1], plinth, PEDESTAL_INK, { step: 1 * F, rows: [0, 0.35, 1] });
-  toneWall(props, [p1, -ph], [p1, ph], PLAZA, u(p1), [1, 0, 0], plinth, PEDESTAL_INK, { step: 1 * F, rows: [0, 0.35, 1] });
-  toneWall(props, [p0, ph], [p0, -ph], PLAZA, u(p0), [-1, 0, 0], plinth, PEDESTAL_INK, { step: 1 * F, rows: [0, 0.35, 1] });
+  const plinth = (a: Plan, c: Plan, y1: number | [number, number], out: Vec3, face: number) =>
+    toneWall(props, a, c, PLAZA, y1, out, () => PAINT.pedestal, PEDESTAL_INK, { step: 40 * F, wear: { painted: false, from: (90 + face) * 17 * F } });
+  plinth([p0, -ph], [p1, -ph], [u(p0), u(p1)], [0, 0, -1], 0);
+  plinth([p1, ph], [p0, ph], [u(p1), u(p0)], [0, 0, 1], 1);
+  plinth([p1, -ph], [p1, ph], u(p1), [1, 0, 0], 2);
+  plinth([p0, ph], [p0, -ph], u(p0), [-1, 0, 0], 3);
   // Its shadow, cast by boxes stacked under the plate (never around its face).
   const steps = 4;
   for (let k = 0; k < steps; k++) {

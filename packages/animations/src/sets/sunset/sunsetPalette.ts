@@ -6,15 +6,10 @@
  * the canopy keeps its unbranded sage and cream (docs/LOCATION_PRESENTATION.md).
  */
 export const SUNSET_PAINT = {
-  // The bank: grey paint rolled over board-formed concrete, streaked down the fall line, patched where tags
-  // were painted out, dirty at the toe.
+  // The bank: grey paint rolled over board-formed concrete; its boards, painted-out patches, drips and dirty
+  // toe are the look's wall wear. Chips show the pale concrete under the paint.
   bank: '#a9adae',
-  bankRidge: '#bcbfbf',
-  bankFurrow: '#8f9496',
-  bankPatch: '#9ca2a6',
-  bankPatchOld: '#b4b5b0',
   bankGrime: '#7f817c',
-  bankScuff: '#5f6264',
   bankChip: '#cfd0ca',
   bankEnd: '#a2a6a6',
   cap: '#b9bab4',
@@ -87,7 +82,6 @@ export const SUNSET_PAINT = {
 
   // Planters: board-formed grey concrete boxes, each board a shade apart, oleanders clipped into mounds.
   planter: '#b1b2ab',
-  planterBoard: '#a6a7a0',
   planterCap: '#bbbcb5',
   soil: '#5b4d3e',
   oleander: '#4e6b40',

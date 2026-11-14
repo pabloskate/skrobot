@@ -369,7 +369,24 @@ describe('Triangle Bank: the scenery', () => {
         vertices += geometry.getAttribute('position').count;
         expect(geometry.getAttribute('position').count % 3).toBe(0);
         for (const key of ['position', 'normal', 'aColor', 'aCorner']) expect(Array.from(geometry.getAttribute(key).array).every(Number.isFinite)).toBe(true);
-        expect(Array.from(geometry.getAttribute('aCorner').array).every((value) => value === 0)).toBe(true);
+        // Nothing is drawn in the picture plane: the corner slot is used only by wall faces (band 3 or more),
+        // for where they are on their wall (along it, above its foot, below its top), which the look's wall
+        // wear reads.
+        const corner = geometry.getAttribute('aCorner'), band = geometry.getAttribute('aBand');
+        let walls = 0, stray = 0, off = 0;
+        for (let v = 0; v < corner.count; v++) {
+          const [along, up, down] = [corner.getX(v), corner.getY(v), corner.getZ(v)];
+          if (band.getX(v) < 2.5) {
+            if (along !== 0 || up !== 0 || down !== 0) stray++;
+            continue;
+          }
+          walls++;
+          // A wall's corner is on it, at or under its top edge.
+          if (down < -1e-6) off++;
+        }
+        expect(stray).toBe(0);
+        expect(off).toBe(0);
+        expect(walls).toBeGreaterThan(100);
       }
       expect(vertices).toBeLessThan(150_000);
       expect(built.railSegments.length).toBeLessThanOrEqual(48);

@@ -6,7 +6,7 @@ import { Bake, celShade, DAYLIGHT, daylight, daylightIrradiance, NO_INK } from '
 import { rgb, SUN } from '../three/materials';
 import { ClassicSpot3D, type ClassicSpotConfig } from './classicSpot3d';
 import { elToroPropMaterial } from './elToro/elToroMaterials';
-import { canopiesFromTrees, lookSurfaceTest, MAX_CANOPIES, MAX_CONTACTS, resolveLook, stairContacts, SURFACE, surfaceInk, surfacesGlsl, type SpotLook } from './surfaces';
+import { canopiesFromTrees, lookSurfaceTest, MAX_CANOPIES, MAX_CONTACTS, resolveLook, stairContacts, SURFACE, surfaceInk, surfacesGlsl, WALL, wallQuad, wallVertex, type SpotLook } from './surfaces';
 import { SET_FOOT } from './setScale';
 
 const UP: Vec3 = [0, 1, 0];
@@ -260,6 +260,78 @@ describe('the realistic look is opt in', () => {
     const along = PAVERS.joint / (PAVERS.size + PAVERS.joint), share = along + (1 - along) * along;
     for (let i = 0; i < 3; i++) expect((1 - share) * paver[i] + share * sand[i]).toBeCloseTo(1, 3);
     expect(sand.every((m) => m > 1)).toBe(true);
+  });
+
+  it('compiles wall wear only for a spot whose look sets it, leaving every other spot\'s shaders as they were', () => {
+    const WALLS = { bare: '#a7a69c' };
+    const plain = resolveLook({ light: 'shader' }), worn = resolveLook({ light: 'shader', walls: WALLS });
+    expect(surfacesGlsl(plain)).not.toContain('lookWallWear');
+    expect(surfacesGlsl(plain)).not.toContain('lookOnWall');
+    const material = elToroPropMaterial(plain), own = elToroPropMaterial(worn);
+    try {
+      expect(material.vertexShader).not.toContain('vWall');
+      expect(material.fragmentShader).not.toContain('vWall');
+      // The corner slot rides to the fragment shader, in feet, and only concrete marked by its band is worn.
+      expect(own.vertexShader).toContain('vWall = aCorner;');
+      expect(own.fragmentShader).toContain(`lookOnWall = vBand.x > 2.5 && (abs(surface - ${SURFACE.concrete}.0) < 0.5 || abs(surface - ${SURFACE.stucco}.0) < 0.5);`);
+      expect(own.fragmentShader).toContain(`color = lookWallWear(color, vWall / ${SET_FOOT.toFixed(1)}, vBand);`);
+      // Its paint is weathered before it is lit and textured, and it gets its own runs, not the stock streaks.
+      const f = own.fragmentShader;
+      expect(f.indexOf('color = lookWallWear(')).toBeLessThan(f.indexOf('color = lookSurface('));
+      expect(f).toContain('if (flatwork < 1.0 && !lookOnWall)');
+      expect(material.fragmentShader).toContain('if (flatwork < 1.0) c *=');
+    } finally {
+      material.dispose();
+      own.dispose();
+    }
+    // Form lines and the sprinklers' rust only where a spot asks for them.
+    const dry = surfacesGlsl(worn), formed = surfacesGlsl(resolveLook({ walls: { ...WALLS, boards: 0.5, panel: 6, rust: 0.5 } }));
+    expect(dry).not.toContain('lookJoint(down +');
+    expect(dry).not.toContain('lookJoint(along,');
+    expect(dry).not.toContain('float iron =');
+    expect(formed).toContain('lookJoint(down + 0.2500, 0.5000, 0.014)');
+    expect(formed).toContain('lookJoint(along, 6.0000, 0.035)');
+    expect(formed).toContain('float iron =');
+    // Boards down a bank's fall line, and a storey-high wall's bigger wear, only where asked: a curb's is 1.
+    expect(dry).not.toContain('float plank =');
+    expect(dry).toContain('const float LOOK_WALL_SIZE = 1.0000;');
+    const bank = surfacesGlsl(resolveLook({ walls: { ...WALLS, fall: 0.5, scale: 2 } }));
+    expect(bank).toContain('float plank = floor(along / 0.5000);');
+    expect(bank).toContain('const float LOOK_WALL_SIZE = 2.0000;');
+    // A ridden bank takes wheel streaks, and no wax or flakes from its use.
+    expect(bank).toContain('bank = step(4.5, band.x)');
+    expect(bank).toContain('mix(0.06 + 0.16 * lip, 0.0, bank)');
+  });
+
+  it('marks a wall face with its band and carries each corner\'s place on the wall in the corner slot', () => {
+    const bake = new Bake();
+    const q: [Vec3, Vec3, Vec3, Vec3] = [[0, 0, 0], [0, 30, 0], [0, 30, 60], [0, 0, 60]];
+    const at = (along: number, up: number, use?: number) => ({ along, up, down: 30 - up, use });
+    wallQuad(bake, q, [1, 0, 0], { color: '#d6d5ca' }, surfaceInk('concrete'), [at(100, 0), at(100, 30, 2), at(160, 30, 0.5), at(160, 0)]);
+    wallQuad(bake, q, [1, 0, 0], { color: '#a9a9a2' }, surfaceInk('concrete'), [at(0, 0), at(0, 30), at(60, 30), at(60, 0)], 'cast');
+    bake.quad(q[0], q[1], q[2], q[3], [1, 0, 0], { color: '#d6d5ca' }, surfaceInk('concrete'));
+    // A bank's vertex, with its own smooth normal.
+    wallVertex(bake, [0, 0, 0], [0.6, 0.8, 0], { color: '#a9adae' }, surfaceInk('stucco'), { along: 5, up: 7, down: 9, use: 0.25 }, 'bank');
+    wallVertex(bake, [0, 0, 1], [0.6, 0.8, 0], { color: '#a9adae' }, surfaceInk('stucco'), { along: 5, up: 7, down: 9 }, 'bank');
+    wallVertex(bake, [1, 0, 0], [0.6, 0.8, 0], { color: '#a9adae' }, surfaceInk('stucco'), { along: 5, up: 7, down: 9 }, 'bank');
+    const g = bake.geometry();
+    try {
+      const corner = g.getAttribute('aCorner'), band = g.getAttribute('aBand');
+      expect(g.getAttribute('position').count).toBe(21);
+      // Painted 4, cast 3, plain flat paint 2: a split band (a tube's) is under 1.5, so none reads as round.
+      expect([0, 6, 12].map((v) => band.getX(v))).toEqual([4, 3, 2]);
+      expect(WALL).toEqual({ cast: 3, painted: 4, bank: 5 });
+      expect([band.getX(18), band.getY(18), corner.getX(18), corner.getY(18), corner.getZ(18)]).toEqual([5, 0.25, 5, 7, 9]);
+      expect(g.getAttribute('normal').getY(18)).toBeCloseTo(0.8, 6);
+      // Along, above the foot, below the top; use clamped to 0-1.
+      expect([corner.getX(1), corner.getY(1), corner.getZ(1)]).toEqual([100, 30, 0]);
+      expect([corner.getX(2), corner.getY(2), corner.getZ(2)]).toEqual([160, 30, 0]);
+      expect([corner.getX(0), corner.getY(0), corner.getZ(0)]).toEqual([100, 0, 30]);
+      expect([band.getY(0), band.getY(1), band.getY(2)]).toEqual([0, 1, 0.5]);
+      expect([corner.getX(12), corner.getY(12), corner.getZ(12)]).toEqual([0, 0, 0]);
+    } finally {
+      g.dispose();
+    }
   });
 
   it('gives a spot with `look` its surfaces, shadows, contacts, canopies and knobs', () => {
