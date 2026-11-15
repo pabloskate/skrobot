@@ -133,7 +133,7 @@ describe('Emage twenty: inset walking stairs and the riverside rail', () => {
       }
       expect(emageGround(-0.01)).toBe(0);
       expect(emageGround(EMAGE_RUN)).toBe(-EMAGE_DROP);
-    } finally { material.dispose(); built.ground.dispose(); built.props.dispose(); }
+    } finally { material.dispose(); built.ground.dispose(); built.props.dispose(); built.decals.dispose(); built.wireMesh.geometry.dispose(); }
   });
 
   it('matches the drawn grindable top pipe to the stage rail without inventing a center rail', () => {
@@ -149,7 +149,7 @@ describe('Emage twenty: inset walking stairs and the riverside rail', () => {
       expect(radius).toBe(EMAGE_RAIL.radius);
       expect((a[1] - b[1]) / (b[0] - a[0])).toBeCloseTo(EMAGE_GRADE, 8);
       expect(a[1] + a[0] * EMAGE_GRADE + radius * Math.hypot(1, EMAGE_GRADE)).toBeCloseTo(EMAGE_RAIL.top, 8);
-    } finally { built.ground.dispose(); built.props.dispose(); }
+    } finally { built.ground.dispose(); built.props.dispose(); built.decals.dispose(); built.wireMesh.geometry.dispose(); }
   });
 
   it('leaves the gap and both mirrored rail roll-ins clear of the upper bench and planting', () => {
@@ -171,7 +171,7 @@ describe('Emage twenty: inset walking stairs and the riverside rail', () => {
           }
         }
       }
-    } finally { material.dispose(); built.ground.dispose(); built.props.dispose(); }
+    } finally { material.dispose(); built.ground.dispose(); built.props.dispose(); built.decals.dispose(); built.wireMesh.geometry.dispose(); }
   });
 
   it('locks onto the pipe, accelerates down it and clears the last stair on dismount in every stance', () => {
@@ -221,14 +221,14 @@ describe('Emage twenty: inset walking stairs and the riverside rail', () => {
     const built = buildEmageGeometry();
     try {
       let vertices = 0;
-      for (const geometry of [built.ground, built.props]) {
+      for (const geometry of [built.ground, built.props, built.decals, built.wireMesh.geometry]) {
         vertices += geometry.getAttribute('position').count;
         for (const name of ['position', 'normal', 'aColor', 'aCorner']) expect(Array.from(geometry.getAttribute(name).array).every(Number.isFinite), name).toBe(true);
       }
-      expect(vertices).toBeLessThan(140_000);
+      expect(vertices).toBeLessThan(100_000);
       expect(built.railSegments.length).toBeLessThanOrEqual(48);
       expect(built.shadowBoxes.length).toBeLessThanOrEqual(12);
-    } finally { built.ground.dispose(); built.props.dispose(); }
+    } finally { built.ground.dispose(); built.props.dispose(); built.decals.dispose(); built.wireMesh.geometry.dispose(); }
   });
 
   it('keeps a gap and a rail attempt, and the rider stepping off, inside portrait and landscape shots for both riders', () => {

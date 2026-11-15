@@ -22,7 +22,7 @@ export const EMAGE_STAIR_Z1 = 3 * F;
 export const EMAGE_EDGE_Z = 4 * F;
 /** Paved terrace treads inland of the stones, then the gravel seating beds. */
 export const EMAGE_PAVED_Z0 = -7 * F;
-export const EMAGE_TERRACE_Z0 = -45 * F;
+export const EMAGE_TERRACE_Z0 = -38 * F;
 export const EMAGE_RAIL_Z = 3.7 * F;
 export const EMAGE_RAIL_RADIUS = (1 / 12) * F;
 export const EMAGE_RAIL_HEIGHT = 3 * F;
