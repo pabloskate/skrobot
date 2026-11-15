@@ -1,6 +1,6 @@
 # Leap of Faith reference notes
 
-Researched and visually checked October 7, 2026. This set depicts the original
+Researched and visually checked October 7, 2026; made realistic November 14, 2026 (see "Realism pass"). This set depicts the original
 1997 gap at Point Loma High School, San Diego, using the sets'
 scale of 29 units per foot (`SET_FOOT`). It is a photo-guided reconstruction, not a
 survey of the school or its present-day configuration.
@@ -71,10 +71,67 @@ end down past the sole, and at 2.0 it hits the rail. Popping right at the center
 end instead lands the rider's legs on that pipe. This is a playable trick-clearance choice, not a measurement of
 Thomas's ollie. The rail remains scenery rather than a selectable grind.
 
-The builder merges the stair/ground surfaces and architectural details into two
-meshes. Rail mesh is actual diamond wire geometry. The facade, open bay, roof,
-piers, rafters, tables, conduit and drain holes remain visible from different
-angles. Surface raycasts check the stair floors and courtyard, and motion tests
-check wheel/deck/foot clearance over the walkway rail and the stair's
-bay-side rail (`leapOfFaithGuardTop`) in all four trick stances with regular/goofy
-riders and low/high styles. Camera tests follow the complete deep drop, check the actual head crown and board at the exact pop, and raycast against the scenery for pier occlusion.
+The builder is split as the other realistic spots are (`leapOfFaithGeometry`, `Buildings`, `Court`, `Kit`,
+`Palette`, `Trees`, `Wear`) and draws through the shared look (`ClassicSpot3D` with `LEAP_OF_FAITH_LOOK`):
+ground, props and a decals layer, with the rail's diamond mesh drawn per pixel. Surface raycasts check the
+stair floors and courtyard, and motion tests check wheel/deck/foot clearance over the walkway rail and the
+stair's bay-side rail (`leapOfFaithGuardTop`) in all four trick stances with regular/goofy riders and low/high
+styles. Camera tests follow the complete deep drop, check the actual head crown and board at the exact pop, and
+raycast against the scenery for pier occlusion. `leapOfFaithGeometry.test.ts` holds the vertex and shader
+budgets and the keep-clear volumes round the rider's line and the filmers' stands.
+
+## Realism pass, November 14, 2026
+
+Era: the original gap, **1997-98**, before the elevator (present by August 2007).
+
+### Further references inspected
+
+- [Jenkem, "Revisiting the Leap of Faith" video](https://www.youtube.com/watch?v=kCW7o0QFEJ4): archival
+  pre-elevator footage (0:57, 1:03, 2:30, 2:34, including Richard King's 1998 attempt) and the 2023 visit
+  (3:38 onward) for the enclosure, upper levels and materials.
+- [Brittain detail, Jenkem](https://cdn.jenkemmag.com/mediaAssetsMaster/2023/01/LOF-OG1.jpg): wall finish,
+  weep holes, mesh, upper pier, conduit, plank tables.
+- [Flickr, August 20, 2007](https://www.flickr.com/photos/rotophoto/1186630942): the elevator already built.
+- Google and Esri Wayback aerials at 32.740276, -117.226090 (viewed November 14, 2026), for orientation and
+  the surrounding blocks. No 1990s aerial was found.
+
+### What the aerial and footage settled
+
+- **The gap faces north-west** (about 306°) onto a small lower court, not onto the big central court. The
+  stair and the later elevator sit in the notch between the long wing and the block north of it; from the
+  head of the stairs the street (Chatsworth Blvd) is straight ahead. In the scene's axes +x is about 306°,
+  +z about 036°. The rider travels roughly due west.
+- **Behind the rail there is no classroom wall.** The walkway is a breezeway on the lip of the upper terrace
+  (the central court, at walkway level): sky and trees show through it in the 1997-98 frames.
+- **Over the walkway is a second gallery**, a weathered concrete deck on exposed joists with a pipe rail,
+  not a roof.
+- **The walls, fascia and lower columns were painted pale sky blue**: the 1998 footage shows blue walls beside
+  an off-white undercroft back wall in the same frame. The 1997 photograph overexposes them to blue-white.
+  The lower court's paving was a warm red-brown tan.
+
+### Estimates added (none surveyed)
+
+| Feature | Model | Basis |
+| --- | --- | --- |
+| Fascia under the walkway | 3 ft deep | 2.9 ft of the 14.3 ft drop in two archival frames |
+| Undercroft | 14 ft deep, opening about 11.3 ft tall | Tables against the back wall; later frontal view |
+| Lower columns | 10 in square, about every 17 ft | One column in the archival frames; spacing assumed |
+| Gallery deck | Soffit 12 ft over the walkway, edge beam 1.6 ft | Archival frames; height kept from the first model |
+| Tall wall behind the stairs | Level top 2.5 ft over the walkway, hedge on it | Archival frames |
+| Left block | Cream lower storey with a door, white ribbed siding above | Archival frames, top left |
+| Right wing | Face 56 ft right of the stair corner | Aerial reads about 41 ft; see below |
+| Perimeter wall, street | Wall 85 ft out, street beyond | Later photograph from the stair head; aerial |
+
+### Known differences from the real place
+
+- **The stair plan is the user's correction of October 8** (two 90° turns). Today's aerial shows the long
+  flight about 40° off the facade line; the stairs may also have been rebuilt with the elevator. Not changed.
+- **The right wing stands about 15 ft further right than measured**, so the filmers' stands and the modelled
+  walkway's end stay clear.
+- The four upper piers are single piers where the footage shows slim pairs; their positions are tuned to the
+  cameras.
+- The right wing, the far terrace block, the houses across the street and all planting positions are plain
+  stand-ins: no 1990s aerial or four-way coverage exists to place them.
+- Step counts, stair width, rail height and the 12 ft soffit remain the earlier estimates.
+- Left out on purpose: the elevator tower and bridge, modern red tables, gates and guardrails, any school name,
+  signage or artwork.

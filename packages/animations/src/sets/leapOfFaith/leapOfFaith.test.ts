@@ -10,7 +10,11 @@ import { planStage, stageFrame, type StageFrame } from '../../stage/stage';
 import type { RiderStance, Stance } from '../../types';
 import { planStairs, stairTrack } from '../elToro/stairs';
 import { SET_SCALE, stageTerrain } from '../setScale';
-import { buildLeapOfFaithGeometry, LeapOfFaith3D } from './leapOfFaith3d';
+import { LeapOfFaith3D } from './leapOfFaith3d';
+import { Bake } from '../../three/bake';
+import { buildLeapOfFaithBuildings } from './leapOfFaithBuildings';
+import { buildLeapOfFaithCourt } from './leapOfFaithCourt';
+import { buildLeapOfFaithGeometry } from './leapOfFaithGeometry';
 import {
   LEAP_OF_FAITH_DROP, LEAP_OF_FAITH_FOOT as F, LEAP_OF_FAITH_LANE_Z,
   LEAP_OF_FAITH_BEND_DEGREES, LEAP_OF_FAITH_BEND_LENGTH, LEAP_OF_FAITH_LOWER_RUN, LEAP_OF_FAITH_LOWER_STEPS, leapOfFaithStairPoint,
@@ -105,11 +109,16 @@ describe('Leap of Faith: the original Point Loma courtyard', () => {
       let vertices = 0;
       for (const geometry of [built.ground, built.props]) {
         for (const name of ['position', 'normal', 'aCorner']) expect(Array.from(geometry.getAttribute(name).array).every(Number.isFinite)).toBe(true);
-        expect(Array.from(geometry.getAttribute('aCorner').array).every(value => value === 0)).toBe(true);
+        // Wall metadata occupies aCorner only on faces tagged for per-pixel weathering.
+        const corner = geometry.getAttribute('aCorner'), band = geometry.getAttribute('aBand');
+        for (let i = 0; i < corner.count; i++) {
+          if (band.getX(i) >= 3) continue;
+          expect([corner.getX(i), corner.getY(i), corner.getZ(i)]).toEqual([0, 0, 0]);
+        }
         vertices += geometry.getAttribute('position').count;
       }
       expect(vertices).toBeLessThan(180_000);
-    } finally { material.dispose(); built.ground.dispose(); built.props.dispose(); }
+    } finally { material.dispose(); built.ground.dispose(); built.props.dispose(); built.decals.dispose(); built.wireMesh.geometry.dispose(); }
   });
 
   it('clears the actual mesh guardrail with wheels, deck and feet for spinning and flipping tricks', () => {
@@ -192,6 +201,43 @@ describe('Leap of Faith: the original Point Loma courtyard', () => {
           }
         }
       }
-    } finally { spot.dispose(); material.dispose(); built.ground.dispose(); built.props.dispose(); }
+    } finally { spot.dispose(); material.dispose(); built.ground.dispose(); built.props.dispose(); built.decals.dispose(); built.wireMesh.geometry.dispose(); }
+  });
+
+  it('adds no architecture occlusion for any stock tripod at pop, peak and landing', () => {
+    const spot = new LeapOfFaith3D();
+    const built = buildLeapOfFaithGeometry();
+    const material = new MeshBasicMaterial({ side: DoubleSide });
+    // Only the architecture the shape pass added round the gap: the fixed stair and rails are tested above.
+    const added = new Bake(color => color);
+    const paving = new Bake(color => color);
+    buildLeapOfFaithBuildings(added);
+    buildLeapOfFaithCourt(added, paving);
+    const addedGeometry = added.geometry();
+    const pavingGeometry = paving.geometry();
+    const scenery = [new Mesh(addedGeometry, material), new Mesh(pavingGeometry, material)];
+    try {
+      for (const rider of RIDERS) {
+        const stage = attempt('Kickflip', 'regular', rider);
+        const times = [stage.stairs!.pop, (stage.stairs!.pop + stage.stairs!.land) / 2, stage.stairs!.land];
+        for (const tripod of ['bottom', 'side', 'top'] as const) for (const t of times) {
+          const frame = stageFrame(stage, t, 1);
+          const view = spot.view(frame, DEFAULT_SCENE_CAMERA, 1, 1.24, tripod)!;
+          const eye = new Vector3(set(view.eye[0] + frame.scroll), set(view.eye[1]), set(view.eye[2] + frame.stairs!.across));
+          // At exact pop the fixed return hides the board from the side filmer.
+          const head = frame.rig.head.at(0, -30, 0);
+          const points = t === stage.stairs!.pop ? [head] : [head, frame.rig.board.center];
+          for (const point of points) {
+            const p = inSet(frame, point);
+            const target = new Vector3(p.x, p.y, p.z);
+            const direction = target.sub(eye);
+            const ray = new Raycaster(eye, direction.clone().normalize(), 0.1, direction.length() - 1);
+            const hits = ray.intersectObjects(scenery);
+            const where = JSON.stringify(hits.map(hit => hit.point.toArray().map(v => v / F)));
+            expect(hits, `${where} ${rider} ${tripod} filmer occluded at ${t.toFixed(2)}`).toHaveLength(0);
+          }
+        }
+      }
+    } finally { addedGeometry.dispose(); pavingGeometry.dispose(); spot.dispose(); material.dispose(); built.ground.dispose(); built.props.dispose(); built.decals.dispose(); built.wireMesh.geometry.dispose(); }
   });
 });
