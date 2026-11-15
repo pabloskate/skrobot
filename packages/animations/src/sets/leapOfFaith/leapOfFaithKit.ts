@@ -15,6 +15,8 @@ import {
   LEAP_OF_FAITH_STAIR_END_Z as WORLD_LEAP_OF_FAITH_STAIR_END_Z,
   leapOfFaithRailBase as WORLD_leapOfFaithRailBase, leapOfFaithStairGround as WORLD_leapOfFaithStairGround,
 } from './leapOfFaithLayout';
+
+export { mixHex, normalOf } from '../lookKit';
 // The facade is authored in an architectural elevation's left-to-right z;
 // reflect it once into the stage's camera convention, along with shadows.
 export const LEAP_OF_FAITH_ALCOVE_Z = -WORLD_LEAP_OF_FAITH_ALCOVE_Z;
@@ -224,19 +226,4 @@ export const ft = ([x, y, z]: Vec3): Vec3 => [x * F, y * F, z * F];
 /** A tube through points given in feet, `radius` in set units, one surface and no outline. */
 export function tubeFt(b: Bake, points: Vec3[], radius: number, color: string, ink: Ink, sides = 8) {
   b.tube(points.map(ft), points.map(() => radius), { color }, ink, sides);
-}
-
-/** Blend two #rrggbb colours, `t` of the way from `a` to `b`. */
-export function mixHex(a: string, b: string, t: number) {
-  const ca = [1, 3, 5].map(i => parseInt(a.slice(i, i + 2), 16));
-  const cb = [1, 3, 5].map(i => parseInt(b.slice(i, i + 2), 16));
-  return '#' + ca.map((v, i) => Math.round(v + (cb[i] - v) * Math.min(1, Math.max(0, t))).toString(16).padStart(2, '0')).join('');
-}
-
-/** The normal of a triangle's plane, from its winding (counter-clockwise seen from outside). */
-export function normalOf(a: Vec3, c: Vec3, d: Vec3): Vec3 {
-  const u = [c[0] - a[0], c[1] - a[1], c[2] - a[2]], v = [d[0] - a[0], d[1] - a[1], d[2] - a[2]];
-  const n: Vec3 = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
-  const m = Math.hypot(...n) || 1;
-  return [n[0] / m, n[1] / m, n[2] / m];
 }

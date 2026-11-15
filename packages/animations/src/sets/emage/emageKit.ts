@@ -5,6 +5,8 @@ import { EMAGE_FOOT as F } from './emageLayout';
 import { BRIDGE_PICKET } from './emagePalette';
 import { hash2 } from '../setKit';
 
+export { mixHex } from '../lookKit';
+
 /**
  * Emage's bake helpers under the realistic look (light: 'shader'): paint is the authored, sunlit colour, laid
  * flat, and each face carries the surface (sets/surfaces.ts) the look textures and lights it as, per pixel.
@@ -140,13 +142,6 @@ export function bunch(b: Bake, x: number, y: number, z: number, height: number, 
     const color = colors[(k + seed) % colors.length];
     b.triangle([root[0] - sin * wide, y, root[2] + cos * wide], [root[0] + sin * wide, y, root[2] - cos * wide], tip, [cos * 0.5, 0.8, sin * 0.5], { color }, ink);
   }
-}
-
-/** Mix two hex colours, `t` of the way from `a` to `b`. */
-export function mixHex(a: string, b: string, t: number) {
-  const ca = [1, 3, 5].map(i => parseInt(a.slice(i, i + 2), 16));
-  const cb = [1, 3, 5].map(i => parseInt(b.slice(i, i + 2), 16));
-  return '#' + ca.map((v, i) => Math.round(v + (cb[i] - v) * Math.min(1, Math.max(0, t))).toString(16).padStart(2, '0')).join('');
 }
 
 /**

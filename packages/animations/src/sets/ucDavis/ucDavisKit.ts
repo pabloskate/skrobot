@@ -3,6 +3,9 @@ import { Bake, NO_INK, type Ink, type Paint } from '../../three/bake';
 import { INK_PROP } from '../../three/materials';
 import { SURFACE, type SurfaceName } from '../surfaces';
 import { UC_DAVIS_FOOT } from './ucDavisLayout';
+import { normalOf } from '../lookKit';
+
+export { floor, mixHex, normalOf, solidBox, valueNoise } from '../lookKit';
 
 /**
  * Shared pieces for the UC Davis bake under the realistic look (light: 'shader'): paint is the authored,
@@ -29,14 +32,6 @@ export const LEAVES = 13;
 /** Painted steel that isn't galvanised: handrails, lamp poles, bike racks. */
 export const METAL = tag('metal');
 
-/** The unit normal of the plane through three points, wound counter-clockwise seen from outside. */
-export function normalOf(a: Vec3, c: Vec3, d: Vec3): Vec3 {
-  const u = [c[0] - a[0], c[1] - a[1], c[2] - a[2]], v = [d[0] - a[0], d[1] - a[1], d[2] - a[2]];
-  const n: Vec3 = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
-  const m = Math.hypot(...n) || 1;
-  return [n[0] / m, n[1] / m, n[2] / m];
-}
-
 /**
  * A flat face through four corners in flat paint, a colour per corner if given. Wound to face `outward`, or,
  * without it, whichever way the corners' order says (the irregular bank pieces).
@@ -47,32 +42,6 @@ export function face(b: Bake, a: Vec3, c: Vec3, d: Vec3, e: Vec3, color: string 
   const [ca, cc, cd, ce] = typeof color === 'string' ? [color, color, color, color] : color;
   if (n[0] * normal[0] + n[1] * normal[1] + n[2] * normal[2] < 0) b.quadCorners(a, e, d, c, normal, [{ color: ca }, { color: ce }, { color: cd }, { color: cc }], ink);
   else b.quadCorners(a, c, d, e, normal, [{ color: ca }, { color: cc }, { color: cd }, { color: ce }], ink);
-}
-
-/** A level floor over a rectangle. */
-export function floor(b: Bake, x0: number, x1: number, z0: number, z1: number, y: number, color: string, ink: Ink) {
-  b.quad([x0, y, z1], [x1, y, z1], [x1, y, z0], [x0, y, z0], UP, { color }, ink);
-}
-
-/**
- * A box in flat paint (the look lights it) carrying its surface; inked, each face is its own part. (Bake.box
- * turns a null ink into NO_INK, which would drop the surface.)
- */
-export function solidBox(b: Bake, min: Vec3, max: Vec3, side: string, top: string, ink: Ink, faces = 'tbfkle') {
-  const [x0, y0, z0] = min, [x1, y1, z1] = max;
-  const list: Array<[string, Vec3, Vec3[], string]> = [
-    ['t', [0, 1, 0], [[x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0]], top],
-    ['b', [0, -1, 0], [[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]], side],
-    ['f', [0, 0, 1], [[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]], side],
-    ['k', [0, 0, -1], [[x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0]], side],
-    ['l', [-1, 0, 0], [[x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0]], side],
-    ['e', [1, 0, 0], [[x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1]], side],
-  ];
-  list.forEach(([key, n, [a, c, d, e], color], i) => {
-    if (!faces.includes(key)) return;
-    const faceInk = ink.width > 0 ? { ...ink, id: ink.id + i, priority: ink.priority + i } : ink;
-    b.quad(a, c, d, e, n, { color }, faceInk);
-  });
 }
 
 /** A round tube through points: pipe, post, pole, a bicycle's frame. */
@@ -124,20 +93,4 @@ export function chainLink(props: Bake, mesh: Bake, from: Plan, to: Plan, y: numb
       meshPanel(mesh, p, q, y + 1.5, y + 1.5, height - 1.5);
     }
   }
-}
-
-/** Two hex colours mixed in display space. */
-export function mixHex(a: string, b: string, t: number) {
-  const ca = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16));
-  const cb = [1, 3, 5].map((i) => parseInt(b.slice(i, i + 2), 16));
-  return '#' + ca.map((v, i) => Math.round(v + (cb[i] - v) * Math.min(1, Math.max(0, t))).toString(16).padStart(2, '0')).join('');
-}
-
-/** Deterministic value noise in [0, 1), feet in. */
-export function valueNoise(x: number, z: number) {
-  const hash = (i: number, j: number) => { const s = Math.sin(i * 127.1 + j * 311.7) * 43758.5453; return s - Math.floor(s); };
-  const ix = Math.floor(x), iz = Math.floor(z), fx = x - ix, fz = z - iz;
-  const u = fx * fx * (3 - 2 * fx), v = fz * fz * (3 - 2 * fz);
-  const a = hash(ix, iz), b = hash(ix + 1, iz), c = hash(ix, iz + 1), d = hash(ix + 1, iz + 1);
-  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
 }
