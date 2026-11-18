@@ -108,10 +108,11 @@ export function planStage(
   const mechanics = resolveRiderMechanics(riderStance, trickSpec.stance);
   // Where the set has handrails a grind rides one down the stairs; where it has a drop a flatground trick goes down it.
   const { rails, grinds, ledges } = setInfo(set);
-  const landed = options.landed || (options.railBail === 'slip-off' && (!grindSpec || !grinds || !!ledges));
+  const railOnly = options.railBail === 'slip-off' || options.railBail === 'stick';
   const terrain = setTerrain(set, obstacle);
   const washOut = !options.landed && options.fall === 'washout' && !!terrain && !grindSpec;
-  const landed = options.landed || (options.fall === 'washout' && !washOut);
+  const landed = options.landed || (options.fall === 'washout' && !washOut)
+    || (railOnly && (!grindSpec || !grinds || !!ledges));
   // Where the set has a ledge either side instead (Miami's slab), the grind takes the one it comes in toward.
   const ledge = grindSpec && ledges ? ledges[ledgeFor(grindSpec, mechanics)] : null;
   const line = railLineFor(set, trick, riderStance, choice);
