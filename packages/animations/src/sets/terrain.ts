@@ -8,6 +8,8 @@
  * downhill positive; heights are over the top landing, up positive.
  */
 
+import type { BoardSweep } from '../motion/trick';
+
 /** A fixed takeoff and its actual landing surface: a set lays it out in set units, the planner takes it in the stage's (stageTerrain). */
 export interface DropTerrain {
   drop: number;
@@ -52,13 +54,14 @@ export interface DropTerrain {
   pop?: number;
   /**
    * The pop each trick takes, whoever rides it (as a style's popHeight, in
-   * place of both theirs and `pop`): over obstacles about level with the
-   * takeoff (Hollywood's side rail and fence) a skater pops just what the
-   * trick needs to clear them, not as high as they can; over Leap of Faith's
-   * stair rail an impossible's wrap needs more than the rest. Given the
-   * trick's base; without one, the most any trick takes.
+   * place of both theirs and `pop`), by how its board sweeps past what's
+   * beside the line (motion/trick.ts boardSweep): over obstacles about level
+   * with the takeoff (Hollywood's side rail and fence) a skater pops just
+   * what the trick needs to clear them, not as high as they can; over Leap
+   * of Faith's stair rail an impossible's wrap needs more than the rest.
+   * Without a trick, the planner takes the most of the three.
    */
-  trickPop?: (base?: string) => number;
+  trickPop?: Readonly<Record<BoardSweep, number>>;
   /** Signed height gradient. Omitted for discrete stairs with a flat landing. */
   slope?: (u: number) => number;
   /**
@@ -70,16 +73,6 @@ export interface DropTerrain {
   /** Brush on the ground at (u, z): how fast it slows a rider or a board going through it (a share of the speed a second). */
   brush?: (u: number, z: number) => number;
 }
-
-/**
- * Tricks whose board stays lined up down the route as it crosses something
- * near the takeoff (flips, and late shuvs): their ends don't swing out over
- * a rail beside the line, so a `trickPop` can give them less than the rest.
- */
-export const BOARD_ALONG_TRICKS: ReadonlySet<string> = new Set([
-  'Ollie', 'Ollie North', 'Kickflip', 'Heelflip', 'Double Kickflip', 'Double Heelflip',
-  'Late Kickflip', 'Late Backside Shuvit', 'Late Frontside Shuvit',
-]);
 
 /** The ground under (x, z): a spot's two-axis surface where it has one, else its profile down the drop. */
 export function terrainSurface(terrain: DropTerrain, x: number, z: number): number {

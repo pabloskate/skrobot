@@ -5,6 +5,7 @@ import { ASPHALT } from '../../camera/view';
 import type { V3 } from '../../math';
 import { resolveSkateStyle } from '../../motion/style';
 import { TRICK_BASES, X0 } from '../../motion/trick';
+import { trickPop } from '../../stage/drop';
 import { planStage, stageFrame, type StageFrame } from '../../stage/stage';
 import type { RiderStance, Stance } from '../../types';
 import { landingYaw } from '../terrain';
@@ -19,10 +20,12 @@ import {
   HOLLYWOOD_FENCE_YAW, HOLLYWOOD_FENCE_Z, HOLLYWOOD_FOOT, HOLLYWOOD_LANE_WIDTH,
   HOLLYWOOD_LEFT_Z, HOLLYWOOD_RAIL_END, HOLLYWOOD_RAIL_HEIGHT, HOLLYWOOD_RAIL_RADIUS,
   HOLLYWOOD_RAIL_START, HOLLYWOOD_ROAD_Y, HOLLYWOOD_SIDE_RAIL_Z,
-  fencePop, hollywoodNosing, hollywoodSurface,
+  hollywoodNosing, hollywoodSurface,
 } from './hollywoodLayout';
 
 const F = HOLLYWOOD_FOOT;
+/** A trick's pop over the fence; without one, the most any takes. */
+const fencePop = (base?: string) => trickPop(HOLLYWOOD_FENCE_TERRAIN, base)!;
 const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
 const RIDERS: RiderStance[] = ['regular', 'goofy'];
 

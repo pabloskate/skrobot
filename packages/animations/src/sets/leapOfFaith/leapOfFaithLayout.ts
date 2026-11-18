@@ -1,4 +1,4 @@
-import { BOARD_ALONG_TRICKS, type DropTerrain } from '../terrain';
+import type { DropTerrain } from '../terrain';
 import { SET_FOOT } from '../setScale';
 import type { SpotFilmers } from '../tripods';
 
@@ -153,14 +153,7 @@ export const leapOfFaithGround = (x: number) => leapOfFaithSurface(x, leapOfFait
  * rail and takes more; an impossible's, wrapping round the back foot, swings
  * its free end down past the sole and takes the most.
  */
-const LEAP_OF_FAITH_POP_ALONG = 1.2;
-const LEAP_OF_FAITH_POP_ACROSS = 1.65;
-const LEAP_OF_FAITH_POP_WRAP = 2.4;
-/** A trick's pop over the stair rail; without one, the most any takes. */
-function leapOfFaithPop(base?: string): number {
-  if (base === undefined || base === 'Impossible') return LEAP_OF_FAITH_POP_WRAP;
-  return BOARD_ALONG_TRICKS.has(base) ? LEAP_OF_FAITH_POP_ALONG : LEAP_OF_FAITH_POP_ACROSS;
-}
+const LEAP_OF_FAITH_POPS = { along: 1.2, across: 1.65, wrap: 2.4 };
 
 export const LEAP_OF_FAITH_TERRAIN: DropTerrain = {
   drop: LEAP_OF_FAITH_DROP,
@@ -171,7 +164,7 @@ export const LEAP_OF_FAITH_TERRAIN: DropTerrain = {
   surface: leapOfFaithSurface,
   entry: { x: LEAP_OF_FAITH_POP_X, z: LEAP_OF_FAITH_POP_Z, yaw: LEAP_OF_FAITH_YAW, hold: true },
   runUp: 0.35,
-  trickPop: leapOfFaithPop,
+  trickPop: LEAP_OF_FAITH_POPS,
 };
 
 const F = SET_FOOT;

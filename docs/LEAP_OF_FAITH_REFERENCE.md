@@ -66,9 +66,10 @@ speed is whatever carries the board from the pop to that landing over the
 flight, so the landing sets it: at 11 ft out the rider crept in at 11 ft/s and
 the rail's pop read as a slow, four-foot hop (user feedback, Nov 16). At 22 ft
 out it is about 20–22 ft/s, as fast as El Toro or Emage. The ballistic pop is
-the same for every style and set per trick (`leapOfFaithPop`, the pattern of
-Hollywood's fence): 1.2 (2.4 ft of deck rise) for tricks whose board stays
-lined up down the line (`BOARD_ALONG_TRICKS`), 1.65 for those that turn the
+the same for every style and set per trick (`LEAP_OF_FAITH_POPS`, the terrain's
+`trickPop`, the pattern of Hollywood's fence): 1.2 (2.4 ft of deck rise) for
+tricks whose board stays lined up down the line (`boardSweep` in
+`motion/trick.ts`, read off each trick's own row), 1.65 for those that turn the
 board across it and swing its ends out over the rail, and 2.4 for an
 impossible, whose free end wraps down past the sole. Each is the lowest that
 keeps wheels, deck and feet 0.2 ft clear of the rail for every trick base in

@@ -187,6 +187,25 @@ const TRICK_MOTIONS: Readonly<Record<string, TrickMotion>> = {
 /** Every flatground trick base the motion animates (aliases included): what the motion sweeps test. */
 export const TRICK_BASES: readonly string[] = Object.keys(TRICK_MOTIONS);
 
+/**
+ * How a trick's board passes something beside its line just after the pop
+ * (a rail, a fence's tips), which sets how much room it needs over it:
+ * `along`, still lined up down the route there (no turn at all, or a late
+ * one), so its ends never swing out; `across`, turned across the line by
+ * its shuv or the rider's spin, its ends swinging wide; `wrap`, round the
+ * scooping foot (an impossible), its free end swinging down past the sole.
+ * Read off the trick's own row, so a new trick is placed by what it does;
+ * a name the motion doesn't know is taken to turn.
+ */
+export type BoardSweep = 'along' | 'across' | 'wrap';
+
+export function boardSweep(base: string): BoardSweep {
+  const motion = TRICK_MOTIONS[base];
+  if (!motion) return 'across';
+  if (motion.wrap) return 'wrap';
+  return motion.late || !(motion.yaw || motion.bodyYaw) ? 'along' : 'across';
+}
+
 function specFor(trick: Trick): Spec {
   const base: Spec = {
     flips: 0,

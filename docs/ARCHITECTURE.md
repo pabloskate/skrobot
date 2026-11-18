@@ -69,7 +69,7 @@ Where to make common changes:
 
 | Change | Where |
 |---|---|
-| A new flatground trick, or how one moves | a row in `TRICK_MOTIONS` (`motion/trick.ts`); every motion sweep test picks it up, and `explorer.test.ts` fails if a catalog trick has no row |
+| A new flatground trick, or how one moves | a row in `TRICK_MOTIONS` (`motion/trick.ts`); every motion sweep test picks it up, and `explorer.test.ts` fails if a catalog trick has no row. Spots that pop each trick differently (`DropTerrain.trickPop`) class it from that row (`boardSweep`), so no spot lists trick names |
 | A new grind or slide | `GRINDS` in `motion/grindDefinitions.ts` |
 | A new spot | a folder under `sets/` with its layout, its `<spot>Spot.ts` definition and its 3D set piece; a line in `SPOTS` (`sets/spots.ts`); and its set piece in `SET_PIECES` (`three/setPieces.ts`), which the compiler asks for once the spot is listed. Pickers, shared links, filmers and the Dream Tricks card follow from the definition. Camera presets that only make sense there go in the explorer's `CAMERA_PRESETS` with `set` |
 | A new skater | a folder under `riders/`, an entry in `SKATERS` (`riders/skaters.ts`), and one in `RIDER_PIECES` (`three/renderer.ts`) |

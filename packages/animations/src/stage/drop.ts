@@ -1,4 +1,4 @@
-import { FALL_T, LAND_T, ROLL_IN, flightTime, type AttemptTimeline } from '../motion/trick';
+import { FALL_T, LAND_T, ROLL_IN, boardSweep, flightTime, type AttemptTimeline } from '../motion/trick';
 import { resolveSkateStyle } from '../motion/style';
 import type { SkateStyle, Stance } from '../types';
 import { rad, smoothstep } from '../math';
@@ -119,8 +119,19 @@ function takeoffFor(terrain: DropTerrain, stance: Stance): { x: number; z: numbe
   return { x: from.x - back * Math.cos(yaw), z: from.z - back * Math.sin(yaw) };
 }
 
+/**
+ * The pop a drop sets for a trick (terrain.trickPop), by how its board
+ * sweeps past what's beside the line; without a trick, the most any takes.
+ * Null where the drop leaves the pop to the rider.
+ */
+export function trickPop(terrain: DropTerrain, base?: string): number | null {
+  const pops = terrain.trickPop;
+  if (!pops) return null;
+  return base === undefined ? Math.max(pops.along, pops.across, pops.wrap) : pops[boardSweep(base)];
+}
+
 export function planStairs(style: Pick<SkateStyle, 'popHeight'>, landed: boolean, terrain: DropTerrain, stance: Stance = 'regular', base?: string): StairPlan {
-  const popHeight = terrain.trickPop ? terrain.trickPop(base) : Math.max(style.popHeight, terrain.pop ?? 0);
+  const popHeight = trickPop(terrain, base) ?? Math.max(style.popHeight, terrain.pop ?? 0);
   const rise = Math.sqrt(2 * GRAVITY * POP_RISE * popHeight);
   const landingX = terrain.run + terrain.landPast;
   const drop = -terrain.ground(landingX);
