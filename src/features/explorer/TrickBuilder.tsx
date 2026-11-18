@@ -61,7 +61,7 @@ interface FieldProps {
  */
 export function OutcomeField({ state, set }: FieldProps) {
   const labelId = useId();
-  const options = outcomeOptions(state.mode);
+  const options = outcomeOptions(state.mode, state.set);
   const fall = outcomeOf(state);
   const chosen = options.find((option) => option.fall === fall) ?? options[0];
   return (

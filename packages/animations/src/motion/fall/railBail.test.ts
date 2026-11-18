@@ -4,7 +4,7 @@ import { HANGER_BOTTOM, WHEEL_X, deckBottomY } from '../../board/board';
 import { TIP_X } from '../../board/deck';
 import { BOARD_WIDTH_SCALE } from '../../board/boardDimensions';
 import { add3, scale3, sub3, type V3 } from '../../math';
-import { railBailPlan } from '../../stage/railBailFrame';
+import { railBailBoardDown, railBailPlan } from '../../stage/railBailFrame';
 import { hipsOf } from '../../stage/frameParts';
 import { planStage, stageFrame, type StagePlan } from '../../stage/stage';
 import { soundtrackFor } from '../../sound/soundtrack';
@@ -18,6 +18,7 @@ import { DECK_HALF_WIDTH, SHOE_HALF_LENGTH, moveFrame, type Rig } from '../skele
 import { resolveSkateStyle } from '../style';
 import { X0 } from '../trick';
 import { LIMB_RADII, SOLE_GRACE } from './body';
+import { boardAt } from './boardBody';
 import { hipsAt, kickOutAt, type KickOutPlan } from './kickOut';
 import { RAIL_BAIL_T, ROLL_ABOVE, railBailTimelineFor, type RailBail } from './railBail';
 import { runOutAt } from './runOut';
@@ -386,6 +387,32 @@ describe('which way the rider jumps', () => {
       expect(timeline.end).toBeCloseTo(stage.end, 9);
       expect(timeline.lock).toBeCloseTo(stage.grind!.lockAt, 9);
     }
+  });
+
+  it.each(['regular', 'goofy'] as const)('loses the Hollywood 360 flip crook sideways after travel (%s)', riderStance => {
+    const base = joinGrindBase('360 Flip', 'Frontside Crooked Grind');
+    const trick = { id: base, name: base, base, stance: 'regular' as const };
+    const options = { riderStance, style, fall: 'kickout' as const, shankProgress: 0.5, set: 'hollywood-high' as const };
+    const slip = planStage(trick, { ...options, landed: false, railBail: 'slip-off' });
+    const landed = planStage(trick, { ...options, landed: true });
+    const at = slip.railBail!.at;
+    const lock = slip.grind!.lockAt;
+    expect(at).toBeGreaterThan(lock + 0.2);
+    expect(at).toBeLessThan(slip.grind!.off);
+    const riding = (at + lock) / 2;
+    expect(stageFrame(slip, riding, 1).rig.board.center).toEqual(stageFrame(landed, riding, 1).rig.board.center);
+    const plan = railBailPlan(slip);
+    const board = boardAt(plan.board, at + 0.15).center;
+    const first = plan.run.footfalls[0];
+    expect(plan.push).toBe(0);
+    expect(Math.abs(board.z - boardAt(plan.board, at).center.z)).toBeGreaterThan(FOOT * 0.6);
+    expect(Math.abs(first.at.z)).toBeGreaterThan(FOOT * 0.5);
+    const down = railBailBoardDown(slip);
+    expect(down).toBeGreaterThan(at);
+    expect(down).toBeLessThan(first.on);
+    expect(Math.abs(boardAt(plan.board, first.on).center.z - first.at.z)).toBeGreaterThan(FOOT);
+    expect(soundtrackFor(slip).cues.find(c => c.kind === 'crash')?.at).toBe(down);
+    expect(isFiniteFrame(stageFrame(slip, slip.end, 1))).toBe(true);
   });
 
   it.each(['regular', 'goofy'] as const)('slips back on landing a Hollywood High 360 flip into crooks (%s)', riderStance => {

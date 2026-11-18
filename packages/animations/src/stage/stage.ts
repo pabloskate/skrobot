@@ -97,16 +97,17 @@ export function planStage(
     rail?: RailChoice;
     /** Where the set has several ways down: what a gap trick goes over (the stairs, or Hollywood's fence). */
     obstacle?: Obstacle;
-    /** A grind kicked out: which way the rider jumps off the rail. Forward unless asked. */
+    /** How a missed grind leaves the rail. Defaults to a forward jump. */
     railBail?: RailBail;
   },
 ): StagePlan {
-  const { landed, riderStance, style, shankProgress, skater = 'robot', set = 'plaza', rail: choice = 'center', obstacle } = options;
+  const { riderStance, style, shankProgress, skater = 'robot', set = 'plaza', rail: choice = 'center', obstacle } = options;
   const trickSpec = specFor(trick);
   const grindSpec = setGrindSpec(set, trick);
   const mechanics = resolveRiderMechanics(riderStance, trickSpec.stance);
   // Where the set has handrails a grind rides one down the stairs; where it has a drop a flatground trick goes down it.
   const { rails, grinds, ledges } = setInfo(set);
+  const landed = options.landed || (options.railBail === 'slip-off' && (!grindSpec || !grinds || !!ledges));
   const terrain = setTerrain(set, obstacle);
   // Where the set has a ledge either side instead (Miami's slab), the grind takes the one it comes in toward.
   const ledge = grindSpec && ledges ? ledges[ledgeFor(grindSpec, mechanics)] : null;

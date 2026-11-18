@@ -25,9 +25,10 @@ import { ANKLE_HEIGHT } from './body';
  * how long the attempt runs without solving anyone's body.
  */
 
-export type RailBail = 'forward' | 'side';
+export type RailBail = 'forward' | 'side' | 'slip-off';
 
 export const RAIL_BAIL_OPTIONS: ReadonlyArray<{ id: RailBail; label: string }> = [
+  { id: 'slip-off', label: 'Rail slip off' },
   { id: 'forward', label: 'Jump forward' },
   { id: 'side', label: 'Jump aside' },
 ];
@@ -170,6 +171,13 @@ function levelRoom(plan: GrindPlan, along: number, across: number): boolean {
  */
 export function planRailBail(plan: GrindPlan, bail: RailBail): RailBailPlan {
   const grindT = plan.off - plan.lockAt;
+  if (bail === 'slip-off') {
+    // Lose the lock in mid-grind. The hips carry on downhill and tip toward the approach side.
+    const at = plan.lockAt + grindT * 0.58;
+    const drift = { up: 0, along: 0, out: 4 * FOOT };
+    const down = landingFrom(plan, at, drift.along, drift.up, drift.out).t;
+    return { bail, at, jump: drift, side: sideOf(plan), down, end: at + RAIL_BAIL_T };
+  }
   const first = plan.lockAt + Math.max(LOCKED_LEAST, LOCKED_SHARE * grindT);
   const last = Math.max(first, plan.off - BEFORE_OFF);
   const throwOf = JUMP[bail];
@@ -212,7 +220,7 @@ export function railBailTimelineFor(
   rail: Handrail | null = null,
 ): RailBailTimeline | null {
   const spec = grindSpecFor(trick, { ledge: rail?.ledge != null });
-  if (!spec) return null;
+  if (!spec || (bail === 'slip-off' && rail?.ledge)) return null;
   // Planned as the stage plans it: the grind ridden as landed up to the jump.
   const plan = planGrind(spec, resolveRiderMechanics(riderStance, trick.stance), resolveSkateStyle(style), true, 'kickout', rail);
   const jump = planRailBail(plan, bail);
