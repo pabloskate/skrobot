@@ -174,12 +174,17 @@ const BOARD_HULL: V3[] = (() => {
 
 /** Vertical clearance needed by the deck and wheel hull against a surface. */
 export function groundLift(rig: Rig, groundUnder: (p: V3) => number = () => ASPHALT): number {
-  let sunk = 0;
+  return Math.max(0, -boardClearance(rig, groundUnder));
+}
+
+/** Signed wheel and deck clearance for a board skidding along uneven ground. */
+export function boardClearance(rig: Rig, groundUnder: (p: V3) => number): number {
+  let gap = Infinity;
   for (const local of BOARD_HULL) {
     const p = rig.board.point(local);
-    sunk = Math.max(sunk, p.y - groundUnder(p));
+    gap = Math.min(gap, groundUnder(p) - p.y);
   }
-  return sunk;
+  return gap;
 }
 
 /**

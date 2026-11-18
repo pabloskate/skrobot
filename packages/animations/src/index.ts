@@ -23,6 +23,7 @@ export {
   KICK_OUT_DROP_T,
   SLIP_BACK_T,
   SLIP_BACK_DROP_T,
+  WASH_OUT_T,
   HOLD,
   flatTimeline,
   specFor,

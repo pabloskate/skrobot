@@ -140,7 +140,7 @@ function attemptSoundtrack(stage: StagePlan): Soundtrack {
   return {
     cues: [
       { kind: 'pop', at: pop },
-      landed ? { kind: 'land', at: down, weight } : { kind: 'crash', at: down, weight },
+      { kind: landed || stage.fall === 'washout' ? 'land' : 'crash', at: down, weight },
     ],
     slide: false,
     roll: wheels(pop, down, landed),
