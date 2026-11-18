@@ -120,6 +120,8 @@ export interface KickOutSetup {
   jump?: V3;
   /** A rail snag holds the board at takeover while the rider carries on with the grind's velocity. */
   boardStuck?: boolean;
+  /** Signed lateral deck speed at loss of rail contact. Both shoes release without a kick. */
+  railSlipSpeed?: number;
   /** What the board meets, if not the rider's `ground`: with the rail it was left on, over it (`y`, a point's height). Its hangers meet it too. */
   boardGround?: (x: number, z: number, y: number) => number;
   /** How far `boardGround` falls (y, down) for each unit along x under a point, where it's a handrail's slope the board rides down. */
@@ -347,6 +349,7 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
     const slip = ((MISS_DEG * 0.75 * Math.PI) / 180) / (contact - takeover);
     atTakeover.spin = add3(atTakeover.spin, qrot(atTakeover.q, { x: slip, y: slip * 0.35, z: 0 }));
   }
+  if (setup.railSlipSpeed) atTakeover.velocity.z += setup.railSlipSpeed;
   atTakeover.wheel = setup.wheel(takeover);
 
   // ----- The rider at the takeover -----
@@ -652,7 +655,7 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
   // Out, the other way across (which may clear sooner), and where neither clears, back, either way.
   const ways = [dirOf(outward), dirOf(-outward), dirOf(outward, PUSH_DIR.back), dirOf(-outward, PUSH_DIR.back)];
   let pushDir = ways[0];
-  let push = setup.boardStuck ? 0 : leastFor(pushDir);
+  let push = setup.boardStuck || setup.railSlipSpeed ? 0 : leastFor(pushDir);
   const tryWay = (dir: V3) => {
     const otherPush = leastFor(dir);
     if (otherPush < push) {
@@ -934,8 +937,8 @@ function kickEnds(plan: KickOutPlan): KickEnds {
 function kickShoeAt(plan: KickOutPlan, t: number, land: { at: V3; q: Quat; on: number }): ShoePose {
   const { takeover, contact, release } = plan;
   const shoe0 = plan.startShoes[plan.kick];
-  if (plan.setup.boardStuck) {
-    // Both feet come loose at the snag. Carry this shoe into its first stride or roll.
+  if (plan.setup.boardStuck || plan.setup.railSlipSpeed) {
+    // Both feet come loose at release. Carry this shoe into its first stride or roll.
     const dt = land.on - takeover;
     const s = clamp01((t - takeover) / dt);
     return { at: hermite3(shoe0.at, shoe0.velocity, land.at, { x: 0, y: 0, z: 0 }, dt, s), q: qslerp(shoe0.q, land.q, minJerk(s)) };
@@ -991,7 +994,7 @@ function shoeAt(plan: KickOutPlan, run: RunOut, i: 0 | 1, t: number): ShoePose {
     const { at: landAt, q: landQ } = restOf(plan, land);
     if (i === plan.kick) return kickShoeAt(plan, t, { at: landAt, q: landQ, on: land.on });
     const arrive = { x: 0, y: 0.35 * Math.max(0, runOutAt(run, land.on - 0.01).velocity.y), z: 0 };
-    if (plan.setup.jump) {
+    if (plan.setup.jump && !plan.setup.railSlipSpeed) {
       // Jumping off a rail, the free foot stays on the deck, carried with it, while the legs throw the body up off it;
       // it comes away as the other meets the board to kick it off, and reaches for the ground from there.
       const leaves = plan.contact;

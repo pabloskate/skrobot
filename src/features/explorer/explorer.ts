@@ -127,9 +127,9 @@ export interface ExplorerState {
 /**
  * How an attempt ends when it isn't landed: a flatground or gap trick caught wrong and kicked out, or landed with the
  * weight back so the board shoots out ahead and the rider sits down; a grind jumped off along the rail or out to the side,
- * or slipped back on its landing.
+ * slipped sideways out of lock, or slipped back on its landing.
  */
-export type Outcome = 'kickout' | 'slipback' | 'jump-forward' | 'jump-side' | 'rail-stick';
+export type Outcome = 'kickout' | 'slipback' | 'jump-forward' | 'jump-side' | 'rail-stick' | 'rail-slip-off';
 
 export interface OutcomeOption {
   fall: Outcome | null;
@@ -148,8 +148,9 @@ const OUTCOME_OPTIONS: Record<ExplorerMode, readonly OutcomeOption[]> = {
   ],
   grinds: [
     LANDED,
+    { fall: 'rail-slip-off', label: 'Slip off', hint: 'board slips sideways out of lock' },
     { fall: 'jump-forward', label: 'Jump forward', hint: 'jumped off ahead, rolled out' },
-    { fall: 'rail-stick', label: 'Rail Stick', hint: 'board hangs up, rider carries on ahead' },
+    { fall: 'rail-stick', label: 'Stick', hint: 'board hangs up, rider carries on ahead' },
     { fall: 'jump-side', label: 'Jump aside', hint: 'jumped off the side, rolled out' },
     SLIP_BACK,
   ],
@@ -157,14 +158,14 @@ const OUTCOME_OPTIONS: Record<ExplorerMode, readonly OutcomeOption[]> = {
 
 /** The ways an attempt can end in this mode. */
 export const outcomeOptions = (mode: ExplorerMode, set?: StageSet): readonly OutcomeOption[] =>
-  set && setInfo(set).ledges ? OUTCOME_OPTIONS[mode].filter(option => option.fall !== 'rail-stick') : OUTCOME_OPTIONS[mode];
+  set && setInfo(set).ledges ? OUTCOME_OPTIONS[mode].filter(option => option.fall !== 'rail-slip-off' && option.fall !== 'rail-stick') : OUTCOME_OPTIONS[mode];
 
 /** How the attempt on the stage ends: its outcome if the mode has it, else landed. */
-export function outcomeOf(state: Pick<ExplorerState, 'mode' | 'fall'> & { set?: StageSet }): Outcome | null {
+export function outcomeOf(state: Pick<ExplorerState, 'mode' | 'fall' | 'set'>): Outcome | null {
   return outcomeOptions(state.mode, state.set).some((option) => option.fall === state.fall) ? state.fall : null;
 }
 
-const RAIL_BAILS: Partial<Record<Outcome, RailBail>> = { 'rail-stick': 'stick', 'jump-forward': 'forward', 'jump-side': 'side' };
+const RAIL_BAILS: Partial<Record<Outcome, RailBail>> = { 'rail-stick': 'stick', 'rail-slip-off': 'slip-off', 'jump-forward': 'forward', 'jump-side': 'side' };
 
 /** What the stage is told of an outcome: landed or not, the miss, and which way off a rail. */
 export function stageOutcome(fall: Outcome | null): { landed: boolean; fallVariant?: 'kickout' | 'slipback'; railBail?: RailBail } {
@@ -284,13 +285,14 @@ export const DEFAULT_STATE: Readonly<ExplorerState> = Object.freeze({
 
 /** Move to another spot; gap-only spots open the saved gap trick, and an obstacle the new spot lacks goes back to its stairs. */
 export function withSet(state: ExplorerState, set: StageSet): ExplorerState {
+  const mode = setInfo(set).grinds ? state.mode : 'flatground';
   return restrictRailApproach({
     ...state,
     set,
     // A tripod stood in one spot means nothing in another.
     stand: set === state.set ? state.stand : undefined,
-    mode: setInfo(set).grinds ? state.mode : 'flatground',
-    fall: outcomeOf({ mode: setInfo(set).grinds ? state.mode : 'flatground', set, fall: state.fall }),
+    mode,
+    fall: outcomeOf({ set, mode, fall: state.fall }),
     rail: setInfo(set).rails?.fixedLine ? 'side' : setInfo(set).rails?.sideGrinds === false ? 'center' : state.rail,
     obstacle: hasObstacle(set, state.obstacle) ? state.obstacle : DEFAULT_STATE.obstacle,
   });
@@ -475,8 +477,8 @@ export function timelineFor(state: ExplorerState, style: SkateStyle | undefined)
           { label: 'Pop', time: bail.pop },
           ...(bail.trickIn == null ? [] : [{ label: 'Trick in', time: bail.trickIn }]),
           { label: 'Lock', time: bail.lock },
-          { label: railBail === 'stick' ? 'Rail Stick' : 'Jump off', time: bail.bail },
-          { label: 'Roll', time: bail.down },
+          { label: railBail === 'stick' ? 'Stick' : railBail === 'slip-off' ? 'Slip off' : 'Jump off', time: bail.bail },
+          { label: railBail === 'slip-off' ? 'Down' : 'Roll', time: bail.down },
         ],
       };
     }

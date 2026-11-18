@@ -13,7 +13,7 @@ import { BAR_HALF, BAR_TOP_Y, BAR_Z } from '../motion/grindDefinitions';
 import { solveGrindRig } from '../motion/grindRig';
 import { GROUND, X0 } from '../motion/trick';
 import { barShadowParts } from '../sets/bar';
-import { GRAVITY } from '../units';
+import { FOOT, GRAVITY } from '../units';
 import { ROLL_ABOVE, type RailBailPlan } from '../motion/fall/railBail';
 import { STEP_OFF_JUMP } from '../motion/fall/stepOff';
 import { craneDownhill, ledgeAcross, placeOnLedge, railRig, shadowLevel, shiftRig } from './downhill';
@@ -135,6 +135,8 @@ function setupFor(stage: StagePlan): KickOutSetup {
     end: stage.end,
     boardStuck,
     jump: boardStuck ? undefined : { x: jump.x + UP.x * up, y: UP.y * up, z: jump.z },
+    // The truck loses its purchase across the pipe, sliding out faster than the rider drifts.
+    railSlipSpeed: stage.railBail?.bail === 'slip-off' ? way.across * bail.side * 9 * FOOT : undefined,
     boardGround,
     // A rail's top falls away downhill: a board riding it goes on down it, not stopped as on level ground.
     boardSlope: grind.handrail && !grind.handrail.rail.ledge ? (x: number, z: number, y: number) => (railTop(grind, x, z, y) < ground(x, z) ? grind.handrail!.rail.slope : 0) : undefined,
