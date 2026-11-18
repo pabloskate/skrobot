@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { TbArrowLeft, TbCheck, TbDice5, TbMapPin, TbShare, TbSkateboard, TbUser, TbVideo } from 'react-icons/tb';
-import { spotStands, useSoundEffects, type SceneCamera, type Skater, type TripodSpot } from '@skrobot/animations';
+import { SKATERS, skaterInfo, spotStands, useSoundEffects, type SceneCamera, type TripodSpot } from '@skrobot/animations';
 import { groundUnder, planBounds, riderPath, spotPlan } from '@skrobot/animations/three';
 import { ROBOT_BY_ID, ROBOTS } from '@/features/robots';
 import {
@@ -56,14 +56,6 @@ import LocationNotice from './LocationNotice';
 
 /** Swivel supplies the shared skating style for every skater. */
 const RIDER = ROBOT_BY_ID.get('shifty') ?? ROBOTS[0];
-
-/** Static portraits exported from the stage's actual rider meshes. */
-const SKATERS: ReadonlyArray<{ id: Skater; label: string }> = [
-  { id: 'robot', label: 'Robot' },
-  { id: 'realistic', label: 'Realistic' },
-  { id: 'alien', label: 'Alien' },
-  { id: 'windup', label: 'Wind-Up' },
-];
 
 /** Wait for the camera to settle before writing it into the address bar. */
 const URL_SYNC_MS = 250;
@@ -141,7 +133,7 @@ export default function DreamTricks({ initialSearch = '' }: { initialSearch?: st
   const fall = outcomeOf(state);
   const outcome = stageOutcome(fall);
   const timeline = timelineFor(state, RIDER.skateStyle);
-  const skater = SKATERS.find((option) => option.id === state.skater) ?? SKATERS[0];
+  const skater = skaterInfo(state.skater);
   const shot = !state.stand && typeof state.camera === 'string' ? dreamShots(state).find((option) => option.id === state.camera) : undefined;
   const cameraName = mode === 'tripod' ? `Tripod · ${shot?.label ?? 'your spot'}` : shot ? `Follow · ${shot.label.toLowerCase()}` : 'Follow';
 

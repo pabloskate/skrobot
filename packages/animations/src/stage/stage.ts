@@ -76,7 +76,7 @@ export interface StagePlan {
   shankProgress: number;
   /** Clock time the attempt ends at. */
   end: number;
-  /** A robot (the robot, Wind-Up), or a person (the realistic human, the alien) with a person's reach (humanRig.ts). */
+  /** The robot, or a skater with a person's reach (the realistic human and the alien, via humanRig.ts). */
   skater: Skater;
 }
 

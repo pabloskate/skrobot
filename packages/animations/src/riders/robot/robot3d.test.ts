@@ -7,7 +7,6 @@ import { DEFAULT_SKATE_STYLE } from '../../motion/style';
 import { planStage, stageFrame, type StageFrame } from '../../stage/stage';
 import { rgb } from '../../three/materials';
 import type { RobotLook } from '../look';
-import { WINDUP_BOARD } from '../windup/windup3d';
 import { Robot3D } from './robot3d';
 import { BACK_HATCH, EYE_LIFT, EYES, eyeGlow, HEAD_VENTS, SCREEN, SHOE_LACES } from './robotMaterials';
 import { ballGeometry, KNEE_R, mittGeometry, SHOULDER_R } from './robotParts';
@@ -101,7 +100,7 @@ describe('the robot', () => {
     const rider = new Robot3D({ ...LOOK, variant });
     const plan = stage('Ollie');
     pose(rider, stageFrame(plan, plan.end / 2, 1));
-    const board = new Board3D(WINDUP_BOARD);
+    const board = new Board3D({ graphic: LOOK.accent, stripe: LOOK.body });
     const boardIds = new Set(materials(board.group).flatMap((m) =>
       Object.entries(m.uniforms).filter(([name]) => name.startsWith('uInfo')).map(([, uniform]) => Math.round((uniform.value as Vector4).x * 255))));
     expect(boardIds.size).toBeGreaterThan(0);
