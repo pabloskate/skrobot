@@ -5,12 +5,13 @@ import { solveRig } from '../motion/rig';
 import { moveFrame, type Rig } from '../motion/skeleton';
 import { resolveSkateStyle } from '../motion/style';
 import { resolveRiderMechanics } from '../motion/stance';
-import type { RiderStance, Stance } from '../types';
+import type { RiderStance } from '../types';
 import { BOARD_WIDTH_SCALE } from '../board/boardDimensions';
 import { LEG_RADII, capsuleIntersectsBoard, shoeIntersectsBoard } from '../board/boardCollision';
 import { clearFeet } from '../board/footContact';
 import { exitEndsFor, joinGrindBase, joinGrindExit } from '../motion/grindDefinitions';
 import { onTheGround, planStage, stageFrame } from './stage';
+import { STANCES } from '../testing';
 
 /**
  * The board never goes through the rider. The physics places the feet
@@ -24,7 +25,6 @@ import { onTheGround, planStage, stageFrame } from './stage';
  */
 
 const BASES = TRICK_BASES;
-const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
 /** A sole may sit this far (world units) into the grip: soles rest on it, and are rounded. */
 const SOLE_GRACE = 1.5;
 

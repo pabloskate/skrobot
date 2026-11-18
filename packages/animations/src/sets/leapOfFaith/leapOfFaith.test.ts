@@ -24,9 +24,8 @@ import {
   LEAP_OF_FAITH_STAIR_WIDTH, LEAP_OF_FAITH_TERRAIN, LEAP_OF_FAITH_TREAD, leapOfFaithGuardTop,
   leapOfFaithStairGround, leapOfFaithSurface,
 } from './leapOfFaithLayout';
+import { STANCES, RIDERS } from '../../testing';
 
-const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
-const RIDERS: RiderStance[] = ['regular', 'goofy'];
 const attempt = (base = 'Kickflip', stance: Stance = 'regular', riderStance: RiderStance = 'regular', popHeight = 0.45) => planStage(
   { id: base, name: base, base, stance },
   { set: 'leap-of-faith', landed: true, riderStance, style: resolveSkateStyle({ popHeight, rotationSpeed: 1, flickStrength: 1 }), skater: 'realistic', fall: 'slam', shankProgress: 0.65 },

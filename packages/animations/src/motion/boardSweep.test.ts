@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_SKATE_STYLE } from './style';
 import { FLIP_T, ROLL_IN, TRICK_BASES, boardSweep, computeFrame, specFor } from './trick';
 import type { Stance, Trick } from '../types';
+import { STANCES } from '../testing';
 
 /**
  * A spot with something beside its line near the takeoff (Hollywood's side
@@ -9,7 +10,6 @@ import type { Stance, Trick } from '../types';
  * board sweeps past it (DropTerrain.trickPop). That class is read off the
  * trick's row; this holds it to what the board actually does off the pop.
  */
-const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
 /** The share of the flight in which the board crosses what's beside the takeoff. */
 const EARLY = 0.3;
 /** A board still within this of the line (degrees) hasn't swung its ends out. */

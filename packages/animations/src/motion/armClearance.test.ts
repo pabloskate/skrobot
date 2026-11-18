@@ -1,11 +1,10 @@
 import { describe, it } from 'vitest';
 import { TRICK_BASES, type FallVariant } from './trick';
-import { SWEEP_TIMEOUT, sweep } from '../testing';
+import { SWEEP_TIMEOUT, sweep, STANCES, RIDERS } from '../testing';
 import { planStage, stageFrame, type StagePlan } from '../stage/stage';
 import { stageArmLift } from '../stage/armLift';
 import { armInLegs } from './armClearance';
 import { resolveSkateStyle } from './style';
-import type { RiderStance, Stance } from '../types';
 import { COMBO_DIMS, OUTCOMES, covering, everyGrind, nameOf, stepOf, sweepBounds, type Sweep } from './grindTesting';
 
 /**
@@ -27,8 +26,6 @@ const TOUCH = 1.5;
 const HOLD = 0.7;
 const SAG = 2;
 
-const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
-const RIDERS: RiderStance[] = ['regular', 'goofy'];
 const FLAT_OUTCOMES: Array<{ landed: boolean; fall: FallVariant }> = [
   { landed: true, fall: 'slam' },
   { landed: false, fall: 'slam' },

@@ -9,7 +9,7 @@ import { boardSamples } from '../../motion/grindTesting';
 import { resolveSkateStyle } from '../../motion/style';
 import { X0 } from '../../motion/trick';
 import { planStage, stageFrame, type StageFrame, type StagePlan } from '../../stage/stage';
-import { isFiniteFrame, sweepHz } from '../../testing';
+import { isFiniteFrame, sweepHz, STANCES, RIDERS } from '../../testing';
 import type { RiderStance, Stance } from '../../types';
 import { SET_SCALE } from '../setScale';
 import { railApproachAllowed, railLineFor, setHandrail, setInfo, type RailChoice } from '../sets';
@@ -23,8 +23,6 @@ import {
 } from './emageLayout';
 
 const K = SET_SCALE;
-const RIDERS: RiderStance[] = ['regular', 'goofy'];
-const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
 const style = resolveSkateStyle({ popHeight: 0.65, rotationSpeed: 1.08, flickStrength: 0.95 });
 const attempt = (base: string, riderStance: RiderStance = 'regular', stance: Stance = 'regular', rail: RailChoice = 'center') => planStage(
   { id: base, name: base, base, stance },

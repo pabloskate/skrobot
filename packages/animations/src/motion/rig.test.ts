@@ -18,7 +18,7 @@ import {
 } from './trick';
 import { SKATE_STYLE_BOUNDS, resolveSkateStyle } from './style';
 import { flickExtension, orientTrickRotation, resolveRiderMechanics } from './stance';
-import { SWEEP_TIMEOUT, isFiniteFrame, sweep } from '../testing';
+import { SWEEP_TIMEOUT, isFiniteFrame, sweep, STANCES, RIDERS } from '../testing';
 import { planStage, stageFrame } from '../stage/stage';
 import type { RiderStance, Robot, Stance, Trick } from '../types';
 import { WHEEL_R, WHEEL_SPIN } from '../board/board';
@@ -38,8 +38,6 @@ import { dot3, sub3, type V3 } from '../math';
  */
 
 const BASES = TRICK_BASES;
-const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
-const RIDERS: RiderStance[] = ['regular', 'goofy'];
 const OUTCOMES: Array<{ landed: boolean; fall: FallVariant }> = [
   { landed: true, fall: 'slam' },
   { landed: false, fall: 'slam' },

@@ -18,7 +18,7 @@ import { stageArmLift } from '../../stage/armLift';
 import { armsLifted } from '../../motion/armClearance';
 import { ASPHALT, stageView } from '../../camera/view';
 import { X0 } from '../../motion/trick';
-import { sweep, sweepHz } from '../../testing';
+import { sweep, sweepHz, STANCES, RIDERS } from '../../testing';
 
 /**
  * El Toro's 20 stair: flatground tricks go down it. These pin the set's
@@ -64,8 +64,6 @@ const BOARD_POINTS: V3[] = [...TOP_LOCAL, ...BOTTOM_LOCAL];
 for (const x of [-WHEEL_X, WHEEL_X]) for (const z of [-WHEEL_Z, WHEEL_Z]) BOARD_POINTS.push({ x, y: WHEEL_Y + WHEEL_R, z });
 
 const BASES = TRICK_BASES;
-const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
-const RIDERS: RiderStance[] = ['regular', 'goofy'];
 const POPS = [0.45, 1, 1.15];
 
 describe('El Toro', () => {

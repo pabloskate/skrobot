@@ -12,7 +12,7 @@ import { landingYaw } from '../terrain';
 import { SET_SCALE } from '../setScale';
 import { FOOT } from '../../units';
 import { setInfo, setTerrain, setTimeline } from '../sets';
-import { sweep, sweepHz } from '../../testing';
+import { sweep, sweepHz, STANCES, RIDERS } from '../../testing';
 import { Hollywood3D, HOLLYWOOD_TRAFFIC, HOLLYWOOD_TREES } from './hollywood3d';
 import {
   HOLLYWOOD_BUILDING_FACE, HOLLYWOOD_CHEEK_Z, HOLLYWOOD_CURB_Z, HOLLYWOOD_DROP,
@@ -26,8 +26,6 @@ import {
 const F = HOLLYWOOD_FOOT;
 /** A trick's pop over the fence; without one, the most any takes. */
 const fencePop = (base?: string) => trickPop(HOLLYWOOD_FENCE_TERRAIN, base)!;
-const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
-const RIDERS: RiderStance[] = ['regular', 'goofy'];
 
 const fence = (base: string, stance: Stance = 'regular', riderStance: RiderStance = 'regular', options: { popHeight?: number; landed?: boolean; skater?: 'robot' | 'realistic' } = {}) =>
   planStage({ id: base, name: base, base, stance }, {

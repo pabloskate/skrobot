@@ -6,7 +6,7 @@ import { planStage, stageFrame, type StagePlan } from '../../stage/stage';
 import type { RiderStance, Stance } from '../../types';
 import { INCH } from '../../units';
 import { STAGE_SETS, setTerrain, setTimeline, type Obstacle } from '../sets';
-import { sweep } from '../../testing';
+import { sweep, STANCES, RIDERS } from '../../testing';
 import { planStairs, popsFromLeadingEnd } from '../../stage/drop';
 import { terrainSurface } from '../terrain';
 
@@ -21,8 +21,6 @@ const LEADING: Stance[] = ['nollie', 'fakie'];
 
 const DROPS = STAGE_SETS.filter((set) => set.terrain).flatMap((set) =>
   (set.obstacles?.map((o) => o.id) ?? ['stairs' as Obstacle]).map((obstacle) => ({ set: set.id, obstacle })));
-const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
-const RIDERS: RiderStance[] = ['regular', 'goofy'];
 const BASES = ['Ollie', 'Kickflip', 'Heelflip', '360 Flip', 'Frontside 180'];
 
 const plan = (drop: (typeof DROPS)[number], base: string, stance: Stance, rider: RiderStance = 'regular', landed = true): StagePlan =>

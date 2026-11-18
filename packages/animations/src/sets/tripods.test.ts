@@ -5,7 +5,7 @@ import { toThree, type StageView } from '../camera/view';
 import { resolveSkateStyle } from '../motion/style';
 import { planStage, stageFrame, type StageFrame, type StagePlan } from '../stage/stage';
 import type { RiderStance } from '../types';
-import { sweepHz, SWEEP_TIMEOUT } from '../testing';
+import { sweepHz, SWEEP_TIMEOUT, RIDERS } from '../testing';
 import { SET_FOOT as F, SET_SCALE } from './setScale';
 import { setInfo, STAGE_SETS, type Obstacle, type StageSet } from './sets';
 import { filmersFor, setFilmers, standSide, tripodSide, tripodStand } from './tripods';
@@ -44,7 +44,6 @@ const PIECES: Partial<Record<StageSet, () => Piece>> = {
 const LANDMARKS = STAGE_SETS.filter((set) => set.tripods.length > 0).map((set) => set.id);
 const TRIPODS: TripodId[] = ['bottom', 'side', 'top'];
 const SIDES: CameraSide[] = ['left', 'right'];
-const RIDERS: RiderStance[] = ['regular', 'goofy'];
 
 /** A line filmed at a spot: a flatground trick over one of its obstacles, or a grind down one of its ledges. */
 interface Line { name: string; base: string; obstacle?: Obstacle }

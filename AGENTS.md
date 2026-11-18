@@ -23,7 +23,7 @@ Live API) for playing with earbuds at the skatepark.
 | `npm run build` | `next build` — typecheck + production build (catches type errors, not logic bugs) |
 | `npm test` | Vitest unit tests — the behavioral check for the rules engine, RPS, trick resolver, and animation motion |
 | `npm run test:changed` | Only the tests your uncommitted changes reach |
-| `npm run test:quick` | Every test with the animation sweeps thinned to a sample of their cases (`ANIMATION_SWEEP=quick`) — the fast loop, about 15 s; `npm test` sweeps in full in about a minute and a half |
+| `npm run test:quick` | Every test with the animation sweeps thinned to a sample of their cases (`ANIMATION_SWEEP=quick`) — the fast loop, about a minute; `npm test` sweeps in full in about three minutes |
 | `npm run lint` | ESLint (flat config) — also enforces the architecture import boundaries below |
 | `npm run typecheck:web` | Full root TypeScript check, including tests omitted by `next build` |
 | `npm run typecheck:mobile` | Typecheck the Expo companion app |
