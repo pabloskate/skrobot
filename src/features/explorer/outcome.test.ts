@@ -21,6 +21,23 @@ describe('outcome', () => {
     expect(outcomeOptions('grinds').filter(o => o.fall?.startsWith('jump-')).map((o) => o.label)).toEqual(RAIL_BAIL_OPTIONS.map((o) => o.label));
   });
 
+  it('shares a Hollywood 16 wash out and clears it on the rail or flat', () => {
+    const state = stateFromSearch('?trick=backside-180&set=hollywood-high&fall=washout');
+    expect(state).toMatchObject({ mode: 'flatground', trick: 'Backside 180', fall: 'washout', obstacle: 'stairs' });
+    expect(stateFromSearch(searchFromState(state))).toEqual(state);
+    expect(stageOutcome(outcomeOf(state))).toMatchObject({ landed: false, fallVariant: 'washout' });
+    expect(timelineFor(state, undefined).phases.map(p => p.label)).toEqual(['Set up', 'Pop', 'Peak', 'Catch', 'Wash out']);
+    expect(outcomeOptions('flatground', state.set).map(o => o.label)).toContain('Wash out');
+    const rail = dreamSpot(state.set).lines.find(line => line.mode === 'grinds')!;
+    for (const invalid of [withDreamLine(state, rail), withSet(state, 'plaza'),
+      stateFromSearch('?trick=backside-180&set=waterfront&fall=washout'),
+      stateFromSearch('?grind=50-50-grind&set=hollywood-high&fall=washout')]) {
+      expect(invalid.fall).toBeNull();
+      expect(outcomeOptions(invalid.mode, invalid.set).map(o => o.fall)).not.toContain('washout');
+      expect(searchFromState(invalid)).not.toContain('fall=');
+    }
+  });
+
   it('round-trips a flatground kick-out through the link as it did', () => {
     const state = stateFromSearch('?trick=kickflip&set=el-toro&fall=kickout');
     expect(state).toMatchObject({ mode: 'flatground', fall: 'kickout' });

@@ -419,6 +419,8 @@ const KICK_OUT_DROP_T = 3;
 const SLIP_BACK_T = 2;
 /** Down a drop: the slide's a long one. */
 const SLIP_BACK_DROP_T = 2.6;
+/** Time after wheel contact for a sideways skid, fall and slide to rest. */
+export const WASH_OUT_T = 1.65;
 const HOLD = 0.35 * SPEED_SCALE; // freeze on the final frame before onDone
 
 /** The moments of an attempt (seconds): the pop, the top of the hop, the catch, touchdown, and the end. */
@@ -464,7 +466,7 @@ const signedSquash = (c: number) => (Math.abs(c) < 0.01 ? 0.15 : Math.sign(c) * 
  * rider sits down and slides. It's staged wherever the kick-out is; a
  * grind slams instead.
  */
-export type FallVariant = 'slam' | 'bail' | 'shank' | 'kickout' | 'slipback';
+export type FallVariant = 'slam' | 'bail' | 'shank' | 'kickout' | 'slipback' | 'washout';
 
 export const FALL_VARIANT_OPTIONS: ReadonlyArray<{ id: FallVariant; label: string }> = [
   { id: 'slam', label: 'Slam' },
