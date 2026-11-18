@@ -19,7 +19,8 @@ describe('Hollywood High 16 backside 180 wash out', () => {
     const sample = (offset: number) => stageFrame(stage, stairs.land + offset, 1);
     const catchTime = stairs.land - 0.17;
     expect(stageFrame(stage, catchTime, 1).rig.board.center).toEqual(stageFrame(made, catchTime, 1).rig.board.center);
-    expect(soundtrackFor(stage).cues.at(-1)).toMatchObject({ kind: 'land', at: stairs.land });
+    const cues = soundtrackFor(stage).cues;
+    expect(cues[cues.length - 1]).toMatchObject({ kind: 'land', at: stairs.land });
     expect(stage.end).toBeCloseTo(stairs.land + WASH_OUT_T);
 
     const touch = sample(0);
