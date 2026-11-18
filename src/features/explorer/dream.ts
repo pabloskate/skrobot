@@ -1,4 +1,4 @@
-import { FOOT, setInfo, setLocation, spotStands, wrapOrbitYaw, type Obstacle, type PopEnd, type RailChoice, type SceneCamera, type StageSet, type TripodSpot } from '@skrobot/animations';
+import { FOOT, STAGE_SETS, setFlights, setInfo, setLocation, spotStands, wrapOrbitYaw, type Obstacle, type PopEnd, type RailChoice, type SceneCamera, type SpotLine, type StageSet, type TripodSpot } from '@skrobot/animations';
 import {
   DEFAULT_STATE,
   cameraPreset,
@@ -49,34 +49,30 @@ export interface DreamSpot {
   lines: readonly DreamLine[];
 }
 
-const gap = (label: string, obstacle: Obstacle = 'stairs'): DreamLine => ({ id: obstacle, label, mode: 'flatground', obstacle, rail: 'center' });
-const rail = (label: string, choice: RailChoice = 'center'): DreamLine => ({
-  id: choice === 'center' ? 'rail' : 'side-rail', label, mode: 'grinds', obstacle: 'stairs', rail: choice,
-});
+/** A spot's line as the explorer plays it; `set` names its flight where the location has several. */
+function dreamLineOf({ label, hit, obstacle = 'stairs', rail = 'center', id }: SpotLine, set?: StageSet): DreamLine {
+  return hit === 'gap'
+    ? { id: id ?? obstacle, label, mode: 'flatground', obstacle, rail: 'center', ...(set && { set }) }
+    : { id: id ?? (rail === 'center' ? 'rail' : 'side-rail'), label, mode: 'grinds', obstacle: 'stairs', rail, ...(set && { set }) };
+}
 
-/** Spot cards in picker order, with their available lines. */
-export const DREAM_SPOTS: readonly DreamSpot[] = [
-  { id: 'el-toro', name: setInfo('el-toro').label, where: 'Lake Forest, CA', feature: '20 stair and handrails', lines: [gap('20 stair'), rail('Center rail'), rail('Side rail', 'side')] },
-  {
-    id: 'hollywood-high', name: setInfo('hollywood-high').label, where: 'Los Angeles', feature: 'Back-to-back 16 and 12 stairs, rails, and fence',
-    lines: [
-      { ...gap('16 stair'), set: 'hollywood-high' },
-      { ...rail('16 rail'), set: 'hollywood-high' },
-      { ...gap('Over the fence', 'fence'), set: 'hollywood-high' },
-      { ...gap('12 stair'), id: 'twelve-stairs', set: 'hollywood-high-12' },
-      { ...rail('12 rail'), id: 'twelve-rail', set: 'hollywood-high-12' },
-    ],
-  },
-  { id: 'carlsbad-gap', name: setInfo('carlsbad-gap').label, where: 'Carlsbad High · California', feature: 'Grass gap beside the 11 stair · uphill landing', lines: [gap('Over the grass')] },
-  { id: 'wallenberg', name: setInfo('wallenberg').label, where: 'San Francisco', feature: 'The four block gap', lines: [gap('Four block')] },
-  { id: 'sunset-car-wash', name: setInfo('sunset-car-wash').label, where: 'Redesigned setting', feature: 'Off the roof into the bank', lines: [gap('Roof to bank')] },
-  { id: 'lyon-25', name: setInfo('lyon-25').label, where: 'Redesigned courtyard', feature: '25 stairs · 14.76 ft down, 21.29 ft across', lines: [gap('25 stairs')] },
-  { id: 'leap-of-faith', name: setInfo('leap-of-faith').label, where: 'Point Loma High · San Diego', feature: 'Over the rail · 14.3 ft courtyard drop', lines: [gap('Over the rail')] },
-  { id: 'miami-triangle', name: setInfo('miami-triangle').label, where: 'Redesigned park', feature: 'Gap to the triangular bank, or its edges', lines: [gap('Gap to bank'), gap('Over the triangle', 'triangle'), rail('Down an edge')] },
-  { id: 'uc-davis-gap', name: setInfo('uc-davis-gap').label, where: 'Roessler Hall · UC Davis', feature: 'Ivy gap · approx. 24 ft 4 in across, 10 ft down', lines: [gap('Over the ivy')] },
-  { id: 'emage-20', name: setInfo('emage-20').label, where: 'Denver · Colorado', feature: '20 stair and side rail', lines: [gap('20 stair'), rail('Side rail', 'side')] },
-  { id: 'waterfront', name: setInfo('waterfront').label, where: 'Harbor promenade', feature: 'Flatground and flat bar', lines: [{ ...gap('Flatground'), id: 'flatground' }, rail('Flat bar')] },
-];
+/**
+ * Spot cards in picker order, with their available lines: every location
+ * the animation registry gives a card (its `<spot>Spot.ts`), the landmarks
+ * first, then the flat spots.
+ */
+const CARDS = STAGE_SETS.filter((spot) => spot.card && !spot.location);
+
+export const DREAM_SPOTS: readonly DreamSpot[] = [...CARDS.filter((spot) => spot.terrain), ...CARDS.filter((spot) => !spot.terrain)].map((spot) => {
+  const flights = setFlights(spot.id);
+  return {
+    id: spot.id,
+    name: spot.label,
+    where: spot.card!.where,
+    feature: spot.card!.feature,
+    lines: flights.flatMap((flight) => (flight.lines ?? []).map((line) => dreamLineOf(line, flights.length > 1 ? flight.id : undefined))),
+  };
+});
 
 const SPOT_BY_ID = new Map(DREAM_SPOTS.map((spot) => [spot.id, spot]));
 

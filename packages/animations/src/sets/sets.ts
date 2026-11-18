@@ -4,91 +4,41 @@ import { grindSpecFor, type GrindSpec } from '../motion/grindDefinitions';
 import { resolveRiderMechanics, type RiderMechanics } from '../motion/stance';
 import { flatTimeline, type AttemptTimeline } from '../motion/trick';
 import type { RiderStance, SkateStyle, Stance, Trick } from '../types';
-import { CENTER_Z, FAR_RAIL_Z, HILL_RAIL_Z } from './elToro/elToroLayout';
-import { EL_TORO_RAIL, EL_TORO_TERRAIN } from './elToro/stairs';
 import { stairTimeline } from '../stage/drop';
+import { SET_SCALE, stageHandrail, stageTerrain } from './setScale';
+import type { Obstacle, PlacedLedge, RailChoice, RailLine, SpotCard, SpotDefinition, SpotLine, SpotObstacle, SpotRails } from './spot';
+import { SPOTS, type StageSet } from './spots';
 import type { DropTerrain } from './terrain';
-import { SET_SCALE, stageHandrail, stageTerrain, SET_FOOT } from './setScale';
-import { HOLLYWOOD_DROP, HOLLYWOOD_FENCE_TERRAIN, HOLLYWOOD_RUN, HOLLYWOOD_LANE_Z, HOLLYWOOD_RAIL, HOLLYWOOD_CENTER_Z, HOLLYWOOD_LEFT_RAIL_Z, HOLLYWOOD_RIGHT_RAIL_Z, hollywoodGround } from './hollywood/hollywoodLayout';
-import { HOLLYWOOD_12_DROP, HOLLYWOOD_12_RUN, HOLLYWOOD_12_LANE_Z, HOLLYWOOD_12_RAIL, hollywood12Ground, hollywood12Surface } from './hollywood/hollywoodLayout';
-import { WALLENBERG_DROP, WALLENBERG_DROP_IN, WALLENBERG_RUN, WALLENBERG_LANE_Z, wallenbergGround, wallenbergSurface } from './wallenberg/wallenbergLayout';
-import { SUNSET_DROP, SUNSET_LAND_X, SUNSET_LANE_Z, SUNSET_POP_X, SUNSET_POP_Z, sunsetGround, sunsetSlope, sunsetSurface } from './sunset/sunsetLayout';
-import { LYON_TERRAIN } from './lyon/lyonLayout';
-import { LEAP_OF_FAITH_TERRAIN } from './leapOfFaith/leapOfFaithLayout';
-import { MIAMI_BANK_TERRAIN, MIAMI_GAP_TERRAIN, MIAMI_LEDGES } from './miami/miamiLayout';
-import { UC_DAVIS_TERRAIN } from './ucDavis/ucDavisLayout';
-import { CARLSBAD_TERRAIN } from './carlsbad/carlsbadLayout';
-import { EMAGE_RAIL, EMAGE_RAIL_Z, EMAGE_TERRAIN } from './emage/emageLayout';
 
 /**
  * The sets a trick can be staged at (the explorer calls them spots), and
  * what each one changes about the attempt. Everything that differs from set
  * to set and isn't its scenery is read from here: the stage plans stairs and
  * handrails from it, and the explorer offers tripods where the set has them.
- * Each set owns its scenery under sets/, built for the renderer in three/renderer.ts.
  *
- * Each set lays itself out in set units; what's here is the stage's
- * (setScale.ts): the terrain, handrails, ledges and lines across the set
- * are scaled as they're registered.
+ * Each spot defines itself in its own folder (its `<spot>Spot.ts`, a
+ * SpotDefinition: sets/spot.ts), laid out in set units, and sets/spots.ts
+ * lists them. What's here is the stage's (setScale.ts): the terrain,
+ * handrails, ledges and lines across the set are scaled as they're
+ * registered. Each set's scenery is built for the renderer in
+ * three/setPieces.ts.
  */
 
-export type StageSet = 'plaza' | 'waterfront' | 'el-toro' | 'hollywood-high' | 'hollywood-high-12' | 'wallenberg' | 'sunset-car-wash' | 'lyon-25' | 'leap-of-faith' | 'miami-triangle' | 'uc-davis-gap' | 'carlsbad-gap' | 'emage-20';
+export type { Obstacle, PlacedLedge, RailChoice, RailLine, SpotCard, SpotLine, SpotProfile, SpotProfileMark } from './spot';
+export type { StageSet } from './spots';
 
-/**
- * Which handrail a grind rides where a set has several: the center one, or
- * a side one. The side isn't picked: it's the one the grind's approach puts
- * on the rider's far side, coming in from the stairs (a regular rider's
- * frontside grinds and slides take the right rail going down, backside ones
- * the left).
- */
-export type RailChoice = 'center' | 'side';
+/** One way down a set, on the stage. */
+export type SetObstacle = SpotObstacle;
 
-/** One of a set's handrails, by where it stands looking down the stairs. */
-export type RailLine = 'center' | 'left' | 'right';
-
-/**
- * What a gap trick goes over where a spot has more than one way down: its
- * stairs (the spot's main line, whatever it is: Miami's is the gap onto the
- * triangular bank), or (Hollywood) the picket fence beside them, onto the
- * sidewalk, or (Miami) clear over the whole triangle to the plaza.
- */
-export type Obstacle = 'stairs' | 'fence' | 'triangle';
-
-export interface SetObstacle {
-  id: Obstacle;
-  /** What the obstacle picker calls it, and what it says the line is. */
-  label: string;
-  hint: string;
-  terrain: DropTerrain;
-}
-
-export interface SetRails {
-  /** A spot with just one physical side rail keeps every trick on that line. */
-  fixedLine?: 'left' | 'right';
-  /** Side rails can be scenery only when a real wall or fence leaves no board clearance. */
-  sideGrinds?: boolean;
-  /** Every handrail here as a grind sees it: the same pipe over the same steps. */
-  handrail: Handrail;
-  /** Where each stands across the set (z, toward the camera; looking down the stairs, left is −z). */
-  z: Readonly<Record<RailLine, number>>;
-}
-
-/**
- * A ledge to grind that isn't one of a stair set's handrails (Miami's slab
- * edges): its own line, running from (`x`, `z`) in the set at `yaw` degrees
- * off +x toward +z, ridden as `handrail` is in that line's own frame.
- */
-export interface PlacedLedge {
-  handrail: Handrail;
-  x: number;
-  z: number;
-  yaw: number;
-}
+/** A set's handrails, on the stage. */
+export type SetRails = SpotRails;
 
 export interface SetInfo {
   id: StageSet;
   /** What the spot picker calls it. */
   label: string;
+  /** Its name in shared links, where that isn't its id; the id still opens. */
+  slug?: string;
   /** Another flight within this location, sharing its spot card and scenery. */
   location?: StageSet;
   /** Name of the flight when a location offers several. */
@@ -116,116 +66,40 @@ export interface SetInfo {
   ledges?: Readonly<Record<'left' | 'right', PlacedLedge>>;
   /** Filmers standing still at the set, beside the crane that follows the rider. */
   tripods: readonly TripodId[];
+  /** Its card in the players' spot picker; a location without one isn't offered there. */
+  card?: SpotCard;
+  /** The ways to hit this flight, for the card; the first is where a visit starts. */
+  lines?: readonly SpotLine[];
 }
 
-const HOLLYWOOD_STAIRS: DropTerrain = stageTerrain({ drop: HOLLYWOOD_DROP, run: HOLLYWOOD_RUN, landPast: 4 * SET_FOOT, laneZ: HOLLYWOOD_LANE_Z, ground: hollywoodGround });
+const FILMED: readonly TripodId[] = ['bottom', 'side', 'top'];
 
-/** A set's handrails, laid out in set units, on the stage. */
-const stageRails = (handrail: Handrail, z: Readonly<Record<RailLine, number>>, sideGrinds?: boolean): SetRails => ({
-  handrail: stageHandrail(handrail),
-  z: { center: z.center * SET_SCALE, left: z.left * SET_SCALE, right: z.right * SET_SCALE },
-  ...(sideGrinds != null && { sideGrinds }),
-});
+/** A spot's definition, laid out in set units, as the stage reads it. */
+function stageSet(spot: SpotDefinition<StageSet>): SetInfo {
+  // One drop named twice (the default, and first among the obstacles) stays one on the stage.
+  const staged = new Map<DropTerrain, DropTerrain>();
+  const terrain = (laid: DropTerrain): DropTerrain => {
+    if (!staged.has(laid)) staged.set(laid, stageTerrain(laid));
+    return staged.get(laid)!;
+  };
+  const ledge = ({ handrail, x, z, yaw }: PlacedLedge): PlacedLedge => ({ handrail: stageHandrail(handrail), x: x * SET_SCALE, z: z * SET_SCALE, yaw });
+  const { rails, ledges, obstacles, filmers, location, ...rest } = spot;
+  return {
+    ...rest,
+    ...(location !== undefined && { location: location as StageSet }),
+    terrain: spot.terrain && terrain(spot.terrain),
+    ...(obstacles && { obstacles: obstacles.map((o) => ({ ...o, terrain: terrain(o.terrain) })) }),
+    rails: rails ? {
+      ...rails,
+      handrail: stageHandrail(rails.handrail),
+      z: { center: rails.z.center * SET_SCALE, left: rails.z.left * SET_SCALE, right: rails.z.right * SET_SCALE },
+    } : null,
+    ...(ledges && { ledges: { left: ledge(ledges.left), right: ledge(ledges.right) } }),
+    tripods: filmers ? FILMED : [],
+  };
+}
 
-/** A set's ledges, laid out in set units, on the stage. */
-const stageLedges = (ledges: Readonly<Record<'left' | 'right', PlacedLedge>>): Readonly<Record<'left' | 'right', PlacedLedge>> => {
-  const place = ({ handrail, x, z, yaw }: PlacedLedge): PlacedLedge => ({ handrail: stageHandrail(handrail), x: x * SET_SCALE, z: z * SET_SCALE, yaw });
-  return { left: place(ledges.left), right: place(ledges.right) };
-};
-
-const MIAMI_BANK = stageTerrain(MIAMI_BANK_TERRAIN);
-
-export const STAGE_SETS: readonly SetInfo[] = [
-  { id: 'plaza', label: 'Plaza', terrain: null, grinds: true, rails: null, tripods: [] },
-  { id: 'waterfront', label: 'Waterfront', terrain: null, grinds: true, rails: null, tripods: [] },
-  {
-    id: 'el-toro',
-    label: 'El Toro',
-    terrain: stageTerrain(EL_TORO_TERRAIN),
-    grinds: true,
-    rails: stageRails(EL_TORO_RAIL, { center: CENTER_Z, left: HILL_RAIL_Z, right: FAR_RAIL_Z }),
-    tripods: ['bottom', 'side', 'top'],
-  },
-  {
-    id: 'hollywood-high', label: 'Hollywood High', lineLabel: '16 stair', grinds: true,
-    description: 'Hollywood High, Los Angeles · The 16 and 12 descend opposite ends of one auditorium walkway, with center handrails and the fence beside the 16.',
-    terrain: HOLLYWOOD_STAIRS,
-    obstacles: [
-      { id: 'stairs', label: 'Stairs', hint: 'down the stairs', terrain: HOLLYWOOD_STAIRS },
-      { id: 'fence', label: 'Fence', hint: 'over the rail and fence, coming in at an angle', terrain: stageTerrain(HOLLYWOOD_FENCE_TERRAIN) },
-    ],
-    rails: stageRails(HOLLYWOOD_RAIL, { center: HOLLYWOOD_CENTER_Z, left: HOLLYWOOD_LEFT_RAIL_Z, right: HOLLYWOOD_RIGHT_RAIL_Z }, false),
-    tripods: ['bottom', 'side', 'top'],
-  },
-  {
-    id: 'hollywood-high-12', label: 'Hollywood 12', location: 'hollywood-high', lineLabel: '12 stair', grinds: true,
-    description: 'The steeper north-facing 12, behind the 16 across the shared upper walkway.',
-    terrain: stageTerrain({ drop: HOLLYWOOD_12_DROP, run: HOLLYWOOD_12_RUN, landPast: 4 * SET_FOOT, laneZ: HOLLYWOOD_12_LANE_Z, ground: hollywood12Ground, surface: hollywood12Surface }),
-    // The street-side cheek has no grindable pipe; the wall rail is scenery.
-    rails: stageRails(HOLLYWOOD_12_RAIL, { center: 0, left: -HOLLYWOOD_RIGHT_RAIL_Z, right: -HOLLYWOOD_LEFT_RAIL_Z }, false),
-    tripods: ['bottom', 'side', 'top'],
-  },
-  {
-    id: 'wallenberg', label: 'Wallenberg', grinds: false,
-    description: 'San Francisco · Down the roll-in, then four blocks: 51 inches down and 198 inches across.',
-    terrain: stageTerrain({
-      drop: WALLENBERG_DROP, run: WALLENBERG_RUN, landPast: 3 * SET_FOOT, laneZ: WALLENBERG_LANE_Z,
-      ground: wallenbergGround, surface: wallenbergSurface, dropIn: WALLENBERG_DROP_IN,
-    }),
-    rails: null, tripods: ['bottom', 'side', 'top'],
-  },
-  {
-    id: 'sunset-car-wash', label: 'Roof to Bank', grinds: false,
-    description: 'An unbranded roof-to-bank setting. Along the roof, a quarter-turn into the bank, then downhill.',
-    terrain: stageTerrain({
-      drop: SUNSET_DROP, run: SUNSET_LAND_X, landPast: 0, laneZ: SUNSET_LANE_Z,
-      ground: sunsetGround, slope: sunsetSlope, surface: sunsetSurface,
-      entry: { x: SUNSET_POP_X, z: SUNSET_POP_Z, yaw: -90 },
-    }),
-    rails: null, tripods: ['bottom', 'side', 'top'],
-  },
-  {
-    id: 'lyon-25', label: '25 Stair', grinds: false,
-    description: '25 stairs, 14.76 feet down and 21.29 feet across, in a redesigned courtyard.',
-    terrain: stageTerrain(LYON_TERRAIN),
-    rails: null, tripods: ['bottom', 'side', 'top'],
-  },
-  {
-    id: 'leap-of-faith', label: 'Leap of Faith', grinds: false,
-    description: 'Point Loma High School, San Diego · Over the walkway guardrail into the courtyard, a 14.3-foot drop in the classic Jamie Thomas setting.',
-    terrain: stageTerrain(LEAP_OF_FAITH_TERRAIN),
-    rails: null, tripods: ['bottom', 'side', 'top'],
-  },
-  {
-    id: 'miami-triangle', label: 'Triangle Bank', grinds: true,
-    description: 'A redesigned park setting. Gap from the raised deck onto a plain triangular bank, clear it to the plaza, or grind an edge.',
-    terrain: MIAMI_BANK,
-    obstacles: [
-      { id: 'stairs', label: 'Bank', hint: 'off the deck onto the triangular bank, then down it', terrain: MIAMI_BANK },
-      { id: 'triangle', label: 'Over', hint: 'over the whole triangle to the plaza', terrain: stageTerrain(MIAMI_GAP_TERRAIN) },
-    ],
-    rails: null, ledges: stageLedges(MIAMI_LEDGES), tripods: ['bottom', 'side', 'top'],
-  },
-  {
-    id: 'uc-davis-gap', label: 'UC Davis Gap', grinds: false,
-    description: 'Roessler Hall, UC Davis · Over the ivy bank beside the round planter. Estimated 24 ft 4 in across and 10 ft down in the classic filmed layout.',
-    terrain: stageTerrain(UC_DAVIS_TERRAIN),
-    rails: null, tripods: ['bottom', 'side', 'top'],
-  },
-  {
-    id: 'carlsbad-gap', label: 'Carlsbad Gap', grinds: false,
-    description: 'Carlsbad High, California · The original grass gap beside the yellow-edged 11 stair, with its low toe wall, curved curb and uphill landing. Dimensions estimated from archival photos.',
-    terrain: stageTerrain(CARLSBAD_TERRAIN),
-    rails: null, tripods: ['bottom', 'side', 'top'],
-  },
-  {
-    id: 'emage-20', label: 'Emage 20', grinds: true,
-    description: 'Denver, Colorado · The riverside 20 stair inset into ten seating terraces, with its skateable river-side rail and the Platte River Bridge. Dimensions estimated from reference photos.',
-    terrain: stageTerrain(EMAGE_TERRAIN),
-    rails: { ...stageRails(EMAGE_RAIL, { center: EMAGE_RAIL_Z, left: EMAGE_RAIL_Z, right: EMAGE_RAIL_Z }), fixedLine: 'right' },
-    tripods: ['bottom', 'side', 'top'],
-  },
-];
+export const STAGE_SETS: readonly SetInfo[] = SPOTS.map(stageSet);
 
 const BY_ID = new Map(STAGE_SETS.map((set) => [set.id, set]));
 

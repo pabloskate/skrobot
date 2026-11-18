@@ -761,19 +761,13 @@ function parseStand(value: string | null): TripodSpot | null {
   return { u, z, height: Math.max(0, height), ...(frame > 0 ? { frame } : {}) };
 }
 
-/** Public links use neutral names; internal IDs remain stable for existing links and the renderer. */
-const PUBLIC_SET_SLUGS: Partial<Record<StageSet, string>> = {
-  'sunset-car-wash': 'roof-to-bank',
-  'lyon-25': '25-stair',
-  'miami-triangle': 'triangle-bank',
-};
-
 /** The explorer state a URL query describes; anything missing or unknown keeps its default. */
 export function stateFromSearch(search: string, defaultSet: StageSet = DEFAULT_STATE.set): ExplorerState {
   const params = new URLSearchParams(search);
   const stanceParam = params.get('stance');
   const camera = parseCamera(params.get('cam'));
-  const set = STAGE_SETS.find((option) => option.id === params.get('set') || PUBLIC_SET_SLUGS[option.id] === params.get('set'))?.id ?? defaultSet;
+  // Public links use a spot's neutral slug where it has one; its id still opens, for existing links.
+  const set = STAGE_SETS.find((option) => option.id === params.get('set') || option.slug === params.get('set'))?.id ?? defaultSet;
   const pan = parsePan(params.get('pan'));
   const stand = setInfo(set).terrain ? parseStand(params.get('stand')) : null;
   const base: ExplorerState = {
@@ -854,7 +848,7 @@ export function searchFromState(state: ExplorerState, { includeSet = false } = {
   }
   if (state.cameraSide && cameraHasSides(state.camera) && !state.stand) params.set('from', state.cameraSide);
   if (state.zoom !== defaultZoomForCamera(state.camera)) params.set('zoom', String(round(state.zoom, 2)));
-  if (includeSet || state.set !== DEFAULT_STATE.set) params.set('set', PUBLIC_SET_SLUGS[state.set] ?? state.set);
+  if (includeSet || state.set !== DEFAULT_STATE.set) params.set('set', setInfo(state.set).slug ?? state.set);
   if (state.rail !== DEFAULT_STATE.rail) params.set('rail', state.rail);
   if (picksObstacle(state) && state.obstacle !== DEFAULT_STATE.obstacle) params.set('obstacle', state.obstacle);
   if (state.skater !== DEFAULT_STATE.skater) params.set('skater', state.skater);
