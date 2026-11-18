@@ -129,7 +129,7 @@ export interface ExplorerState {
  * weight back so the board shoots out ahead and the rider sits down; a grind jumped off along the rail or out to the side,
  * or slipped back on its landing.
  */
-export type Outcome = 'kickout' | 'slipback' | 'jump-forward' | 'jump-side';
+export type Outcome = 'kickout' | 'slipback' | 'jump-forward' | 'jump-side' | 'rail-stick';
 
 export interface OutcomeOption {
   fall: Outcome | null;
@@ -149,20 +149,22 @@ const OUTCOME_OPTIONS: Record<ExplorerMode, readonly OutcomeOption[]> = {
   grinds: [
     LANDED,
     { fall: 'jump-forward', label: 'Jump forward', hint: 'jumped off ahead, rolled out' },
+    { fall: 'rail-stick', label: 'Rail Stick', hint: 'board hangs up, rider carries on ahead' },
     { fall: 'jump-side', label: 'Jump aside', hint: 'jumped off the side, rolled out' },
     SLIP_BACK,
   ],
 };
 
 /** The ways an attempt can end in this mode. */
-export const outcomeOptions = (mode: ExplorerMode): readonly OutcomeOption[] => OUTCOME_OPTIONS[mode];
+export const outcomeOptions = (mode: ExplorerMode, set?: StageSet): readonly OutcomeOption[] =>
+  set && setInfo(set).ledges ? OUTCOME_OPTIONS[mode].filter(option => option.fall !== 'rail-stick') : OUTCOME_OPTIONS[mode];
 
 /** How the attempt on the stage ends: its outcome if the mode has it, else landed. */
-export function outcomeOf(state: Pick<ExplorerState, 'mode' | 'fall'>): Outcome | null {
-  return OUTCOME_OPTIONS[state.mode].some((option) => option.fall === state.fall) ? state.fall : null;
+export function outcomeOf(state: Pick<ExplorerState, 'mode' | 'fall'> & { set?: StageSet }): Outcome | null {
+  return outcomeOptions(state.mode, state.set).some((option) => option.fall === state.fall) ? state.fall : null;
 }
 
-const RAIL_BAILS: Partial<Record<Outcome, RailBail>> = { 'jump-forward': 'forward', 'jump-side': 'side' };
+const RAIL_BAILS: Partial<Record<Outcome, RailBail>> = { 'rail-stick': 'stick', 'jump-forward': 'forward', 'jump-side': 'side' };
 
 /** What the stage is told of an outcome: landed or not, the miss, and which way off a rail. */
 export function stageOutcome(fall: Outcome | null): { landed: boolean; fallVariant?: 'kickout' | 'slipback'; railBail?: RailBail } {
@@ -288,7 +290,7 @@ export function withSet(state: ExplorerState, set: StageSet): ExplorerState {
     // A tripod stood in one spot means nothing in another.
     stand: set === state.set ? state.stand : undefined,
     mode: setInfo(set).grinds ? state.mode : 'flatground',
-    fall: setInfo(set).grinds ? state.fall : outcomeOf({ mode: 'flatground', fall: state.fall }),
+    fall: outcomeOf({ mode: setInfo(set).grinds ? state.mode : 'flatground', set, fall: state.fall }),
     rail: setInfo(set).rails?.fixedLine ? 'side' : setInfo(set).rails?.sideGrinds === false ? 'center' : state.rail,
     obstacle: hasObstacle(set, state.obstacle) ? state.obstacle : DEFAULT_STATE.obstacle,
   });
@@ -473,7 +475,7 @@ export function timelineFor(state: ExplorerState, style: SkateStyle | undefined)
           { label: 'Pop', time: bail.pop },
           ...(bail.trickIn == null ? [] : [{ label: 'Trick in', time: bail.trickIn }]),
           { label: 'Lock', time: bail.lock },
-          { label: 'Jump off', time: bail.bail },
+          { label: railBail === 'stick' ? 'Rail Stick' : 'Jump off', time: bail.bail },
           { label: 'Roll', time: bail.down },
         ],
       };

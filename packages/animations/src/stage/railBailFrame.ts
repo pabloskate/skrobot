@@ -118,6 +118,7 @@ function setupFor(stage: StagePlan): KickOutSetup {
   const ground = groundOf(grind);
   // A ledge's top is its ground already; a rail or the bar stands up out of it.
   const boardGround = grind.handrail?.rail.ledge ? ground : (x: number, z: number, y: number) => Math.min(ground(x, z), railTop(grind, x, z, y));
+  const boardStuck = stage.railBail?.bail === 'stick';
   const { up, along, out } = bail.jump;
   const jump: V3 = { x: way.along * along, y: 0, z: way.across * bail.side * out };
   return {
@@ -132,7 +133,8 @@ function setupFor(stage: StagePlan): KickOutSetup {
     catchAt: bail.at + TAKEOVER_LEAD,
     touchdown: bail.down,
     end: stage.end,
-    jump: { x: jump.x + UP.x * up, y: UP.y * up, z: jump.z },
+    boardStuck,
+    jump: boardStuck ? undefined : { x: jump.x + UP.x * up, y: UP.y * up, z: jump.z },
     boardGround,
     // A rail's top falls away downhill: a board riding it goes on down it, not stopped as on level ground.
     boardSlope: grind.handrail && !grind.handrail.rail.ledge ? (x: number, z: number, y: number) => (railTop(grind, x, z, y) < ground(x, z) ? grind.handrail!.rail.slope : 0) : undefined,
@@ -167,7 +169,7 @@ function planned(stage: StagePlan): Planned {
   // The board's first touch of the ground, not the rail it left (or, a ledge's top being its ground, once it's off it).
   const ground = groundOf(grind);
   let boardDown = Infinity;
-  for (let t = takeover + (grind.handrail?.rail.ledge ? LEDGE_LEAVE : 0); t <= stage.end; t += plan.board.dt) {
+  for (let t = takeover + (grind.handrail?.rail.ledge ? LEDGE_LEAVE : 0); !plan.setup.boardStuck && t <= stage.end; t += plan.board.dt) {
     const b = boardRigOf(boardAt(plan.board, t));
     const corners = [-40, 40].flatMap((x) => [-10, 10].map((z) => b.point({ x, y: 4, z })));
     if (corners.some((p) => ground(p.x, p.z) - p.y < DOWN_WITHIN && railTop(grind, p.x, p.z, p.y) === Infinity)) {

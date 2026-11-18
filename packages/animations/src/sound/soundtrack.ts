@@ -93,20 +93,21 @@ export function soundtrackFor(stage: StagePlan): Soundtrack {
 function attemptSoundtrack(stage: StagePlan): Soundtrack {
   const { grind, stairs, landed } = stage;
   if (grind && stage.railBail) {
-    // Jumping off: the grind scrapes up to the jump, and the board left on the rail clatters down on its own.
+    // The scrape cuts out at release. A snag knocks against the rail and holds the board there.
     const leave = stage.railBail.at;
-    const boardDown = railBailBoardDown(stage);
-    const down = Number.isFinite(boardDown) ? boardDown : leave + grind.drop;
+    const stuck = stage.railBail.bail === 'stick';
+    const boardDown = stuck ? Infinity : railBailBoardDown(stage);
+    const down = stuck || Number.isFinite(boardDown) ? boardDown : leave + grind.drop;
     return {
       cues: [
         { kind: 'pop', at: grind.pop },
         { kind: 'lock', at: grind.lockAt },
-        { kind: 'crash', at: down, weight: grind.handrail ? HANDRAIL_LANDING : 1 },
+        stuck ? { kind: 'lock', at: leave } : { kind: 'crash', at: down, weight: grind.handrail ? HANDRAIL_LANDING : 1 },
       ],
       slide: grind.spec.slide,
       roll: wheels(grind.pop, down, false),
       grind: (t) => (t >= grind.lockAt && t < leave ? 1 : 0),
-      speed: rolling((t) => grindSpeed(grind, Math.min(t, leave)), down, false),
+      speed: rolling((t) => stuck && t >= leave ? 0 : grindSpeed(grind, Math.min(t, leave)), down, false),
     };
   }
   if (grind) {

@@ -118,6 +118,8 @@ export interface KickOutSetup {
    * takeover, the board holding their weight till then. The board is under the feet, not slipping out.
    */
   jump?: V3;
+  /** A rail snag holds the board at takeover while the rider carries on with the grind's velocity. */
+  boardStuck?: boolean;
   /** What the board meets, if not the rider's `ground`: with the rail it was left on, over it (`y`, a point's height). Its hangers meet it too. */
   boardGround?: (x: number, z: number, y: number) => number;
   /** How far `boardGround` falls (y, down) for each unit along x under a point, where it's a handrail's slope the board rides down. */
@@ -340,7 +342,7 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
   }
   const error = setup.glued ? () => IDENTITY : missBy(lost);
   const atTakeover = boardMotion(setup, error, takeover);
-  if (setup.glued && !setup.jump) {
+  if (setup.glued && !setup.jump && !setup.boardStuck) {
     // The board slips out from under the feet: it rolls off its toeside rail and swings, the way a missed ollie squirts out.
     const slip = ((MISS_DEG * 0.75 * Math.PI) / 180) / (contact - takeover);
     atTakeover.spin = add3(atTakeover.spin, qrot(atTakeover.q, { x: slip, y: slip * 0.35, z: 0 }));
@@ -374,7 +376,9 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
   // Where the foot finds the board: the highest point of the deck's cross-section under it, when it gets there.
   const boardGround = setup.boardGround ?? ground;
   const hangers = setup.boardGround != null;
-  const freeTrack = simulateBoard(atTakeover, takeover, contact + 0.05, { gravity, ground: boardGround, hangers, slope: setup.boardSlope, drag: setup.drag });
+  const freeTrack: BoardTrack = setup.boardStuck
+    ? { start: takeover, dt: h, poses: [atTakeover], touchdown: Infinity }
+    : simulateBoard(atTakeover, takeover, contact + 0.05, { gravity, ground: boardGround, hangers, slope: setup.boardSlope, drag: setup.drag });
   const atContact = boardAt(freeTrack, contact);
   const toLocal = (p: V3) => qrot(qconj(atTakeover.q), sub3(p, atTakeover.center));
   const footX = Math.max(-26, Math.min(26, toLocal(start.shoes[kick].at).x));
@@ -648,7 +652,7 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
   // Out, the other way across (which may clear sooner), and where neither clears, back, either way.
   const ways = [dirOf(outward), dirOf(-outward), dirOf(outward, PUSH_DIR.back), dirOf(-outward, PUSH_DIR.back)];
   let pushDir = ways[0];
-  let push = leastFor(pushDir);
+  let push = setup.boardStuck ? 0 : leastFor(pushDir);
   const tryWay = (dir: V3) => {
     const otherPush = leastFor(dir);
     if (otherPush < push) {
@@ -681,7 +685,7 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
       }
     }
   }
-  const board = boardFor(pushDir, push, setup.end + 0.1);
+  const board = setup.boardStuck ? freeTrack : boardFor(pushDir, push, setup.end + 0.1);
   const run = runWith(pushDir, push);
 
   const plan: KickOutPlan = { ...shared, board, push, run, roll: null };
@@ -930,6 +934,12 @@ function kickEnds(plan: KickOutPlan): KickEnds {
 function kickShoeAt(plan: KickOutPlan, t: number, land: { at: V3; q: Quat; on: number }): ShoePose {
   const { takeover, contact, release } = plan;
   const shoe0 = plan.startShoes[plan.kick];
+  if (plan.setup.boardStuck) {
+    // Both feet come loose at the snag. Carry this shoe into its first stride or roll.
+    const dt = land.on - takeover;
+    const s = clamp01((t - takeover) / dt);
+    return { at: hermite3(shoe0.at, shoe0.velocity, land.at, { x: 0, y: 0, z: 0 }, dt, s), q: qslerp(shoe0.q, land.q, minJerk(s)) };
+  }
   if (t < contact) {
     // Down onto the board where it will be.
     const { meet, meetV } = kickEnds(plan);

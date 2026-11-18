@@ -388,6 +388,29 @@ describe('which way the rider jumps', () => {
     }
   });
 
+  it.each(['regular', 'goofy'] as const)('sticks a Hollywood High boardslide under a moving rider (%s)', rider => {
+    const stage = stageOf({ set: 'hollywood-high', rail: 'center', grind: 'Frontside Boardslide', bail: 'stick', rider, skater: 'realistic' });
+    const at = stage.railBail!.at;
+    expect(at).toBeGreaterThan(stage.grind!.lockAt + 0.15);
+    expect(at).toBeLessThan(stage.grind!.off);
+    const worldBoardX = (t: number) => {
+      const frame = stageFrame(stage, t, 1);
+      return frame.rig.board.center.x + frame.scroll;
+    };
+    const snag = worldBoardX(at);
+    expect(snag - worldBoardX(at - 0.1)).toBeGreaterThan(FOOT / 2);
+    for (const t of [at + 0.05, at + 0.2, stage.end]) {
+      expect(worldBoardX(t)).toBeCloseTo(snag, 6);
+      expect(isFiniteFrame(stageFrame(stage, t, 1))).toBe(true);
+    }
+    const ahead = stageFrame(stage, at + 0.2, 1);
+    expect(hipsOf(ahead.rig).x - ahead.rig.board.center.x).toBeGreaterThan(FOOT);
+    expect(hipsOf(ahead.rig).y).toBeGreaterThan(hipsOf(stageFrame(stage, at, 1).rig).y);
+    const track = soundtrackFor(stage);
+    expect(track.cues[track.cues.length - 1]).toEqual({ kind: 'lock', at });
+    expect(track.roll(stage.end)).toBe(0);
+  });
+
   it.each(['regular', 'goofy'] as const)('slips back on landing a Hollywood High 360 flip into crooks (%s)', riderStance => {
     const base = joinGrindBase('360 Flip', 'Frontside Crooked Grind');
     const trick = { id: base, name: base, base, stance: 'regular' as const };
