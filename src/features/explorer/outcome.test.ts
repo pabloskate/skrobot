@@ -4,8 +4,8 @@ import { DEFAULT_STATE, outcomeOf, outcomeOptions, searchFromState, stageOutcome
 import { dreamSpot, withDreamLine } from './dream';
 
 /**
- * How an attempt ends: landed, or missed the mode's way (a flatground or gap trick kicked out, a grind jumped off forward
- * or aside), kept in the link, and only where the mode has it.
+ * How an attempt ends: landed, or missed the mode's way (a flatground or gap trick kicked out or slipped back, a grind
+ * jumped off forward or aside), kept in the link, and only where the mode has it.
  */
 describe('outcome', () => {
   it('lands by default, and leaves it out of the link', () => {
@@ -14,8 +14,8 @@ describe('outcome', () => {
     expect(stageOutcome(null)).toEqual({ landed: true });
   });
 
-  it('offers a kick-out on flatground and a jump off either way on a grind', () => {
-    expect(outcomeOptions('flatground').map((o) => o.fall)).toEqual([null, 'kickout']);
+  it('offers a kick-out and a slip back on flatground and a jump off either way on a grind', () => {
+    expect(outcomeOptions('flatground').map((o) => o.fall)).toEqual([null, 'kickout', 'slipback']);
     expect(outcomeOptions('grinds').map((o) => o.fall)).toEqual([null, 'jump-forward', 'jump-side']);
     // The grind's labels are the package's.
     expect(outcomeOptions('grinds').slice(1).map((o) => o.label)).toEqual(RAIL_BAIL_OPTIONS.map((o) => o.label));
@@ -28,6 +28,21 @@ describe('outcome', () => {
     expect(new URLSearchParams(search).get('fall')).toBe('kickout');
     expect(stateFromSearch(search)).toEqual(state);
     expect(stageOutcome('kickout')).toEqual({ landed: false, fallVariant: 'kickout', railBail: undefined });
+  });
+
+  it('round-trips a slip back through the link, and runs its clip on past the landing', () => {
+    const state = stateFromSearch('?trick=kickflip&set=el-toro&fall=slipback');
+    expect(state).toMatchObject({ mode: 'flatground', fall: 'slipback' });
+    expect(stateFromSearch(searchFromState(state))).toEqual(state);
+    expect(stageOutcome('slipback')).toEqual({ landed: false, fallVariant: 'slipback', railBail: undefined });
+    // A grind doesn't slip back.
+    expect(stateFromSearch('?grind=50-50-grind&set=el-toro&fall=slipback').fall).toBeNull();
+    for (const set of ['el-toro', 'plaza'] as const) {
+      const slipped = withSet(state, set);
+      const landed = { ...slipped, fall: null };
+      expect(timelineFor(slipped, undefined).duration).toBeGreaterThan(timelineFor(landed, undefined).duration + 0.5);
+      expect(timelineFor(slipped, undefined).phases.map((p) => p.label)).toContain('Slip');
+    }
   });
 
   it.each([['jump-forward', 'forward'], ['jump-side', 'side']] as const)('round-trips a grind jumped off (%s) through the link', (fall, bail) => {

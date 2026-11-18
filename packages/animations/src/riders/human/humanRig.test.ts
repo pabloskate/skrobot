@@ -8,7 +8,7 @@ import { resolveRiderMechanics } from '../../motion/stance';
 import type { Robot, Stance, Trick } from '../../types';
 import { capsuleIntersectsBoard } from '../../board/boardCollision';
 import { clearFeet } from '../../board/footContact';
-import { HUMAN_FOREARM, HUMAN_SCALE, HUMAN_SHIN, HUMAN_THIGH, HUMAN_UPPER_ARM, shinRadius, thighRadius } from './humanProportions';
+import { HUMAN_FOREARM, HUMAN_HIP_HALF, HUMAN_SHIN, HUMAN_SHOULDER, HUMAN_THIGH, HUMAN_UPPER_ARM, shinRadius, thighRadius } from './humanProportions';
 import { humanRig } from './humanRig';
 import { onTheGround, planStage, stageFrame } from '../../stage/stage';
 
@@ -46,6 +46,8 @@ describe('person rig', () => {
         const a = stageFrame(robotStage, t, 1).rig;
         const b = stageFrame(humanStage, t, 1).rig;
         expect(b.board.center).toEqual(a.board.center);
+        expect(len(b.legs[0].hip, b.legs[1].hip)).toBeCloseTo(2 * HUMAN_HIP_HALF, 6);
+        expect(len(b.arms[0].shoulder, b.arms[1].shoulder)).toBeCloseTo(2 * HUMAN_SHOULDER.s, 6);
         for (const [k, leg] of b.legs.entries()) {
           const was = a.legs[k];
           expect([leg.ankle, leg.shoe.origin, leg.shoe.fwd]).toEqual([was.ankle, was.shoe.origin, was.shoe.fwd]);
@@ -56,8 +58,8 @@ describe('person rig', () => {
         expect([b.torso.fwd, b.torso.up, b.head.fwd, b.head.up]).toEqual([a.torso.fwd, a.torso.up, a.head.fwd, a.head.up]);
         for (const [k, arm] of b.arms.entries()) {
           const was = a.arms[k];
-          expect(len(arm.shoulder, arm.elbow)).toBeCloseTo(HUMAN_UPPER_ARM * HUMAN_SCALE, 6);
-          expect(len(arm.elbow, arm.hand)).toBeCloseTo(HUMAN_FOREARM * HUMAN_SCALE, 6);
+          expect(len(arm.shoulder, arm.elbow)).toBeCloseTo(HUMAN_UPPER_ARM, 6);
+          expect(len(arm.elbow, arm.hand)).toBeCloseTo(HUMAN_FOREARM, 6);
           expect(dot3(norm3(sub3(arm.elbow, arm.shoulder)), norm3(sub3(was.elbow, was.shoulder)))).toBeCloseTo(1, 6);
           expect(dot3(norm3(sub3(arm.hand, arm.elbow)), norm3(sub3(was.hand, was.elbow)))).toBeCloseTo(1, 6);
         }
@@ -116,7 +118,8 @@ describe('person rig', () => {
         const mechanics = resolveRiderMechanics('regular', stance);
         const spec = specFor({ id: base, name: base, base, stance });
         for (let t = ROLL_IN - 0.15; t <= ROLL_IN + FLIP_T; t += 1 / 60) {
-          const rig = humanRig(clearFeet(onTheGround(solveRig(computeFrame(t, spec, true, 'slam', 0.65, style), spec, mechanics, style, 'landed'))));
+          const solved = clearFeet(onTheGround(solveRig(computeFrame(t, spec, true, 'slam', 0.65, style), spec, mechanics, style, 'landed')));
+          const rig = humanRig(solved, undefined, solved.popArc);
           for (const leg of rig.legs) {
             const parts = [
               ...chain(leg.hip, leg.knee, HUMAN_THIGH, thighRadius),

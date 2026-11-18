@@ -4,15 +4,18 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Matrix4, Mesh, ShaderMaterial, SkinnedMesh, Texture, TextureLoader, Vector3 } from 'three';
 import { GLTFLoader, type GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import { RealisticHuman3D, growToPerson, restSkeleton, skaterLoader, type RealisticCharacter } from './realisticHuman3d';
-import { SkaterSolver, aroundBone, girthAt, girthFrame, type RestSkeleton, type SkeletonPose } from './skaterPose';
+import { LID_FOLLOW, SkaterSolver, aroundBone, girthAt, girthFrame, type RestSkeleton, type SkeletonPose } from './skaterPose';
 import { DeltaMush } from './deltaMush';
 import { TeeDrape } from './teeDrape';
 import { planStage, stageFrame } from '../../stage/stage';
-import { stageView, toThree } from '../../camera/view';
+import { dirToThree, stageView, toThree } from '../../camera/view';
 import { DEFAULT_SKATE_STYLE } from '../../motion/style';
+import { carriedRig } from '../../motion/dynamics';
+import { add3, rotY, type V3 } from '../../math';
 import { SHOE_HALF_HEIGHT } from '../../motion/skeleton';
-import { HUMAN_SHIN, HUMAN_THIGH, MODEL_SCALE } from '../human/humanProportions';
-import { INCH } from '../../units';
+import { HUMAN_FOREARM, HUMAN_HIP_HALF, HUMAN_SHIN, HUMAN_SHOULDER, HUMAN_THIGH, HUMAN_UPPER_ARM, MODEL_SCALE } from '../human/humanProportions';
+import { GRAVITY, INCH } from '../../units';
+import { ROLL_IN, flightTime } from '../../motion/trick';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -60,13 +63,17 @@ function wear(gltf: GLTF, pose: SkeletonPose) {
 }
 
 describe.each(CHARACTERS)('realistic %s skeleton', (character) => {
+  const riderOptions = (rider: 'regular' | 'goofy', landed = true) => ({
+    ...options(rider, landed),
+    skater: character === 'alien' ? 'alien' as const : 'realistic' as const,
+  });
   it('keeps each sole on the rig’s sole and never stretches a bone, in both stances', async () => {
     const skeleton = await rest(character);
-    const solver = new SkaterSolver(skeleton);
+    const solver = new SkaterSolver(skeleton, LID_FOLLOW, character === 'skater');
     const restLength = skeleton.bones.map((b) => (b.parent >= 0 ? b.head.distanceTo(skeleton.bones[b.parent].head) : 0));
     for (const base of ['Ollie', 'Kickflip', '360 Flip', 'Kickflip into Backside Boardslide']) {
       for (const stance of ['regular', 'goofy'] as const) {
-        const stage = planStage(trick(base), options(stance));
+        const stage = planStage(trick(base), riderOptions(stance));
         for (const share of [0, 0.1, 0.2, 0.35, 0.5, 0.65, 0.8, 1]) {
           const rig = stageFrame(stage, stage.end * share, 1).rig;
           const pose = solver.solve(rig);
@@ -91,8 +98,8 @@ describe.each(CHARACTERS)('realistic %s skeleton', (character) => {
 
   it('bends the knees forward, over the feet, while riding', async () => {
     const skeleton = await rest(character);
-    const solver = new SkaterSolver(skeleton);
-    const stage = planStage(trick('Kickflip'), options('regular'));
+    const solver = new SkaterSolver(skeleton, LID_FOLLOW, character === 'skater');
+    const stage = planStage(trick('Kickflip'), riderOptions('regular'));
     for (const share of [0.05, 0.2, 0.35, 0.8]) {
       const pose = solver.solve(stageFrame(stage, stage.end * share, 1).rig);
       const pelvis = pose.quat[named(skeleton, 'root')].clone().multiply(skeleton.bones[named(skeleton, 'root')].quat.clone().invert());
@@ -112,8 +119,8 @@ describe.each(CHARACTERS)('realistic %s skeleton', (character) => {
 
   it('keeps a slammed body on top of the ground', async () => {
     const skeleton = await rest(character);
-    const solver = new SkaterSolver(skeleton);
-    const stage = planStage(trick('Kickflip'), options('regular', false));
+    const solver = new SkaterSolver(skeleton, LID_FOLLOW, character === 'skater');
+    const stage = planStage(trick('Kickflip'), riderOptions('regular', false));
     const trunk = ['root', 'spine03', 'spine01', 'neck01', 'head'].map((n) => named(skeleton, n));
     for (let share = 0.5; share <= 1; share += 0.05) {
       const pose = solver.solve(stageFrame(stage, stage.end * share, 1).rig);
@@ -123,8 +130,8 @@ describe.each(CHARACTERS)('realistic %s skeleton', (character) => {
 
   it('holds a hand open out for balance and relaxed (curled, wrist lifted, fingers together) while riding', async () => {
     const skeleton = await rest(character);
-    const solver = new SkaterSolver(skeleton);
-    const stage = planStage(trick('Kickflip'), options('regular'));
+    const solver = new SkaterSolver(skeleton, LID_FOLLOW, character === 'skater');
+    const stage = planStage(trick('Kickflip'), riderOptions('regular'));
     const at = (pose: { head: Vector3[] }, name: string) => pose.head[named(skeleton, name)].clone();
     /** How far the middle finger curls (degrees): its middle bone against the back of the hand. */
     const curl = (pose: { head: Vector3[] }, s: string) => {
@@ -148,9 +155,9 @@ describe.each(CHARACTERS)('realistic %s skeleton', (character) => {
 
   it('lets the arms follow through only while playback runs forward', async () => {
     const skeleton = await rest(character);
-    const still = new SkaterSolver(skeleton);
-    const playing = new SkaterSolver(skeleton);
-    const stage = planStage(trick('Kickflip'), options('regular'));
+    const still = new SkaterSolver(skeleton, LID_FOLLOW, character === 'skater');
+    const playing = new SkaterSolver(skeleton, LID_FOLLOW, character === 'skater');
+    const stage = planStage(trick('Kickflip'), riderOptions('regular'));
     const hand = named(skeleton, 'wrist.L');
     const t = stage.end * 0.3;
     for (let k = 20; k > 0; k--) playing.solve(stageFrame(stage, t - k / 60, 1).rig, { dt: 1 / 60 });
@@ -164,7 +171,7 @@ describe.each(CHARACTERS)('realistic %s skeleton', (character) => {
 
   it('turns a limb only a little against what it hangs off, whichever way the rider faces, and never over between frames', async () => {
     const skeleton = await rest(character);
-    const solver = new SkaterSolver(skeleton);
+    const solver = new SkaterSolver(skeleton, LID_FOLLOW, character === 'skater');
     const delta = (pose: SkeletonPose, i: number) => pose.quat[i].clone().multiply(skeleton.bones[i].quat.clone().invert());
     /** How far a bone is turned about itself against the one it hangs off (degrees). */
     const roll = (pose: SkeletonPose, child: string, parent: string, tip: string) => {
@@ -178,7 +185,7 @@ describe.each(CHARACTERS)('realistic %s skeleton', (character) => {
     // Deep crouches (where a thigh points nearly at its knee's pole), and a boardslide that turns the rider round.
     for (const base of ['Kickflip', 'Kickflip into Backside Boardslide']) {
       for (const stance of ['regular', 'goofy'] as const) {
-        const stage = planStage(trick(base), options(stance));
+        const stage = planStage(trick(base), riderOptions(stance));
         let last: SkeletonPose | null = null;
         for (let t = 0; t <= stage.end; t += 1 / 60) {
           const pose = solver.solve(stageFrame(stage, t, 1).rig);
@@ -201,12 +208,12 @@ describe.each(CHARACTERS)('realistic %s skeleton', (character) => {
   it('rests the hands on the jeans, never in them, through tricks in both stances', async () => {
     const skeleton = await rest(character);
     const jeans = skeleton.jeans!;
-    const solver = new SkaterSolver(skeleton);
+    const solver = new SkaterSolver(skeleton, LID_FOLLOW, character === 'skater');
     const bone = (name: string) => named(skeleton, name);
     let deepest = 0;
     for (const base of ['Ollie', 'Kickflip', '360 Flip', 'Backside 180', 'Kickflip into Backside Boardslide']) {
       for (const stance of ['regular', 'goofy'] as const) {
-        const stage = planStage(trick(base), options(stance));
+        const stage = planStage(trick(base), riderOptions(stance));
         let last = -1;
         for (let k = 0; k <= 60; k++) {
           const t = (stage.end * k) / 60;
@@ -237,6 +244,150 @@ describe.each(CHARACTERS)('realistic %s skeleton', (character) => {
     // Without the jeans to keep out of, fingers went about 12 units into a thigh.
     expect(deepest).toBeLessThan(2.5);
   });
+});
+
+it('extends between attempts, loads the pop, and compresses again after touchdown', async () => {
+  const skeleton = await rest();
+  const solver = new SkaterSolver(skeleton);
+  for (const rider of ['regular', 'goofy'] as const) {
+    const stage = planStage(trick('Ollie'), options(rider));
+    const land = ROLL_IN + flightTime(stage.style);
+    const flexion = (t: number) => {
+      const { head } = solver.solve(stageFrame(stage, t, 1).rig);
+      return ['L', 'R'].map((side) => {
+        const hip = head[named(skeleton, `upperleg01.${side}`)];
+        const knee = head[named(skeleton, `lowerleg01.${side}`)];
+        const ankle = head[named(skeleton, `foot.${side}`)];
+        return hip.clone().sub(knee).angleTo(knee.clone().sub(ankle)) * 180 / Math.PI;
+      });
+    };
+    for (const t of [0, stage.end]) {
+      for (const bend of flexion(t)) {
+        expect(bend).toBeGreaterThan(20);
+        expect(bend).toBeLessThan(50);
+      }
+    }
+    for (const t of [ROLL_IN - 0.1, land + 0.09]) {
+      for (const bend of flexion(t)) {
+        expect(bend).toBeGreaterThan(85);
+        expect(bend).toBeLessThan(115);
+      }
+    }
+  }
+});
+
+it('keeps the pelvis on one arc as the feet rise and catch the board', async () => {
+  const skeleton = await rest();
+  const solver = new SkaterSolver(skeleton);
+  for (const base of ['Ollie', 'Kickflip']) {
+    for (const rider of ['regular', 'goofy'] as const) {
+      const stage = planStage(trick(base), options(rider));
+      const flight = flightTime(stage.style);
+      const height = (phase: number) => {
+        const { head } = solver.solve(stageFrame(stage, ROLL_IN + phase * flight, 1).rig);
+        return (head[named(skeleton, 'upperleg01.L')].y + head[named(skeleton, 'upperleg01.R')].y) / 2;
+      };
+      const start = 0.22, end = 0.78;
+      const a = height(start), b = height(end);
+      for (let i = 1; i < 20; i++) {
+        const u = i / 20;
+        const ballistic = a + (b - a) * u + 0.5 * GRAVITY * ((end - start) * flight) ** 2 * u * (1 - u);
+        expect(Math.abs(height(start + (end - start) * u) - ballistic), base).toBeLessThan(4);
+      }
+    }
+  }
+});
+
+it('cups the little-finger edge at rest and unfolds it through the pop', async () => {
+  const skeleton = await rest();
+  const solver = new SkaterSolver(skeleton);
+  const stage = planStage(trick('Kickflip'), options('regular'));
+  const sideCup = (pose: SkeletonPose, side: string) => {
+    const turn = (bone: string) => {
+      const i = named(skeleton, `${bone}.${side}`);
+      return pose.quat[i].clone().multiply(skeleton.bones[i].quat.clone().invert());
+    };
+    return turn('metacarpal4').angleTo(turn('wrist')) * 180 / Math.PI;
+  };
+  for (const side of ['L', 'R']) {
+    const relaxed = sideCup(solver.solve(stageFrame(stage, 0, 1).rig), side);
+    expect(relaxed).toBeGreaterThan(3);
+    let least = relaxed;
+    for (let t = 0; t < ROLL_IN + flightTime(stage.style); t += 1 / 60) {
+      const pose = solver.solve(stageFrame(stage, t, 1).rig, { dt: 1 / 60, time: t });
+      least = Math.min(least, sideCup(pose, side));
+    }
+    expect(least).toBeLessThan(relaxed * 0.5);
+  }
+});
+
+it('plants open hands to brace a backward fall', async () => {
+  const skeleton = await rest();
+  const solver = new SkaterSolver(skeleton);
+  const worldUp = new Vector3(0, 1, 0);
+  for (const rider of ['regular', 'goofy'] as const) {
+    const stage = planStage(trick('Kickflip'), { ...options(rider, false), set: 'el-toro', fall: 'slipback' });
+    const frame = stageFrame(stage, stage.end, 1);
+    const ground = frame.stairs!.shadowY;
+    const { head } = solver.solve(frame.rig, { ground });
+    for (const side of ['L', 'R']) {
+      const at = (bone: string) => head[named(skeleton, `${bone}.${side}`)];
+      const wrist = at('wrist');
+      const fingers = at('finger3-1').clone().sub(wrist).normalize();
+      const tips = [2, 3, 4, 5].map((f) => 2 * at(`finger${f}-3`).y - at(`finger${f}-2`).y - ground);
+      expect(Math.abs(fingers.dot(worldUp))).toBeLessThan(0.4);
+      expect(Math.min(...tips)).toBeGreaterThan(0);
+      expect(Math.min(...tips)).toBeLessThan(2 * MODEL_SCALE);
+    }
+  }
+});
+
+it('tracks each knee over its shoe as the human loads the tail or nose', async () => {
+  const skeleton = await rest();
+  const solver = new SkaterSolver(skeleton);
+  for (const stance of ['regular', 'switch', 'nollie', 'fakie'] as const) {
+    for (const rider of ['regular', 'goofy'] as const) {
+      const stage = planStage({ ...trick('Kickflip'), stance }, options(rider));
+      for (const t of [0, 0.18, 0.3, 0.42]) {
+        const { rig } = stageFrame(stage, t, 1);
+        const pose = solver.solve(rig);
+        for (const leg of rig.legs) {
+          const side = leg.side === 'left' ? 'L' : 'R';
+          const knee = pose.head[named(skeleton, `lowerleg01.${side}`)];
+          const ankle = pose.head[named(skeleton, `foot.${side}`)];
+          const shin = knee.clone().sub(ankle).normalize();
+          const across = new Vector3(...dirToThree(leg.shoe.side));
+          const lateralTilt = Math.asin(Math.abs(shin.dot(across))) * 180 / Math.PI;
+          expect(lateralTilt, `${rider} riding ${stance} at ${t}, ${side}`).toBeLessThan(22);
+        }
+      }
+    }
+  }
+});
+
+it('carries arm follow-through and finger curl with a translating, spinning rider', async () => {
+  const skeleton = await rest();
+  const still = new SkaterSolver(skeleton);
+  const moving = new SkaterSolver(skeleton);
+  const stage = planStage(trick('Kickflip'), options('goofy'));
+  const joints = ['lowerarm01', 'wrist', 'finger3-3'].flatMap((bone) =>
+    ['L', 'R'].map((side) => named(skeleton, `${bone}.${side}`)));
+  for (let k = 0; k <= 24; k++) {
+    const time = 0.45 + k / 60;
+    const rig = stageFrame(stage, time, 1).rig;
+    const turn = (p: V3) => rotY(p, 5 * k);
+    const move = (p: V3) => add3(turn(p), { x: 12 * k, y: 0, z: 0 });
+    const tick = { time, dt: 1 / 60 };
+    const a = still.solve(rig, tick);
+    const b = moving.solve(carriedRig(rig, move, turn), tick);
+    const root = named(skeleton, 'root');
+    for (const joint of joints) {
+      const offset = a.head[joint].clone().sub(a.head[root]);
+      const expected = turn(offset); // yaw has the same x/z action in both spaces
+      const actual = b.head[joint].clone().sub(b.head[root]);
+      expect(actual.distanceTo(new Vector3(expected.x, expected.y, expected.z))).toBeLessThan(0.02);
+    }
+  }
 });
 
 describe('realistic skater assets', () => {
@@ -375,9 +526,18 @@ describe('realistic skater assets', () => {
     expect(body.geometry.boundingBox!.max.y / INCH).toBeCloseTo(70, 0);
     const skeleton = await rest();
     const at = (name: string) => skeleton.bones[named(skeleton, name)].head;
+    const pelvis = at('upperleg01L').clone().lerp(at('upperleg01R'), 0.5);
     for (const side of ['L', 'R']) {
-      const legs = at(`upperleg01${side}`).distanceTo(at(`lowerleg01${side}`)) + at(`lowerleg01${side}`).distanceTo(at(`foot${side}`));
-      expect(legs).toBeCloseTo(HUMAN_THIGH + HUMAN_SHIN, 1);
+      const hip = at(`upperleg01${side}`), knee = at(`lowerleg01${side}`);
+      const shoulder = at(`upperarm01${side}`), elbow = at(`lowerarm01${side}`);
+      expect(hip.distanceTo(pelvis)).toBeCloseTo(HUMAN_HIP_HALF, 2);
+      expect(hip.distanceTo(knee)).toBeCloseTo(HUMAN_THIGH, 2);
+      expect(knee.distanceTo(at(`foot${side}`))).toBeCloseTo(HUMAN_SHIN, 2);
+      expect(Math.abs(shoulder.x - pelvis.x)).toBeCloseTo(HUMAN_SHOULDER.s, 2);
+      expect(shoulder.y - pelvis.y).toBeCloseTo(HUMAN_SHOULDER.u, 2);
+      expect(shoulder.z - pelvis.z).toBeCloseTo(HUMAN_SHOULDER.f, 2);
+      expect(shoulder.distanceTo(elbow)).toBeCloseTo(HUMAN_UPPER_ARM, 2);
+      expect(elbow.distanceTo(at(`wrist${side}`))).toBeCloseTo(HUMAN_FOREARM, 2);
     }
     for (const sole of [skeleton.soles.L, skeleton.soles.R]) {
       expect(Math.abs(sole.center.y)).toBeLessThan(3 * MODEL_SCALE);

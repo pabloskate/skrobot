@@ -187,40 +187,53 @@ export function carlsbadCurbSample(s: number) {
   };
 }
 // Small bounding blocks avoid projecting onto the entire curb per wheel/shadow query.
-const curbBlocks = Array.from({ length: Math.ceil((curbPoints.length - 1) / 16) }, (_, block) => {
-  const start = block * 16 + 1,
-    end = Math.min(curbPoints.length, start + 16);
+// Flat number arrays walked by index: the search runs tens of thousands of times in a mesh build and
+// for every wheel each frame, and written over objects the browser never settled on fast code for it.
+const CURB_BLOCK = 16;
+const curbX = Float64Array.from(curbPoints, (p) => p[0]);
+const curbZ = Float64Array.from(curbPoints, (p) => p[1]);
+const curbS = Float64Array.from(curbLengths);
+const curbBlocks = Math.ceil((curbPoints.length - 1) / CURB_BLOCK);
+/** Each block's minX, maxX, minZ, maxZ. */
+const curbBounds = new Float64Array(curbBlocks * 4);
+for (let block = 0; block < curbBlocks; block++) {
+  const start = block * CURB_BLOCK + 1,
+    end = Math.min(curbPoints.length, start + CURB_BLOCK);
   const points = curbPoints.slice(start - 1, end);
-  return {
-    start,
-    end,
-    minX: Math.min(...points.map((p) => p[0])),
-    maxX: Math.max(...points.map((p) => p[0])),
-    minZ: Math.min(...points.map((p) => p[1])),
-    maxZ: Math.max(...points.map((p) => p[1])),
-  };
-});
+  curbBounds.set(
+    [
+      Math.min(...points.map((p) => p[0])),
+      Math.max(...points.map((p) => p[0])),
+      Math.min(...points.map((p) => p[1])),
+      Math.max(...points.map((p) => p[1])),
+    ],
+    block * 4,
+  );
+}
 export function carlsbadCurbNearest(x: number, z: number) {
   let best = Infinity,
     s = 0,
     d = 0;
-  for (const block of curbBlocks) {
-    const bx = Math.max(block.minX - x, 0, x - block.maxX),
-      bz = Math.max(block.minZ - z, 0, z - block.maxZ);
+  for (let block = 0; block < curbBlocks; block++) {
+    const at = block * 4;
+    const bx = Math.max(curbBounds[at] - x, 0, x - curbBounds[at + 1]),
+      bz = Math.max(curbBounds[at + 2] - z, 0, z - curbBounds[at + 3]);
     if (bx * bx + bz * bz > best) continue;
-    for (let i = block.start; i < block.end; i++) {
-      const a = curbPoints[i - 1],
-        b = curbPoints[i],
-        dx = b[0] - a[0],
-        dz = b[1] - a[1],
-        length = curbLengths[i] - curbLengths[i - 1];
-      const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / (length * length)));
-      const rx = x - a[0] - t * dx,
-        rz = z - a[1] - t * dz,
+    const start = block * CURB_BLOCK + 1,
+      end = Math.min(curbX.length, start + CURB_BLOCK);
+    for (let i = start; i < end; i++) {
+      const ax = curbX[i - 1],
+        az = curbZ[i - 1],
+        dx = curbX[i] - ax,
+        dz = curbZ[i] - az,
+        length = curbS[i] - curbS[i - 1];
+      const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (length * length)));
+      const rx = x - ax - t * dx,
+        rz = z - az - t * dz,
         dist = rx * rx + rz * rz;
       if (dist < best) {
         best = dist;
-        s = curbLengths[i - 1] + t * length;
+        s = curbS[i - 1] + t * length;
         d = (rx * dz - rz * dx) / length;
       }
     }
@@ -232,8 +245,25 @@ export function carlsbadCurbTop(s: number) {
   const t = Math.max(0, Math.min(1, s / farS));
   return carlsbadLanding(carlsbadCurbSample(s).point[0]) + (1.9 - 0.8 * t * t * (3 - 2 * t)) * F;
 }
+/**
+ * Offsets already found, by `d` then `z`. Building the mesh asks for the same
+ * rows' thousands of times, and each is a 36-step search along the curb.
+ */
+const curbOffsets = new Map<number, Map<number, number>>();
+const CURB_OFFSETS_KEPT = 8192;
 /** Row intersections are mesh constraints only; heights use curb coordinates. */
 export function carlsbadCurbOffset(z: number, d: number): number {
+  let row = curbOffsets.get(d);
+  if (!row) curbOffsets.set(d, (row = new Map()));
+  let x = row.get(z);
+  if (x === undefined) {
+    // A rider's wheels ask at any depth at all: start over rather than grow without end.
+    if (row.size >= CURB_OFFSETS_KEPT) row.clear();
+    row.set(z, (x = curbOffsetAt(z, d)));
+  }
+  return x;
+}
+function curbOffsetAt(z: number, d: number): number {
   // Miter at the external wall corner. The wall's eight-inch cap stays row-wise.
   const wall = (13 + (12.2 - 13) * Math.min(1, (z / F + 5) / 9.33)) * F - d;
   let lo = 0,

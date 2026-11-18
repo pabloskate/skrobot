@@ -96,6 +96,15 @@ const PROFILES: Partial<Record<StageSet, { ground: string; strokeWidth?: number;
     strokeWidth: 0.9,
     extra: <path d="M14 5 Q15 2 18 4 L54 30 M19 5 V12 M31 14 V21 M43 23 V30" strokeWidth={1.4} />,
   },
+  waterfront: {
+    ground: 'M0 27 H34 V33 Q38 30 42 33 T50 33 T58 33 T66 33 T74 33',
+    extra: (
+      <>
+        <path d="M4 21 H28 M7 21 V27 M25 21 V27" />
+        <path d="M36 19 H72 M53 23 V6 M51 7 H55 M35 17 Q47 16 53 6 Q60 16 72 17" strokeWidth={1.3} strokeOpacity={0.75} />
+      </>
+    ),
+  },
 };
 
 /** A spot's silhouette for its card. Decorative; the card names the spot. */

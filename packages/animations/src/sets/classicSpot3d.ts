@@ -6,6 +6,7 @@ import type { Obstacle } from './sets';
 import { elToroPropMaterial, elToroSkyMaterial } from './elToro/elToroMaterials';
 import { StreetProps, type StreetPropPlacements } from './props/streetProps';
 import { wireMeshMaterial, type WireMesh } from './wireMesh';
+import type { SpotShade } from '../three/daylight';
 import { SET_SCALE } from './setScale';
 import { filmersFor, tripodStand, type SpotFilmers } from './tripods';
 import {
@@ -231,6 +232,7 @@ export class ClassicSpot3D {
   readonly overlayMaterials: ShaderMaterial[] = [];
   readonly shadowGeometry = null;
   readonly propInk: string;
+  readonly riderShade?: SpotShade;
   private readonly sky = elToroSkyMaterial();
   private readonly solid: ShaderMaterial;
   private readonly surface: ShaderMaterial;
@@ -269,6 +271,10 @@ export class ClassicSpot3D {
     });
     cast(u);
     if (look) {
+      this.riderShade = {
+        origin: this.scenery.position, count: boxes.length, min: u.uBoxMin.value, max: u.uBoxMax.value,
+        look: u.uLook.value, soffit: look.soffit,
+      };
       if (look.propShadows) {
         const p = this.solid.uniforms;
         p.uBoxCount.value = boxes.length;

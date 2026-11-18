@@ -7,24 +7,26 @@ import { PERSON_SCALE, SHIN, THIGH } from '../../motion/skeleton';
  * as relaxed pants, which the rig keeps off the board.
  */
 
-/** How much bigger than modelled the person is, and the rig grown: hips up, and the legs' bones. */
+/** Ratio of adult leg length to the base trick rig’s leg length. */
 export const HUMAN_SCALE = PERSON_SCALE;
 /** How much bigger the head grows: a grown-up's head is a smaller share of them than a kid's. */
 export const HUMAN_HEAD = HUMAN_SCALE * 0.845;
-/** The person's leg bones (world units). */
-export const HUMAN_THIGH = THIGH * HUMAN_SCALE;
-export const HUMAN_SHIN = SHIN * HUMAN_SCALE;
 /**
- * The realistic person (riders/realistic) as built, hip joint to ankle, in
- * its own units (blender/build_skater.py), and how much bigger it's drawn:
- * its legs the person's. Lengths measured on the model as built are this
- * much bigger on the stage.
+ * Rest-pose joint centers measured on the shipped MakeHuman skeleton, in
+ * model units. The stage physics uses these same lever arms as the mesh.
+ * See the GLB measurement check in realisticHuman3d.test.ts.
  */
-export const MODEL_LEGS = 90.77;
-export const MODEL_SCALE = (HUMAN_THIGH + HUMAN_SHIN) / MODEL_LEGS;
-/** Shoulder joint to elbow, and elbow to wrist, as modelled. */
-export const HUMAN_UPPER_ARM = 19;
-export const HUMAN_FOREARM = 17;
+const MODEL_THIGH = 46.116;
+const MODEL_SHIN = 44.654;
+/** Stage units per unit of the skinned model. */
+export const MODEL_SCALE = (THIGH + SHIN) * HUMAN_SCALE / (MODEL_THIGH + MODEL_SHIN);
+export const HUMAN_THIGH = MODEL_THIGH * MODEL_SCALE;
+export const HUMAN_SHIN = MODEL_SHIN * MODEL_SCALE;
+export const HUMAN_HIP_HALF = 11.062 * MODEL_SCALE;
+/** Shoulder joint off the hip midpoint along the chest's forward, up and side axes. */
+export const HUMAN_SHOULDER = { f: 2.519 * MODEL_SCALE, u: 47.134 * MODEL_SCALE, s: 20.401 * MODEL_SCALE };
+export const HUMAN_UPPER_ARM = 26.556 * MODEL_SCALE;
+export const HUMAN_FOREARM = 26.966 * MODEL_SCALE;
 /** How far a person's knees turn from the rig's toward the way their hips face: over the toes (a tuck brings them up in front of the chest). */
 export const KNEE_FORWARD = 0.75;
 

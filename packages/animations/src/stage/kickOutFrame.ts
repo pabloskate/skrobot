@@ -73,18 +73,25 @@ export interface Follow {
 }
 
 export function followRider(plan: KickOutPlan, from: { x: number; vx: number; z: number; vz: number }): Follow {
-  const { takeover } = plan;
-  const dt = plan.run.dt;
-  const hips0 = hipsAt(plan, takeover).hips;
+  return followHips({ takeover: plan.takeover, end: plan.setup.end, dt: plan.run.dt, hips: (t) => hipsAt(plan, t) }, from);
+}
+
+/** The same, for any rider on their own from a `takeover`: where their hips are at a clock, and how fast they're going. */
+export function followHips(
+  rider: { takeover: number; end: number; dt: number; hips: (t: number) => { hips: V3; velocity: V3 } },
+  from: { x: number; vx: number; z: number; vz: number },
+): Follow {
+  const { takeover, dt } = rider;
+  const hips0 = rider.hips(takeover).hips;
   const offset = { x: hips0.x - from.x, z: hips0.z - from.z };
   const x: number[] = [];
   const z: number[] = [];
   let s = { x: from.x, z: from.z };
   let v = { x: from.vx, z: from.vz };
-  for (let t = takeover; t <= plan.setup.end + dt; t += dt) {
+  for (let t = takeover; t <= rider.end + dt; t += dt) {
     x.push(s.x);
     z.push(s.z);
-    const { hips, velocity } = hipsAt(plan, t);
+    const { hips, velocity } = rider.hips(t);
     const a = {
       x: FOLLOW * FOLLOW * (hips.x - offset.x - s.x) + 2 * FOLLOW * (velocity.x - v.x),
       z: FOLLOW * FOLLOW * (hips.z - offset.z - s.z) + 2 * FOLLOW * (velocity.z - v.z),
@@ -167,24 +174,30 @@ function spotSetup(stage: StagePlan, stairs: StairPlan): KickOutSetup {
   };
 }
 
+/** The setup for a fall off a flatground or gap trick on a stage: on the street, or at a spot down its drop. */
+export const fallSetup = (stage: StagePlan): KickOutSetup => (stage.stairs ? spotSetup(stage, stage.stairs) : flatSetup(stage));
+
+/** Where the landed attempt's camera has the frame at clock `t`, and how fast it's moving: what a fall's own camera carries on from. */
+export function attemptCamera(stage: StagePlan, t: number): { x: number; vx: number; z: number; vz: number } {
+  const { stairs } = stage;
+  const h = 1 / 240;
+  if (stairs) {
+    const route = (at: number) => stairRig(stage, stairs, at, null, undefined, true).route;
+    const a = route(t - h);
+    const b = route(t + h);
+    const now = route(t);
+    return { x: now.x, vx: (b.x - a.x) / (2 * h), z: now.z, vz: (b.z - a.z) / (2 * h) };
+  }
+  const scroll = (at: number) => landedScroll(stage, at);
+  return { x: scroll(t), vx: (scroll(t + h) - scroll(t - h)) / (2 * h), z: 0, vz: 0 };
+}
+
 /** The kick-out planned for a stage, once, with the camera that follows it. */
 function planned(stage: StagePlan): Planned {
   const known = plans.get(stage);
   if (known) return known;
-  const { stairs } = stage;
-  const plan = planKickOut(stairs ? spotSetup(stage, stairs) : flatSetup(stage));
-  const h = 1 / 240;
-  let follow: Follow;
-  if (stairs) {
-    const route = (t: number) => stairRig(stage, stairs, t, null, undefined, true).route;
-    const a = route(plan.takeover - h);
-    const b = route(plan.takeover + h);
-    const now = route(plan.takeover);
-    follow = followRider(plan, { x: now.x, vx: (b.x - a.x) / (2 * h), z: now.z, vz: (b.z - a.z) / (2 * h) });
-  } else {
-    const scroll = (t: number) => landedScroll(stage, t);
-    follow = followRider(plan, { x: scroll(plan.takeover), vx: (scroll(plan.takeover + h) - scroll(plan.takeover - h)) / (2 * h), z: 0, vz: 0 });
-  }
+  const plan = planKickOut(fallSetup(stage));
+  const follow = followRider(plan, attemptCamera(stage, plan.takeover));
   const made = { plan, follow };
   plans.set(stage, made);
   return made;

@@ -1,3 +1,4 @@
+import { quayGrindBar } from './waterfront/grindBar';
 import { Group, Mesh, type BufferGeometry, type ShaderMaterial } from 'three';
 import { X0 } from '../motion/trick';
 import { PALETTE } from '../camera/camera';
@@ -24,12 +25,13 @@ export class Bar3D {
   private readonly materials: ShaderMaterial[] = [];
   private readonly geometries: BufferGeometry[] = [];
   private length = -1;
+  private quay = false;
 
   constructor() {
     this.group.visible = false;
   }
 
-  private build(length: number) {
+  private build(length: number, quay: boolean) {
     for (const g of this.geometries) g.dispose();
     for (const m of this.materials) m.dispose();
     this.group.clear();
@@ -37,6 +39,15 @@ export class Bar3D {
     this.materials.length = 0;
     // The bar keeps its height over the board's physics; its posts reach down to the asphalt.
     const top = toThree({ x: X0, y: BAR_TOP_Y, z: 0 })[1];
+    this.length = length;
+    this.quay = quay;
+    if (quay) {
+      const { pieces, material } = quayGrindBar(length, top);
+      this.group.add(...pieces);
+      this.materials.push(material);
+      this.geometries.push(...pieces.map((mesh) => mesh.geometry));
+      return;
+    }
     const bottom = top - 2 * BAR_HALF;
     const tube = faceBoxGeometry([0, bottom, -BAR_HALF], [length, top, BAR_HALF]);
     const posts = [POST_INSET, length - POST_INSET].map((x) =>
@@ -49,14 +60,13 @@ export class Bar3D {
       this.geometries.push(geometry);
       this.materials.push(material);
     }
-    this.length = length;
   }
 
-  update(span: BarSpan | null) {
+  update(span: BarSpan | null, quay: boolean) {
     this.group.visible = span != null;
     if (!span) return;
     const length = span.x1 - span.x0;
-    if (Math.abs(length - this.length) > 1e-6) this.build(length);
+    if (Math.abs(length - this.length) > 1e-6 || this.quay !== quay) this.build(length, quay);
     this.group.position.set(span.x0 - X0, 0, 0);
   }
 

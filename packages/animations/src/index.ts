@@ -21,6 +21,8 @@ export {
   FALL_T,
   KICK_OUT_T,
   KICK_OUT_DROP_T,
+  SLIP_BACK_T,
+  SLIP_BACK_DROP_T,
   HOLD,
   flatTimeline,
   specFor,

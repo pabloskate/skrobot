@@ -32,6 +32,7 @@ describe('3D game presentation', () => {
   it('provides replay and speed controls for game attempts, while fixed-time viewers hide the speed toggle', () => {
     const props = { robot, trick, landed: false, knewIt: false, onDone: vi.fn(), showSpeedToggle: true };
     const playing = renderToStaticMarkup(createElement(TrickScene3D, props));
+    expect(playing).toContain('data-set="plaza"');
     expect(playing).toContain('aria-label="Replay Echo attempting Kickflip"');
     expect(playing).toContain('Animation speed 1x; switch to .5x');
     const frozen = renderToStaticMarkup(createElement(TrickScene3D, { ...props, fixedTime: 1 }));

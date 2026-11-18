@@ -22,10 +22,8 @@ import { EMAGE_RAIL, EMAGE_RAIL_Z, EMAGE_TERRAIN } from './emage/emageLayout';
  * The sets a trick can be staged at (the explorer calls them spots), and
  * what each one changes about the attempt. Everything that differs from set
  * to set and isn't its scenery is read from here: the stage plans stairs and
- * handrails from it, the renderer and the video recorder paint a far
- * panorama only where there is one, and the explorer offers tripods where
- * the set has them. Each set's scenery is its own folder under sets/, built
- * for the renderer in three/renderer.ts.
+ * handrails from it, and the explorer offers tripods where the set has them.
+ * Each set owns its scenery under sets/, built for the renderer in three/renderer.ts.
  *
  * Each set lays itself out in set units; what's here is the stage's
  * (setScale.ts): the terrain, handrails, ledges and lines across the set
@@ -114,8 +112,6 @@ export interface SetInfo {
    * the far side of its approach. No choice of center or side.
    */
   ledges?: Readonly<Record<'left' | 'right', PlacedLedge>>;
-  /** Its far panorama is SVG painted under the canvas, so the canvas leaves the sky see-through. */
-  farPanorama: boolean;
   /** Filmers standing still at the set, beside the crane that follows the rider. */
   tripods: readonly TripodId[];
 }
@@ -138,15 +134,14 @@ const stageLedges = (ledges: Readonly<Record<'left' | 'right', PlacedLedge>>): R
 const MIAMI_BANK = stageTerrain(MIAMI_BANK_TERRAIN);
 
 export const STAGE_SETS: readonly SetInfo[] = [
-  { id: 'plaza', label: 'Plaza', terrain: null, grinds: true, rails: null, farPanorama: false, tripods: [] },
-  { id: 'waterfront', label: 'Waterfront', terrain: null, grinds: true, rails: null, farPanorama: true, tripods: [] },
+  { id: 'plaza', label: 'Plaza', terrain: null, grinds: true, rails: null, tripods: [] },
+  { id: 'waterfront', label: 'Waterfront', terrain: null, grinds: true, rails: null, tripods: [] },
   {
     id: 'el-toro',
     label: 'El Toro',
     terrain: stageTerrain(EL_TORO_TERRAIN),
     grinds: true,
     rails: stageRails(EL_TORO_RAIL, { center: CENTER_Z, left: HILL_RAIL_Z, right: FAR_RAIL_Z }),
-    farPanorama: false,
     tripods: ['bottom', 'side', 'top'],
   },
   {
@@ -158,7 +153,7 @@ export const STAGE_SETS: readonly SetInfo[] = [
       { id: 'fence', label: 'Fence', hint: 'over the rail and fence, coming in at an angle', terrain: stageTerrain(HOLLYWOOD_FENCE_TERRAIN) },
     ],
     rails: stageRails(HOLLYWOOD_RAIL, { center: HOLLYWOOD_CENTER_Z, left: HOLLYWOOD_LEFT_RAIL_Z, right: HOLLYWOOD_RIGHT_RAIL_Z }, false),
-    farPanorama: false, tripods: ['bottom', 'side', 'top'],
+    tripods: ['bottom', 'side', 'top'],
   },
   {
     id: 'hollywood-high-12', label: 'Hollywood 12', location: 'hollywood-high', lineLabel: '12 stair', grinds: true,
@@ -166,7 +161,7 @@ export const STAGE_SETS: readonly SetInfo[] = [
     terrain: stageTerrain({ drop: HOLLYWOOD_12_DROP, run: HOLLYWOOD_12_RUN, landPast: 4 * SET_FOOT, laneZ: HOLLYWOOD_12_LANE_Z, ground: hollywood12Ground, surface: hollywood12Surface }),
     // The street-side cheek has no grindable pipe; the wall rail is scenery.
     rails: stageRails(HOLLYWOOD_12_RAIL, { center: 0, left: -HOLLYWOOD_RIGHT_RAIL_Z, right: -HOLLYWOOD_LEFT_RAIL_Z }, false),
-    farPanorama: false, tripods: ['bottom', 'side', 'top'],
+    tripods: ['bottom', 'side', 'top'],
   },
   {
     id: 'wallenberg', label: 'Wallenberg', grinds: false,
@@ -175,7 +170,7 @@ export const STAGE_SETS: readonly SetInfo[] = [
       drop: WALLENBERG_DROP, run: WALLENBERG_RUN, landPast: 3 * SET_FOOT, laneZ: WALLENBERG_LANE_Z,
       ground: wallenbergGround, surface: wallenbergSurface, dropIn: WALLENBERG_DROP_IN,
     }),
-    rails: null, farPanorama: false, tripods: ['bottom', 'side', 'top'],
+    rails: null, tripods: ['bottom', 'side', 'top'],
   },
   {
     id: 'sunset-car-wash', label: 'Roof to Bank', grinds: false,
@@ -185,19 +180,19 @@ export const STAGE_SETS: readonly SetInfo[] = [
       ground: sunsetGround, slope: sunsetSlope, surface: sunsetSurface,
       entry: { x: SUNSET_POP_X, z: SUNSET_POP_Z, yaw: -90 },
     }),
-    rails: null, farPanorama: false, tripods: ['bottom', 'side', 'top'],
+    rails: null, tripods: ['bottom', 'side', 'top'],
   },
   {
     id: 'lyon-25', label: '25 Stair', grinds: false,
     description: '25 stairs, 14.76 feet down and 21.29 feet across, in a redesigned courtyard.',
     terrain: stageTerrain(LYON_TERRAIN),
-    rails: null, farPanorama: false, tripods: ['bottom', 'side', 'top'],
+    rails: null, tripods: ['bottom', 'side', 'top'],
   },
   {
     id: 'leap-of-faith', label: 'Leap of Faith', grinds: false,
     description: 'Point Loma High School, San Diego · Over the walkway guardrail into the courtyard, a 14.3-foot drop in the classic Jamie Thomas setting.',
     terrain: stageTerrain(LEAP_OF_FAITH_TERRAIN),
-    rails: null, farPanorama: false, tripods: ['bottom', 'side', 'top'],
+    rails: null, tripods: ['bottom', 'side', 'top'],
   },
   {
     id: 'miami-triangle', label: 'Triangle Bank', grinds: true,
@@ -207,26 +202,26 @@ export const STAGE_SETS: readonly SetInfo[] = [
       { id: 'stairs', label: 'Bank', hint: 'off the deck onto the triangular bank, then down it', terrain: MIAMI_BANK },
       { id: 'triangle', label: 'Over', hint: 'over the whole triangle to the plaza', terrain: stageTerrain(MIAMI_GAP_TERRAIN) },
     ],
-    rails: null, ledges: stageLedges(MIAMI_LEDGES), farPanorama: false, tripods: ['bottom', 'side', 'top'],
+    rails: null, ledges: stageLedges(MIAMI_LEDGES), tripods: ['bottom', 'side', 'top'],
   },
   {
     id: 'uc-davis-gap', label: 'UC Davis Gap', grinds: false,
     description: 'Roessler Hall, UC Davis · Over the ivy bank beside the round planter. Estimated 24 ft 4 in across and 10 ft down in the classic filmed layout.',
     terrain: stageTerrain(UC_DAVIS_TERRAIN),
-    rails: null, farPanorama: false, tripods: ['bottom', 'side', 'top'],
+    rails: null, tripods: ['bottom', 'side', 'top'],
   },
   {
     id: 'carlsbad-gap', label: 'Carlsbad Gap', grinds: false,
     description: 'Carlsbad High, California · The original grass gap beside the yellow-edged 11 stair, with its low toe wall, curved curb and uphill landing. Dimensions estimated from archival photos.',
     terrain: stageTerrain(CARLSBAD_TERRAIN),
-    rails: null, farPanorama: false, tripods: ['bottom', 'side', 'top'],
+    rails: null, tripods: ['bottom', 'side', 'top'],
   },
   {
     id: 'emage-20', label: 'Emage 20', grinds: true,
     description: 'Denver, Colorado · The riverside 20 stair inset into ten seating terraces, with its skateable river-side rail and the Platte River Bridge. Dimensions estimated from reference photos.',
     terrain: stageTerrain(EMAGE_TERRAIN),
     rails: { ...stageRails(EMAGE_RAIL, { center: EMAGE_RAIL_Z, left: EMAGE_RAIL_Z, right: EMAGE_RAIL_Z }), fixedLine: 'right' },
-    farPanorama: false, tripods: ['bottom', 'side', 'top'],
+    tripods: ['bottom', 'side', 'top'],
   },
 ];
 

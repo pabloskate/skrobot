@@ -22,7 +22,7 @@ import { BOARD_WIDTH_SCALE } from '../board/boardDimensions';
 import { FOLLOW_POP } from '../camera/camera';
 import { CROUCH_START, DECK_HALF_WIDTH, FOOT_RAKE, POP_HEIGHT, RIDE_HEIGHT, TOE_REACH, TOUCHDOWN_HEIGHT, cruiseBob } from './skeleton';
 import { CROUCH_HOLD, EXTEND_MAX, extendTime, extending, flightLegs, flightSpeeds, landingSpring, rideAway } from './dynamics';
-import { reachShift, grownFrom } from '../riders/human/humanRig';
+import { reachShift, grownHips } from '../riders/human/humanRig';
 import { HUMAN_SHIN, HUMAN_THIGH, KNEE_FORWARD } from '../riders/human/humanProportions';
 import { add3, clamp01, dot3, easeOutCubic, norm3, rotX, rotY, rotZ, scale3, smootherstep, smoothstep, sub3, type V3 } from '../math';
 import {
@@ -266,8 +266,8 @@ const TAIL_POP_FEET = [10, -POP_FOOT_X] as const;
 const NOSE_POP_FEET = [POP_FOOT_X, -8] as const;
 
 /** Street decay after a slip (as the shared fall physics) and where the board ends up. */
-const FALL_DECAY: Record<FallVariant, number> = { slam: 2.4, bail: 1.3, shank: 1.9, kickout: 1.3 };
-const BOARD_LEAVE: Record<FallVariant, number> = { slam: 85, bail: -70, shank: 38, kickout: -70 };
+const FALL_DECAY: Record<FallVariant, number> = { slam: 2.4, bail: 1.3, shank: 1.9, kickout: 1.3, slipback: 2.4 };
+const BOARD_LEAVE: Record<FallVariant, number> = { slam: 85, bail: -70, shank: 38, kickout: -70, slipback: 85 };
 /** How far beside the bar a fallen rider lands, and how high a slipping board kicks up. */
 export const FALL_CLEAR = 32;
 /**
@@ -1582,12 +1582,13 @@ function legReach(
     // ankles, pulled in toward the feet where a leg can't reach its ankle.
     const at = (p: V3): V3 => ({ x: p.x - f.board.x, y: p.y - f.board.y, z: p.z });
     const [l0, l1] = rig.legs;
-    const feet = scale3(add3(at(l0.ankle), at(l1.ankle)), 0.5);
+    const feet = scale3(add3(l0.ankle, l1.ankle), 0.5);
     const a = HUMAN_THIGH, b = HUMAN_SHIN;
-    const shift = reachShift(rig.legs.map((leg) => ({ hip: at(leg.hip), ankle: at(leg.ankle) })), feet);
-    for (const leg of rig.legs) {
+    const hips = grownHips(rig.legs, feet);
+    const shift = reachShift(rig.legs, hips);
+    for (const [i, leg] of rig.legs.entries()) {
       const ankle = at(leg.ankle);
-      const hip = add3(grownFrom(feet, at(leg.hip)), shift);
+      const hip = at(add3(hips[i], shift));
       const down = norm3(sub3(ankle, hip));
       const offAxis = (v: V3) => sub3(v, scale3(down, dot3(v, down)));
       const d = Math.min(a + b - 1e-3, Math.hypot(ankle.x - hip.x, ankle.y - hip.y, ankle.z - hip.z));

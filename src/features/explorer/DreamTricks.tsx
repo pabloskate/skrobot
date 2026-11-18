@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { TbArrowLeft, TbCheck, TbDice5, TbMapPin, TbShare, TbSkateboard, TbUser, TbVideo } from 'react-icons/tb';
-import { spotStands, useSoundEffects, type SceneCamera, type Skater, type TripodSpot } from '@skrobot/animations';
-import { groundUnder, planBounds, riderPath, spotPlan } from '@skrobot/animations/three';
+import { SKATERS, setInfo, spotStands, useSoundEffects, type SceneCamera, type TripodSpot } from '@skrobot/animations';
+import { groundUnder, planBounds, riderPath, spotPlan, type PathPoint } from '@skrobot/animations/three';
 import { ROBOT_BY_ID, ROBOTS } from '@/features/robots';
 import {
   FLATGROUND_TIERS,
@@ -17,7 +17,6 @@ import {
   flatgroundTrick,
   sceneCamera,
   sceneTripod,
-  searchFromState,
   shuffle,
   stageTrick,
   restrictRailApproach,
@@ -36,6 +35,7 @@ import {
   dreamLine,
   dreamOutEnd,
   dreamShots,
+  dreamSearchFromState,
   dreamSpot,
   dreamStateFromSearch,
   insideWindow,
@@ -56,14 +56,6 @@ import LocationNotice from './LocationNotice';
 
 /** Swivel supplies the shared skating style for every skater. */
 const RIDER = ROBOT_BY_ID.get('shifty') ?? ROBOTS[0];
-
-/** Static portraits exported from the stage's actual rider meshes. */
-const SKATERS: ReadonlyArray<{ id: Skater; label: string }> = [
-  { id: 'robot', label: 'Robot' },
-  { id: 'realistic', label: 'Realistic' },
-  { id: 'alien', label: 'Alien' },
-  { id: 'windup', label: 'Wind-Up' },
-];
 
 /** Wait for the camera to settle before writing it into the address bar. */
 const URL_SYNC_MS = 250;
@@ -105,14 +97,12 @@ function Choice<T extends string>({ label, options, value, onChange, name = capi
 }
 
 /**
- * Dream Tricks: pick a famous spot, a skater, what to hit there and a trick, and
+ * Dream Tricks: pick a spot, a skater, what to hit there and a trick, and
  * watch it land or kick out on repeat. The picture stays in view the whole
  * time; under it, four tiles say what's on stage (the trick, the spot, the
  * skater, the camera) and each opens its choices. The camera is one of two
  * things, a tripod stood anywhere on a map of the spot or one that follows
- * the skater. Everything an animator would tune (scrubbing, the plaza and
- * waterfront) stays in the Trick Explorer; the link still describes exactly
- * what's on stage.
+ * the skater. The share link describes the trick, spot, skater and camera.
  */
 export default function DreamTricks({ initialSearch = '' }: { initialSearch?: string }) {
   const [state, setRawState] = useState<ExplorerState>(() => dreamStateFromSearch(initialSearch));
@@ -136,7 +126,7 @@ export default function DreamTricks({ initialSearch = '' }: { initialSearch?: st
   const mode = cameraMode(state);
   const spot = dreamSpot(state.set);
   const line = dreamLine(state);
-  const search = searchFromState(state);
+  const search = dreamSearchFromState(state);
   const grinding = state.mode === 'grinds';
   const fall = outcomeOf(state);
   const outcome = stageOutcome(fall);
@@ -145,32 +135,37 @@ export default function DreamTricks({ initialSearch = '' }: { initialSearch?: st
   const shot = !state.stand && typeof state.camera === 'string' ? dreamShots(state).find((option) => option.id === state.camera) : undefined;
   const cameraName = mode === 'tripod' ? `Tripod · ${shot?.label ?? 'your spot'}` : shot ? `Follow · ${shot.label.toLowerCase()}` : 'Follow';
 
-  // The rider's line through the spot, for the map and for where a tripod aims its framing.
-  const path = useMemo(
-    () => riderPath(trick, {
-      landed: outcome.landed,
-      fall: outcome.fallVariant,
-      railBail: outcome.railBail,
-      riderStance: state.rider,
-      style: RIDER.skateStyle,
-      skater: state.skater,
-      set: state.set,
-      rail: state.rail,
-      obstacle: state.obstacle,
-    }),
+  // The rider's line through the spot, for the map and for where a tripod aims its framing. Finding it
+  // plays the whole attempt through, so it waits until one of them asks (the camera's panel, or a drag
+  // that walks a tripod) rather than holding up every change of trick, spot or skater.
+  const riderLine = useMemo(
+    () => {
+      let found: PathPoint[] | null = null;
+      return () => (found ??= riderPath(trick, {
+        landed: outcome.landed,
+        fall: outcome.fallVariant,
+        railBail: outcome.railBail,
+        riderStance: state.rider,
+        style: RIDER.skateStyle,
+        skater: state.skater,
+        set: state.set,
+        rail: state.rail,
+        obstacle: state.obstacle,
+      }));
+    },
     // The trick's id carries its base and stance.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [trick.id, outcome.landed, outcome.fallVariant, outcome.railBail, state.rider, state.skater, state.set, state.rail, state.obstacle],
   );
-  const action = actionPoint(path, timeline.phases);
+  const actionOn = (path: readonly PathPoint[]) => actionPoint(path, timeline.phases);
   const pop = timeline.phases.find((phase) => phase.label === 'Pop')?.time ?? 0;
   const flight = [pop, timeline.phases[timeline.phases.length - 1]?.time ?? timeline.duration] as const;
   // The spot from above is read off its meshes, so only once the camera is opened.
-  const plan = useMemo(() => (tab === 'camera' ? spotPlan(state.set) : null), [tab, state.set]);
+  const plan = useMemo(() => (tab === 'camera' && setInfo(state.set).terrain ? spotPlan(state.set) : null), [tab, state.set]);
   const stand = state.stand ?? (plan ? presetStand(state, (u, z) => groundUnder(plan, u, z)) : null);
   // The map shows the rider's line and the spot's filmers, with room round them to stand a tripod.
   const around = (ground: NonNullable<typeof plan>) =>
-    mapWindow(planBounds(ground), [...path, ...Object.values(spotStands(state.set, filmedLine(state), state.cameraSide) ?? {})]);
+    mapWindow(planBounds(ground), [...riderLine(), ...Object.values(spotStands(state.set, filmedLine(state), state.cameraSide) ?? {})]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -237,7 +232,7 @@ export default function DreamTricks({ initialSearch = '' }: { initialSearch?: st
     if (!from.stand) dragFrom.current = presetStand(state, (u, z) => groundUnder(ground, u, z)) ?? dragFrom.current;
     const base = from.stand ?? dragFrom.current;
     if (!base) return turnCamera(from, yaw, pitch);
-    const swung = swingStand(base, action, yaw, pitch);
+    const swung = swingStand(base, actionOn(riderLine()), yaw, pitch);
     return { ...from, pan: undefined, stand: { ...swung, ...insideWindow(swung, around(ground)) } };
   };
 
@@ -490,8 +485,8 @@ export default function DreamTricks({ initialSearch = '' }: { initialSearch?: st
                   stand={stand}
                   plan={plan}
                   window={plan && around(plan)}
-                  path={path}
-                  action={action}
+                  path={plan ? riderLine() : []}
+                  action={actionOn(plan ? riderLine() : [])}
                   flight={flight}
                   clock={clock}
                   onMode={switchMode}

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 export default defineConfig({
   plugins: [react()],
   resolve: {
+    dedupe: ['three'],
     alias: [
       {
         find: '@skrobot/animations/trick-scene-3d.css',

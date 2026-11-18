@@ -195,6 +195,10 @@ export interface Rig {
   onGrip?: number;
   bodyYawDeg: number;
   headYawDeg: number;
+  /** A flatground pop before limb clearance: extended hip height above the deck,
+   * the distance the board tucks up, and its share of the flight. Retargeting
+   * can scale the legs independently of the trajectory of the board. */
+  popArc?: { extension: number; tuck: number; progress: number };
   /** Hip height above the deck center. */
   hipOverDeck: number;
   /**

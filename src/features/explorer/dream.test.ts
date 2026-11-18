@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FOOT, setInfo, specFor, spotStands } from '@skrobot/animations';
-import { outEndsFor, sceneCamera, sceneTripod, searchFromState, stageTrick, withCamera, withShot, FLATGROUND_TIERS, GRIND_CHOICES } from './explorer';
+import { outEndsFor, sceneCamera, sceneTripod, stageTrick, withCamera, withShot, FLATGROUND_TIERS, GRIND_CHOICES } from './explorer';
 import {
   DREAM_DEFAULT,
   DREAM_SPOTS,
@@ -8,6 +8,7 @@ import {
   actionPoint,
   cameraMode,
   dreamLine,
+  dreamSearchFromState,
   dreamShots,
   dreamSpot,
   dreamStateFromSearch,
@@ -26,11 +27,11 @@ import {
 } from './dream';
 
 describe('Dream Tricks', () => {
-  it('offers only the landmark spots, each line one the spot can skate', () => {
-    expect(DREAM_SPOTS.map((spot) => spot.id)).toEqual(['el-toro', 'hollywood-high', 'carlsbad-gap', 'wallenberg', 'sunset-car-wash', 'lyon-25', 'leap-of-faith', 'miami-triangle', 'uc-davis-gap', 'emage-20']);
+  it('offers the landmarks and waterfront, each with its skateable lines', () => {
+    expect(DREAM_SPOTS.map((spot) => spot.id)).toEqual(['el-toro', 'hollywood-high', 'carlsbad-gap', 'wallenberg', 'sunset-car-wash', 'lyon-25', 'leap-of-faith', 'miami-triangle', 'uc-davis-gap', 'emage-20', 'waterfront']);
     for (const spot of DREAM_SPOTS) {
       const info = setInfo(spot.id);
-      expect(info.terrain, spot.id).not.toBeNull();
+      expect(info.terrain === null, spot.id).toBe(spot.id === 'waterfront');
       expect(spot.name, spot.id).toBe(info.label);
       expect(new Set(spot.lines.map((line) => line.id)).size, spot.id).toBe(spot.lines.length);
       for (const line of spot.lines) {
@@ -58,13 +59,14 @@ describe('Dream Tricks', () => {
     const trick = stageTrick(state);
     expect(trick.name).toBe('Nollie Backside 360 Heelflip');
     expect(specFor(trick)).toMatchObject({ nollie: true, flips: 1, flipDir: -1, yaw: 360, bodyYaw: 360, spinDir: 1 });
-    expect(dreamStateFromSearch(searchFromState(state))).toEqual(state);
+    expect(dreamStateFromSearch(dreamSearchFromState(state))).toEqual(state);
   });
 
-  it('opens explorer links as they are, moved to a landmark when they were elsewhere', () => {
+  it('opens links to supported spots and defaults unlisted or missing spots to El Toro', () => {
     expect(dreamStateFromSearch('?trick=heelflip&set=wallenberg&stance=nollie')).toMatchObject({ mode: 'flatground', trick: 'Heelflip', set: 'wallenberg', stance: 'nollie' });
     expect(dreamStateFromSearch('?grind=lipslide&set=el-toro&rail=side')).toMatchObject({ mode: 'grinds', grind: 'Lipslide', rail: 'side' });
     expect(dreamStateFromSearch('?trick=kickflip&set=plaza').set).toBe('el-toro');
+    expect(dreamStateFromSearch('?set=unknown&grind=lipslide').set).toBe('el-toro');
     expect(dreamStateFromSearch('?grind=lipslide').set).toBe('el-toro');
     expect(dreamStateFromSearch('?trick=kickflip&skater=humanoid').skater).toBe('robot');
   });
@@ -82,7 +84,7 @@ describe('Dream Tricks', () => {
       { ...withDreamSpot(DREAM_DEFAULT, 'carlsbad-gap'), trick: 'Heelflip', skater: 'realistic' as const, stance: 'nollie' as const, rider: 'goofy' as const, camera: 'tripod-bottom' as const },
       { ...withDreamSpot(DREAM_DEFAULT, 'emage-20'), trick: 'Kickflip', skater: 'realistic' as const, stance: 'switch' as const, rider: 'goofy' as const, camera: 'tripod-top' as const },
     ];
-    for (const state of states) expect(dreamStateFromSearch(searchFromState(state)), searchFromState(state)).toEqual(state);
+    for (const state of states) expect(dreamStateFromSearch(dreamSearchFromState(state)), dreamSearchFromState(state)).toEqual(state);
   });
 
   it('names the line on stage, and switches lines without losing the trick or grind', () => {
@@ -111,7 +113,7 @@ describe('Dream Tricks', () => {
       const next = withDreamLine(withDreamLine(initial, from), to);
       expect(next).toMatchObject({ set: to.set, mode: to.mode, trick: 'Heelflip', grind: 'Smith Grind', rider: 'goofy', stance: 'fakie' });
       expect(dreamLine(next)).toBe(to);
-      const reopened = dreamStateFromSearch(searchFromState(next));
+      const reopened = dreamStateFromSearch(dreamSearchFromState(next));
       expect(dreamLine(reopened)).toBe(to);
       expect(stageTrick(reopened)).toEqual(stageTrick(next));
     }
@@ -135,13 +137,44 @@ describe('Dream Tricks', () => {
     const rail = withDreamLine(stairs, spot.lines[1]);
     expect(rail).toMatchObject({ set: 'emage-20', mode: 'grinds', rail: 'side', grind: 'Lipslide', into: 'Kickflip', side: 'Backside', rider: 'goofy' });
     expect(dreamLine(rail)).toBe(spot.lines[1]);
-    const reopened = dreamStateFromSearch(searchFromState(rail));
+    const reopened = dreamStateFromSearch(dreamSearchFromState(rail));
     expect(dreamLine(reopened)).toBe(spot.lines[1]);
     expect(stageTrick(reopened)).toEqual(stageTrick(rail));
     expect(reopened.rider).toBe('goofy');
     expect(stageTrick(rail).name).toBe('Kickflip into Backside Lipslide');
     expect(withDreamLine(rail, spot.lines[0])).toMatchObject({ mode: 'flatground', trick: 'Heelflip' });
     expect(dreamLine(dreamStateFromSearch('?set=emage-20&grind=boardslide'))).toBe(spot.lines[1]);
+  });
+
+  it('skates flatground and the flat bar at Waterfront and shares either line', () => {
+    const spot = dreamSpot('waterfront');
+    expect(spot.lines.map((line) => line.label)).toEqual(['Flatground', 'Flat bar']);
+    const start = dreamStateFromSearch('?set=el-toro&grind=noseblunt-slide&side=bs&in=hardflip&cam=-45.2_20.3_1&zoom=0.9&skater=realistic-robot');
+    const flat = withDreamSpot(start, spot.id);
+    const bar = withDreamLine(flat, spot.lines[1]);
+    expect(flat).toMatchObject({ set: 'waterfront', mode: 'flatground', camera: start.camera });
+    expect(bar).toMatchObject({ set: 'waterfront', mode: 'grinds', rail: 'center', grind: start.grind, into: 'Hardflip', side: 'Backside' });
+    for (const state of [flat, bar]) {
+      const search = dreamSearchFromState(state);
+      expect(new URLSearchParams(search).get('set')).toBe('waterfront');
+      const reopened = dreamStateFromSearch(search);
+      expect(dreamLine(reopened)).toBe(dreamLine(state));
+      expect(reopened.set).toBe('waterfront');
+      expect(reopened.camera).toEqual(start.camera);
+      expect(reopened.skater).toBe('realistic-robot');
+      expect(stageTrick(reopened)).toEqual(stageTrick(state));
+    }
+  });
+
+  it('opens Waterfront with a moving camera when coming from a landmark tripod', () => {
+    const selected = withDreamSpot(DREAM_DEFAULT, 'waterfront');
+    const linked = dreamStateFromSearch('?set=waterfront&cam=tripod-bottom');
+    for (const state of [selected, linked]) {
+      expect(state.set).toBe('waterfront');
+      expect(cameraMode(state)).toBe('follow');
+      expect(dreamShots(state, 'tripod')).toEqual([]);
+      expect(dreamShots(state, 'follow').map((shot) => shot.id)).toContain('follow');
+    }
   });
 
   it('starts each spot on its first line, gap-only spots on their gap', () => {
@@ -173,7 +206,7 @@ describe('Dream Tricks', () => {
   });
 
   it('films every landmark from the bottom, the side, and the top, classic from the bottom', () => {
-    for (const spot of DREAM_SPOTS) {
+    for (const spot of DREAM_SPOTS.filter((spot) => spot.id !== 'waterfront')) {
       const shots = dreamShots({ set: spot.id, camera: DREAM_DEFAULT.camera });
       expect(shots.map((shot) => shot.id), spot.id).toEqual(expect.arrayContaining(['tripod-bottom', 'tripod-side', 'tripod-top']));
       expect(shots.find((shot) => shot.label === 'Bottom')?.id, spot.id).toBe('tripod-bottom');
@@ -211,7 +244,7 @@ describe('Dream Tricks', () => {
       const placed = { ...DREAM_DEFAULT, stand };
       expect(sceneTripod(placed)).toBeNull();
       expect(sceneCamera(placed).stand).toEqual(stand);
-      const back = dreamStateFromSearch(searchFromState(placed));
+      const back = dreamStateFromSearch(dreamSearchFromState(placed));
       expect(back.stand?.u).toBeCloseTo(stand.u, 3);
       expect(back.stand?.z).toBeCloseTo(stand.z, 3);
       expect(back.stand?.height).toBeCloseTo(stand.height, 3);
@@ -223,7 +256,7 @@ describe('Dream Tricks', () => {
     });
 
     it('starts a dragged tripod from where the spot\'s own filmer stands', () => {
-      for (const spot of DREAM_SPOTS) {
+      for (const spot of DREAM_SPOTS.filter((spot) => spot.id !== 'waterfront')) {
         const own = spotStands(spot.id, { obstacle: 'stairs' })!.bottom;
         const from = presetStand(withDreamSpot(DREAM_DEFAULT, spot.id), () => own.y - 4 * FOOT);
         expect(from, spot.id).toMatchObject({ u: own.u, z: own.z, frame: own.frame });

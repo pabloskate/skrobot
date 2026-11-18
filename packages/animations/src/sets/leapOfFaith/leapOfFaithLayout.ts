@@ -1,4 +1,4 @@
-import { SET_FOOT, type DropTerrain } from '../elToro/stairs';
+import { BOARD_ALONG_TRICKS, SET_FOOT, type DropTerrain } from '../elToro/stairs';
 import type { SpotFilmers } from '../tripods';
 
 /** Point Loma High's original 1997 courtyard gap. The requested 14.3 ft is
@@ -14,7 +14,12 @@ export const LEAP_OF_FAITH_POP_X = -3 * SET_FOOT;
 export const LEAP_OF_FAITH_POP_Z = 4.5 * SET_FOOT;
 export const LEAP_OF_FAITH_YAW = -35;
 export const LEAP_OF_FAITH_RUN = 11 * SET_FOOT;
-export const LEAP_OF_FAITH_LAND_X = LEAP_OF_FAITH_RUN;
+/** How far past RUN the board touches down. Speed is set by the landing:
+ * the rider rolls fast enough to carry this far over the flight, so a near
+ * landing with the rail's pop made a slow (11 ft/s), 4-foot-high hop. Out
+ * here they roll in at 20–22 ft/s, as fast as El Toro or Emage. */
+export const LEAP_OF_FAITH_LAND_PAST = 11 * SET_FOOT;
+export const LEAP_OF_FAITH_LAND_X = LEAP_OF_FAITH_RUN + LEAP_OF_FAITH_LAND_PAST;
 const turn = LEAP_OF_FAITH_YAW * Math.PI / 180;
 export const leapOfFaithLineZ = (x: number) => LEAP_OF_FAITH_POP_Z + (x - LEAP_OF_FAITH_POP_X) * Math.tan(turn);
 export const LEAP_OF_FAITH_LANE_Z = leapOfFaithLineZ(LEAP_OF_FAITH_LAND_X);
@@ -138,22 +143,28 @@ export const leapOfFaithGround = (x: number) => leapOfFaithSurface(x, leapOfFait
 
 /**
  * The stair rail is part of the real gap, so every style pops over it (as a
- * style's popHeight, in place of any style's own, all lower): 2 is the lowest pop that keeps
- * every flip and spin 0.2 ft clear. An impossible's board wraps round the
- * back foot, its middle swinging out toward the rail and its free end down
- * past the sole as it comes round: it takes 2.6.
+ * style's popHeight, twice it in feet of deck rise, in place of any style's
+ * own): just enough that wheels, deck and feet clear it by 0.2 ft, every
+ * stance both ways round. The line crosses the rail near its top corner,
+ * where it still stands about two feet over the walkway, so this is a big
+ * pop whatever the speed. A board that stays lined up down the line skims
+ * over lowest; one the trick turns across it swings its ends out over the
+ * rail and takes more; an impossible's, wrapping round the back foot, swings
+ * its free end down past the sole and takes the most.
  */
-const LEAP_OF_FAITH_POP = 2;
-const LEAP_OF_FAITH_POP_WRAP = 2.6;
+const LEAP_OF_FAITH_POP_ALONG = 1.2;
+const LEAP_OF_FAITH_POP_ACROSS = 1.65;
+const LEAP_OF_FAITH_POP_WRAP = 2.4;
 /** A trick's pop over the stair rail; without one, the most any takes. */
 function leapOfFaithPop(base?: string): number {
-  return base === undefined || base === 'Impossible' ? LEAP_OF_FAITH_POP_WRAP : LEAP_OF_FAITH_POP;
+  if (base === undefined || base === 'Impossible') return LEAP_OF_FAITH_POP_WRAP;
+  return BOARD_ALONG_TRICKS.has(base) ? LEAP_OF_FAITH_POP_ALONG : LEAP_OF_FAITH_POP_ACROSS;
 }
 
 export const LEAP_OF_FAITH_TERRAIN: DropTerrain = {
   drop: LEAP_OF_FAITH_DROP,
   run: LEAP_OF_FAITH_RUN,
-  landPast: 0,
+  landPast: LEAP_OF_FAITH_LAND_PAST,
   laneZ: LEAP_OF_FAITH_LANE_Z,
   ground: leapOfFaithGround,
   surface: leapOfFaithSurface,
@@ -172,7 +183,7 @@ export const LEAP_OF_FAITH_FILMERS: SpotFilmers = {
     stands: {
       // Out in front of the undercroft, as in the archival footage; the
       // stair block stands on +z and would hide the drop from there.
-      bottom: { u: 28 * F, z: -20 * F, height: FLOOR + 3 * F, frame: 22 * F, place: 0.58 },
+      bottom: { u: 40 * F, z: -28 * F, height: FLOOR + 3 * F, frame: 22 * F, place: 0.58 },
       side: { u: 12 * F, z: -34 * F, height: FLOOR + 5 * F, frame: 24 * F, place: 0.56 },
       top: { u: -0.5 * F, z: -6.5 * F, height: 5 * F, frame: 8 * F, place: 0.6 },
     },

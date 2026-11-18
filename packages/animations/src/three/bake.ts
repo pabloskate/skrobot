@@ -174,11 +174,6 @@ export class Bake {
     });
   }
 
-  /** A box in one flat color, unlit and not outlined (the waterfront's railing). */
-  flatBox(min: Vec3, max: Vec3, color: string) {
-    this.box(min, max, color, color, null, 'tbfkle', false);
-  }
-
   /**
    * A round tube along `spine` (three world), radius per point, with
    * `sides` facets: a palm trunk, a lamp post, a wire. Normals are smooth,

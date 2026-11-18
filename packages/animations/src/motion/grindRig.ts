@@ -4,7 +4,7 @@ import { FALL_T, GROUND, POP_RISE, ROLL_IN, X0, catchFraction, computeFrame, fli
 import { GRAVITY } from '../units';
 import { deckTopY } from '../board/board';
 import { capsuleIntersectsBoard } from '../board/boardCollision';
-import { PERSON_REACH, grownFrom } from '../riders/human/humanRig';
+import { PERSON_REACH, grownFrom, grownHips } from '../riders/human/humanRig';
 import {
   FALL_CLEAR,
   FALL_SETTLE,
@@ -830,10 +830,11 @@ function grownOver(rig: Rig, y: number, grow: number): Rig {
   let by = feetY(rig) + (y - feetY(rig)) / grow - hipY(rig);
   const feet = middle(rig.legs[0].ankle, rig.legs[1].ankle);
   const reach = PERSON_REACH * grow * (THIGH + SHIN);
-  for (const leg of rig.legs) {
+  const hips = grownHips(rig.legs, feet, grow);
+  for (const [i, leg] of rig.legs.entries()) {
     // Their hip, grown up from between the ankles, over this ankle: the highest their straight leg lets it,
     // eased into over the last GROWN_EASE so they never stop dead.
-    const d = sub3(grownFrom(feet, leg.hip, grow), leg.ankle);
+    const d = sub3(hips[i], leg.ankle);
     const top = (-Math.sqrt(Math.max(0, reach * reach - d.x * d.x - d.z * d.z)) - d.y) / grow;
     const x = (by - top) / GROWN_EASE;
     if (x < 1) by = top + GROWN_EASE * Math.exp(x - 1);

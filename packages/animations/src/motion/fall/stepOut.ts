@@ -1,7 +1,7 @@
 import { add3, dot3, scale3, smoothstep, sub3, type V3 } from '../../math';
 import { ANKLE_HEIGHT, ANKLE_IN_SHOE, type BodyDims } from './body';
 import {
-  REACH, STEP_WIDTH, TOE_OUT, UP, besideStop, clearOfEdges, footfallAt, heelToToe, level, rightOf, soleCorners, turnLevel, within,
+  REACH, stepHalfWidth, TOE_OUT, UP, besideStop, clearOfEdges, footfallAt, heelToToe, level, rightOf, soleCorners, turnLevel, within,
   type Footfall,
 } from './footing';
 import type { RunOut, RunOutSample } from './runOut';
@@ -173,7 +173,7 @@ export function stepOut(setup: StepOutSetup): RunOut {
     const captures = (along * (1 - taken(ahead))) / omega <= most;
     const lateral = dot3(v, aside) / omega;
     const heading = turnLevel(facing, side * TOE_OUT);
-    const flat = add3(add3(add3(p, scale3(way, ahead)), scale3(aside, lateral)), scale3(rightOf(facing), side * STEP_WIDTH * body.hipHalf));
+    const flat = add3(add3(add3(p, scale3(way, ahead)), scale3(aside, lateral)), scale3(rightOf(facing), side * stepHalfWidth(body)));
     const fall = footAt(foot, flat, heading, t, captures ? 'capture' : 'step', way);
     footfalls.push(fall);
     // The foot it was on lifts once this one has the weight; stopping over this one, once the body's settled onto it.

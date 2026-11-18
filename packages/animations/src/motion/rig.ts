@@ -364,7 +364,16 @@ export function solveRig(
   // than a foot, so the hips follow a gentler version of the tuck.
   const [ha, hb] = tuckAt(track, f.t, HIP_LEAD, HIP_LAG);
   const jumpUp = softCap(HIP_FOLLOW * Math.max(0, Math.max(ha, hb) * down - HIP_FOLLOW_FROM), HIP_FOLLOW_MAX / 2, HIP_FOLLOW_MAX);
-  return poseRig(f, spec, mechanics, skateStyle, outcome, tuck, jumpUp, impact);
+  const rig = poseRig(f, spec, mechanics, skateStyle, outcome, tuck, jumpUp, impact);
+  const progress = f.motion.flight;
+  if (progress > 0 && progress < 1) {
+    rig.popArc = {
+      extension: POP_HEIGHT + (TOUCHDOWN_HEIGHT - POP_HEIGHT) * progress,
+      tuck: 4 * popTuck(spec) * progress * (1 - progress),
+      progress,
+    };
+  }
+  return rig;
 }
 
 // ----- Board tuck -----

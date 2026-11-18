@@ -219,6 +219,8 @@ const RELAXED = [
   [18, 26, 12],
   [23, 30, 14],
 ] as const;
+// The two outer fingers fold farther through the middle joint as the hand settles.
+const HUMAN_RELAXED = [[10, 19, 9], [14, 27, 12], [19, 33, 15], [22, 36, 18]] as const;
 const OPEN = [
   [2, 5, 3],
   [3, 6, 3],
@@ -281,6 +283,7 @@ const LIDS: Record<Expression, [number, number]> = {
 };
 /** The arms' follow-through: natural frequency (rad/s) and damping ratio. */
 const ARM_SPRING = { omega: 12, zeta: 0.9 } as const;
+const HAND_SWING_SPRING = { omega: 17, zeta: 0.85 } as const;
 
 /**
  * A damped spring chasing a target vector. A step that isn't a short one
@@ -361,8 +364,12 @@ const PELVIS_SHARE = 0.62;
 const HIPS_BACK = 0.4;
 /** The most a leg straightens, as a share of its length (about 25° of knee bend). */
 const SOFT_KNEE = 0.975;
+/** Extra standing height as a fraction of leg length, leaving about 40° knee flexion on the approach. */
+const STANCE_LIFT = 0.16;
 /** How much a knee turns toward its own foot (negative: a touch in, over the board, as a skater's knees ride). */
 const KNEE_SPLAY = -0.12;
+/** Maximum extra hip rotation used to bring a loaded knee over its shoe. */
+const KNEE_TRACK_LIMIT = 28 * DEG;
 /**
  * Arms, from the rig's angles (radians): the rig's riding arm is ARM_OUT_RIG_RIDE
  * out from the side, a person's ARM_OUT_RIDE, and as the rig raises an arm the
@@ -418,6 +425,9 @@ interface Hand {
   palm: Vector3;
   curl: Vector3;
   thumbCurl: Vector3;
+  fingerAxes: Vector3[];
+  /** Wrist to the extended middle fingertip at rest. */
+  fingertip: Vector3;
   /** +1 if turning about the palm's normal by a positive angle swings the fingers toward the little finger. */
   ulnar: number;
   /** Rest index-to-little-finger direction. */
@@ -449,19 +459,21 @@ export class SkaterSolver {
   private readonly hands: Record<SideKey, Hand>;
   /** The look: head yaw and pitch off the chest, eye yaw and pitch off the head (degrees), eased. */
   private readonly look = new Springs(4);
-  /** Each hand's shape (four finger curls, wrist flex, wrist deviation, spread), eased. */
-  private readonly handShape: Record<SideKey, Springs> = { L: new Springs(7), R: new Springs(7) };
+  /** Each hand's shape (four finger curls, wrist flex, wrist deviation, spread, thumb curl), eased. */
+  private readonly handShape: Record<SideKey, Springs> = { L: new Springs(8), R: new Springs(8) };
   /** Each wrist where it was last frame, for how fast the arm is moving. */
   private readonly lastWrist: Record<SideKey, Vector3 | null> = { L: null, R: null };
   /** How far each hand was last pushed out of the jeans, in the hips' frame. */
   private readonly jeansPush: Record<SideKey, Vector3> = { L: new Vector3(), R: new Vector3() };
   /** Each hand's follow-through. */
   private readonly follow: Record<SideKey, Spring> = { L: new Spring(ARM_SPRING), R: new Spring(ARM_SPRING) };
+  /** Wrist-to-knuckle direction carried in the moving chest frame. */
+  private readonly handSwing = { L: new Spring(HAND_SWING_SPRING), R: new Spring(HAND_SWING_SPRING) };
   /** The trunk as spheres for keeping it out of the ground: bone, radius, and how far up the bone the middle is. */
   private readonly trunk: [number, number, number][];
 
   /** `lidFollow`: how far the upper lids follow the eyes down (LID_FOLLOW for eyes with whites). */
-  constructor(rest: RestSkeleton, private readonly lidFollow = LID_FOLLOW) {
+  constructor(rest: RestSkeleton, private readonly lidFollow = LID_FOLLOW, private readonly humanMotion = true) {
     this.rest = rest;
     const bones = rest.bones;
     // glTF loaders drop the dots from node names (upperleg01.L → upperleg01L); match either.
@@ -521,12 +533,19 @@ export class SkaterSolver {
       // The thumb closes across the palm, toward the little finger.
       const thumbCurl = new Vector3().crossVectors(thumbDir, across).normalize();
       const ulnar = Math.sign(new Vector3().crossVectors(palm, fwd).dot(across)) || 1;
+      const fingertip = at(`finger3-3.${s}`).clone().multiplyScalar(2).sub(at(`finger3-2.${s}`)).sub(w);
       return {
-        wrist: n(`wrist.${s}`),
+        wrist: n(`wrist.${s}`), fingertip,
         metacarpals: [1, 2, 3, 4].map((m) => n(`metacarpal${m}.${s}`)),
         fingers: [2, 3, 4, 5].map((f) => [1, 2, 3].map((j) => n(`finger${f}-${j}.${s}`))),
         thumb: [1, 2, 3].map((j) => n(`finger1-${j}.${s}`)),
         fwd, palm, curl, thumbCurl, ulnar, across,
+        // Each knuckle folds in its own plane. The outer fingers curl a
+        // little toward the heel of the thumb when the palm is cupped.
+        fingerAxes: [2, 3, 4, 5].map((finger, i) => {
+          const along = at(`finger${finger}-2.${s}`).clone().sub(at(`finger${finger}-1.${s}`));
+          return along.cross(palm.clone().addScaledVector(across, -0.07 * i)).normalize();
+        }),
       };
     };
     this.hands = { L: hand('L'), R: hand('R') };
@@ -581,8 +600,25 @@ export class SkaterSolver {
     // off how far each hip is from its ankle; the trunk leans with it, fully with
     // the feet on the board on the ground, less in the air (a tuck brings the knees
     // up to the chest more than the chest down to them).
+    // The trick rig rides low, even on the approach. Give the adult room to
+    // stand up between loads. Limit the lift vertically against BOTH feet so
+    // a reaching leg cannot pull the pelvis sideways during a pop or flick.
+    const hipL = v3(rigLeg.L.hip), hipR = v3(rigLeg.R.hip);
+    if (this.humanMotion) {
+      const hips = { L: hipL, R: hipR };
+      const legLength = this.legs.L.a + this.legs.L.b;
+      let lift = legLength * STANCE_LIFT;
+      for (const s of SIDES) {
+        const offset = hips[s].clone().sub(feet[s].ankle);
+        const reach = (this.legs[s].a + this.legs[s].b) * SOFT_KNEE;
+        const height = Math.sqrt(Math.max(0, reach * reach - offset.x ** 2 - offset.z ** 2));
+        lift = Math.min(lift, Math.max(0, height - offset.y));
+      }
+      hipL.y += lift * upright * (1 - free);
+      hipR.y += lift * upright * (1 - free);
+    }
     const bend = SIDES.reduce((sum, s) => {
-      const reach = v3(rigLeg[s].hip).distanceTo(feet[s].ankle) / (this.legs[s].a + this.legs[s].b);
+      const reach = (s === 'L' ? hipL : hipR).distanceTo(feet[s].ankle) / (this.legs[s].a + this.legs[s].b);
       return sum + 2 * Math.acos(Math.min(1, reach)) / SIDES.length;
     }, 0) / DEG;
     const boardHeight = v3(rig.board.center).y - ground;
@@ -605,7 +641,6 @@ export class SkaterSolver {
 
     // Pelvis: square to the hips, tipped most of the way the trunk leans (the hips
     // flex) while the rider is up; the rest of the lean rounds the back.
-    const hipL = v3(rigLeg.L.hip), hipR = v3(rigLeg.R.hip);
     const right = hipR.clone().sub(hipL).normalize();
     const pelvisUp = torsoUp.clone().lerp(UP, (1 - PELVIS_SHARE) * upright);
     pelvisUp.addScaledVector(right, -pelvisUp.dot(right)).normalize();
@@ -630,7 +665,7 @@ export class SkaterSolver {
     // Hips between the rig's, pulled toward the feet if a leg can't reach its foot
     // with the knee still soft: a skater never locks a knee on a rolling board.
     const rootRest = bones[this.root].head;
-    const rootAt = v3(rigLeg.L.hip).add(v3(rigLeg.R.hip)).multiplyScalar(0.5).add(rootRest.clone().sub(this.hipMid).applyQuaternion(pelvis));
+    const rootAt = hipL.clone().add(hipR).multiplyScalar(0.5).add(rootRest.clone().sub(this.hipMid).applyQuaternion(pelvis));
     // The hips sit back as far as the trunk leans past the rig's, so the weight stays over the feet.
     if (lean > rigLean && leanTo.lengthSq() > 0.5) {
       rootAt.addScaledVector(leanTo, -HIPS_BACK * this.trunkLength * (Math.sin(lean * DEG) - Math.sin(rigLean * DEG)));
@@ -695,6 +730,24 @@ export class SkaterSolver {
       if (!Number.isFinite(pole.x) || pole.lengthSq() < 0.5) pole = forward.clone();
       pole.lerp(forward, KNEE_FORWARD * upright).normalize();
       const { mid: knee, normal } = twoBone(hip, feet[s].ankle, L.a, L.b, pole);
+      if (this.humanMotion) {
+        // A loaded shin tracks in the toe-to-heel plane of its own shoe. Turn
+        // the knee about the hip–ankle line to reduce sideways ankle bend,
+        // keeping the ankle planted and both bone lengths fixed. The tangent
+        // to the knee's circle is its bend-plane normal.
+        const axis = feet[s].ankle.clone().sub(hip).normalize();
+        const shin = knee.clone().sub(feet[s].ankle);
+        const radius = shin.clone().projectOnPlane(axis).length();
+        const acrossShoe = d3(leg.shoe.side);
+        const lateral = shin.dot(acrossShoe);
+        const angle = -lateral * normal.dot(acrossShoe) / Math.max(radius, 0.15 * L.b);
+        // Soften the limit at the hip. A foot rolling over for a flick or
+        // leaving the board in a fall carries much less of the knee with it.
+        const soleLevel = smoothstep((d3(leg.shoe.up).dot(UP) - 0.35) / 0.6);
+        const turn = KNEE_TRACK_LIMIT * Math.tanh(angle / KNEE_TRACK_LIMIT) * soleLevel * upright * (1 - free);
+        knee.sub(hip).applyAxisAngle(axis, turn).add(hip);
+        normal.applyAxisAngle(axis, turn);
+      }
       this.aimLimb(L.upper, L.root, L.mid, L.normal, hip, knee, normal, 0.5);
       this.aimLimb(L.lower, L.mid, L.tip, L.normal, knee, feet[s].ankle, normal, 0.5);
       drive(L.foot, feet[s].quat);
@@ -707,7 +760,7 @@ export class SkaterSolver {
     // out to the sides only as far as balance asks, elbows hinging forward and
     // pointing back, each arm with a little life of its own.
     const down = torsoUp.clone().negate();
-    const human = {} as Record<SideKey, { upper: Vector3; fore: Vector3; out: number }>;
+    const human = {} as Record<SideKey, { upper: Vector3; fore: Vector3 }>;
     for (const s of SIDES) {
       const arm = rigArm[s];
       const outward = s === 'L' ? shoulderRight.clone().negate() : shoulderRight.clone();
@@ -737,17 +790,28 @@ export class SkaterSolver {
         upperH.lerp(rigUpper, free).normalize();
         foreH.lerp(rigFore, free).normalize();
       }
-      human[s] = { upper: upperH, fore: foreH, out };
-      // Collarbones rise as an arm does.
-      const raise = smoothstep((out + (outR - out) * free - 0.6) / 0.9);
+      human[s] = { upper: upperH, fore: foreH };
+      // A rising arm carries its shoulder up and slightly back. Reaching
+      // forward carries the shoulder around the ribs; the two shoulders can
+      // lead and trail the chest independently through the wind-up.
+      const raise = this.humanMotion
+        ? smoothstep((upperH.angleTo(down) - 12 * DEG) / (95 * DEG))
+        : smoothstep((out + (outR - out) * free - 0.6) / 0.9);
       const axis = new Vector3().crossVectors(outward, torsoUp).normalize();
-      drive(this.arms[s].clavicle, new Quaternion().setFromAxisAngle(axis, 16 * DEG * raise).multiply(chest));
+      const clavicle = new Quaternion().setFromAxisAngle(axis, (this.humanMotion ? 13 : 16) * DEG * raise).multiply(chest);
+      if (this.humanMotion) {
+        const forward = upperH.dot(chestFwd);
+        const sweep = (forward * 10 - raise * 7) * DEG * (1 - free);
+        clavicle.premultiply(new Quaternion().setFromAxisAngle(new Vector3().crossVectors(outward, chestFwd).normalize(), sweep));
+      }
+      drive(this.arms[s].clavicle, clavicle);
     }
     this.forward();
 
     // The trunk the hands keep out of: from the hips up the spine.
     const hipsAt = this.pose.head[this.root].clone();
     const neckAt = this.pose.head[this.neck[0]].clone();
+    const chestInverse = this.humanMotion ? chest.clone().invert() : null;
     for (const s of SIDES) {
       const A = this.arms[s];
       const outward = s === 'L' ? shoulderRight.clone().negate() : shoulderRight.clone();
@@ -755,18 +819,49 @@ export class SkaterSolver {
       const { upper: upperH, fore: foreH } = human[s];
       const elbowAt = shoulder.clone().addScaledVector(upperH, A.a);
       let target = elbowAt.clone().addScaledVector(foreH, A.b);
-      // The hand follows through: it trails the shoulder's moves a beat, then settles,
-      // the way an arm that's held (not thrown) does.
-      target = shoulder.clone().add(this.follow[s].step(target.sub(shoulder), dt, A.a + A.b));
+      // Most of a reach is actively driven. Its follow-through is relative to
+      // the chest so turning the whole rider carries the elbows with them.
+      // An arm placed to break a fall must reach its authored brace on time.
+      const reach = target.sub(shoulder);
+      if (chestInverse) reach.applyQuaternion(chestInverse);
+      const trailing = this.follow[s].step(reach, dt, A.a + A.b);
+      if (chestInverse) trailing.lerp(reach, 0.55 + 0.45 * free).applyQuaternion(chest);
+      target = trailing.add(shoulder);
       target = clearOfTrunk(target, hipsAt, neckAt, HAND_CLEARANCE);
       // Hands stay on top of the ground they're thrown at.
+      const handHeight = v3(rigArm[s].hand).y - ground;
+      const brace = this.humanMotion ? free * smoothstep((30 * MODEL_SCALE - handHeight) / (13 * MODEL_SCALE))
+        * smoothstep((-foreH.y - 0.15) / 0.5) : 0;
+      if (brace > 0) {
+        // Bring the support point closer if reaching behind the shoulder
+        // would lift the palm off the ground. Keep a soft elbow.
+        const reach = 0.985 * (A.a + A.b);
+        const down = Math.min(0.975 * reach, shoulder.y - ground - HAND_OFF_GROUND);
+        const planted = target.clone().sub(shoulder).setY(0);
+        planted.clampLength(0, Math.sqrt(Math.max(0, reach * reach - down * down)));
+        target.lerp(planted.setY(-down).add(shoulder), brace);
+      }
       target.y = Math.max(target.y, ground + HAND_OFF_GROUND);
       let pole = bendOf(shoulder, elbowAt, elbowAt.clone().addScaledVector(foreH, A.b));
       if (!Number.isFinite(pole.x) || pole.lengthSq() < 0.5) pole = chestFwd.clone().negate().addScaledVector(down, 0.5).normalize();
       const { mid: elbow, end: wrist, normal } = twoBone(shoulder, target, A.a, A.b, pole);
       this.aimLimb(A.upper, A.root, A.mid, A.normal, shoulder, elbow, normal, 0.4);
       const fore = this.aimLimb(A.lower, A.mid, A.tip, A.normal, elbow, wrist, normal, 1);
-      this.handPose(s, fore, wrist, wrist.clone().sub(elbow).normalize(), upperH, outward, torsoUp, chestFwd, dt, time);
+      // Finger opening follows an active swing. Coasting across the scene or
+      // falling with gravity alone does not make the hand reach.
+      const wristForSpeed = chestInverse ? wrist.clone().sub(shoulder).applyQuaternion(chestInverse) : wrist;
+      const foreDir = wrist.clone().sub(elbow).normalize();
+      let fingerDir = foreDir;
+      if (chestInverse) {
+        // The hand hangs under its own weight. When the elbow reverses, the
+        // fingers carry on briefly before the wrist catches up.
+        const hanging = foreDir.clone().addScaledVector(UP, -0.32 * (1 - brace)).normalize();
+        const local = hanging.clone().applyQuaternion(chestInverse);
+        const trailing = this.handSwing[s].step(local, dt, 1).applyQuaternion(chest).normalize();
+        const delay = Math.min(0.55, (24 * DEG) / Math.max(1e-6, hanging.angleTo(trailing)));
+        fingerDir = hanging.lerp(trailing, delay * (1 - brace)).normalize();
+      }
+      this.handPose(s, fore, wristForSpeed, foreDir, fingerDir, upperH, outward, torsoUp, chestFwd, dt, time, brace, wrist.y - ground);
       // A hand hanging by a leg, or brought against one in a crouch, rests on the jeans,
       // not in them: the arm reaches the wrist out as far as the hand went in, the hand
       // held as it was (its bones are posed in the world, so it moves out whole).
@@ -865,7 +960,8 @@ export class SkaterSolver {
           const { t, off, out, angle } = aroundBone(point.clone().add(moved), at, frame);
           if (t < 0 || t > 1) continue;
           const reach = girthAt(girth, t, angle);
-          const wide = girthAt(girth, t, dirAngle) + HAND_OFF_JEANS;
+          // A fingertip can enter a fold wider than the leg in the push direction.
+          const wide = Math.max(reach, girthAt(girth, t, dirAngle)) + HAND_OFF_JEANS;
           if (reach <= 0 || off >= reach + HAND_OFF_JEANS) continue;
           // Out along `dir` to where the jeans' edge is that way.
           const along = out.dot(dir);
@@ -948,7 +1044,7 @@ export class SkaterSolver {
    * fingers one after another, and drifts a little on its own, so the hand is
    * held, not frozen and not limp.
    */
-  private handPose(s: SideKey, fore: Quaternion, wrist: Vector3, foreDir: Vector3, upperDir: Vector3, outward: Vector3, up: Vector3, chestFwd: Vector3, dt: number, time: number) {
+  private handPose(s: SideKey, fore: Quaternion, wrist: Vector3, foreDir: Vector3, fingerDir: Vector3, upperDir: Vector3, outward: Vector3, up: Vector3, chestFwd: Vector3, dt: number, time: number, brace: number, wristHeight: number) {
     const H = this.hands[s];
     const out = smoothstep((upperDir.dot(outward) + 0.1) / 0.8) * (1 - smoothstep((upperDir.dot(up) - 0.5) / 0.4));
     const palm = outward.clone().multiplyScalar(-(1 - out)).addScaledVector(up, -out).addScaledVector(chestFwd, -0.35 * (1 - out));
@@ -966,42 +1062,76 @@ export class SkaterSolver {
       return Math.sin(time * (1.3 + 0.29 * k) + seed) * 0.6 + Math.sin(time * (2.9 + 0.17 * k) + seed * 2.3) * 0.4;
     };
     const mixed = (a: number, b: number) => a + (b - a) * out;
-    const curlTarget = Math.max(0, mixed(HAND_HANG.curl, HAND_OUT.curl) - 0.35 * reach);
+    // When the swinging hand trails palmward the fingers release a
+    // little. They settle back into their curl as the wrist swings back.
+    const passiveCurl = this.humanMotion ? -0.45 * fingerDir.dot(palm) * (1 - out) : 0;
+    const curlTarget = Math.max(0, mixed(HAND_HANG.curl, HAND_OUT.curl) - 0.35 * reach + passiveCurl);
     const shape = this.handShape[s];
-    const curls = FINGER_OMEGA.map((omega, f) => Math.min(1.1, Math.max(0, shape.step(f, curlTarget + 0.07 * wave(f), dt, omega))));
-    const flex = shape.step(4, mixed(HAND_HANG.flex, HAND_OUT.flex) - 8 * reach + 3 * wave(5), dt, WRIST_OMEGA);
+    const curls = FINGER_OMEGA.map((omega, f) => {
+      // The index leads a reach. The outer fingertips retain a gentle hook
+      // even with the palm open; ground contact flattens them below.
+      const loose = this.humanMotion ? 0.08 + 0.075 * f : 0;
+      return Math.min(1.1, Math.max(0, shape.step(f, Math.max(loose, curlTarget + 0.07 * wave(f)), dt, omega)));
+    });
+    const flex = shape.step(4, mixed(this.humanMotion ? -3 : HAND_HANG.flex, HAND_OUT.flex) - 8 * reach + 3 * wave(5), dt, WRIST_OMEGA);
     const dev = shape.step(5, mixed(HAND_HANG.dev, HAND_OUT.dev) + 2 * wave(6), dt, WRIST_OMEGA);
-    const open = shape.step(6, Math.min(1, out + reach), dt, WRIST_OMEGA);
+    const spreadTarget = shape.step(6, Math.min(1, out + reach), dt, WRIST_OMEGA);
+    const open = spreadTarget + (1 - spreadTarget) * brace;
+    const thumb = this.humanMotion
+      ? shape.step(7, Math.max(0, curlTarget - 0.2 * reach + 0.06 * wave(7)), dt, 13)
+      : (curls[0] + curls[1]) / 2;
     shape.settle();
 
     // The wrist: the hand along the forearm, then flexed toward the palm (or lifted
     // back) and angled toward the little finger's side.
-    const base = deltaFrom(H.fwd, H.palm, foreDir, palm);
-    const flexAxis = new Vector3().crossVectors(foreDir, palm).normalize();
+    const base = deltaFrom(H.fwd, H.palm, fingerDir, palm);
+    const flexAxis = new Vector3().crossVectors(fingerDir, palm).normalize();
     const ulnarW = H.across.clone().applyQuaternion(base);
     const devSign = Math.sign(new Vector3().crossVectors(palm, foreDir).dot(ulnarW)) || 1;
     const hand = new Quaternion().setFromAxisAngle(palm, devSign * dev * DEG)
       .multiply(new Quaternion().setFromAxisAngle(flexAxis, flex * DEG))
       .multiply(base);
-    this.twistForearm(s, hand, fore, foreDir);
-    for (const b of [H.wrist, ...H.metacarpals]) {
-      this.delta[b].copy(hand);
-      this.driven[b] = true;
+    if (brace > 0) {
+      // Lay the palm on the surface as it takes weight. The forearm and
+      // outward direction give even a vertical reaching hand a stable heading.
+      const fingers = foreDir.clone().addScaledVector(outward, 0.45).projectOnPlane(UP);
+      if (fingers.lengthSq() > 1e-5) {
+        // If the wrist is above palm height, the fingertips touch first.
+        const slope = Math.min(0.95, Math.max(0, (wristHeight - MODEL_SCALE) / H.fingertip.length()));
+        fingers.normalize().multiplyScalar(Math.sqrt(1 - slope * slope)).setY(-slope);
+        const planted = deltaFrom(H.fingertip, H.palm, fingers, UP.clone().negate());
+        hand.slerp(planted, brace);
+      }
     }
+    this.twistForearm(s, hand, fore, foreDir);
+    this.delta[H.wrist].copy(hand);
+    this.driven[H.wrist] = true;
     H.fingers.forEach((chain, f) => {
-      const c = curls[f];
+      const c = curls[f] * (1 - brace);
+      const curlAxis = this.humanMotion ? H.fingerAxes[f] : H.curl;
       const spread = SPREAD_RELAXED[f] + (SPREAD_OPEN[f] - SPREAD_RELAXED[f]) * open;
-      let q = hand.clone().multiply(new Quaternion().setFromAxisAngle(H.palm, H.ulnar * spread * DEG));
+      const knuckle = hand.clone();
+      if (this.humanMotion && f >= 2) {
+        // Cup the little-finger edge of the palm around the thumb, unfolding
+        // it as the hand opens for balance or comes down to brace.
+        const cup = (f === 2 ? 5 : 11) * DEG * c * (1 - open);
+        knuckle.multiply(new Quaternion().setFromAxisAngle(H.curl, cup))
+          .multiply(new Quaternion().setFromAxisAngle(H.fwd, H.ulnar * cup));
+      }
+      this.delta[H.metacarpals[f]].copy(knuckle);
+      this.driven[H.metacarpals[f]] = true;
+      let q = knuckle.multiply(new Quaternion().setFromAxisAngle(H.palm, H.ulnar * spread * DEG));
       chain.forEach((b, j) => {
-        const angle = OPEN[f][j] + (RELAXED[f][j] - OPEN[f][j]) * c;
-        q = q.clone().multiply(new Quaternion().setFromAxisAngle(H.curl, angle * DEG));
+        const relaxed = this.humanMotion ? HUMAN_RELAXED[f][j] : RELAXED[f][j];
+        const angle = OPEN[f][j] * (1 - brace) + (relaxed - OPEN[f][j]) * c;
+        q = q.clone().multiply(new Quaternion().setFromAxisAngle(curlAxis, angle * DEG));
         this.delta[b].copy(q);
         this.driven[b] = true;
       });
     });
     // The thumb rests along the side of the index finger, and swings away from the
     // palm as the hand opens.
-    const thumbCurl = (curls[0] + curls[1]) / 2;
+    const thumbCurl = thumb * (1 - brace);
     let q = hand.clone().multiply(new Quaternion().setFromAxisAngle(H.palm, -H.ulnar * THUMB_AWAY * open * DEG));
     H.thumb.forEach((b, j) => {
       const angle = THUMB_OPEN[j] + (THUMB_RELAXED[j] - THUMB_OPEN[j]) * thumbCurl;

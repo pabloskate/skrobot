@@ -3,7 +3,7 @@ import { SHOE_HALF_HEIGHT, SHOE_HALF_LENGTH, SHOE_HALF_WIDTH, type BoardRig, typ
 import {
   ANKLE_HEIGHT, ANKLE_IN_SHOE, LIMB_RADII, MASS, ankleOf, centerOfMass, rigOf, twoBone, type BodyDims, type BodyPose, type ShoePose,
 } from './body';
-import { STEP_WIDTH, UP, level, rightOf, turnLevel } from './footing';
+import { stepHalfWidth, UP, level, rightOf, turnLevel } from './footing';
 import { frameFrom, qframe, qrot, qslerp } from './rotation';
 import { MODEL_SCALE } from '../../riders/human/humanProportions';
 
@@ -266,6 +266,13 @@ function touches(rig: Rig, body: BodyDims, ground: (x: number, z: number) => num
     }
   });
   return out;
+}
+
+/** How far into the ground the trunk (chest, shoulders and hips) is at its deepest; negative, how far clear of it. */
+export function trunkInGround(rig: Rig, body: BodyDims, ground: (x: number, z: number) => number): number {
+  let deepest = -Infinity;
+  for (const touch of touches(rig, body, ground)) if (touch.part === 'chest') deepest = Math.max(deepest, -touch.gap);
+  return deepest;
 }
 
 const isHand = (part: Part) => part === 'hand0' || part === 'hand1';
@@ -692,7 +699,7 @@ export function rollOut(setup: RollSetup): Roll {
   const firstShoe: ShoePose = { at: setup.first.at, q: qframe(setup.first.heading, UP) };
   // The other foot comes down beside the first, out to its own side, pointing the same way.
   const across = rightOf(setup.facing);
-  const width = (second === 0 ? -1 : 1) * 2 * STEP_WIDTH * body.hipHalf;
+  const width = (second === 0 ? -1 : 1) * 2 * stepHalfWidth(body);
   const secondSpot = add3(setup.first.at, scale3(across, width));
   const secondShoe: ShoePose = {
     at: { ...secondSpot, y: setup.first.at.y + ground(secondSpot.x, secondSpot.z) - ground(setup.first.at.x, setup.first.at.z) },

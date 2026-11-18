@@ -1,7 +1,7 @@
 import { add3, dot3, scale3, sub3, type V3 } from '../../math';
 import { ANKLE_HEIGHT, ANKLE_IN_SHOE, type BodyDims } from './body';
 import {
-  REACH, STEP_WIDTH, TOE_OUT, besideStop, clearOfEdges, footfallAt, heelToToe, level, rightOf, soleCorners, turnLevel, within,
+  REACH, stepHalfWidth, TOE_OUT, besideStop, clearOfEdges, footfallAt, heelToToe, level, rightOf, soleCorners, turnLevel, within,
   type Footfall,
 } from './footing';
 
@@ -320,14 +320,14 @@ export function runOut(setup: RunOutSetup): RunOut {
     const facing = setup.facing(on);
     const side = foot === 0 ? -1 : 1;
     // Out to its own side of the hips, and across as far as catches the body's drift.
-    const width = scale3(rightOf(facing), side * STEP_WIDTH * body.hipHalf);
+    const width = scale3(rightOf(facing), side * stepHalfWidth(body));
     const lateral = vAcross / omega;
     const heading = turnLevel(facing, side * TOE_OUT);
     // The hips as the step's taken: the leg down bends them to their running height over the ground it stands on, if they're higher.
     const support = footfalls.filter((f) => f.foot !== foot && f.on <= on).pop();
     const standOn = support ? support.at.y + ANKLE_HEIGHT - ANKLE_IN_SHOE.u : ground(s.p.x, s.p.z);
     // Stopping, they bend as low as the step out to the capture point needs (no deeper than a squat).
-    const capture = stop ? want + (STEP_WIDTH - 1) * body.hipHalf : 0;
+    const capture = stop ? want + Math.abs(stepHalfWidth(body) - body.hipHalf) : 0;
     const lunge = stop ? Math.min(standOn - lowest, standOn - (ANKLE_HEIGHT - ANKLE_IN_SHOE.u) - Math.sqrt(Math.max(0, (reach * 0.97) ** 2 - capture * capture))) : -Infinity;
     const taking: State = { ...s, p: { ...s.p, y: Math.max(s.p.y, standOn - runHeight, lunge) } };
     // The leg's reach down to the ground where it comes down (the planted ankle sits ANKLE_HEIGHT up), found from under the

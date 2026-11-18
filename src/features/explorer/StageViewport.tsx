@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
-import { useSoundEffects } from '@skrobot/animations';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
+import { setInfo, useSoundEffects } from '@skrobot/animations';
 import type { Obstacle, RailChoice, RiderStance, Robot, SceneCamera, Skater, StageSet, Trick, TripodId } from '@skrobot/animations';
 import { TrickScene3D } from '@skrobot/animations/three';
 import { ZOOM_STEP, stageOutcome, turnCamera, zoomBy, type Outcome } from './explorer';
 import type { Playhead } from './usePlayhead';
+import SpotArt from './SpotArt';
 
 /** Pointer travel (CSS px) before a press counts as a drag rather than a tap. */
 const DRAG_SLOP = 5;
@@ -72,6 +73,10 @@ const useInBrowser = () => useSyncExternalStore(noSubscription, () => true, () =
 /**
  * The picture: the trick at the playhead's moment, a camera the viewer can
  * drag around the rider or pinch to zoom, and a tap to play or pause.
+ *
+ * Another spot or skater takes a moment to build. Meanwhile the last picture
+ * stays up behind a veil that names the spot on its way, the clock waits, and
+ * the trick starts from the top once the new scene is there.
  */
 export default function StageViewport({ scene, playhead, rate, onCamera, onZoom, turn = turnCamera, hint, children }: Props) {
   const { camera, zoom } = scene;
@@ -81,13 +86,19 @@ export default function StageViewport({ scene, playhead, rate, onCamera, onZoom,
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const pinch = useRef<{ distance: number; zoom: number } | null>(null);
   const stage = useRef<HTMLDivElement>(null);
-  const latest = useRef({ zoom, onZoom });
+  const latest = useRef({ zoom, onZoom, playhead });
   const [orbited, setOrbited] = useState(false);
+  const [loading, setLoading] = useState(false);
   const inBrowser = useInBrowser();
 
   useEffect(() => {
-    latest.current = { zoom, onZoom };
+    latest.current = { zoom, onZoom, playhead };
   });
+
+  const onLoading = useCallback((on: boolean) => {
+    setLoading(on);
+    latest.current.playhead.hold(on);
+  }, []);
 
   useEffect(() => {
     const el = stage.current;
@@ -191,6 +202,7 @@ export default function StageViewport({ scene, playhead, rate, onCamera, onZoom,
       aria-label={`${scene.trick.name}. Drag or use the arrow keys to move the camera; pinch, or press plus and minus, to zoom; tap or press space to ${playhead.playing ? 'pause' : 'play'}.`}
       ref={stage}
       tabIndex={0}
+      aria-busy={loading}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -206,6 +218,7 @@ export default function StageViewport({ scene, playhead, rate, onCamera, onZoom,
             knewIt
             riderStance={scene.rider}
             fixedTime={playhead.time}
+            animateWater
             playbackRate={playhead.playing ? rate : 0.05}
             camera={camera}
             tripod={scene.tripod}
@@ -214,14 +227,25 @@ export default function StageViewport({ scene, playhead, rate, onCamera, onZoom,
             rail={scene.rail}
             obstacle={scene.obstacle}
             skater={scene.skater}
-            sound={sound && playhead.playing}
+            sound={sound && playhead.playing && !loading}
             onDone={ignoreDone}
+            onLoading={onLoading}
           />
         ) : (
           <div className="explorer-scene-placeholder" />
         )}
       </div>
-      {hint && !orbited && <span className="explorer-orbit-hint" aria-hidden>{hint}</span>}
+      <div className={`explorer-stage-loading ${loading ? 'on' : ''}`} role="status" aria-hidden={!loading}>
+        <div className="explorer-stage-loading-card">
+          <SpotArt set={scene.set} />
+          <span className="explorer-stage-loading-name">
+            <span className="sr-only">Loading </span>
+            {setInfo(scene.set).label}
+          </span>
+          <span className="explorer-stage-loading-bar" aria-hidden />
+        </div>
+      </div>
+      {hint && !orbited && !loading && <span className="explorer-orbit-hint" aria-hidden>{hint}</span>}
       {children && (
         // Controls on the picture are pressed, not dragged or tapped through to the stage.
         <div className="explorer-stage-overlay" onPointerDown={(event) => event.stopPropagation()}>

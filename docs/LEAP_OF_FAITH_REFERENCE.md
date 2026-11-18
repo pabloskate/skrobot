@@ -33,7 +33,7 @@ textures. No image search thumbnail alone determined the scene geometry.
 | Guardrail height | 3 ft over the nosing | Visual estimate |
 | Roof above the upper walkway | 12 ft | Visual estimate |
 | Recessed bay depth | 10 ft | Visual estimate |
-| Landing from facade | 11 ft outward | Animation route estimate; not a historical distance claim |
+| Landing from facade | 22 ft outward | Animation route estimate, set so the roll-in speed matches the other gaps; not a historical distance claim |
 
 The decimal **14.3 ft** is deliberately preserved. It is not converted to
 14 feet 3 inches (14.25 ft), nor replaced by the larger figures often attached
@@ -60,14 +60,20 @@ The route rolls out across the head of the stairs and pops three feet behind
 the top nosing, in line with the center pipe (4.5 ft in from the bay-side
 rail), angled 35° toward the undercroft (user request, Oct 8). It crosses that
 rail about 3.4 ft down the flight, where its top has dropped about 2 ft, passes
-the walkway corner and lands 11 ft out, about 5.3 ft in front of the
-undercroft. Both stances share the same route and terrain. The
-ballistic pop is 2.0 in the existing style units for every style (lowered from
-2.5 when the user found the bot popped too high). It is the lowest value that
-keeps every flipping and spinning board 0.2 ft clear of the rail; at 1.8–1.9
-some fakie kickflips clip. An impossible pops 2.5 (`leapOfFaithPop`): its board
-wraps round the back foot, its middle swinging out toward the rail and its free
-end down past the sole, and at 2.0 it hits the rail. Popping right at the center pipe's top
+the walkway corner and lands 22 ft out, in the open courtyard clear of the
+undercroft's tables. Both stances share the same route and terrain. The roll-in
+speed is whatever carries the board from the pop to that landing over the
+flight, so the landing sets it: at 11 ft out the rider crept in at 11 ft/s and
+the rail's pop read as a slow, four-foot hop (user feedback, Nov 16). At 22 ft
+out it is about 20–22 ft/s, as fast as El Toro or Emage. The ballistic pop is
+the same for every style and set per trick (`leapOfFaithPop`, the pattern of
+Hollywood's fence): 1.2 (2.4 ft of deck rise) for tricks whose board stays
+lined up down the line (`BOARD_ALONG_TRICKS`), 1.65 for those that turn the
+board across it and swing its ends out over the rail, and 2.4 for an
+impossible, whose free end wraps down past the sole. Each is the lowest that
+keeps wheels, deck and feet 0.2 ft clear of the rail for every trick base in
+every stance. The rail is crossed near its top corner, still about two feet
+over the walkway, so the pop can't go much lower at any speed. Popping right at the center pipe's top
 end instead lands the rider's legs on that pipe. This is a playable trick-clearance choice, not a measurement of
 Thomas's ollie. The rail remains scenery rather than a selectable grind.
 

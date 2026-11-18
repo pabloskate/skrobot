@@ -174,6 +174,16 @@ export interface DropTerrain {
   brush?: (u: number, z: number) => number;
 }
 
+/**
+ * Tricks whose board stays lined up down the route as it crosses something
+ * near the takeoff (flips, and late shuvs): their ends don't swing out over
+ * a rail beside the line, so a `trickPop` can give them less than the rest.
+ */
+export const BOARD_ALONG_TRICKS: ReadonlySet<string> = new Set([
+  'Ollie', 'Ollie North', 'Kickflip', 'Heelflip', 'Double Kickflip', 'Double Heelflip',
+  'Late Kickflip', 'Late Backside Shuvit', 'Late Frontside Shuvit',
+]);
+
 export const EL_TORO_TERRAIN: DropTerrain = {
   drop: STAIR_DROP, run: STAIR_RUN, landPast: LAND_PAST, laneZ: 12 * SET_FOOT, ground: stairGround,
 };

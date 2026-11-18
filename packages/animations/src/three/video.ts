@@ -1,6 +1,3 @@
-import { createElement } from 'react';
-import { flushSync } from 'react-dom';
-import { createRoot, type Root } from 'react-dom/client';
 import {
   AudioBufferSource,
   BufferTarget,
@@ -16,7 +13,7 @@ import type { FallVariant } from '../motion/trick';
 import type { RailBail } from '../motion/fall/railBail';
 import { resolveSkateStyle } from '../motion/style';
 import { DEFAULT_SCENE_CAMERA, type SceneCamera, type TripodId } from '../camera/camera';
-import { setInfo, type Obstacle, type RailChoice, type StageSet } from '../sets/sets';
+import type { Obstacle, RailChoice, StageSet } from '../sets/sets';
 import type { Skater } from '../riders/skaters';
 import { SceneRenderer } from './renderer';
 import type { RenderQuality } from './cinematic';
@@ -24,9 +21,8 @@ export type { RenderQuality } from './cinematic';
 import { lookFor } from './rendererPool';
 import { renderSoundtrack } from '../sound/skateSounds';
 import { soundtrackFor } from '../sound/soundtrack';
-import { planStage, stageFrame, type StageFrame } from '../stage/stage';
-import { STOCK_VIEW, stageView, tracked } from '../camera/view';
-import { WaterfrontFarImage } from '../sets/waterfront/waterfrontFar';
+import { planStage, stageFrame } from '../stage/stage';
+import { STOCK_VIEW } from '../camera/view';
 
 /**
  * @skrobot/animations/three/video — films an attempt, landed or missed, to a video file.
@@ -35,10 +31,8 @@ import { WaterfrontFarImage } from '../sets/waterfront/waterfrontFar';
  * frame rate, however fast or slow the device draws, and encoded with
  * WebCodecs. No real-time recording fallback: slow rendering must never skip
  * frames in a downloaded video. Browsers without an encoder cannot export.
- * The same stage, renderer, camera, and zoom as the live scene;
- * on the waterfront the far panorama, which the page layers under the
- * canvas, is painted under each frame instead (WaterfrontFarImage). The
- * trick's sounds go on its audio track, where the browser can encode one.
+ * The same stage, renderer, camera and zoom draw the live scene. The trick's
+ * sounds go on its audio track where the browser can encode one.
  * Its own entry point, so the encoder only loads when someone films.
  */
 
@@ -149,15 +143,12 @@ export async function recordTrickVideo({
   const glCanvas = document.createElement('canvas');
   const scene = new SceneRenderer(glCanvas, lookFor(robot, skater), set, quality);
   scene.setSize(width, height, quality === 'cinematic' ? Math.min(1.5, 2560 / width) : 1);
-  const far = setInfo(set).farPanorama ? new FarPainter(width, height) : null;
 
   const bitrate = Math.round(BITRATE * ((width * height) / (1280 * 1034)) * (fps / 60));
-  const drawFrame = async (time: number) => {
+  const drawFrame = (time: number) => {
     // The wheels' motion smear spans one video frame (stageFrame assumes 60 fps).
     const frame = stageFrame(stage, Math.min(stage.end, time * rate), (rate * 60) / fps);
-    const backdrop = await far?.paint(frame, camera, zoom);
     ctx.clearRect(0, 0, width, height);
-    if (backdrop) ctx.drawImage(backdrop, 0, 0, width, height);
     // Copied in the same task it's drawn, while the WebGL canvas still holds the frame.
     if (scene.renderer.getContext().isContextLost()) throw new Error('The graphics context was lost. Try exporting again.');
     scene.render(frame, camera, zoom, tripod);
@@ -184,7 +175,7 @@ export async function recordTrickVideo({
       }
       for (let i = 0; i < total; i++) {
         signal?.throwIfAborted();
-        await drawFrame(i / fps);
+        drawFrame(i / fps);
         await source.add(i / fps, 1 / fps);
         onProgress?.((i + 1) / total);
       }
@@ -197,32 +188,7 @@ export async function recordTrickVideo({
     if (!buffer) throw new Error('The video came out empty.');
     return new Blob([buffer], { type: output.format.mimeType });
   } finally {
-    far?.dispose();
     scene.dispose();
-  }
-}
-
-/** Rasterizes the waterfront's far panorama for one frame, framed as the renderer frames it. */
-class FarPainter {
-  private readonly host = document.createElement('div');
-  private readonly root: Root = createRoot(this.host);
-
-  constructor(private readonly width: number, private readonly height: number) {}
-
-  async paint(frame: StageFrame, camera: Readonly<SceneCamera>, zoom: number): Promise<HTMLImageElement> {
-    const { width, height } = this;
-    const view = stageView(frame.lift, tracked(camera, frame), zoom, width / height);
-    flushSync(() => this.root.render(createElement(WaterfrontFarImage, { cam: view.cam, scroll: frame.scroll, view: view.box, width, height })));
-    const svg = this.host.firstElementChild;
-    if (!svg) throw new Error('The waterfront backdrop did not render.');
-    const image = new Image(width, height);
-    image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(svg))}`;
-    await image.decode();
-    return image;
-  }
-
-  dispose() {
-    this.root.unmount();
   }
 }
 
@@ -241,26 +207,21 @@ export async function renderTrickPreview(options: TrickVideoOptions): Promise<{ 
   output.height = height;
   const ctx = output.getContext('2d');
   if (!ctx) throw new VideoUnsupportedError();
-  const far = setInfo(set).farPanorama ? new FarPainter(width, height) : null;
   const result = { standard: '', cinematic: '' };
-  try {
-    const backdrop = await far?.paint(frame, camera, zoom);
-    for (const quality of ['standard', 'cinematic'] as const) {
+  for (const quality of ['standard', 'cinematic'] as const) {
+    signal?.throwIfAborted();
+    const canvas = document.createElement('canvas');
+    const scene = new SceneRenderer(canvas, lookFor(robot, skater), set, quality);
+    try {
+      scene.setSize(width, height, quality === 'cinematic' ? 1.5 : 1);
+      await scene.ready;
       signal?.throwIfAborted();
-      const canvas = document.createElement('canvas');
-      const scene = new SceneRenderer(canvas, lookFor(robot, skater), set, quality);
-      try {
-        scene.setSize(width, height, quality === 'cinematic' ? 1.5 : 1);
-        await scene.ready;
-        signal?.throwIfAborted();
-        scene.render(frame, camera, zoom, tripod);
-        ctx.clearRect(0, 0, width, height);
-        if (backdrop) ctx.drawImage(backdrop, 0, 0, width, height);
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(canvas, 0, 0, width, height);
-        result[quality] = output.toDataURL('image/png');
-      } finally { scene.dispose(); }
-    }
-    return result;
-  } finally { far?.dispose(); }
+      scene.render(frame, camera, zoom, tripod);
+      ctx.clearRect(0, 0, width, height);
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(canvas, 0, 0, width, height);
+      result[quality] = output.toDataURL('image/png');
+    } finally { scene.dispose(); }
+  }
+  return result;
 }

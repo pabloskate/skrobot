@@ -23,8 +23,9 @@ export function turnLevel(dir: V3, deg: number): V3 {
 
 /** Furthest the legs reach to a planted foot: the knee never locks. */
 export const REACH = 0.965;
-/** Feet land this far either side of the hips' line (in hip widths), toes turned out from the way the hips face (degrees). */
-export const STEP_WIDTH = 1.25;
+/** Distance from the running line to either footfall: 6.25 rig units, or 8.8 cm at the adult's scale. */
+export const stepHalfWidth = (body: BodyDims): number => 6.25 * body.scale;
+/** Degrees a planted toe turns out from the way the rider faces. */
 export const TOE_OUT = 8;
 /**
  * How far (world units, a robot's) the ground under a shoe may bend off one even slope, heel to toe or side to side, before
@@ -84,7 +85,7 @@ export function besideStop(by: V3, balance: V3, foot: 0 | 1, facing: V3, way: V3
   const shift = Math.max(-0.3 * leg, Math.min(0.3 * leg, dot3(sub3(balance, by), way)));
   const side = foot === 0 ? -1 : 1;
   return {
-    at: add3(add3(by, scale3(rightOf(facing), side * 2 * STEP_WIDTH * body.hipHalf)), scale3(way, shift)),
+    at: add3(add3(by, scale3(rightOf(facing), side * 2 * stepHalfWidth(body))), scale3(way, shift)),
     heading: turnLevel(facing, side * TOE_OUT),
   };
 }

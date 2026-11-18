@@ -125,7 +125,7 @@ describe('Leap of Faith: the original Point Loma courtyard', () => {
     let minimum = Infinity;
     let crossings = 0;
     const failures: string[] = [];
-    for (const base of ['Ollie', 'Kickflip', 'Heelflip', '360 Flip', 'Frontside 180', 'Backside 360 Kickflip', 'Impossible']) {
+    for (const base of ['Ollie', 'Kickflip', 'Heelflip', '360 Flip', '360 Shuvit', 'Bigspin', 'Frontside 180', 'Backside 360 Kickflip', 'Backside 360 Heelflip', 'Impossible']) {
       for (const stance of STANCES) for (const rider of RIDERS) for (const pop of [0.45, 1.15]) {
         const stage = attempt(base, stance, rider, pop);
         const { pop: takeoff, land } = stage.stairs!;

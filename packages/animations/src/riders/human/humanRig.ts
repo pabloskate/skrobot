@@ -1,34 +1,18 @@
 import { add3, cross3, dot3, norm3, scale3, smoothstep, sub3, type V3 } from '../../math';
-import type { ArmRig, BoardRig, Frame3, LegRig, Rig } from '../../motion/skeleton';
+import { ANKLE_LIFT, FOOT_OVER_SOLE, type ArmRig, type BoardRig, type Frame3, type LegRig, type Rig } from '../../motion/skeleton';
 import { capsuleIntersectsBoard } from '../../board/boardCollision';
-import { HUMAN_FOREARM, HUMAN_HEAD, HUMAN_SCALE, HUMAN_SHIN, HUMAN_THIGH, HUMAN_UPPER_ARM, MODEL_SCALE, shinRadius, thighRadius } from './humanProportions';
+import { HUMAN_FOREARM, HUMAN_HEAD, HUMAN_HIP_HALF, HUMAN_SCALE, HUMAN_SHOULDER, HUMAN_SHIN, HUMAN_THIGH, HUMAN_UPPER_ARM, MODEL_SCALE, shinRadius, thighRadius } from './humanProportions';
 import { ASPHALT } from '../../camera/view';
 
 /**
- * The robot's rig worn by a person. The rig is sized for a toy: legs and
- * a chest that put its head about a board and a third over the deck, with
- * stubby arms set wide on a boxy chest (UPPER_ARM 13, FOREARM 12,
- * shoulders 17 off the spine). A grown skater stands 5'10", over two and a
- * quarter boards, with arms that hang to mid-thigh from shoulders set in
- * narrower.
- *
- * So the person is the robot's pose, bigger: everything from the hips up is
- * scaled by HUMAN_SCALE out from under the feet, and the legs are that much
- * longer, re-bent to reach from the higher hips down to the very same
- * ankles. The board, the shoes on it, and the ankles in them are the rig as
- * solved, so the trick is the same trick; the person just stands taller
- * over it. The head grows less than the body (HUMAN_HEAD), the way a
- * grown-up's head is a smaller share of them than a kid's.
- *
- * The arms keep the rig's pose: each bone points the way the rig points
- * it, only longer, from a shoulder moved in along the chest and down a
- * little, and tipped up off the ground where that longer reach would put a
- * hand through it.
+ * Fit the animation rig to the adult skater over the trick's planted shoes.
+ * The center of the pelvis rises with stature, while its joint spacing and
+ * the lengths on either side of the knee come from the skinned model.
+ * Arms keep their authored directions from the anatomical shoulders, with
+ * their reach limited by the ground on a fall. The board and soles carry
+ * the trick's original contact poses.
  */
 
-/** How far the shoulder joints sit off the spine, and below the robot's: a person's sit under the shoulder's top. */
-export const HUMAN_SHOULDER = 12.4;
-export const HUMAN_SHOULDER_DROP = 3.2;
 /** Where the neck meets the jaw in the rig's head frame: the head grows out from here, so the neck keeps its length. */
 const HEAD_PIVOT = { f: -2.5, u: -15 } as const;
 
@@ -126,17 +110,21 @@ export const PERSON_REACH = 0.995;
 /** `p` grown `scale` times out from `from`: a person's (HUMAN_SCALE) unless told otherwise. */
 export const grownFrom = (from: V3, p: V3, scale = HUMAN_SCALE): V3 => add3(from, scale3(sub3(p, from), scale));
 
-/**
- * Hips grown HUMAN_SCALE out from `from`, over the same ankles, come in
- * toward the feet together, as far as either of a person's legs (HUMAN_THIGH,
- * HUMAN_SHIN) needs to reach its ankle (PERSON_REACH): how far they come in.
- */
-export function reachShift(legs: ReadonlyArray<{ hip: V3; ankle: V3 }>, from: V3): V3 {
+/** Grow the pelvis over its feet, with the joints the measured distance apart along its own axis. */
+export function grownHips(legs: Rig['legs'], from: V3, scale = HUMAN_SCALE): [V3, V3] {
+  const [first, second] = legs;
+  const center = grownFrom(from, scale3(add3(first.hip, second.hip), 0.5), scale);
+  const side = scale3(norm3(sub3(second.hip, first.hip)), HUMAN_HIP_HALF * (scale / HUMAN_SCALE));
+  return [sub3(center, side), add3(center, side)];
+}
+
+/** Translation of the whole pelvis needed for both legs to reach their ankles. */
+export function reachShift(legs: Rig['legs'], hips: [V3, V3]): V3 {
   let shift: V3 = { x: 0, y: 0, z: 0 };
   const reach = (HUMAN_THIGH + HUMAN_SHIN) * PERSON_REACH;
   for (let pass = 0; pass < 2; pass++) {
-    for (const leg of legs) {
-      const hip = add3(grownFrom(from, leg.hip), shift);
+    for (const [i, leg] of legs.entries()) {
+      const hip = add3(hips[i], shift);
       const d = sub3(leg.ankle, hip);
       const len = Math.hypot(d.x, d.y, d.z);
       if (len > reach) shift = add3(shift, scale3(d, (len - reach) / len));
@@ -157,14 +145,28 @@ const frameAt = (frame: Frame3, origin: V3): Frame3 => ({
  * under them (the asphalt, or the steps under a handrail) that a slammed body
  * grows along and the arms keep off.
  */
-export function humanRig(rig: Rig, ground = ASPHALT): Rig {
+export function humanRig(rig: Rig, ground = ASPHALT, pop?: Rig['popArc']): Rig {
   const from = growFrom(rig, ground);
   // Hips up, scaled; then pulled in toward the feet if either leg can't reach its ankle.
-  const shift = reachShift(rig.legs, from);
-  const place = (p: V3) => add3(grownFrom(from, p), shift);
+  const hips = grownHips(rig.legs, from);
+  // In flight the hips follow the jump while the board and shoes move under
+  // them. Scaling about a rising toe would make a flick lift the torso too.
+  // Match back to the planted pose during the tail strike and touchdown.
+  let drop = 0;
+  if (pop) {
+    const ankleHeight = ANKLE_LIFT + FOOT_OVER_SOLE;
+    const overDeck = ankleHeight + (pop.extension - ankleHeight) * HUMAN_SCALE - pop.tuck;
+    const blend = smoothstep(Math.min(pop.progress, 1 - pop.progress) / 0.14);
+    drop = (rig.board.center.y - overDeck - (hips[0].y + hips[1].y) * 0.5) * blend;
+    hips[0].y += drop;
+    hips[1].y += drop;
+  }
+  const shift = reachShift(rig.legs, hips);
+  const upperShift = { ...shift, y: shift.y + drop };
+  const place = (p: V3) => add3(grownFrom(from, p), upperShift);
 
-  const legs = rig.legs.map((leg): LegRig => {
-    const hip = place(leg.hip);
+  const legs = rig.legs.map((leg, i): LegRig => {
+    const hip = add3(hips[i], shift);
     // The robot's knee, as a direction off its own hip-ankle line.
     const axis = norm3(sub3(leg.ankle, leg.hip));
     const off = sub3(leg.knee, leg.hip);
@@ -177,16 +179,13 @@ export function humanRig(rig: Rig, ground = ASPHALT): Rig {
   const pivot = rig.head.at(HEAD_PIVOT.f, HEAD_PIVOT.u, 0);
   const head = frameAt(rig.head, add3(place(pivot), scale3(sub3(rig.head.origin, pivot), HUMAN_HEAD)));
 
+  const chest = frameAt(torso, scale3(add3(legs[0].hip, legs[1].hip), 0.5));
   const arms = rig.arms.map((arm): ArmRig => {
     const upper = norm3(sub3(arm.elbow, arm.shoulder));
     const fore = norm3(sub3(arm.hand, arm.elbow));
-    const across = dot3(sub3(arm.shoulder, rig.torso.origin), rig.torso.side);
-    const inward = scale3(rig.torso.side, Math.sign(across) * HUMAN_SHOULDER - across);
-    const shoulder = place(add3(add3(arm.shoulder, inward), scale3(rig.torso.up, -HUMAN_SHOULDER_DROP)));
-    const upperLength = HUMAN_UPPER_ARM * HUMAN_SCALE;
-    const foreLength = HUMAN_FOREARM * HUMAN_SCALE;
-    const elbow = add3(shoulder, scale3(overGround(shoulder, upper, upperLength, ELBOW_OFF_GROUND, ground), upperLength));
-    const hand = add3(elbow, scale3(overGround(elbow, fore, foreLength, HAND_OFF_GROUND, ground), foreLength));
+    const shoulder = chest.at(HUMAN_SHOULDER.f, HUMAN_SHOULDER.u, (arm.side === 'left' ? -1 : 1) * HUMAN_SHOULDER.s);
+    const elbow = add3(shoulder, scale3(overGround(shoulder, upper, HUMAN_UPPER_ARM, ELBOW_OFF_GROUND, ground), HUMAN_UPPER_ARM));
+    const hand = add3(elbow, scale3(overGround(elbow, fore, HUMAN_FOREARM, HAND_OFF_GROUND, ground), HUMAN_FOREARM));
     return { ...arm, shoulder, elbow, hand };
   }) as Rig['arms'];
 

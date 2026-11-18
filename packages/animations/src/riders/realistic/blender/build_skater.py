@@ -34,7 +34,7 @@ assert LOOK in ("skater", "alien"), LOOK
 ALIEN = LOOK == "alien"
 os.makedirs(OUT, exist_ok=True)
 DATA = LocationService.get_user_data()
-# Metres to the model's units: a 1.8 m adult. Its legs measure MODEL_LEGS (humanProportions.ts).
+# Metres to the model's units: a 1.8 m adult. humanProportions.ts records its rest-pose joint dimensions.
 SCALE = 97.0
 
 for o in list(bpy.data.objects):

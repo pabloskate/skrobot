@@ -200,7 +200,7 @@ export class RealisticHuman3D {
     this.bones = body.skeleton.bones;
     this.parents = rest.bones.map((b) => b.parent);
     this.root = Math.max(0, rest.bones.findIndex((b) => b.name === 'root'));
-    this.solver = new SkaterSolver(rest, look.lidFollow);
+    this.solver = new SkaterSolver(rest, look.lidFollow, this.character === 'skater');
     const soles = rest.soles;
     for (const bone of this.bones) {
       bone.matrixAutoUpdate = false;

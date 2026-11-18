@@ -1,5 +1,5 @@
 import type { Handrail } from '../../motion/grind';
-import type { DropTerrain } from '../elToro/stairs';
+import { BOARD_ALONG_TRICKS, type DropTerrain } from '../elToro/stairs';
 import { SET_FOOT } from '../setScale';
 import type { SpotFilmers } from '../tripods';
 
@@ -166,15 +166,10 @@ export const HOLLYWOOD_FENCE_YAW = -32;
 const FENCE_POP_ALONG = 0.7;
 const FENCE_POP_ACROSS = 0.95;
 const FENCE_POP_WRAP = 1.1;
-/** Flips, and late shuvs: the board still lined up as it goes over the rail. */
-const BOARD_ALONG = new Set([
-  'Ollie', 'Ollie North', 'Kickflip', 'Heelflip', 'Double Kickflip', 'Double Heelflip',
-  'Late Kickflip', 'Late Backside Shuvit', 'Late Frontside Shuvit',
-]);
 /** A trick's pop over the fence; without one, the most any takes. */
 export function fencePop(base?: string): number {
   if (base === undefined || base === 'Impossible') return FENCE_POP_WRAP;
-  return BOARD_ALONG.has(base) ? FENCE_POP_ALONG : FENCE_POP_ACROSS;
+  return BOARD_ALONG_TRICKS.has(base) ? FENCE_POP_ALONG : FENCE_POP_ACROSS;
 }
 const FENCE_TURN = (HOLLYWOOD_FENCE_YAW * Math.PI) / 180;
 const FENCE_POP = { x: -0.9 * F, z: -3 * F };
