@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { TbArrowLeft, TbCheck, TbDice5, TbMapPin, TbShare, TbSkateboard, TbUser, TbVideo } from 'react-icons/tb';
-import { SKATERS, setInfo, spotStands, useSoundEffects, type SceneCamera, type TripodSpot } from '@skrobot/animations';
+import { SKATERS, skaterInfo, setInfo, spotStands, useSoundEffects, type SceneCamera, type TripodSpot } from '@skrobot/animations';
 import { groundUnder, planBounds, riderPath, spotPlan, type PathPoint } from '@skrobot/animations/three';
 import { ROBOT_BY_ID, ROBOTS } from '@/features/robots';
 import {
@@ -131,7 +131,7 @@ export default function DreamTricks({ initialSearch = '' }: { initialSearch?: st
   const fall = outcomeOf(state);
   const outcome = stageOutcome(fall);
   const timeline = timelineFor(state, RIDER.skateStyle);
-  const skater = SKATERS.find((option) => option.id === state.skater) ?? SKATERS[0];
+  const skater = skaterInfo(state.skater);
   const shot = !state.stand && typeof state.camera === 'string' ? dreamShots(state).find((option) => option.id === state.camera) : undefined;
   const cameraName = mode === 'tripod' ? `Tripod · ${shot?.label ?? 'your spot'}` : shot ? `Follow · ${shot.label.toLowerCase()}` : 'Follow';
 

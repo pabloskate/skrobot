@@ -69,6 +69,9 @@ describe('Dream Tricks', () => {
     expect(dreamStateFromSearch('?set=unknown&grind=lipslide').set).toBe('el-toro');
     expect(dreamStateFromSearch('?grind=lipslide').set).toBe('el-toro');
     expect(dreamStateFromSearch('?trick=kickflip&skater=humanoid').skater).toBe('robot');
+    expect(dreamStateFromSearch('?trick=heelflip&set=wallenberg&skater=windup')).toEqual(
+      dreamStateFromSearch('?trick=heelflip&set=wallenberg'),
+    );
   });
 
   it('round-trips what is on stage through the link', () => {

@@ -32,7 +32,6 @@ import type { Expression, RobotLook } from '../riders/look';
 import { RealisticRobot3D } from '../riders/realisticRobot/realisticRobot3d';
 import { Robot3D } from '../riders/robot/robot3d';
 import type { Skater } from '../riders/skaters';
-import { WINDUP_BOARD, WindUp3D } from '../riders/windup/windup3d';
 import { Bar3D } from '../sets/bar3d';
 import type { StageSet } from '../sets/sets';
 import { SET_PIECES } from './setPieces';
@@ -96,7 +95,6 @@ const RIDER_PIECES: Record<Skater, (look: RendererLook, quality: RenderQuality, 
   'realistic-robot': (look, _quality, light) => ({ rider: new RealisticRobot3D(look.robot, light), board: new RealisticBoard3D(light) }),
   realistic: () => ({ rider: new RealisticHuman3D(), board: new RealisticBoard3D() }),
   alien: () => ({ rider: new RealisticHuman3D('alien'), board: new RealisticBoard3D() }),
-  windup: (_look, quality) => ({ rider: new WindUp3D(), board: quality === 'cinematic' ? new RealisticBoard3D() : new Board3D(WINDUP_BOARD) }),
 };
 
 /**

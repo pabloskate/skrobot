@@ -7435,7 +7435,6 @@ main:has(.rps-arena) > .screen {
 .dream-skater-realistic-robot { --skater-bg: #e6eeec; }
 .dream-skater-realistic { --skater-bg: #f4f0e9; }
 .dream-skater-alien { --skater-bg: #edf4e8; }
-.dream-skater-windup { --skater-bg: #fbece6; }
 
 .dream-skater:hover {
   border-color: #cdbff3;

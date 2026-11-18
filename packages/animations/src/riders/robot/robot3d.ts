@@ -60,8 +60,7 @@ const HEAD_CONTACT: [number, number, number] = [HEAD.f * 1.05, HEAD.u * 1.05, HE
 
 /**
  * Part ids for the outline pass: each is one silhouette. The fittings are
- * numbered clear of the board's, the bar's and the scenery's (as Wind-Up's
- * are, windup3d.ts).
+ * numbered clear of the board's, the bar's and the scenery's.
  */
 const ID = {
   leftArm: 1, rightArm: 2, leftLeg: 3, rightLeg: 4, torso: 5, head: 6, leftShoe: 7, rightShoe: 8,

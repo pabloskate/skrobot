@@ -487,17 +487,18 @@ describe('Trick Explorer links', () => {
   it('opens with the robot, and accepts every selectable skater in shared links', () => {
     expect(DEFAULT_STATE.skater).toBe('robot');
     expect(stateFromSearch('?grind=lipslide').skater).toBe('robot');
-    expect(SKATERS.map((option) => option.id)).toEqual(['robot', 'realistic-robot', 'realistic', 'alien', 'windup']);
+    expect(SKATERS.map((option) => option.id)).toEqual(['robot', 'realistic-robot', 'realistic', 'alien']);
     for (const { id } of SKATERS) {
       expect(stateFromSearch(`?trick=heelflip&skater=${id}`).skater).toBe(id);
     }
     expect(stateFromSearch('?skater=ghost').skater).toBe('robot');
-    // Links from before the illustrated human and humanoid were retired open with the robot.
+    // Links naming a retired skater open with the robot.
     expect(stateFromSearch('?trick=heelflip&skater=human').skater).toBe('robot');
     expect(stateFromSearch('?trick=heelflip&skater=humanoid').skater).toBe('robot');
+    expect(stateFromSearch('?trick=heelflip&skater=windup')).toEqual(flatState({ trick: 'Heelflip' }));
   });
 
-  it.each(['realistic-robot', 'realistic', 'alien', 'windup'] as const)('keeps %s selected when changing spots, modes, grinds, and random tricks', (skater) => {
+  it.each(['realistic-robot', 'realistic', 'alien'] as const)('keeps %s selected when changing spots, modes, grinds, and random tricks', (skater) => {
     const initial = flatState({ skater, trick: 'Heelflip' });
     const onStairs = withSet(initial, 'el-toro');
     const onPlaza = withSet(onStairs, 'plaza');

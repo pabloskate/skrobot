@@ -72,7 +72,7 @@ describe('renderer pool', () => {
   });
 
   it('keeps only a couple idle, disposing the oldest', () => {
-    const skaters = ['robot', 'realistic', 'windup'] as const;
+    const skaters = ['robot', 'realistic', 'realistic-robot'] as const;
     const borrowed = skaters.map((skater) => borrowRenderer(lookFor(robot, skater), 'plaza') as unknown as { disposed: boolean });
     for (const renderer of borrowed) returnRenderer(renderer as never);
     expect(borrowed.map((r) => r.disposed)).toEqual([true, false, false]);
