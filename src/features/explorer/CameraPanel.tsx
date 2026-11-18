@@ -59,21 +59,23 @@ export default function CameraPanel({ state, mode, camera, stand, plan, window, 
 
   return (
     <div className="dream-camera">
-      <div className="dream-mode" role="radiogroup" aria-label="Camera">
-        {MODES.map((option) => (
-          <button
-            key={option.id}
-            type="button"
-            role="radio"
-            aria-checked={mode === option.id}
-            className={mode === option.id ? 'active' : ''}
-            onClick={() => onMode(option.id)}
-          >
-            {option.id === 'tripod' ? <TbVideo aria-hidden /> : <TbRun aria-hidden />}
-            {option.label}
-          </button>
-        ))}
-      </div>
+      {plan && (
+        <div className="dream-mode" role="radiogroup" aria-label="Camera">
+          {MODES.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              role="radio"
+              aria-checked={mode === option.id}
+              className={mode === option.id ? 'active' : ''}
+              onClick={() => onMode(option.id)}
+            >
+              {option.id === 'tripod' ? <TbVideo aria-hidden /> : <TbRun aria-hidden />}
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {plan && window && (
         <>
@@ -94,7 +96,7 @@ export default function CameraPanel({ state, mode, camera, stand, plan, window, 
         </>
       )}
 
-      <p className="dream-camera-blurb">{MODES.find((option) => option.id === mode)?.blurb}</p>
+      <p className="dream-camera-blurb">{plan ? MODES.find((option) => option.id === mode)?.blurb : 'Drag the scene to orbit the skater.'}</p>
 
       <div className="dream-field">
         <span className="dream-field-label">{follow ? 'Angles' : 'Filmer spots'}</span>

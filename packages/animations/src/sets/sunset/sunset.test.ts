@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { DoubleSide, Mesh, MeshBasicMaterial, Raycaster, Vector3 } from 'three';
 import { projectThree, stageView } from '../../camera/view';
-import { SET_FOOT } from '../elToro/stairs';
+import { SET_FOOT } from '../setScale';
+import { SUNSET_SPOT } from './sunsetSpot';
 import { Bake } from '../../three/bake';
 import { MAX_CANOPIES, MAX_CONTACTS, WALL } from '../surfaces';
 import { BANK_INK, buildSunsetGeometry } from './sunset3d';
@@ -272,10 +273,14 @@ describe('Sunset roof-to-bank geometry', () => {
       expect(word).not.toMatch(brand);
     }
     expect(() => sunsetLettering(new Bake(), 'SUNSET', [0, 0, 0], [1, 0, 0], 1, '#ffffff')).toThrow();
-    // No string in the set's source spells the business's name, slogan or address (imports aside).
+    // No string in the set's source spells the business's name, slogan or address (imports aside, and the
+    // spot's internal id, which is never shown: links use its neutral slug, and the id only keeps old ones opening).
     const dir = dirname(fileURLToPath(import.meta.url));
+    expect(SUNSET_SPOT.slug).toBeDefined();
+    expect(SUNSET_SPOT.slug).not.toMatch(brand);
     for (const file of readdirSync(dir).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'))) {
-      const source = readFileSync(join(dir, file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '').replace(/from '[^']*'/g, '');
+      const source = readFileSync(join(dir, file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '').replace(/from '[^']*'/g, '')
+        .replace(`id: '${SUNSET_SPOT.id}'`, '');
       for (const literal of source.match(/'[^'\n]*'|"[^"\n]*"|`[^`]*`/g) ?? []) expect(literal, `${file}: ${literal}`).not.toMatch(brand);
     }
   });

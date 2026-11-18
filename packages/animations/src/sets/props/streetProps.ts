@@ -163,7 +163,7 @@ export interface PropHaze {
   amount: number;
 }
 
-/** The set's light: daylight and haze as the baked props have it (sets/elToro/elToroMaterials.ts), or a spot's own haze. */
+/** The set's light: daylight and haze as the baked props have it (sets/spotMaterials.ts), or a spot's own haze. */
 function light(haze?: PropHaze) {
   const fade = haze
     ? `${haze.amount.toFixed(4)} * smoothstep(${haze.from.toFixed(1)}, ${haze.to.toFixed(1)},`

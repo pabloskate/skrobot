@@ -1,6 +1,5 @@
 import { ClassicSpot3D } from '../classicSpot3d';
-import { CARLSBAD_LOOK } from '../carlsbad/carlsbad3d';
-import type { SpotLook } from '../surfaces';
+import { BASE_LOOK, type SpotLook } from '../surfaces';
 import { buildMiamiGeometry } from './miamiGeometry';
 import {
   MIAMI_DROP, MIAMI_FILMERS, MIAMI_SLAB_GRADE, MIAMI_SLAB_LIP_X, miamiGround,
@@ -17,7 +16,7 @@ export { MIAMI_TRAFFIC } from './miamiTrees';
  * look, with the plaza's clay pavers and the boulevard's asphalt.
  */
 export const MIAMI_LOOK: SpotLook = {
-  ...CARLSBAD_LOOK,
+  ...BASE_LOOK,
   haze: { color: '#d3dde1', from: 60, to: 1100, amount: 0.55 },
   fill: { sky: 0.72, bounce: 0.95 },
   // Urethane marks where the bank line rolls off onto the pavers and the over line lands and rolls away.
@@ -31,7 +30,6 @@ export const MIAMI_LOOK: SpotLook = {
   // them, their feet kept damp and a little rusty by the sprinklers.
   walls: { bare: PAINT.wallPeeled, coats: 0.03, damp: 0.7, rust: 0.5, boards: 0.5, panel: 6 },
   foliage: true,
-  sash: undefined,
 };
 
 export class Miami3D extends ClassicSpot3D {

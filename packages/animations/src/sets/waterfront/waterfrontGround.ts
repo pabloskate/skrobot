@@ -1,322 +1,133 @@
-import { GLSL3, ShaderMaterial, Vector2, Vector3, Vector4 } from 'three';
+import { GLSL3, ShaderMaterial, Vector2, Vector3 } from 'three';
 import { X0 } from '../../motion/trick';
-import { PALETTE } from '../../camera/camera';
-import { mixHex } from '../../math';
-import { LEDGE_FRONT_Z, PROM_Z, SLAB, TREE_Z, WALL_Z, WATER_Z, WF } from './waterfrontLayout';
-import { rgb } from '../../three/materials';
-import { SET_SCALE } from '../setScale';
+import { glslRgb } from '../../three/materials';
+import { SPOT_NOISE } from '../spotMaterials';
+import { SET_FOOT, SET_SCALE } from '../setScale';
+import { WATER_Z } from './waterfrontLayout';
 
 /**
- * The waterfront's ground for TrickScene3D: plazaGround in waterfront.tsx,
- * drawn per pixel on the asphalt plane instead of as paths. The plaza's
- * concrete with its uneven slabs, granite bands, cracks, stains and gum, the
- * slab joints, the promenade's pavers in running bond with a soldier course,
- * skid marks along the riding lane, manhole covers, the iron grates round
- * the palms, the ledges' contact shadows, then the props' shadows and the
- * rider's. Every random choice is setKit's hash2 on stable copy indices, so
- * each slab, crack, and stain stays put as the street scrolls, and lines keep
- * their on-screen widths. Past the sea wall the ground is see-through: the
- * bay is a far layer under the canvas.
+ * Sealed concrete pours extending inland from the quay. All texture coordinates
+ * are in feet in the moving street frame, including the saw cuts and drain iron.
  */
-
-const c = (hex: string) => `vec3(${rgb(hex).map((v) => v.toFixed(5)).join(', ')})`;
-const f = (n: number) => n.toFixed(2);
-
-const SLAB_ROW0 = LEDGE_FRONT_Z + SLAB * 0.5;
-const SLAB_ROWS = Math.ceil((760 - SLAB_ROW0) / SLAB);
-const NEAR = 2600;
-
-const FRAG = /* glsl */ `
+const FRAGMENT = /* glsl */ `
 layout(location = 0) out vec4 outColor;
 layout(location = 1) out vec4 outInfo;
-in vec3 vWorld;
-uniform vec4 uBox;
+in vec2 vGround;
 uniform vec2 uRes;
-uniform float uHorizon;
-uniform float uPlazaNear;
 uniform float uScroll;
-uniform float uPxPerUnit;
 uniform sampler2D uShadow;
 uniform vec3 uShadowOpacity;
+${SPOT_NOISE}
 
-const vec3 CONCRETE = ${c(WF.concrete)};
-const vec3 CONCRETE_FAR = ${c(WF.concreteFar)};
-const vec3 SLAB_DARK = ${c(WF.slabDark)};
-const vec3 SLAB_LIGHT = ${c(WF.slabLight)};
-const vec3 JOINT = ${c(WF.joint)};
-const vec3 CRACK = ${c(WF.crack)};
-const vec3 PAVER = ${c(WF.paver)};
-const vec3 PAVER_DARK = ${c(WF.paverDark)};
-const vec3 PAVER_JOINT = ${c(WF.paverJoint)};
-const vec3 BAND = ${c(WF.band)};
-const vec3 STAIN = ${c(WF.stain)};
-const vec3 SKID = ${c(WF.skid)};
-const vec3 GRATE = ${c(WF.grate)};
-const vec3 GRATE_EDGE = ${c(mixHex(WF.grate, PALETTE.ink, 0.3))};
-const vec3 SHADOW = ${c(PALETTE.shadow)};
-
-float hash2(int i, int j, int salt) {
-  uint h = (uint(i) * 0x27d4eb2du) ^ (uint(j) * 0x165667b1u) ^ (uint(salt) * 0x9e3779b1u);
-  h = (h ^ (h >> 15u)) * 0x85ebca6bu;
-  h = (h ^ (h >> 13u)) * 0xc2b2ae35u;
-  return float(h ^ (h >> 16u)) / 4294967296.0;
+// Pixel-filter a strip of full world width 2 * radius. Narrow joints and grate
+// slots keep their average coverage when viewed down the length of the wharf.
+float strip(float distanceToLine, float radius, float footprint) {
+  float w = max(footprint, 0.0001);
+  return clamp(min(w, min(2.0 * radius, radius + 0.5 * w - abs(distanceToLine))) / w, 0.0, 1.0);
 }
 
-// Screen pixels per world unit along a direction on the ground.
-mat2 toScreen;
-float pxAlong(vec2 dir) { return length(toScreen * dir); }
-/** Coverage of a shape from its signed world distance (negative inside) and outward direction. */
-float fill(float sd, vec2 dir) { return clamp(0.5 - sd * pxAlong(dir), 0.0, 1.0); }
-/** Coverage of a line from its world distance, its stroke width given in viewBox units. */
-float stroke(float d, vec2 dir, float width) { return clamp(0.5 * width * uPxPerUnit - abs(d) * pxAlong(dir) + 0.5, 0.0, 1.0); }
-/** Distance to the nearest of a repeating set of lines at coord = phase + k * period. */
-float repeatDist(float coord, float phase, float period) {
-  return coord - phase - period * floor((coord - phase) / period + 0.5);
+vec3 flatwork(vec2 q, vec2 pixel) {
+  const vec2 pourSize = vec2(8.5, 7.25);
+  vec2 grid = (q + vec2(2.3, 1.4)) / pourSize;
+  vec2 id = floor(grid);
+  vec2 local = fract(grid) * pourSize;
+  vec2 edges = min(local, pourSize - local);
+  float batch = hash(id + 2.21);
+  float cloud = weather(q * 0.47 + 13.8);
+  float salt = weather(q * 1.83 + 4.5);
+  vec3 c = mix(${glslRgb('#a5a399')}, ${glslRgb('#c7c4b9')},
+    clamp(0.50 + 0.30 * (batch - 0.5) + 0.86 * (cloud - 0.5) + 0.28 * (salt - 0.5), 0.0, 1.0));
+
+  // The trowelled skim coat covers most of the aggregate. At wheel height
+  // the fine mineral grain and the drag of the float are barely visible.
+  float sand = grain(q * 53.0);
+  float finish = grain(vec2(q.x * 1.2 + batch * 7.0, q.y * 22.0 + 1.8 * cloud));
+  c += vec3(0.048 * sand + 0.019 * finish + 0.032 * grain(q * 12.0));
+  float silt = smoothstep(0.53, 0.80, weather(q * 0.16 + 30.6) + 0.18 * (salt - 0.5));
+  c *= 1.0 - silt * vec3(0.075, 0.085, 0.095);
+
+  // Soft broken edges around the original saw cuts and a narrow dark seal.
+  float spall = smoothstep(0.50, 0.76, salt) * 0.034;
+  vec2 seam = vec2(strip(edges.x, 0.013 + spall, pixel.x), strip(edges.y, 0.013 + spall, pixel.y));
+  float border = min(edges.x, edges.y);
+  c *= 1.0 - 0.085 * (1.0 - smoothstep(0.025, 0.13, border)) * (0.6 + salt);
+  c = mix(c, c * vec3(0.57, 0.56, 0.54), max(seam.x, seam.y));
+
+  // A few corners fractured back to the joint. Their jagged faces taper
+  // toward either end and vary with the concrete rather than with view angle.
+  if (batch < 0.24 && max(local.x, local.y) < 2.5) {
+    float run = 0.78 + 1.45 * hash(id + 31.2);
+    float slope = 0.55 + 0.42 * hash(id + 8.7);
+    float d = local.y + local.x * slope - run + (salt - 0.5) * 0.38;
+    float crack = strip(d, 0.007 + 0.012 * cloud, pixel.y + pixel.x * slope);
+    c *= 1.0 - 0.37 * crack;
+  }
+
+  // Old urethane traces fade into the skim coat along the riding line.
+  float wear = grain(q * vec2(0.33, 6.0) + 7.7);
+  c *= 1.0 - 0.08 * smoothstep(0.13, 0.35, wear) * (1.0 - smoothstep(0.2, 2.9, abs(q.y)));
+  return c;
 }
-/** Signed distance to an axis-aligned rectangle, with the direction it's nearest along. */
-float rectDist(vec2 p, vec2 lo, vec2 hi, out vec2 dir) {
-  vec2 c = 0.5 * (lo + hi);
-  vec2 h = 0.5 * (hi - lo);
-  vec2 q = abs(p - c) - h;
-  dir = q.x > q.y ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
-  return max(q.x, q.y);
-}
-float rectFill(vec2 p, vec2 lo, vec2 hi) {
-  vec2 dir;
-  float d = rectDist(p, lo, hi, dir);
-  return fill(d, dir);
-}
-float segDist(vec2 p, vec2 a, vec2 b, out vec2 dir) {
-  vec2 pa = p - a;
-  vec2 ba = b - a;
-  vec2 q = pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
-  float d = length(q);
-  dir = d > 1e-4 ? q / d : vec2(0.0, 1.0);
-  return d;
+
+// Flush catch basins, just inland of the coping. A cast frame surrounds the
+// recessed bars. Salt has taken the black finish back to iron along their lips.
+vec3 catchBasin(vec3 cement, vec2 q, vec2 pixel, float fromWater) {
+  vec2 p = vec2(mod(q.x + 11.0, 22.0) - 11.0, fromWater - 3.6);
+  vec2 edge = abs(p) - vec2(0.98, 0.54);
+  float body = max(edge.x, edge.y);
+  float aa = max(pixel.x, pixel.y) * 0.5 + 0.001;
+  if (body > aa + 0.10) return cement;
+  float speckle = noise(q * 7.2);
+  vec3 iron = mix(${glslRgb('#514e46')}, ${glslRgb('#827a69')}, speckle);
+  float slot = mod(p.x + 0.082, 0.164) - 0.082;
+  float opening = strip(slot, 0.041, pixel.x);
+  float bevel = strip(slot - 0.044, 0.012, pixel.x);
+  float inset = 1.0 - smoothstep(-0.095 - aa, -0.095 + aa, body);
+  iron += vec3(0.11) * bevel * inset;
+  iron = mix(iron, ${glslRgb('#333733')}, opening * inset);
+  return mix(cement, iron, 1.0 - smoothstep(-aa, aa, body));
 }
 
 void main() {
-  float z = vWorld.z;
-  if (z < ${f(WATER_Z)}) discard;
-  // The street's own coordinate: the plaza is laid out in it and slides by the scroll.
-  float x = vWorld.x + ${f(X0)};
-  float u = x + uScroll;
-  vec2 g = vec2(u, z);
-  vec2 du = vec2(dFdx(u), dFdy(u));
-  vec2 dz = vec2(dFdx(z), dFdy(z));
-  // Screen pixels per world unit: invert the screen-to-ground Jacobian.
-  float det = du.x * dz.y - du.y * dz.x;
-  toScreen = abs(det) > 1e-12 ? mat2(dz.y, -dz.x, -du.y, du.x) / det : mat2(0.0);
+  float fromWater = (vGround.y - ${WATER_Z.toFixed(2)}) / ${SET_FOOT.toFixed(2)};
+  if (fromWater < 0.0) discard;
+  vec2 q = (vGround + vec2(${X0.toFixed(2)} + uScroll, 0.0)) / ${SET_FOOT.toFixed(2)};
+  vec2 pixel = fwidth(q);
+  vec3 color = flatwork(q, pixel);
+  float splash = 1.0 - smoothstep(1.2, 2.1 + 0.9 * noise(q * 0.6), fromWater);
+  color *= 1.0 - splash * vec3(0.22, 0.20, 0.185);
+  color = catchBasin(color, q, pixel, fromWater);
 
-  vec2 frag = gl_FragCoord.xy;
-  vec2 vb = vec2(uBox.x + frag.x / uRes.x * uBox.z, uBox.y + (1.0 - frag.y / uRes.y) * uBox.w);
-  vec3 color = mix(CONCRETE_FAR, CONCRETE, clamp((vb.y - uHorizon) / (uPlazaNear - uHorizon), 0.0, 1.0));
-  if (z < ${f(PROM_Z)}) color = PAVER;
-
-  // Slab tones: a few slabs a shade darker or lighter, and now and then a crack.
-  float crack = 0.0;
-  float row = floor((z - ${f(SLAB_ROW0)}) / ${f(SLAB)});
-  if (row >= 0.0 && row < ${f(SLAB_ROWS - 1)}) {
-    int r = int(row);
-    float z0 = ${f(SLAB_ROW0)} + row * ${f(SLAB)};
-    int i = int(floor(u / ${f(SLAB)}));
-    float cellX = float(i) * ${f(SLAB)};
-    float at = cellX - uScroll;
-    if (at >= ${f(X0 - 1500)} && at < ${f(X0 + 1500)}) {
-      float h = hash2(i, r, 1);
-      if (h <= 0.3 || h >= 0.82) {
-        float tone = rectFill(g, vec2(cellX + 1.0, z0 + 1.0), vec2(cellX + ${f(SLAB - 1)}, z0 + ${f(SLAB - 1)}));
-        color = mix(color, h <= 0.3 ? SLAB_DARK : SLAB_LIGHT, tone);
-        if (hash2(i, r, 2) > 0.9) {
-          float zz = z0 + 8.0 + 30.0 * hash2(i, r, 5);
-          float best = 1e3;
-          vec2 bestDir = vec2(0.0, 1.0);
-          vec2 prev = vec2(cellX + 6.0, zz - 3.0 * hash2(i, r, 6));
-          for (int k = 1; k <= 4; k++) {
-            vec2 next = vec2(cellX + 6.0 + 13.0 * float(k), zz + (k % 2 == 1 ? 5.0 : -3.0) * hash2(i, r, 6 + k));
-            vec2 dir;
-            float d = segDist(g, prev, next, dir);
-            if (d < best) {
-              best = d;
-              bestDir = dir;
-            }
-            prev = next;
-          }
-          crack = 0.75 * stroke(best, bestDir, 0.8);
-        }
-      }
-    }
-  }
-  // Granite bands across the plaza every six slabs, then the cracks over them.
-  {
-    float bandX = repeatDist(u, ${f(SLAB * 2)}, ${f(SLAB * 6)});
-    float bandAt = u - bandX - uScroll;
-    if (z >= ${f(PROM_Z)} && z < ${f(NEAR)} && bandAt >= ${f(X0 - 2000)} && bandAt < ${f(X0 + 2000)}) {
-      color = mix(color, BAND, fill(abs(bandX) - 7.0, vec2(1.0, 0.0)));
-    }
-  }
-  color = mix(color, CRACK, crack);
-  // Old stains and gum spots.
-  {
-    float stain = 0.0;
-    float gum = 0.0;
-    int base = int(floor((u - 60.0) / 340.0));
-    for (int di = -1; di <= 1; di++) {
-      int i = base + di;
-      float copyX = 60.0 + float(i) * 340.0;
-      if (copyX - uScroll < ${f(X0 - 1400)} || copyX - uScroll >= ${f(X0 + 1400)}) continue;
-      for (int k = 0; k < 2; k++) {
-        float cx = copyX + 300.0 * hash2(i, k, 50);
-        float cz = -260.0 + 560.0 * hash2(i, k, 51);
-        float r = 8.0 + 16.0 * hash2(i, k, 52);
-        // The blob: nine points round the center at uneven radii, stretched along the street.
-        vec2 d = g - vec2(cx, cz);
-        if (dot(d, d) < 50.0 * 50.0) {
-          float inside = 1e3;
-          vec2 dirOut = vec2(0.0, 1.0);
-          bool odd = false;
-          for (int j = 0; j < 9; j++) {
-            float a0 = float(j) / 9.0 * 6.2831853;
-            float a1 = float(j + 1) / 9.0 * 6.2831853;
-            float r0 = r * (0.6 + 0.5 * hash2(i * 9 + j, k, 53));
-            float r1 = r * (0.6 + 0.5 * hash2(i * 9 + (j + 1) % 9, k, 53));
-            vec2 p0 = vec2(cos(a0) * r0 * 1.4, sin(a0) * r0);
-            vec2 p1 = vec2(cos(a1) * r1 * 1.4, sin(a1) * r1);
-            vec2 dir;
-            float e = segDist(d, p0, p1, dir);
-            if (e < inside) {
-              inside = e;
-              dirOut = dir;
-            }
-            if ((p0.y > d.y) != (p1.y > d.y) && d.x < p0.x + (d.y - p0.y) * (p1.x - p0.x) / (p1.y - p0.y)) odd = !odd;
-          }
-          stain = max(stain, fill(odd ? -inside : inside, dirOut));
-        }
-        for (int j = 0; j < 4; j++) {
-          vec2 at = vec2(cx + 90.0 * (hash2(i, j, 54) - 0.5), cz + 70.0 * (hash2(i, j, 55) - 0.5));
-          gum = max(gum, rectFill(g, at, at + vec2(2.2, 2.0)));
-        }
-      }
-    }
-    color = mix(color, STAIN, 0.1 * stain);
-    color = mix(color, STAIN, 0.35 * gum);
-  }
-  // Slab joints: rows across the plaza, and lines along it that slide with the street.
-  {
-    float joints = 0.0;
-    float rowZ = repeatDist(z, ${f(SLAB_ROW0)}, ${f(SLAB)});
-    float rowIndex = floor((z - ${f(SLAB_ROW0)}) / ${f(SLAB)} + 0.5);
-    if (rowIndex >= 0.0 && rowIndex < ${f(SLAB_ROWS)}) joints = max(joints, stroke(rowZ, vec2(0.0, 1.0), 1.3));
-    if (z > ${f(PROM_Z)} - 1.0 && z < ${f(NEAR)}) joints = max(joints, stroke(repeatDist(u, 0.0, ${f(SLAB)}), vec2(1.0, 0.0), 1.3));
-    color = mix(color, JOINT, 0.8 * joints);
-  }
-  // The promenade's running bond, the wall's edge, then the soldier course along the plaza.
-  if (z < ${f(PROM_Z)} + 1.0) {
-    float bond = 0.0;
-    float rowZ = repeatDist(z, ${f(PROM_Z)}, 30.0);
-    float rowIndex = floor((${f(PROM_Z)} - z) / 30.0 + 0.5);
-    if (rowIndex >= 0.0 && ${f(PROM_Z)} - rowIndex * 30.0 > ${f(WALL_Z + 1)}) bond = max(bond, stroke(rowZ, vec2(0.0, 1.0), 1.0));
-    float r = floor((${f(PROM_Z)} - z) / 30.0);
-    if (r >= 0.0 && ${f(PROM_Z)} - (r + 1.0) * 30.0 > ${f(WALL_Z + 1)}) {
-      float phase = mod(r, 2.0) > 0.5 ? 32.0 : 0.0;
-      float dx = repeatDist(u, phase, 64.0);
-      float at = u - dx - uScroll;
-      if (at >= ${f(X0 - 1600)} && at < ${f(X0 + 1600)}) bond = max(bond, stroke(dx, vec2(1.0, 0.0), 1.0));
-    }
-    bond = max(bond, stroke(z - ${f(WALL_Z)}, vec2(0.0, 1.0), 1.0));
-    color = mix(color, PAVER_JOINT, 0.7 * bond);
-    color = mix(color, PAVER_DARK, rectFill(g, vec2(-1e6, ${f(PROM_Z - 10)}), vec2(1e6, ${f(PROM_Z)})));
-  }
-  // Skid marks and wax along the riding lane.
-  {
-    float skid = 0.0;
-    int i = int(floor((u - 140.0) / 520.0));
-    float copyX = 140.0 + float(i) * 520.0;
-    if (copyX - uScroll >= ${f(X0 - 1400)} && copyX - uScroll < ${f(X0 + 1400)}) {
-      for (int k = 0; k < 3; k++) {
-        float len = 30.0 + 70.0 * hash2(i, k, 7);
-        float sz = -46.0 + 92.0 * hash2(i, k, 8);
-        float sx = copyX + 160.0 * hash2(i, k, 9);
-        skid = max(skid, rectFill(g, vec2(sx, sz), vec2(sx + len, sz + 1.6 + 1.6 * hash2(i, k, 10))));
-      }
-    }
-    color = mix(color, SKID, 0.13 * skid);
-  }
-  // A manhole cover in the foreground now and then.
-  {
-    int i = int(floor((u - 620.0) / 1700.0 + 0.5));
-    float cx = 620.0 + float(i) * 1700.0;
-    if (cx - uScroll >= ${f(X0 - 1200)} && cx - uScroll < ${f(X0 + 1200)}) {
-      vec2 d = g - vec2(cx, 150.0);
-      float r = length(d);
-      vec2 radial = r > 1e-3 ? d / r : vec2(1.0, 0.0);
-      color = mix(color, GRATE, 0.55 * fill(r - 21.0, radial));
-      color = mix(color, CONCRETE, 0.5 * stroke(r - 17.0, radial, 1.0));
-      float grid = 0.0;
-      for (int k = -2; k <= 2; k++) {
-        float off = float(k) * 6.5;
-        float half_ = sqrt(max(0.0, 225.0 - off * off));
-        vec2 dir;
-        float e = segDist(g, vec2(cx - half_, 150.0 + off), vec2(cx + half_, 150.0 + off), dir);
-        grid = max(grid, stroke(e, dir, 0.9));
-      }
-      color = mix(color, CONCRETE, 0.45 * grid);
-    }
-  }
-  // Iron grates round the palms' roots.
-  if (abs(z - ${f(TREE_Z)}) < 20.0) {
-    for (int p = 0; p < 2; p++) {
-      float offset = p == 0 ? 120.0 : 520.0;
-      float cx = offset + 800.0 * floor((u - offset) / 800.0 + 0.5);
-      vec2 dir;
-      float d = rectDist(g, vec2(cx - 18.0, ${f(TREE_Z - 18)}), vec2(cx + 18.0, ${f(TREE_Z + 18)}), dir);
-      color = mix(color, GRATE, fill(d, dir));
-      color = mix(color, GRATE_EDGE, stroke(d, dir, 0.8));
-    }
-  }
-  // The ledges' contact shadows, a strip along each one's foot.
-  if (z > ${f(LEDGE_FRONT_Z)} - 1.0 && z < ${f(LEDGE_FRONT_Z + 6)}) {
-    float contact = 0.0;
-    for (int l = 0; l < 3; l++) {
-      float offset = l == 0 ? 0.0 : l == 1 ? 290.0 : 500.0;
-      float len = l == 0 ? 190.0 : l == 1 ? 120.0 : 210.0;
-      float lx = offset + 800.0 * floor((u - offset) / 800.0);
-      contact = max(contact, rectFill(g, vec2(lx - 2.0, ${f(LEDGE_FRONT_Z)}), vec2(lx + len + 2.0, ${f(LEDGE_FRONT_Z + 5)})));
-    }
-    color = mix(color, SHADOW, 0.14 * contact);
-  }
-
-  // Shadows: the props' (crisp), then the rider's (softened).
-  vec4 s = texture(uShadow, frag / uRes);
-  color = mix(color, SHADOW, 0.26 * s.a);
-  float a = 1.0 - (1.0 - uShadowOpacity.x * s.r) * (1.0 - uShadowOpacity.y * s.g) * (1.0 - uShadowOpacity.z * s.b);
-  outColor = vec4(mix(color, SHADOW, a), 1.0);
+  // Preserve the surface detail under the rider, board and quay furniture.
+  vec4 s = texture(uShadow, gl_FragCoord.xy / uRes);
+  vec3 lit = 1.0 - s.rgb * uShadowOpacity;
+  float blocked = 1.0 - lit.r * lit.g * lit.b * (1.0 - 0.36 * s.a);
+  color *= mix(vec3(1.0), vec3(0.49, 0.54, 0.60), min(1.6 * blocked, 1.0));
+  // At grazing angles a pixel can span several pours. Their grain settles
+  // into the quay's average tone, then sea haze softens the far end.
+  color = mix(color, ${glslRgb('#afaea5')}, smoothstep(0.45, 3.0, max(pixel.x, pixel.y)));
+  float depthFeet = 1.0 / (gl_FragCoord.w * ${(SET_SCALE * SET_FOOT).toFixed(5)});
+  color = mix(color, ${glslRgb('#b4c5cf')}, 0.67 * smoothstep(85.0, 1000.0, depthFeet));
+  outColor = vec4(color, 1.0);
   outInfo = vec4(0.0);
-}
-`;
-
-const VERT = /* glsl */ `
-out vec3 vWorld;
-void main() {
-  vec4 world = modelMatrix * vec4(position, 1.0);
-  // The plaza is laid out in set units: the stage's world, SET_SCALE smaller.
-  vWorld = world.xyz / ${SET_SCALE.toFixed(6)};
-  gl_Position = projectionMatrix * viewMatrix * world;
 }
 `;
 
 export function waterfrontGroundMaterial() {
   return new ShaderMaterial({
     glslVersion: GLSL3,
-    vertexShader: VERT,
-    fragmentShader: FRAG,
+    vertexShader: /* glsl */ `
+      out vec2 vGround;
+      void main() {
+        vec4 world = modelMatrix * vec4(position, 1.0);
+        vGround = world.xz / ${SET_SCALE.toFixed(6)};
+        gl_Position = projectionMatrix * viewMatrix * world;
+      }
+    `,
+    fragmentShader: FRAGMENT,
     uniforms: {
-      uBox: { value: new Vector4() },
       uRes: { value: new Vector2() },
-      uHorizon: { value: 0 },
-      uPlazaNear: { value: 0 },
       uScroll: { value: 0 },
-      uPxPerUnit: { value: 1 },
       uShadow: { value: null },
       uShadowOpacity: { value: new Vector3() },
     },

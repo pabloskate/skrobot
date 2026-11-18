@@ -5,13 +5,11 @@ import {
   ShaderMaterial,
   Vector2,
   Vector3,
-  Vector4,
   type Texture,
 } from 'three';
 import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
 import { PALETTE } from '../camera/camera';
-import { BAY } from '../sets/waterfront/waterfrontPanorama';
-import { FEATURES, GARMENT, INK_PROP, INK_ROBOT, rgb } from './materials';
+import { FEATURES, GARMENT, INK_PROP, rgb } from './materials';
 import { GLSL_DEPTH } from './depth';
 
 /**
@@ -137,39 +135,7 @@ export function inkMaterial() {
       uniform float uTouch;
       /** The set's prop outline color. */
       uniform vec3 uPropInk;
-      /**
-       * The waterfront's light over its set (not over the rider): the air
-       * fading the horizon, a warm wash from the sun's side and cool shade
-       * opposite, and a vignette. viewBox geometry: the picture's box, and the
-       * horizon's row.
-       */
-      uniform int uOverlays;
-      uniform vec4 uBox;
-      uniform vec2 uRes;
-      uniform float uHorizon;
       const vec3 INK = ${glsl(PALETTE.ink)};
-      const vec3 AIR = ${glsl(BAY.horizon)};
-      const vec3 WARM = ${glsl('#ffd2a1')};
-      const vec3 COOL = ${glsl('#5b4aa8')};
-      const vec3 SHADE = ${glsl('#2a1f5c')};
-
-      vec4 over(vec4 under, vec3 color, float a) {
-        return vec4(color * a + under.rgb * (1.0 - a), a + under.a * (1.0 - a));
-      }
-      vec4 setLight(vec4 c) {
-        vec2 vb = vec2(uBox.x + gl_FragCoord.x / uRes.x * uBox.z, uBox.y + (1.0 - gl_FragCoord.y / uRes.y) * uBox.w);
-        float t = (vb.y - (uHorizon - 60.0)) / 110.0;
-        if (t >= 0.0 && t <= 1.0) c = over(c, AIR, t < 0.5 ? 0.32 * t / 0.5 : t < 0.62 ? 0.32 : 0.32 * (1.0 - t) / 0.38);
-        vec2 p1 = vec2(uBox.x + uBox.z, uBox.y);
-        vec2 d = vec2(-uBox.z, uBox.w);
-        float w = clamp(dot(vb - p1, d) / dot(d, d), 0.0, 1.0);
-        if (w < 0.5) c = over(c, WARM, 0.24 * (1.0 - w / 0.5));
-        else if (w > 0.78) c = over(c, COOL, 0.1 * (w - 0.78) / 0.22);
-        float r = length(vb - (uBox.xy + 0.5 * uBox.zw)) / (length(uBox.zw) * 0.6);
-        if (r > 0.55) c = over(c, SHADE, 0.26 * min(1.0, (r - 0.55) / 0.45));
-        return c;
-      }
-      bool riderAt(vec4 info) { return abs(mod(floor(info.a * 255.0 + 0.5), 4.0) - ${INK_ROBOT.toFixed(1)}) < 0.5; }
 
       ${GLSL_DEPTH}
 
@@ -205,10 +171,8 @@ export function inkMaterial() {
         vec4 own = texture(uInfo, vUv);
         float ownDepth = texture(uDepth, vUv).r;
         gl_FragDepth = ownDepth;
-        bool lit = uOverlays == 1 && !riderAt(own);
         if (reachPx == 0) {
-          vec4 c = texture(uColor, vUv);
-          outColor = lit ? setLight(c) : c;
+          outColor = texture(uColor, vUv);
           return;
         }
         float ownSurface = floor(floor(own.a * 255.0 + 0.5) / 4.0);
@@ -259,12 +223,9 @@ export function inkMaterial() {
             }
           }
         }
-        // Props' outlines go under the set's light, the rider's over it.
         vec4 c = texture(uColor, vUv);
-        bool propInk = bestInk > ${INK_PROP.toFixed(1)} - 0.5;
-        if (propInk) c = mix(c, vec4(uPropInk, 1.0), best);
-        if (lit) c = setLight(c);
-        if (!propInk) c = mix(c, vec4(INK, 1.0), best);
+        vec3 ink = bestInk > ${INK_PROP.toFixed(1)} - 0.5 ? uPropInk : INK;
+        c = mix(c, vec4(ink, 1.0), best);
         // Transparent set details must also stay behind the expanded silhouette.
         if (best > 0.0) gl_FragDepth = nearerDepth(ownDepth, bestDepth);
         outColor = c;
@@ -281,10 +242,6 @@ export function inkMaterial() {
       uFar: { value: 1000 },
       uTouch: { value: 1.5 },
       uPropInk: { value: new Vector3() },
-      uOverlays: { value: 0 },
-      uBox: { value: new Vector4() },
-      uRes: { value: new Vector2() },
-      uHorizon: { value: 0 },
     },
     depthTest: true,
     depthFunc: AlwaysDepth,

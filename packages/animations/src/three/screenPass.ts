@@ -11,5 +11,10 @@ export class ScreenPass {
   }
 
   render(renderer: WebGLRenderer) { renderer.render(this.mesh, this.camera); }
+  /** Start compiling its shader for the target the renderer is set to, ahead of its first frame; returns its material. */
+  compile(renderer: WebGLRenderer): ShaderMaterial {
+    renderer.compile(this.mesh, this.camera);
+    return this.mesh.material;
+  }
   dispose() { this.mesh.geometry.dispose(); }
 }

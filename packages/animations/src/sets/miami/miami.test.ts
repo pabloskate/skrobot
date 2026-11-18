@@ -9,10 +9,10 @@ import { TRICK_BASES, X0 } from '../../motion/trick';
 import { LEAN_PAST_TOUCHDOWN } from '../../stage/bank';
 import { planStage, stageFrame, type StageFrame } from '../../stage/stage';
 import type { RiderStance, Stance } from '../../types';
-import { routeHeight } from '../elToro/stairs';
+import { routeHeight } from '../../stage/drop';
 import { SET_SCALE } from '../setScale';
 import { setInfo, setTerrain, setTimeline, type Obstacle } from '../sets';
-import { sweep, sweepHz } from '../../testing';
+import { sweep, sweepHz, STANCES, RIDERS } from '../../testing';
 import { buildMiamiGeometry, Miami3D } from './miami3d';
 import {
   MIAMI_BANK_LAND_X, MIAMI_BANK_TERRAIN, MIAMI_DROP, MIAMI_FOOT as F, MIAMI_GAP_LAND_X, MIAMI_GAP_TERRAIN,
@@ -22,8 +22,6 @@ import {
   miamiGround, miamiSlabHalf, miamiSlabTop, miamiSlope, miamiSurface, miamiTerraceHalf, miamiTerraceInset, onMiamiSlab,
 } from './miamiLayout';
 
-const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
-const RIDERS: RiderStance[] = ['regular', 'goofy'];
 const attempt = (base: string, obstacle: Obstacle = 'stairs', stance: Stance = 'regular', riderStance: RiderStance = 'regular', options: { popHeight?: number; landed?: boolean; skater?: 'robot' | 'realistic' } = {}) => planStage(
   { id: base, name: base, base, stance },
   {

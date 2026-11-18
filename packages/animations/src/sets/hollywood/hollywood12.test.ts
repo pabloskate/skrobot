@@ -5,9 +5,9 @@ import { boardSamples } from '../../motion/grindTesting';
 import { resolveSkateStyle } from '../../motion/style';
 import { X0 } from '../../motion/trick';
 import { planStage, stageFrame, type StageFrame, type StagePlan } from '../../stage/stage';
-import { isFiniteFrame, sweepHz } from '../../testing';
+import { isFiniteFrame, sweepHz, STANCES, RIDERS } from '../../testing';
 import type { RiderStance, Stance } from '../../types';
-import { terrainSurface } from '../elToro/stairs';
+import { terrainSurface } from '../terrain';
 import { setInfo, setTimeline } from '../sets';
 import { SET_SCALE } from '../setScale';
 import {
@@ -16,8 +16,6 @@ import {
 } from './hollywoodLayout';
 
 const K = SET_SCALE;
-const RIDERS: RiderStance[] = ['regular', 'goofy'];
-const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
 const style = resolveSkateStyle({ popHeight: 0.65, rotationSpeed: 1.08, flickStrength: 0.95 });
 const plan = (base: string, stance: Stance, riderStance: RiderStance, landed = true): StagePlan =>
   planStage({ id: base, name: base, base, stance }, {

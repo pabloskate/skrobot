@@ -4,6 +4,7 @@ import { THICKNESS, kickY } from './deck';
 import type { BoardRig } from '../motion/skeleton';
 import { BOARD_WIDTH_SCALE } from './boardDimensions';
 import { deckGeometry, roundedBoxGeometry, solidHullGeometry } from '../three/geometry';
+import type { RiderDaylight } from '../three/daylight';
 import { BOARD_SURFACE as S, realisticBoardMaterial } from './realisticBoardMaterials';
 import { dirToThree, toThree, type StageView, type Vec3 } from '../camera/view';
 
@@ -123,14 +124,15 @@ function wheelAssembly(): BufferGeometry {
   return a.finish();
 }
 
-/** The realistic human's board, sharing the exact motion and ground-contact contract. */
+/** The detailed board shares the standard deck, motion and ground-contact contract. */
 export class RealisticBoard3D {
   readonly group = new Group();
-  private readonly material = realisticBoardMaterial();
+  private readonly material: ReturnType<typeof realisticBoardMaterial>;
   private readonly geometries: BufferGeometry[];
   private disposed = false;
 
-  constructor() {
+  constructor(light?: RiderDaylight) {
+    this.material = realisticBoardMaterial(light);
     this.group.name = 'realistic-board';
     this.group.matrixAutoUpdate = false;
     const body = boardAssembly();

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ShaderMaterial } from 'three';
 import { rad } from '../../math';
 import { SUN } from '../../three/materials';
-import { planStairs, stairTrack } from '../elToro/stairs';
+import { planStairs, stairTrack } from '../../stage/drop';
 import { crownSpheres, treeCrowns, type TreePlacement } from '../props/trees';
 import { tripodStand } from '../tripods';
 import { MAX_CANOPIES } from '../surfaces';

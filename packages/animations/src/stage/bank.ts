@@ -3,7 +3,7 @@ import { rotY, smoothstep } from '../math';
 import { ASPHALT } from '../camera/view';
 import { GROUND, X0 } from '../motion/trick';
 import type { Frame3, Rig } from '../motion/skeleton';
-import { rideGrade, routeHeight, type StairPlan } from '../sets/elToro/stairs';
+import { rideGrade, routeHeight, type StairPlan } from './drop';
 import { WHEEL_X } from '../board/board';
 
 /**

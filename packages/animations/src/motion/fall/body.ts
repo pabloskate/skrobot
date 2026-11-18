@@ -1,7 +1,6 @@
 import { add3, cross3, dot3, norm3, scale3, sub3, type V3 } from '../../math';
 import { LEG_RADII } from '../../board/boardCollision';
-import { HUMAN_FOREARM, HUMAN_HEAD, HUMAN_SCALE, HUMAN_SHIN, HUMAN_THIGH, HUMAN_UPPER_ARM } from '../../riders/human/humanProportions';
-import { HUMAN_SHOULDER, HUMAN_SHOULDER_DROP } from '../../riders/human/humanRig';
+import { HUMAN_FOREARM, HUMAN_HEAD, HUMAN_HIP_HALF, HUMAN_SCALE, HUMAN_SHOULDER, HUMAN_SHIN, HUMAN_THIGH, HUMAN_UPPER_ARM } from '../../riders/human/humanProportions';
 import { skaterInfo, type Skater } from '../../riders/skaters';
 import {
   ANKLE_LIFT,
@@ -64,7 +63,7 @@ const ROBOT: BodyDims = {
   forearm: FOREARM,
 };
 
-/** The robot's rig as humanRig grows it (same frames, hips up, shoulders in and down, the head a little less). */
+/** Match the riding rig's joint spacing and limb lengths at the handoff to a fall. */
 const PERSON: BodyDims = (() => {
   const k = HUMAN_SCALE;
   // humanRig grows the head out from its pivot on the neck by HUMAN_HEAD and the rest by k.
@@ -72,16 +71,16 @@ const PERSON: BodyDims = (() => {
   const headGrow = HUMAN_HEAD;
   return {
     scale: k,
-    hipHalf: HIP_Z * k,
+    hipHalf: HUMAN_HIP_HALF,
     thigh: HUMAN_THIGH,
     shin: HUMAN_SHIN,
     torso: { f: 1 * k, u: 14 * k },
-    shoulder: { f: SHOULDER.x * k, u: (-SHOULDER.y - HUMAN_SHOULDER_DROP) * k, s: HUMAN_SHOULDER * k },
+    shoulder: HUMAN_SHOULDER,
     neck: 60 * k,
     neckBase: 35 * k,
     head: { f: pivot.f * k + (4 - pivot.f) * headGrow, u: pivot.u * k - pivot.u * headGrow },
-    upperArm: HUMAN_UPPER_ARM * k,
-    forearm: HUMAN_FOREARM * k,
+    upperArm: HUMAN_UPPER_ARM,
+    forearm: HUMAN_FOREARM,
   };
 })();
 

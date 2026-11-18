@@ -1,6 +1,9 @@
 import type { StageFrame } from './stage/stage';
 import type { V3 } from './math';
-import { WHEEL_BOTTOM } from './board/board';
+import { WHEEL_BOTTOM, WHEEL_X, WHEEL_Z } from './board/board';
+import { ASPHALT } from './camera/view';
+import { X0 } from './motion/trick';
+import type { RiderStance, Stance, Trick } from './types';
 
 /**
  * Test helpers shared across the package's suites. Not exported from the
@@ -57,3 +60,26 @@ export const sweepHz = (full: number) => (QUICK_SWEEP ? Math.max(15, full / 4) :
  * several times over on a busy machine, so the limit only catches a hang.
  */
 export const SWEEP_TIMEOUT = 240_000;
+
+/** Every trick stance, and both ways a rider stands: what a sweep goes through. */
+export const STANCES: readonly Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
+export const RIDERS: readonly RiderStance[] = ['regular', 'goofy'];
+
+/** A trick to stage, from its catalog base. */
+export const trickNamed = (base: string, stance: Stance = 'regular'): Pick<Trick, 'id' | 'name' | 'base' | 'stance'> => ({ id: base, name: base, base, stance });
+
+/**
+ * How far the lowest wheel is over the ground under it: 0 rolling on it,
+ * positive in the air, negative sunk into it. `ground` is the height at a
+ * point of the spot (along the drop from its lip, and across it); `dir` is
+ * the way the attempt travels along it.
+ */
+export function wheelClearance(frame: StageFrame, ground: (along: number, across: number) => number, dir: 1 | -1 = 1): number {
+  let low = Infinity;
+  for (const x of [-WHEEL_X, WHEEL_X]) for (const z of [-WHEEL_Z, WHEEL_Z]) {
+    const p = frame.rig.board.point({ x, y: WHEEL_BOTTOM, z });
+    const along = (p.x - X0) + frame.scroll * dir;
+    low = Math.min(low, ASPHALT - ground(along, (frame.stairs?.across ?? 0) + p.z) - p.y);
+  }
+  return low;
+}

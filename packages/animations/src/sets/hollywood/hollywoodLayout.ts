@@ -1,5 +1,5 @@
 import type { Handrail } from '../../motion/grind';
-import type { DropTerrain } from '../elToro/stairs';
+import type { DropTerrain } from '../terrain';
 import { SET_FOOT } from '../setScale';
 import type { SpotFilmers } from '../tripods';
 
@@ -147,7 +147,7 @@ export const HOLLYWOOD_RAIL_LINES = [
  *
  * The rail and the fence's tips are about level with the run-up, so it's
  * fast and low: a 24 foot flight, popped only as high as the trick needs
- * to get its board over them (fencePop), at 14 to 16 mph.
+ * to get its board over them (FENCE_POPS), at 14 to 16 mph.
  */
 export const HOLLYWOOD_FENCE_YAW = -32;
 
@@ -163,19 +163,7 @@ export const HOLLYWOOD_FENCE_YAW = -32;
  * late, and takes 1.9; an impossible's, wrapping round the back foot,
  * swings its free end down past the sole and takes 2.2.
  */
-const FENCE_POP_ALONG = 0.7;
-const FENCE_POP_ACROSS = 0.95;
-const FENCE_POP_WRAP = 1.1;
-/** Flips, and late shuvs: the board still lined up as it goes over the rail. */
-const BOARD_ALONG = new Set([
-  'Ollie', 'Ollie North', 'Kickflip', 'Heelflip', 'Double Kickflip', 'Double Heelflip',
-  'Late Kickflip', 'Late Backside Shuvit', 'Late Frontside Shuvit',
-]);
-/** A trick's pop over the fence; without one, the most any takes. */
-export function fencePop(base?: string): number {
-  if (base === undefined || base === 'Impossible') return FENCE_POP_WRAP;
-  return BOARD_ALONG.has(base) ? FENCE_POP_ALONG : FENCE_POP_ACROSS;
-}
+const FENCE_POPS = { along: 0.7, across: 0.95, wrap: 1.1 };
 const FENCE_TURN = (HOLLYWOOD_FENCE_YAW * Math.PI) / 180;
 const FENCE_POP = { x: -0.9 * F, z: -3 * F };
 /** Down the line from the pop to touchdown. */
@@ -194,7 +182,7 @@ export const HOLLYWOOD_FENCE_TERRAIN: DropTerrain = {
   entry: { ...FENCE_POP, yaw: HOLLYWOOD_FENCE_YAW, hold: true },
   // An angled line runs out of run-up before the school wall: start just before the crouch.
   runUp: 0.15,
-  trickPop: fencePop,
+  trickPop: FENCE_POPS,
 };
 
 const lower = -HOLLYWOOD_DROP;

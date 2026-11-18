@@ -44,6 +44,12 @@ export interface Playhead {
   toggle(): void;
   /** Jump to a moment and hold there. */
   seek(time: number): void;
+  /**
+   * Stop the clock while there's no picture of the trick to watch (its scene
+   * is loading). Let go, a trick that was playing starts from the top; a
+   * paused one stays on its moment.
+   */
+  hold(on: boolean): void;
 }
 
 /**
@@ -60,11 +66,12 @@ export interface Playhead {
 export function usePlayhead(duration: number, rate: number, loop: boolean): Playhead {
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(true);
+  const [waiting, setWaiting] = useState(false);
   // The clock's source of truth between frames; `time` is its rendered copy.
   const clock = useRef(0);
 
   useEffect(() => {
-    if (!playing) return;
+    if (!playing || waiting) return;
     let raf = 0;
     let last: number | null = null;
     let lastDraw = -Infinity;
@@ -120,7 +127,7 @@ export function usePlayhead(duration: number, rate: number, loop: boolean): Play
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [playing, duration, rate, loop]);
+  }, [playing, waiting, duration, rate, loop]);
 
   const play = () => {
     // From the end, play starts the trick over.
@@ -137,5 +144,13 @@ export function usePlayhead(duration: number, rate: number, loop: boolean): Play
     setPlaying(false);
   };
 
-  return { time, playing, play, pause, toggle: () => (playing ? pause() : play()), seek };
+  const hold = (on: boolean) => {
+    setWaiting(on);
+    if (!on && playing) {
+      clock.current = 0;
+      setTime(0);
+    }
+  };
+
+  return { time, playing, play, pause, toggle: () => (playing ? pause() : play()), seek, hold };
 }

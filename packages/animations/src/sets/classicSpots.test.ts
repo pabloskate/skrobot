@@ -7,12 +7,13 @@ import { planStage, stageFrame } from '../stage/stage';
 import type { RiderStance, Stance } from '../types';
 import { setInfo, setTimeline, type StageSet } from './sets';
 import { SUNSET_BANK_END, SUNSET_LAND_X, SUNSET_POP_X, SUNSET_POP_Z, SUNSET_ROOF_Z0, sunsetGround, sunsetSlope } from './sunset/sunsetLayout';
-import { entryTurn, SET_FOOT, terrainSurface, TURN_PAST_TOUCHDOWN } from './elToro/stairs';
+import { entryTurn, TURN_PAST_TOUCHDOWN } from '../stage/drop';
+import { terrainSurface } from './terrain';
 import { LEAN_PAST_TOUCHDOWN } from '../stage/bank';
 import { Sunset3D } from './sunset/sunset3d';
 import { DEFAULT_SCENE_CAMERA } from '../camera/camera';
 import { HOLLYWOOD_RUN } from './hollywood/hollywoodLayout';
-import { SET_SCALE } from './setScale';
+import { SET_SCALE, SET_FOOT } from './setScale';
 
 /** The set's layout (set units) as the stage has it. */
 const K = SET_SCALE;
@@ -112,7 +113,7 @@ describe('classic spots use their actual terrain', () => {
         expect(setup.scroll).toBeCloseTo(SUNSET_POP_X * K);
         expect(takeoff.scroll).toBeCloseTo(SUNSET_POP_X * K);
         expect(setup.stairs!.across).toBeGreaterThan(takeoff.stairs!.across);
-        // A nollie or fakie pops further back up the roof, its leading end short of the edge (stairs.ts); everything else at the set's pop.
+        // A nollie or fakie pops further back up the roof, its leading end short of the edge (stage/drop.ts); everything else at the set's pop.
         if (stance === 'nollie' || stance === 'fakie') expect(takeoff.stairs!.across).toBeGreaterThan(SUNSET_POP_Z * K);
         else expect(takeoff.stairs!.across).toBeCloseTo(SUNSET_POP_Z * K);
         expect(takeoff.stairs!.across).toBeGreaterThan(SUNSET_ROOF_Z0 * K);

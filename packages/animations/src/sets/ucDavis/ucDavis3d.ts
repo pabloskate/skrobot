@@ -3,9 +3,8 @@ import { craneThrough, type SceneCamera, type TripodId } from '../../camera/came
 import { fromThree, stageView, type StageView } from '../../camera/view';
 import { smoothstep } from '../../math';
 import type { StageFrame } from '../../stage/stage';
-import { CARLSBAD_LOOK } from '../carlsbad/carlsbad3d';
 import { SET_SCALE } from '../setScale';
-import type { SpotLook } from '../surfaces';
+import { BASE_LOOK, type SpotLook } from '../surfaces';
 import { buildUcDavisGeometry } from './ucDavisGeometry';
 import {
   UC_DAVIS_DROP, UC_DAVIS_FILMERS, UC_DAVIS_FOOT as F, UC_DAVIS_LANE_Z, UC_DAVIS_RUN, ucDavisGround,
@@ -21,7 +20,7 @@ import { UC_DAVIS_CARS, UC_DAVIS_TREES } from './ucDavisTrees';
  * nine-flat-nine's weathering and the ivy's leaves.
  */
 export const UC_DAVIS_LOOK: SpotLook = {
-  ...CARLSBAD_LOOK,
+  ...BASE_LOOK,
   haze: { color: '#d8d8cd', from: 50, to: 850, amount: 0.5 },
   // Urethane where boards roll across the terrace to the lip, and land and roll away below it.
   marks: [{ x: [-30, -1], z: [-2.5, 2.5] }, { x: [UC_DAVIS_RUN / F + 1.5, UC_DAVIS_RUN / F + 18], z: [-4.5, 4.5] }],
@@ -36,7 +35,6 @@ export const UC_DAVIS_LOOK: SpotLook = {
     rails: [UC_DAVIS_STAIR_Z0 / F + 0.45, UC_DAVIS_STAIR_Z1 / F - 0.45], then: UC_DAVIS_STAIR_MID_END / F,
   },
   foliage: true,
-  sash: undefined,
 };
 
 export class UcDavis3D extends ClassicSpot3D {

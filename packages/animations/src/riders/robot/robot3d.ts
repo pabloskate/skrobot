@@ -303,13 +303,18 @@ export class Robot3D {
       const a = twist * (1 - smoothstep((y + straight) / (2 * straight)));
       const c = Math.cos(a);
       const s = Math.sin(a);
-      for (const [rest, out] of [[restPos, pos], [restNor, nor]] as const) {
-        const x = rest[i];
-        const z = rest[i + 2];
-        out[i] = x * c + z * s;
-        out[i + 1] = rest[i + 1];
-        out[i + 2] = z * c - x * s;
-      }
+      // Positions, then normals, written out longhand: this runs for every vertex of the chest each
+      // frame, and looped over the pair the browser kept throwing its fast code for it away.
+      const x = restPos[i];
+      const z = restPos[i + 2];
+      pos[i] = x * c + z * s;
+      pos[i + 1] = restPos[i + 1];
+      pos[i + 2] = z * c - x * s;
+      const nx = restNor[i];
+      const nz = restNor[i + 2];
+      nor[i] = nx * c + nz * s;
+      nor[i + 1] = restNor[i + 1];
+      nor[i + 2] = nz * c - nx * s;
     }
     posAttr.needsUpdate = true;
     norAttr.needsUpdate = true;

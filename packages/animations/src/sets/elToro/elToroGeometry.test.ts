@@ -10,7 +10,7 @@ import type { Vec3 } from '../../camera/view';
 import {
   BUILDING_END, BUILDING_LENGTH, BUILDING_BACK, BUILDING_FACE, EAVE, CENTER_Z, EL_TORO_FILMERS, FAR_RAIL_Z, HILL_EDGE, HILL_RAIL_Z, LIP_AWAY, RAIL_EXT, RAIL_R, RIDER_LANE_Z, WALL_THICK, WALL_Z,
 } from './elToroLayout';
-import { SET_FOOT, RISER, STAIR_DROP, STAIR_RUN, STAIR_STEPS, TREAD, stairGround } from './stairs';
+import { RISER, STAIR_DROP, STAIR_RUN, STAIR_STEPS, TREAD, stairGround } from './stairs';
 import { buildElToroBuilding } from './elToroBuilding';
 import { Bake } from '../../three/bake';
 import { buildElToroCanopy, EL_TORO_CANOPY, EL_TORO_CANOPY_COLUMNS } from './elToroCanopy';
@@ -18,7 +18,7 @@ import { buildElToroGeometry } from './elToroGeometry';
 import { elToroCanopies, elToroTrees } from './elToroTrees';
 import { crownSpheres } from '../props/trees';
 import { MAX_CANOPIES, MAX_CONTACTS, SURFACE } from '../surfaces';
-import { SET_SCALE } from '../setScale';
+import { SET_SCALE, SET_FOOT } from '../setScale';
 
 const robot: Robot = {
   id: 'el-toro-geometry',
@@ -184,7 +184,7 @@ describe('El Toro environment geometry', () => {
         const frame = update(stance);
         expect(set.group.children.filter((child) => child instanceof Group)).toEqual(builds);
         expect(parts(set)).toEqual(meshes);
-        // A nollie or fakie takes off further back (stairs.ts), so only its run along the stairs differs.
+        // A nollie or fakie takes off further back (stage/drop.ts), so only its run along the stairs differs.
         expect(builds[0].position.x).toBeCloseTo(-frame.scroll, 9);
         expect(builds[0].position.y).toBe(position.y);
         expect(builds[0].position.z).toBe(position.z);

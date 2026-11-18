@@ -1,11 +1,9 @@
 import type { Vec3 } from '../../camera/view';
 import { Bake, NO_INK, type Ink, type Paint } from '../../three/bake';
-import { INK_PROP } from '../../three/materials';
-import { SURFACE, type SurfaceName } from '../surfaces';
 import { UC_DAVIS_FOOT } from './ucDavisLayout';
-import { normalOf } from '../lookKit';
+import { normalOf, tag } from '../lookKit';
 
-export { floor, mixHex, normalOf, solidBox, valueNoise } from '../lookKit';
+export { floor, mixHex, normalOf, part, solidBox, tag, valueNoise } from '../lookKit';
 
 /**
  * Shared pieces for the UC Davis bake under the realistic look (light: 'shader'): paint is the authored,
@@ -19,14 +17,6 @@ export const INCH = UC_DAVIS_FOOT / 12;
 /** Straight up. */
 export const UP: Vec3 = [0, 1, 0];
 
-/** An uninked face of one surface. */
-export const tag = (surface: SurfaceName | number, id = 0): Ink => ({
-  id, priority: 0, width: 0, kind: 0, solid: typeof surface === 'number' ? surface : SURFACE[surface],
-});
-/** An outlined part of one surface (the planter, the stairs, the building's wings), so each reads as its own piece. */
-export const part = (id: number, surface: SurfaceName | number, priority = 2, width = 0.14): Ink => ({
-  id, priority, width, kind: INK_PROP, solid: typeof surface === 'number' ? surface : SURFACE[surface],
-});
 /** Foliage masses, leaves patterned on them in three dimensions (solid 13, the look's `foliage`). */
 export const LEAVES = 13;
 /** Painted steel that isn't galvanised: handrails, lamp poles, bike racks. */

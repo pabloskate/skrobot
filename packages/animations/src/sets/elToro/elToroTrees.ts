@@ -3,7 +3,8 @@ import type { Vec3 } from '../../camera/view';
 import { SUN } from '../../three/materials';
 import { crownSpheres, type TreePlacement, type TreeSpecies } from '../props/trees';
 import { MAX_CANOPIES, type Canopy } from '../surfaces';
-import { SET_FOOT as F, STAIR_RUN, stairGround } from './stairs';
+import { STAIR_RUN, stairGround } from './stairs';
+import { SET_FOOT as F } from '../setScale';
 import { BUILDING_BACK, BUILDING_END, BUILDING_FACE, HILL_EDGE, WALL_Z, hill } from './elToroLayout';
 
 /** Plan position (u down the stairs, z across), height in feet, turn and seed. */

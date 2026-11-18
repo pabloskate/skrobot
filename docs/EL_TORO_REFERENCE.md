@@ -118,7 +118,7 @@ or bundled into the application. Reusable scene code belongs in
 `elToroGeometry.ts` the stairs, landings, paving, banks, decals and contact lines,
 `elToroCampus.ts` the shared block architecture, lower campus and fixtures,
 `elToroBuilding.ts`, `elToroCanopy.ts`, `elToroLandscape.ts` and `elToroTrees.ts`
-the other environment props, `elToroMaterials.ts` the shader, and `elToro3d.ts`
+the other environment props, `sets/spotMaterials.ts` the shader, and `elToro3d.ts`
 assembles the set with `EL_TORO_LOOK`.
 
 ## Validation checklist

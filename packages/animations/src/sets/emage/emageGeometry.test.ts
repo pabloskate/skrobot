@@ -28,7 +28,7 @@ describe('Emage realistic groundwork', () => {
       expect(built.contacts).toHaveLength(9);
       expect(built.canopies.length).toBeGreaterThan(0);
       expect(EMAGE_LOOK.light).toBe('shader');
-      // Emage's own dressing: wall wear, gravel aggregate, panelled plaza, urethane marks. Nothing else of Carlsbad's.
+      // Emage's own dressing: wall wear, gravel aggregate, panelled plaza, urethane marks. Nothing it doesn't name.
       for (const key of ['marks', 'pavers', 'walls', 'asphalt'] as const) expect(EMAGE_LOOK[key]).toBeDefined();
       for (const key of ['stairs', 'sash', 'lockers', 'brick', 'gum', 'mortar'] as const) expect(EMAGE_LOOK[key]).toBeUndefined();
       const solids = Array.from(built.ground.getAttribute('aInfo').array).filter((_, i) => i % 4 === 3).map(v => Math.floor(Math.round(v * 255) / 4));

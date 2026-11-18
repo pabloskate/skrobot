@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { computeFrame, specFor, FLIP_T, GROUND, H, LAND_T, ROLL_IN, SKY_PAD, W, X0, TRICK_BASES } from '../motion/trick';
 import { resolveSkateStyle } from '../motion/style';
 import { resolveRiderMechanics } from '../motion/stance';
-import { isFiniteFrame, sweep as sweepCases } from '../testing';
+import { isFiniteFrame, sweep as sweepCases, STANCES, RIDERS } from '../testing';
 import { planStage, stageFrame } from '../stage/stage';
 import { stageView } from './view';
 import type { RiderStance, Stance, Trick } from '../types';
@@ -22,8 +22,6 @@ import type { Rig } from '../motion/skeleton';
  */
 
 const BASES = TRICK_BASES;
-const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
-const RIDERS: RiderStance[] = ['regular', 'goofy'];
 const POPS = [0.45, 1.15];
 
 const { yaw: YAW, pitch: PITCH, lens: LENS } = SCENE_CAMERA_BOUNDS;

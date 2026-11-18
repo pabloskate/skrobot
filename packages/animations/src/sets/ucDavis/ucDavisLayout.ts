@@ -1,4 +1,4 @@
-import type { DropTerrain } from '../elToro/stairs';
+import type { DropTerrain } from '../terrain';
 import type { SpotFilmers } from '../tripods';
 import { SET_FOOT as F } from '../setScale';
 import { smoothstep } from '../../math';

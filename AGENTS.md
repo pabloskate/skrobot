@@ -23,7 +23,7 @@ Live API) for playing with earbuds at the skatepark.
 | `npm run build` | `next build` — typecheck + production build (catches type errors, not logic bugs) |
 | `npm test` | Vitest unit tests — the behavioral check for the rules engine, RPS, trick resolver, and animation motion |
 | `npm run test:changed` | Only the tests your uncommitted changes reach |
-| `npm run test:quick` | Every test with the animation sweeps thinned to a sample of their cases (`ANIMATION_SWEEP=quick`) — the fast loop, about 15 s; `npm test` sweeps in full in about a minute and a half |
+| `npm run test:quick` | Every test with the animation sweeps thinned to a sample of their cases (`ANIMATION_SWEEP=quick`) — the fast loop, about a minute; `npm test` sweeps in full in about three minutes |
 | `npm run lint` | ESLint (flat config) — also enforces the architecture import boundaries below |
 | `npm run typecheck:web` | Full root TypeScript check, including tests omitted by `next build` |
 | `npm run typecheck:mobile` | Typecheck the Expo companion app |
@@ -73,7 +73,7 @@ src/
 │   ├── skater/           # Player model: skate score (unlocks at 8 games, beta-gated), robot-ladder placement, adaptive rival robot
 │   ├── home/             # Landing screen / flatground robot choice
 │   ├── install/          # App Store handoff + Android PWA install guidance (web-only)
-│   ├── explorer/         # Trick Explorer at /explore (/explore/3d redirects here): tricks + grind combos, robot, the realistic human, or the alien, camera angles, spots (plaza, waterfront, El Toro's 20 stair and its handrails, Hollywood High's back-to-back 16 and 12 stairs and rails, plus the 16's fence, Wallenberg, Roof to Bank, 25 Stair, Leap of Faith, UC Davis Gap over the ivy bank, Carlsbad Gap over the grass bank onto its uphill landing, Emage 20 in Denver and its side rail, Triangle Bank (onto the triangular bank, over it, or grinds down its edges)), tripod angles at the landmarks, shareable links, MP4 download; plus Dream Tricks at /dream-tricks, the same stage for players (landmark spot first, avatar cards to pick a skater, then what to hit and the trick), and the /about location notice both link to
+│   ├── explorer/         # Trick Explorer at /explore (/explore/3d redirects here): tricks + grind combos, Robot, Realistic Robot, the realistic human, or the alien, camera angles, spots (plaza, waterfront, El Toro's 20 stair and its handrails, Hollywood High's back-to-back 16 and 12 stairs and rails, plus the 16's fence, Wallenberg, Roof to Bank, 25 Stair, Leap of Faith, UC Davis Gap over the ivy bank, Carlsbad Gap over the grass bank onto its uphill landing, Emage 20 in Denver and its side rail, Triangle Bank (onto the triangular bank, over it, or grinds down its edges)), tripod angles at the landmarks, shareable links, MP4 download; plus Dream Tricks at /dream-tricks, the same stage for players (landmark spot first, avatar cards to pick a skater, then what to hit and the trick), and the /about location notice both link to
 │   └── gallery/          # Flatground trick gallery + player trick book (search, stance filters, video tips, want-to-learn shelf, proven marks, consistency stats)
 ├── platform/             # Runtime infrastructure (Cloudflare env, D1 bindings)
 └── shared/               # Primitive domain-neutral helpers (online status, etc.)

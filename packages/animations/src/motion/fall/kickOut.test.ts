@@ -77,7 +77,7 @@ function cases(): Case[] {
 }
 
 /**
- * Nollies, which pop off the leading nose and so take off further back than a tail pop (stairs.ts): off Sunset's roof
+ * Nollies, which pop off the leading nose and so take off further back than a tail pop (stage/drop.ts): off Sunset's roof
  * and down El Toro, by both skaters, regular and goofy.
  */
 function nollieCases(): Case[] {

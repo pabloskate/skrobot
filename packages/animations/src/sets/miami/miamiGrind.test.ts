@@ -15,7 +15,7 @@ import type { RiderStance, Stance } from '../../types';
 import { setInfo } from '../sets';
 import { SET_SCALE } from '../setScale';
 import { FOOT } from '../../units';
-import { sweep, sweepHz } from '../../testing';
+import { sweep, sweepHz, STANCES, RIDERS } from '../../testing';
 import { buildMiamiGeometry, Miami3D } from './miami3d';
 import {
   MIAMI_EDGE_FALL, MIAMI_EDGE_YAW, MIAMI_FOOT as F, MIAMI_GRIND_LOCK, MIAMI_GRIND_SPEED, MIAMI_LEDGES, MIAMI_PLAZA_HALF, MIAMI_PLAZA_Y,
@@ -35,8 +35,6 @@ import {
 
 // The lowest popper, as the gap lines are tested: everyone else pops higher.
 const style = resolveSkateStyle({ popHeight: 0.45, rotationSpeed: 1.16, flickStrength: 0.88 });
-const RIDERS: RiderStance[] = ['regular', 'goofy'];
-const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
 const COMBOS = [
   'Kickflip into Frontside 50-50 Grind',
   'Backside 180 into Frontside Nosegrind',

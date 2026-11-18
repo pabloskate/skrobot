@@ -116,7 +116,7 @@ back to riding along the sidewalk; a fall slides on along the line.
 
 The rail and the spear tips are about level with the run-up, so the line is
 fast and low: each trick is popped just high enough for its board to clear them
-(`fencePop`, the terrain's `trickPop`), the same whoever rides it, while each
+(`FENCE_POPS`, the terrain's `trickPop`, by each trick's `boardSweep`), the same whoever rides it, while each
 rider's own trick motion is unchanged. A board that stays pointing down the
 line (ollies, flips, late shuvs) peaks 1.4 ft over the run-up, and a plain
 ollie's deck passes about 1.5 ft over the rail and the fence; one the trick

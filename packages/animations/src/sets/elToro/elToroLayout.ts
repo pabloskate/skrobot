@@ -1,4 +1,5 @@
-import { SET_FOOT, RISER, STAIR_DROP, STAIR_RUN, TREAD, nosingLine } from './stairs';
+import { RISER, STAIR_DROP, STAIR_RUN, TREAD, nosingLine } from './stairs';
+import { SET_FOOT } from '../setScale';
 import type { SpotFilmers } from '../tripods';
 
 /** The rails' pipe, height and run past the steps: the center one is the one grinds ride (stairs.ts). */

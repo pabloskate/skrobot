@@ -17,7 +17,7 @@ import type { RailChoice } from '../sets';
 import * as layout from './elToroLayout';
 import { SET_SCALE, stageHandrail } from '../setScale';
 import { FOOT } from '../../units';
-import { sweep, sweepHz } from '../../testing';
+import { sweep, sweepHz, STANCES, RIDERS } from '../../testing';
 
 /**
  * Grinds down El Toro's center handrail. These pin what a skater would
@@ -45,8 +45,6 @@ const robot: Robot = {
   skateStyle: { popHeight: 0.92, rotationSpeed: 1.08, flickStrength: 0.95 },
 };
 const style = resolveSkateStyle(robot.skateStyle);
-const RIDERS: RiderStance[] = ['regular', 'goofy'];
-const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
 const COMBOS = [
   'Kickflip into Frontside 50-50 Grind',
   'Backside 180 into Frontside Nosegrind',

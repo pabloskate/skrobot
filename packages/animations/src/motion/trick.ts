@@ -187,6 +187,25 @@ const TRICK_MOTIONS: Readonly<Record<string, TrickMotion>> = {
 /** Every flatground trick base the motion animates (aliases included): what the motion sweeps test. */
 export const TRICK_BASES: readonly string[] = Object.keys(TRICK_MOTIONS);
 
+/**
+ * How a trick's board passes something beside its line just after the pop
+ * (a rail, a fence's tips), which sets how much room it needs over it:
+ * `along`, still lined up down the route there (no turn at all, or a late
+ * one), so its ends never swing out; `across`, turned across the line by
+ * its shuv or the rider's spin, its ends swinging wide; `wrap`, round the
+ * scooping foot (an impossible), its free end swinging down past the sole.
+ * Read off the trick's own row, so a new trick is placed by what it does;
+ * a name the motion doesn't know is taken to turn.
+ */
+export type BoardSweep = 'along' | 'across' | 'wrap';
+
+export function boardSweep(base: string): BoardSweep {
+  const motion = TRICK_MOTIONS[base];
+  if (!motion) return 'across';
+  if (motion.wrap) return 'wrap';
+  return motion.late || !(motion.yaw || motion.bodyYaw) ? 'along' : 'across';
+}
+
 function specFor(trick: Trick): Spec {
   const base: Spec = {
     flips: 0,
@@ -396,6 +415,10 @@ const FALL_T = 1.28 * SPEED_SCALE;
 const KICK_OUT_T = 2.1;
 /** Down a drop: the roll, up, the steps, and the look back. */
 const KICK_OUT_DROP_T = 3;
+/** Seconds from the trick's touchdown a slip back runs (stage/slipBackFrame.ts): sat down, the slide, and sat up watching the board go. */
+const SLIP_BACK_T = 2;
+/** Down a drop: the slide's a long one. */
+const SLIP_BACK_DROP_T = 2.6;
 const HOLD = 0.35 * SPEED_SCALE; // freeze on the final frame before onDone
 
 /** The moments of an attempt (seconds): the pop, the top of the hop, the catch, touchdown, and the end. */
@@ -407,8 +430,8 @@ export interface AttemptTimeline {
   end: number;
 }
 
-/** A flatground trick's moments for a robot's style (its pop sets the hang time); a kick-out runs on past touchdown. */
-export function flatTimeline(style: Readonly<SkateStyle> | undefined, landed = true, kickOut = false): AttemptTimeline {
+/** A flatground trick's moments for a robot's style (its pop sets the hang time); a kick-out or a slip back runs on past touchdown. */
+export function flatTimeline(style: Readonly<SkateStyle> | undefined, landed = true, kickOut = false, slipBack = false): AttemptTimeline {
   const flight = flightTime(resolveSkateStyle(style));
   const land = ROLL_IN + flight;
   return {
@@ -416,7 +439,7 @@ export function flatTimeline(style: Readonly<SkateStyle> | undefined, landed = t
     peak: ROLL_IN + flight / 2,
     catch: ROLL_IN + flight * 0.88,
     land,
-    end: land + (landed ? LAND_T : kickOut ? KICK_OUT_T : FALL_T),
+    end: land + (landed ? LAND_T : kickOut ? KICK_OUT_T : slipBack ? SLIP_BACK_T : FALL_T),
   };
 }
 const STREET_DASH_PERIOD = 210;
@@ -436,18 +459,22 @@ const signedSquash = (c: number) => (Math.abs(c) < 0.01 ? 0.15 : Math.sign(c) * 
  * rider catching the board wrong, shoving it away and running it out on
  * their feet, or rolling out of a hard or fast landing; it's staged on flat
  * ground and down a set's drops alike, and a grind bails instead
- * (stage/stage.ts).
+ * (stage/stage.ts). The slip back (motion/fall/slipBack.ts) is the trick
+ * landed with the weight behind the board: it shoots out ahead and the
+ * rider sits down and slides. It's staged wherever the kick-out is; a
+ * grind slams instead.
  */
-export type FallVariant = 'slam' | 'bail' | 'shank' | 'kickout';
+export type FallVariant = 'slam' | 'bail' | 'shank' | 'kickout' | 'slipback';
 
 export const FALL_VARIANT_OPTIONS: ReadonlyArray<{ id: FallVariant; label: string }> = [
   { id: 'slam', label: 'Slam' },
   { id: 'bail', label: 'Bail' },
   { id: 'shank', label: 'Shank' },
   { id: 'kickout', label: 'Kick out' },
+  { id: 'slipback', label: 'Slip back' },
 ];
 
-/** The falls a missed attempt picks from at random: the kick-out isn't in the game's pool yet. */
+/** The falls a missed attempt picks from at random: the kick-out and the slip back aren't in the game's pool yet. */
 const RANDOM_FALLS: readonly FallVariant[] = ['slam', 'bail', 'shank'];
 
 const randomFallVariant = () => {
@@ -1242,6 +1269,8 @@ export {
   FALL_T,
   KICK_OUT_T,
   KICK_OUT_DROP_T,
+  SLIP_BACK_T,
+  SLIP_BACK_DROP_T,
   HOLD,
   STREET_DASH_PERIOD,
   STREET_DASH_SECONDS,

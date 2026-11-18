@@ -1,16 +1,7 @@
 import type { CameraSide, TripodId } from '../camera/camera';
-import type { Obstacle, StageSet } from './sets';
 import { SET_FOOT, SET_SCALE } from './setScale';
-import { CARLSBAD_FILMERS } from './carlsbad/carlsbadLayout';
-import { EL_TORO_FILMERS } from './elToro/elToroLayout';
-import { EMAGE_FILMERS } from './emage/emageLayout';
-import { HOLLYWOOD_12_FILMERS, HOLLYWOOD_FILMERS } from './hollywood/hollywoodLayout';
-import { LEAP_OF_FAITH_FILMERS } from './leapOfFaith/leapOfFaithLayout';
-import { LYON_FILMERS } from './lyon/lyonLayout';
-import { MIAMI_FILMERS } from './miami/miamiLayout';
-import { SUNSET_FILMERS } from './sunset/sunsetLayout';
-import { UC_DAVIS_FILMERS } from './ucDavis/ucDavisLayout';
-import { WALLENBERG_FILMERS } from './wallenberg/wallenbergLayout';
+import type { Obstacle } from './spot';
+import { SPOTS, type StageSet } from './spots';
 
 /**
  * The filmers standing still at the landmarks, and which side of the
@@ -89,22 +80,10 @@ export function tripodStand(tripods: SpotTripods, tripod: TripodId, side?: Camer
   return { ...own, z: side === 'left' ? line - off : line + off };
 }
 
-const FILMERS: Readonly<Partial<Record<StageSet, SpotFilmers>>> = {
-  'el-toro': EL_TORO_FILMERS,
-  'hollywood-high': HOLLYWOOD_FILMERS,
-  'hollywood-high-12': HOLLYWOOD_12_FILMERS,
-  wallenberg: WALLENBERG_FILMERS,
-  'sunset-car-wash': SUNSET_FILMERS,
-  'lyon-25': LYON_FILMERS,
-  'leap-of-faith': LEAP_OF_FAITH_FILMERS,
-  'miami-triangle': MIAMI_FILMERS,
-  'uc-davis-gap': UC_DAVIS_FILMERS,
-  'carlsbad-gap': CARLSBAD_FILMERS,
-  'emage-20': EMAGE_FILMERS,
-};
+const FILMERS = new Map<StageSet, SpotFilmers | undefined>(SPOTS.map((spot) => [spot.id, (spot as { filmers?: SpotFilmers }).filmers]));
 
 /** A spot's filmers; null where it has none (the crane films everything there). */
-export const setFilmers = (set: StageSet): SpotFilmers | null => FILMERS[set] ?? null;
+export const setFilmers = (set: StageSet): SpotFilmers | null => FILMERS.get(set) ?? null;
 
 /**
  * The side of the rider's line the spot's own `tripod` stands on, filming

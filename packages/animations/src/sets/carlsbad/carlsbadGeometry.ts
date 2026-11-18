@@ -148,26 +148,40 @@ function terrain(b: Bake) {
     }
     return [...new Set(xs)].sort((a, c) => a - c).map((x) => [x * F, carlsbadSurface(x * F, z * F), z * F] as Vec3);
   });
+  // The zipper asks the same things of the same rows and corners over and over (two centroid depths
+  // a band, six triangles round a corner), and each answer is a search along the curb: keep them.
+  const kept = <K, V>(work: (key: K) => V) => {
+    const known = new Map<K, V>();
+    return (key: K): V => {
+      let value = known.get(key);
+      if (value === undefined) known.set(key, (value = work(key)));
+      return value;
+    };
+  };
+  const capBack = kept(carlsbadCapBack),
+    bankEnd = kept(carlsbadBankEnd);
+  const turfAt = kept((p: Vec3) => turfColor(p[0], p[2]));
+  const bankNormal = kept((p: Vec3): Vec3 => {
+    const e = 0.02 * F;
+    const dx = (carlsbadBank(p[0] + e, p[2]) - carlsbadBank(p[0] - e, p[2])) / (2 * e);
+    const dz = (carlsbadBank(p[0], p[2] + e) - carlsbadBank(p[0], p[2] - e)) / (2 * e);
+    const length = Math.hypot(dx, 1, dz);
+    return [-dx / length, 1 / length, -dz / length];
+  });
   function tri(a: Vec3, c: Vec3, d: Vec3) {
     const x = (a[0] + c[0] + d[0]) / 3,
       z = (a[2] + c[2] + d[2]) / 3;
-    const cap = x >= carlsbadCapBack(z) && x <= carlsbadBankEnd(z) + 0.001 * F && z < 4.33 * F;
+    const cap = x >= capBack(z) && x <= bankEnd(z) + 0.001 * F && z < 4.33 * F;
     const cheek = ((z >= 4.33 * F && z < 5 * F) || (z > 16 * F && z <= 16.67 * F)) && x >= -2 * F && x <= 12.2 * F;
     const paved = carlsbadPaved(x, z) || cap || cheek;
-    if (!paved && z < 4.33 * F && x > carlsbadUpperEdge(z) && x < carlsbadCapBack(z)) {
-      for (const p of [a, c, d]) {
-        const e = 0.02 * F;
-        const dx = (carlsbadBank(p[0] + e, p[2]) - carlsbadBank(p[0] - e, p[2])) / (2 * e);
-        const dz = (carlsbadBank(p[0], p[2] + e) - carlsbadBank(p[0], p[2] - e)) / (2 * e);
-        const length = Math.hypot(dx, 1, dz);
-        b.vertex(p, [-dx / length, 1 / length, -dz / length], { color: turfColor(p[0], p[2]) }, tag(14));
-      }
+    if (!paved && z < 4.33 * F && x > carlsbadUpperEdge(z) && x < capBack(z)) {
+      for (const p of [a, c, d]) b.vertex(p, bankNormal(p), { color: turfAt(p) }, tag(14));
     } else {
       // Flat-shaded, but painted per corner: wear and grime vary across the big paving triangles.
       const n = faceNormal(a, c, d);
       const part: PavingPart = cap ? 'cap' : cheek ? 'cheek' : 'paved';
       for (const p of [a, c, d]) {
-        b.vertex(p, n, { color: paved ? pavingColor(p, n, part) : turfColor(p[0], p[2]) }, tag(paved ? 15 : 14));
+        b.vertex(p, n, { color: paved ? pavingColor(p, n, part) : turfAt(p) }, tag(paved ? 15 : 14));
       }
     }
   }

@@ -23,6 +23,7 @@ import {
 } from './style';
 import { orientTrickRotation, resolveRiderMechanics } from './stance';
 import type { RiderStance, SkateStyle, Stance, Trick } from '../types';
+import { STANCES } from '../testing';
 
 /**
  * Invariant tests for the animation core. These exist because the dominant
@@ -36,7 +37,6 @@ import type { RiderStance, SkateStyle, Stance, Trick } from '../types';
 // Every flatground trick the motion animates (its own table, aliases included).
 const BASES = TRICK_BASES;
 
-const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
 const RIDER_STANCES: RiderStance[] = ['regular', 'goofy'];
 const FALLS: FallVariant[] = ['slam', 'bail', 'shank'];
 

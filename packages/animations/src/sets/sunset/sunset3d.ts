@@ -2,8 +2,7 @@ import type { BufferGeometry } from 'three';
 import type { Vec3 } from '../../camera/view';
 import { Bake, type Ink } from '../../three/bake';
 import { ClassicSpot3D } from '../classicSpot3d';
-import { CARLSBAD_LOOK } from '../carlsbad/carlsbad3d';
-import { wallVertex, type Canopy, type ContactLine, type SpotLook, type WallAt } from '../surfaces';
+import { BASE_LOOK, wallVertex, type Canopy, type ContactLine, type SpotLook, type WallAt } from '../surfaces';
 import { CAP_BACK, backdrop, billboard, canopy, hills, houses, miniMall, storefronts, washBuilding } from './sunsetBuildings';
 import { hedge, oleanderMound, oleanderTree } from './sunsetDetails';
 import {
@@ -23,7 +22,7 @@ import { bankUse, buildSunsetWear } from './sunsetWear';
  * gum on the sidewalk, the wash building's painted block and a few brick shopfronts across the street.
  */
 export const SUNSET_LOOK: SpotLook = {
-  ...CARLSBAD_LOOK,
+  ...BASE_LOOK,
   haze: { color: '#d7d5cb', from: 60, to: 900, amount: 0.5 },
   // Urethane marks where boards roll out down the sidewalk below the landing, in feet.
   marks: [{ x: [12.3, 19.4], z: [-23, -13] }],
@@ -40,7 +39,6 @@ export const SUNSET_LOOK: SpotLook = {
   // A storey high, so its patches, runs and dirt are twice a curb's.
   walls: { bare: PAINT.bankChip, coats: 0.06, damp: 0.3, fall: 0.5, scale: 2 },
   foliage: true,
-  sash: undefined,
 };
 
 /** The bank's face, unoutlined painted render: the tests find the riding profile by this ink (id 0, solid 17). */

@@ -1,35 +1,32 @@
 'use client';
 
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { RiderStance, Robot, Trick } from '../types';
 import { resolveSkateStyle } from '../motion/style';
 import { useTrickPlayback } from './useTrickPlayback';
 import { randomFallVariant, randomShankProgress, type FallVariant } from '../motion/trick';
 import { DEFAULT_SCENE_CAMERA, type SceneCamera, type TripodId } from '../camera/camera';
-import { setInfo, type Obstacle, type RailChoice, type StageSet } from '../sets/sets';
+import { type Obstacle, type RailChoice, type StageSet } from '../sets/sets';
 import type { RailBail } from '../motion/fall/railBail';
 import type { LeadIn } from '../types';
 import type { Skater } from '../riders/skaters';
-import type { SceneRenderer } from './renderer';
-import { borrowRenderer, lookFor, returnRenderer } from './rendererPool';
+import { useWaterClock } from './useWaterClock';
+import { useStageRenderer } from './useStageRenderer';
 import { planStage, stageFrame } from '../stage/stage';
 import { useTrickSound } from '../sound/useTrickSound';
-import { STOCK_VIEW, stageView, tracked } from '../camera/view';
-import WaterfrontFar from '../sets/waterfront/waterfrontFar';
 
 /**
  * TrickScene3D — a skate attempt on stage, drawn in WebGL with three.js.
  *
  * The attempt is planned and worked out frame by frame by the stage
  * (stage/stage.ts); this component runs its clock, borrows a renderer for
- * the set and rider (rendererPool.ts), and draws each frame. Parts are
+ * the rider and puts the set on it (useStageRenderer.ts), and draws each frame. Parts are
  * depth-tested, so crossing limbs, a board flipping past a foot, and any
  * camera angle sort themselves out; the look is two-tone cel shading, ink
  * outlines, and soft cast shadows.
  *
  * With `fixedTime` it draws that moment; without it plays the attempt on
- * its own clock. Where the set has a far panorama (the waterfront's) it is
- * SVG in layers under the canvas (waterfrontFar.tsx).
+ * its own clock.
  */
 
 interface Props {
@@ -48,6 +45,8 @@ interface Props {
   riderStance?: RiderStance;
   /** Render one frozen frame at this absolute time (seconds). */
   fixedTime?: number;
+  /** Keep the water moving on a live stage, including a viewer that supplies its own playhead. */
+  animateWater?: boolean;
   /** The robot's pick reel and head moves before the first attempt. */
   leadIn?: LeadIn;
   /** Where the crane films from; the stock 3/4 view when omitted. */
@@ -62,14 +61,20 @@ interface Props {
   rail?: RailChoice;
   /** Where the set has several ways down (Hollywood): what a gap trick goes over, the stairs or the fence. */
   obstacle?: Obstacle;
-  /** Who rides: the robot (its look from `robot`), the realistic human, or the alien. */
+  /** Who rides: the original robot (its look from `robot`), the realistic robot, the realistic human, or the alien. */
   skater?: Skater;
   /** Play the attempt's sounds while its clock runs: the pop, the wheels, a grind or slide, the landing. Off by default. */
   sound?: boolean;
+  /**
+   * Told when the stage starts getting a scene ready that has to be built
+   * first (another spot, another rider, the first of either) and when it's
+   * on screen. Given, that build happens a step at a time without freezing
+   * the page, the last picture left up meanwhile, for a host that runs the
+   * clock and can show that it's loading. Omitted, it's built on the spot,
+   * as a stage running its own clock needs.
+   */
+  onLoading?: (loading: boolean) => void;
 }
-
-/** Device pixels drawn per CSS pixel: supersampled on ordinary screens, native on retina. */
-const PIXEL_RATIO = 2;
 
 export default function TrickScene3D({
   robot,
@@ -84,6 +89,7 @@ export default function TrickScene3D({
   knewIt,
   riderStance = 'regular',
   fixedTime,
+  animateWater = fixedTime == null,
   leadIn,
   camera = DEFAULT_SCENE_CAMERA,
   tripod = null,
@@ -93,8 +99,8 @@ export default function TrickScene3D({
   rail = 'center',
   obstacle = 'stairs',
   sound = false,
+  onLoading,
 }: Props) {
-  const idBase = useId().replace(/:/g, '');
   const style = useMemo(() => resolveSkateStyle(robot.skateStyle), [robot.skateStyle]);
   const forcedFall = !landed && knewIt === false ? ('shank' as FallVariant) : undefined;
   const [randomizedFall] = useState<FallVariant>(randomFallVariant);
@@ -124,59 +130,18 @@ export default function TrickScene3D({
   const inLeadIn = lead != null && time < 0;
   useTrickSound(stage, time, effectivePlaybackRate, sound);
 
-  // The canvas's shape, for framing the far layers the way the canvas is framed.
-  const [aspect, setAspect] = useState(STOCK_VIEW.width / STOCK_VIEW.height);
   const frame = stageFrame(stage, time, effectivePlaybackRate, lead?.head?.(time));
-  const view = stageView(frame.lift, tracked(camera, frame), zoom, aspect);
 
   const host = useRef<HTMLDivElement>(null);
   const slot = useRef<HTMLDivElement>(null);
-  const renderer = useRef<SceneRenderer | null>(null);
-  const fallback = useRef<HTMLParagraphElement>(null);
   const draw = useRef<() => void>(() => {});
+  const { renderer, unsupported } = useStageRenderer({ host, slot, look: robot.avatar, skater, set, draw, onLoading });
 
-  // Only the robot's colors, the rider, and the set need a different renderer; a new trick reuses it.
-  const { body, accent, variant } = robot.avatar;
-  useEffect(() => {
-    const box = host.current;
-    const into = slot.current;
-    if (!box || !into) return;
-    let scene: SceneRenderer;
-    try {
-      scene = borrowRenderer(lookFor({ avatar: { body, accent, variant } }, skater), set);
-    } catch {
-      // No WebGL 2: say so in place of the picture.
-      if (fallback.current) fallback.current.hidden = false;
-      return;
-    }
-    const canvas = scene.canvas;
-    canvas.setAttribute('aria-hidden', 'true');
-    Object.assign(canvas.style, { display: 'block', width: '100%', height: '100%' });
-    into.append(canvas);
-    renderer.current = scene;
-    let active = true;
-    // A paused or reduced-motion scene has no animation tick to repaint decoded textures.
-    void scene.ready.then(() => { if (active) draw.current(); });
-    const resize = () => {
-      const rect = box.getBoundingClientRect();
-      scene.setSize(rect.width, rect.height, PIXEL_RATIO);
-      if (rect.width > 0 && rect.height > 0) setAspect(rect.width / rect.height);
-      draw.current();
-    };
-    resize();
-    const observer = new ResizeObserver(resize);
-    observer.observe(box);
-    return () => {
-      active = false;
-      observer.disconnect();
-      renderer.current = null;
-      canvas.remove();
-      returnRenderer(scene);
-    };
-  }, [body, accent, variant, set, skater]);
+  const liveWater = animateWater && set === 'waterfront';
+  const waterClock = useWaterClock(liveWater, host, renderer);
 
   useLayoutEffect(() => {
-    draw.current = () => renderer.current?.render(frame, camera, zoom, tripod);
+    draw.current = () => renderer.current?.render(frame, camera, zoom, tripod, liveWater ? waterClock.current() : frame.t);
     draw.current();
   });
 
@@ -208,10 +173,8 @@ export default function TrickScene3D({
         }}
       >
         <div ref={host} style={{ position: 'relative', width: '100%', aspectRatio: '500 / 404', overflow: 'hidden' }}>
-          {setInfo(set).farPanorama && <WaterfrontFar cam={view.cam} scroll={frame.scroll} view={view.box} idBase={idBase} />}
-          {/* The borrowed renderer's canvas goes here, above the SVG panorama, including in panels that give their SVGs a z-index. */}
           <div ref={slot} style={{ position: 'relative', zIndex: 2, width: '100%', height: '100%' }} />
-          <p ref={fallback} hidden style={{ position: 'absolute', zIndex: 3, inset: 0, placeContent: 'center', margin: 0, padding: 16, textAlign: 'center' }}>
+          <p hidden={!unsupported} style={{ position: 'absolute', zIndex: 3, inset: 0, placeContent: 'center', margin: 0, padding: 16, textAlign: 'center' }}>
             This browser can&apos;t draw the 3D stage (WebGL 2 is off or unavailable).
           </p>
         </div>

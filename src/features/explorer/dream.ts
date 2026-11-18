@@ -1,4 +1,4 @@
-import { FOOT, setInfo, setLocation, spotStands, wrapOrbitYaw, type Obstacle, type PopEnd, type RailChoice, type SceneCamera, type StageSet, type TripodSpot } from '@skrobot/animations';
+import { FOOT, STAGE_SETS, setFlights, setInfo, setLocation, spotStands, wrapOrbitYaw, type Obstacle, type PopEnd, type RailChoice, type SceneCamera, type SpotLine, type StageSet, type TripodSpot } from '@skrobot/animations';
 import {
   DEFAULT_STATE,
   cameraPreset,
@@ -6,6 +6,8 @@ import {
   filmedLine,
   outEndsFor,
   sceneTripod,
+  searchFromState,
+  withShot,
   stateFromSearch,
   withGrind,
   withMode,
@@ -18,7 +20,7 @@ import {
 
 /**
  * Dream Tricks: the Trick Explorer cut down for someone who just wants to
- * see a trick at a famous spot. Pick the spot and skater, then what to hit
+ * see a trick at a skate spot. Pick the spot and skater, then what to hit
  * there (its stairs, its rail, the fence) within the trick section. The
  * same explorer state and shareable link underneath, so nothing is lost.
  */
@@ -47,33 +49,30 @@ export interface DreamSpot {
   lines: readonly DreamLine[];
 }
 
-const gap = (label: string, obstacle: Obstacle = 'stairs'): DreamLine => ({ id: obstacle, label, mode: 'flatground', obstacle, rail: 'center' });
-const rail = (label: string, choice: RailChoice = 'center'): DreamLine => ({
-  id: choice === 'center' ? 'rail' : 'side-rail', label, mode: 'grinds', obstacle: 'stairs', rail: choice,
-});
+/** A spot's line as the explorer plays it; `set` names its flight where the location has several. */
+function dreamLineOf({ label, hit, obstacle = 'stairs', rail = 'center', id }: SpotLine, set?: StageSet): DreamLine {
+  return hit === 'gap'
+    ? { id: id ?? obstacle, label, mode: 'flatground', obstacle, rail: 'center', ...(set && { set }) }
+    : { id: id ?? (rail === 'center' ? 'rail' : 'side-rail'), label, mode: 'grinds', obstacle: 'stairs', rail, ...(set && { set }) };
+}
 
-/** The landmark spots, the only ones this page offers (the plaza and waterfront stay in the explorer). */
-export const DREAM_SPOTS: readonly DreamSpot[] = [
-  { id: 'el-toro', name: setInfo('el-toro').label, where: 'Lake Forest, CA', feature: '20 stair and handrails', lines: [gap('20 stair'), rail('Center rail'), rail('Side rail', 'side')] },
-  {
-    id: 'hollywood-high', name: setInfo('hollywood-high').label, where: 'Los Angeles', feature: 'Back-to-back 16 and 12 stairs, rails, and fence',
-    lines: [
-      { ...gap('16 stair'), set: 'hollywood-high' },
-      { ...rail('16 rail'), set: 'hollywood-high' },
-      { ...gap('Over the fence', 'fence'), set: 'hollywood-high' },
-      { ...gap('12 stair'), id: 'twelve-stairs', set: 'hollywood-high-12' },
-      { ...rail('12 rail'), id: 'twelve-rail', set: 'hollywood-high-12' },
-    ],
-  },
-  { id: 'carlsbad-gap', name: setInfo('carlsbad-gap').label, where: 'Carlsbad High · California', feature: 'Grass gap beside the 11 stair · uphill landing', lines: [gap('Over the grass')] },
-  { id: 'wallenberg', name: setInfo('wallenberg').label, where: 'San Francisco', feature: 'The four block gap', lines: [gap('Four block')] },
-  { id: 'sunset-car-wash', name: setInfo('sunset-car-wash').label, where: 'Redesigned setting', feature: 'Off the roof into the bank', lines: [gap('Roof to bank')] },
-  { id: 'lyon-25', name: setInfo('lyon-25').label, where: 'Redesigned courtyard', feature: '25 stairs · 14.76 ft down, 21.29 ft across', lines: [gap('25 stairs')] },
-  { id: 'leap-of-faith', name: setInfo('leap-of-faith').label, where: 'Point Loma High · San Diego', feature: 'Over the rail · 14.3 ft courtyard drop', lines: [gap('Over the rail')] },
-  { id: 'miami-triangle', name: setInfo('miami-triangle').label, where: 'Redesigned park', feature: 'Gap to the triangular bank, or its edges', lines: [gap('Gap to bank'), gap('Over the triangle', 'triangle'), rail('Down an edge')] },
-  { id: 'uc-davis-gap', name: setInfo('uc-davis-gap').label, where: 'Roessler Hall · UC Davis', feature: 'Ivy gap · approx. 24 ft 4 in across, 10 ft down', lines: [gap('Over the ivy')] },
-  { id: 'emage-20', name: setInfo('emage-20').label, where: 'Denver · Colorado', feature: '20 stair and side rail', lines: [gap('20 stair'), rail('Side rail', 'side')] },
-];
+/**
+ * Spot cards in picker order, with their available lines: every location
+ * the animation registry gives a card (its `<spot>Spot.ts`), the landmarks
+ * first, then the flat spots.
+ */
+const CARDS = STAGE_SETS.filter((spot) => spot.card && !spot.location);
+
+export const DREAM_SPOTS: readonly DreamSpot[] = [...CARDS.filter((spot) => spot.terrain), ...CARDS.filter((spot) => !spot.terrain)].map((spot) => {
+  const flights = setFlights(spot.id);
+  return {
+    id: spot.id,
+    name: spot.label,
+    where: spot.card!.where,
+    feature: spot.card!.feature,
+    lines: flights.flatMap((flight) => (flight.lines ?? []).map((line) => dreamLineOf(line, flights.length > 1 ? flight.id : undefined))),
+  };
+});
 
 const SPOT_BY_ID = new Map(DREAM_SPOTS.map((spot) => [spot.id, spot]));
 
@@ -96,7 +95,8 @@ export function withDreamLine(state: ExplorerState, line: DreamLine): ExplorerSt
 /** Go to another spot, starting on its first line. */
 export function withDreamSpot(state: ExplorerState, set: StageSet): ExplorerState {
   const moved = withSet(state, set);
-  return withDreamLine(moved, dreamSpot(set).lines[0]);
+  if (set === 'waterfront') moved.rail = 'center';
+  return withDreamLine(withDreamCamera(moved), dreamSpot(set).lines[0]);
 }
 
 /** The end a trick out of this grind pops off: the tail where it's on the bar, as most are. */
@@ -107,12 +107,16 @@ export function withDreamGrind(state: ExplorerState, grind: string): ExplorerSta
   return withGrind({ ...state, out: state.out && { ...state.out, end: dreamOutEnd(grind) } }, grind);
 }
 
-/**
- * The classic shot here is a filmer standing at the bottom. The explorer's
- * classic is a crane flying alongside, which no one could follow down a
- * landmark with, so this page doesn't offer it.
- */
+/** Landmarks open from the bottom tripod. The waterfront opens facing the harbor. */
 const CLASSIC_SHOT: CameraPresetId = 'tripod-bottom';
+
+function withDreamCamera(state: ExplorerState): ExplorerState {
+  if (typeof state.camera !== 'string') return state;
+  const hasTripods = setInfo(state.set).tripods.length > 0;
+  if (hasTripods && state.camera === 'classic') return { ...state, camera: CLASSIC_SHOT, zoom: CLASSIC_SHOT_ZOOM };
+  if (!hasTripods && cameraPreset(state.camera).tripod) return withShot(state, 'classic');
+  return state;
+}
 
 /** The framing that shot opens on, so the explorer's classic pull-back doesn't follow the link over here. */
 const CLASSIC_SHOT_ZOOM = cameraPreset(CLASSIC_SHOT).zoom ?? 1;
@@ -120,15 +124,19 @@ const CLASSIC_SHOT_ZOOM = cameraPreset(CLASSIC_SHOT).zoom ?? 1;
 /** A first visit: a kickflip down El Toro, filmed from the bottom. */
 export const DREAM_DEFAULT: Readonly<ExplorerState> = Object.freeze({ ...DEFAULT_STATE, mode: 'flatground', trick: 'Kickflip', set: 'el-toro', camera: CLASSIC_SHOT, zoom: CLASSIC_SHOT_ZOOM });
 
-/** The state a link opens on this page: any explorer link works, moved to a landmark if it was elsewhere, the crane's classic shot to this page's. */
+/** Read shared tricks with the Dream Tricks starting spot and camera. */
 export function dreamStateFromSearch(search: string): ExplorerState {
   const params = new URLSearchParams(search);
-  let state = stateFromSearch(search);
+  let state = stateFromSearch(search, DREAM_DEFAULT.set);
   if (!params.get('trick') && !params.get('grind')) state = { ...state, mode: 'flatground', trick: DREAM_DEFAULT.trick };
   if (!SPOT_BY_ID.has(setLocation(state.set).id)) state = withSet(state, DREAM_DEFAULT.set);
-  if (state.camera === 'classic') state = { ...state, camera: CLASSIC_SHOT, zoom: params.has('zoom') ? state.zoom : CLASSIC_SHOT_ZOOM };
-  return state;
+  if (state.set === 'waterfront') state.rail = 'center';
+  const framed = withDreamCamera(state);
+  return params.has('zoom') ? { ...framed, zoom: state.zoom } : framed;
 }
+
+/** Explicit spot names keep waterfront links portable between the two pages. */
+export const dreamSearchFromState = (state: ExplorerState) => searchFromState(state, { includeSet: true });
 
 /** A camera shot, named for where the filmer stands. */
 export interface DreamShot {
@@ -141,6 +149,7 @@ const SHOTS: readonly DreamShot[] = [
   { id: CLASSIC_SHOT, label: 'Bottom', hint: 'Filmer at the bottom' },
   { id: 'tripod-side', label: 'Side', hint: 'Filmer beside the drop' },
   { id: 'tripod-top', label: 'Top', hint: 'Filmer at the top' },
+  { id: 'classic', label: 'Harbor view', hint: 'Looking across the water' },
   { id: 'follow', label: 'Behind', hint: 'Chasing from behind' },
   { id: 'side', label: 'Beside', hint: 'Rolling alongside' },
   { id: 'head-on', label: 'In front', hint: 'Backing away ahead of the rider' },
@@ -150,6 +159,7 @@ const SHOTS: readonly DreamShot[] = [
 /** The starting points this spot offers for a camera of this kind: its filmers' stands, or angles round the rider. */
 export const dreamShots = (state: Pick<ExplorerState, 'set' | 'camera'>, mode?: CameraMode): readonly DreamShot[] => {
   const available = new Set(cameraPresetsFor(state).map((preset) => preset.id));
+  if (state.set !== 'waterfront') available.delete('classic');
   return SHOTS.filter((shot) => available.has(shot.id) && (!mode || (cameraPreset(shot.id).tripod != null) === (mode === 'tripod')));
 };
 

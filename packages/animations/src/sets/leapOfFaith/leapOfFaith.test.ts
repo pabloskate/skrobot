@@ -8,7 +8,7 @@ import { resolveSkateStyle } from '../../motion/style';
 import { X0 } from '../../motion/trick';
 import { planStage, stageFrame, type StageFrame } from '../../stage/stage';
 import type { RiderStance, Stance } from '../../types';
-import { planStairs, stairTrack } from '../elToro/stairs';
+import { planStairs, stairTrack } from '../../stage/drop';
 import { SET_SCALE, stageTerrain } from '../setScale';
 import { LeapOfFaith3D } from './leapOfFaith3d';
 import { Bake } from '../../three/bake';
@@ -24,9 +24,8 @@ import {
   LEAP_OF_FAITH_STAIR_WIDTH, LEAP_OF_FAITH_TERRAIN, LEAP_OF_FAITH_TREAD, leapOfFaithGuardTop,
   leapOfFaithStairGround, leapOfFaithSurface,
 } from './leapOfFaithLayout';
+import { STANCES, RIDERS } from '../../testing';
 
-const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
-const RIDERS: RiderStance[] = ['regular', 'goofy'];
 const attempt = (base = 'Kickflip', stance: Stance = 'regular', riderStance: RiderStance = 'regular', popHeight = 0.45) => planStage(
   { id: base, name: base, base, stance },
   { set: 'leap-of-faith', landed: true, riderStance, style: resolveSkateStyle({ popHeight, rotationSpeed: 1, flickStrength: 1 }), skater: 'realistic', fall: 'slam', shankProgress: 0.65 },
@@ -125,7 +124,7 @@ describe('Leap of Faith: the original Point Loma courtyard', () => {
     let minimum = Infinity;
     let crossings = 0;
     const failures: string[] = [];
-    for (const base of ['Ollie', 'Kickflip', 'Heelflip', '360 Flip', 'Frontside 180', 'Backside 360 Kickflip', 'Impossible']) {
+    for (const base of ['Ollie', 'Kickflip', 'Heelflip', '360 Flip', '360 Shuvit', 'Bigspin', 'Frontside 180', 'Backside 360 Kickflip', 'Backside 360 Heelflip', 'Impossible']) {
       for (const stance of STANCES) for (const rider of RIDERS) for (const pop of [0.45, 1.15]) {
         const stage = attempt(base, stance, rider, pop);
         const { pop: takeoff, land } = stage.stairs!;

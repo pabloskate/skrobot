@@ -6,8 +6,9 @@ import { DEFAULT_SCENE_CAMERA } from '../../camera/camera';
 import { BOTTOM_LOCAL, TOP_LOCAL } from '../../board/deck';
 import { cross3, dot3, type V3 } from '../../math';
 import { SQUAT_FLOOR } from '../../motion/skeleton';
-import { EL_TORO_TERRAIN, SET_FOOT, RISER, STAIR_DROP, STAIR_RUN, STAIR_STEPS, TREAD, planStairs, stairClock, stairGround, stairTimeline } from './stairs';
-import { SET_SCALE, stageTerrain } from '../setScale';
+import { EL_TORO_TERRAIN, RISER, STAIR_DROP, STAIR_RUN, STAIR_STEPS, TREAD, stairGround } from './stairs';
+import { planStairs, stairClock, stairTimeline } from '../../stage/drop';
+import { SET_SCALE, stageTerrain, SET_FOOT } from '../setScale';
 import { FOOT } from '../../units';
 import { resolveSkateStyle } from '../../motion/style';
 import type { RiderStance, Robot, Stance, Trick } from '../../types';
@@ -17,7 +18,7 @@ import { stageArmLift } from '../../stage/armLift';
 import { armsLifted } from '../../motion/armClearance';
 import { ASPHALT, stageView } from '../../camera/view';
 import { X0 } from '../../motion/trick';
-import { sweep, sweepHz } from '../../testing';
+import { sweep, sweepHz, STANCES, RIDERS } from '../../testing';
 
 /**
  * El Toro's 20 stair: flatground tricks go down it. These pin the set's
@@ -63,8 +64,6 @@ const BOARD_POINTS: V3[] = [...TOP_LOCAL, ...BOTTOM_LOCAL];
 for (const x of [-WHEEL_X, WHEEL_X]) for (const z of [-WHEEL_Z, WHEEL_Z]) BOARD_POINTS.push({ x, y: WHEEL_Y + WHEEL_R, z });
 
 const BASES = TRICK_BASES;
-const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
-const RIDERS: RiderStance[] = ['regular', 'goofy'];
 const POPS = [0.45, 1, 1.15];
 
 describe('El Toro', () => {
@@ -168,7 +167,7 @@ describe('El Toro', () => {
     for (const rider of RIDERS) {
       const regular = plan('Kickflip', { rider });
       const fakie = plan('Kickflip', { rider, stance: 'fakie' });
-      // Same clock and landing; the leading tail pops short of the lip, so the takeoff is further back (stairs.ts).
+      // Same clock and landing; the leading tail pops short of the lip, so the takeoff is further back (stage/drop.ts).
       expect(fakie.stairs!.pop).toBe(regular.stairs!.pop);
       expect(fakie.stairs!.land).toBe(regular.stairs!.land);
       expect(fakie.stairs!.takeoff.x).toBeLessThan(regular.stairs!.takeoff.x);

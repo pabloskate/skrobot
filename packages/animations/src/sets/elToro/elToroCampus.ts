@@ -2,7 +2,7 @@ import type { Vec3 } from '../../camera/view';
 import { Bake, NO_INK, type Ink, type Paint } from '../../three/bake';
 import { hash2 } from '../setKit';
 import { SURFACE } from '../surfaces';
-import { SET_FOOT as F } from './stairs';
+import { SET_FOOT as F } from '../setScale';
 
 /**
  * El Toro's campus round the stairs, authored in feet in the spot's own axes (u downhill, h up, z across) and

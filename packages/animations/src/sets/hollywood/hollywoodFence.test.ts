@@ -5,13 +5,14 @@ import { ASPHALT } from '../../camera/view';
 import type { V3 } from '../../math';
 import { resolveSkateStyle } from '../../motion/style';
 import { TRICK_BASES, X0 } from '../../motion/trick';
+import { trickPop } from '../../stage/drop';
 import { planStage, stageFrame, type StageFrame } from '../../stage/stage';
 import type { RiderStance, Stance } from '../../types';
-import { landingYaw } from '../elToro/stairs';
+import { landingYaw } from '../terrain';
 import { SET_SCALE } from '../setScale';
 import { FOOT } from '../../units';
 import { setInfo, setTerrain, setTimeline } from '../sets';
-import { sweep, sweepHz } from '../../testing';
+import { sweep, sweepHz, STANCES, RIDERS } from '../../testing';
 import { Hollywood3D, HOLLYWOOD_TRAFFIC, HOLLYWOOD_TREES } from './hollywood3d';
 import {
   HOLLYWOOD_BUILDING_FACE, HOLLYWOOD_CHEEK_Z, HOLLYWOOD_CURB_Z, HOLLYWOOD_DROP,
@@ -19,12 +20,12 @@ import {
   HOLLYWOOD_FENCE_YAW, HOLLYWOOD_FENCE_Z, HOLLYWOOD_FOOT, HOLLYWOOD_LANE_WIDTH,
   HOLLYWOOD_LEFT_Z, HOLLYWOOD_RAIL_END, HOLLYWOOD_RAIL_HEIGHT, HOLLYWOOD_RAIL_RADIUS,
   HOLLYWOOD_RAIL_START, HOLLYWOOD_ROAD_Y, HOLLYWOOD_SIDE_RAIL_Z,
-  fencePop, hollywoodNosing, hollywoodSurface,
+  hollywoodNosing, hollywoodSurface,
 } from './hollywoodLayout';
 
 const F = HOLLYWOOD_FOOT;
-const STANCES: Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
-const RIDERS: RiderStance[] = ['regular', 'goofy'];
+/** A trick's pop over the fence; without one, the most any takes. */
+const fencePop = (base?: string) => trickPop(HOLLYWOOD_FENCE_TERRAIN, base)!;
 
 const fence = (base: string, stance: Stance = 'regular', riderStance: RiderStance = 'regular', options: { popHeight?: number; landed?: boolean; skater?: 'robot' | 'realistic' } = {}) =>
   planStage({ id: base, name: base, base, stance }, {

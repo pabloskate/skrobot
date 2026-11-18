@@ -1,5 +1,7 @@
 import type { Vec3 } from '../camera/view';
-import type { Bake, Ink } from '../three/bake';
+import type { Bake, Ink, Paint } from '../three/bake';
+import { INK_PROP } from '../three/materials';
+import { SURFACE, type SurfaceName } from './surfaces';
 
 /**
  * Pieces every spot drawn under the realistic look (sets/surfaces.ts) bakes with, in set units. Spot kits
@@ -10,6 +12,20 @@ import type { Bake, Ink } from '../three/bake';
 export { mixHex } from '../math';
 
 const UP: Vec3 = [0, 1, 0];
+
+/** An uninked face of one surface. */
+export const tag = (surface: SurfaceName | number, id = 0): Ink => ({
+  id, priority: 0, width: 0, kind: 0, solid: typeof surface === 'number' ? surface : SURFACE[surface],
+});
+/** An outlined part of one surface (a planter, the stairs, a building), so each reads as its own piece. */
+export const part = (id: number, surface: SurfaceName | number, priority = 2, width = 0.14): Ink => ({
+  id, priority, width, kind: INK_PROP, solid: typeof surface === 'number' ? surface : SURFACE[surface],
+});
+
+/** A round tube of one radius through points: pipe, post, pole. */
+export function tube(b: Bake, spine: Vec3[], radius: number, color: string, ink: Ink, sides = 8) {
+  b.tube(spine, spine.map(() => radius), { color } as Paint, ink, sides, true);
+}
 
 /** The unit normal of the plane through three points, wound counter-clockwise seen from outside. */
 export function normalOf(a: Vec3, c: Vec3, d: Vec3): Vec3 {

@@ -1,5 +1,6 @@
 import type { Handrail } from '../../motion/grind';
-import { SET_FOOT, type DropTerrain } from '../elToro/stairs';
+import { SET_FOOT } from '../setScale';
+import type { DropTerrain } from '../terrain';
 import type { SpotTripod, SpotTripods, SpotFilmers } from '../tripods';
 
 /**

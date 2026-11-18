@@ -1,6 +1,6 @@
 import { FOOT } from '../units';
 import type { Handrail } from '../motion/grind';
-import type { DropTerrain } from './elToro/stairs';
+import type { DropTerrain } from './terrain';
 
 /**
  * The spots are laid out and drawn at their own scale, SET_FOOT units to

@@ -2,16 +2,16 @@ import { DoubleSide, GLSL3, ShaderMaterial, Vector4 } from 'three';
 import { WHEEL_R } from './board';
 import { DECK_HALF_WIDTH } from '../motion/skeleton';
 import { BOARD_WIDTH_SCALE } from './boardDimensions';
-import { SUN } from '../three/materials';
+import { GLSL_DAYLIGHT, RiderDaylight } from '../three/daylight';
 
 export const BOARD_SURFACE = { grip: 0, underside: 1, maple: 2, aluminum: 3, bushing: 4, urethane: 5, steel: 6, bolt: 7, rubber: 8 } as const;
 
-/** Physical-style finish for the realistic human's board; both MRT targets remain valid. */
-export function realisticBoardMaterial(): ShaderMaterial {
+/** Grip tape, printed maple, cast trucks and urethane in the stage daylight. */
+export function realisticBoardMaterial(light = new RiderDaylight()): ShaderMaterial {
   return new ShaderMaterial({
     glslVersion: GLSL3,
     side: DoubleSide,
-    uniforms: { uAngle: { value: 0 }, uSweep: { value: 0 }, uInfo: { value: new Vector4(234 / 255, 30 / 255, 0, 0) } },
+    uniforms: { ...light.uniforms, uAngle: { value: 0 }, uSweep: { value: 0 }, uInfo: { value: new Vector4(234 / 255, 30 / 255, 0, 0) } },
     vertexShader: /* glsl */ `
       in float aSurface;
       in float aLayer;
@@ -43,8 +43,7 @@ export function realisticBoardMaterial(): ShaderMaterial {
       uniform float uAngle;
       uniform float uSweep;
       uniform vec4 uInfo;
-      const vec3 SUN = vec3(${SUN.x.toFixed(6)}, ${SUN.y.toFixed(6)}, ${SUN.z.toFixed(6)});
-      const float PI = 3.14159265;
+      ${GLSL_DAYLIGHT}
       float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
       float noise(vec2 p) {
         vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -61,13 +60,6 @@ export function realisticBoardMaterial(): ShaderMaterial {
       float wood(vec2 p) {
         float bend = noise(vec2(p.x * 0.035, p.y * 0.22));
         return 0.55 * noise(vec2(p.x * 0.11, p.y * 4.0 + bend * 1.2)) + 0.45 * noise(vec2(p.x * 0.04, p.y * 11.0 + bend * 2.0));
-      }
-      vec3 environment(vec3 r, float rough) {
-        vec3 sky = mix(vec3(0.7, 0.79, 0.83), vec3(0.19, 0.31, 0.44), smoothstep(0.0, 1.0, r.y));
-        float cloud = pow(max(0.0, dot(r, normalize(vec3(-0.5, 0.75, 0.42)))), mix(22.0, 5.0, rough));
-        sky += cloud * vec3(0.4, 0.39, 0.35);
-        vec3 ground = mix(vec3(0.15, 0.13, 0.095), vec3(0.4, 0.36, 0.28), smoothstep(-0.8, 0.0, r.y));
-        return mix(ground, sky, smoothstep(-0.12, 0.4, r.y));
       }
       void main() {
         vec3 n = normalize(vNormal);
@@ -166,23 +158,8 @@ export function realisticBoardMaterial(): ShaderMaterial {
           base = vec3(0.028, 0.036, 0.038); metal = 0.72; rough = 0.4;
         } else { base = vec3(0.011, 0.015, 0.017); rough = 0.85; }
         vec3 v = normalize(cameraPosition - vWorld);
-        vec3 h = normalize(v + SUN);
-        float nv = max(0.001, dot(n, v));
-        float nl = max(0.0, dot(n, SUN));
-        vec3 f0 = mix(vec3(0.035), base, metal);
-        vec3 f = f0 + (1.0 - f0) * pow(1.0 - nv, 5.0);
-        vec3 ambient = mix(vec3(0.22, 0.2, 0.165), vec3(0.42, 0.48, 0.55), n.y * 0.5 + 0.5);
-        vec3 color = base * (1.0 - metal * 0.75) * (ambient + nl * vec3(0.83, 0.79, 0.7));
-        float a2 = pow(rough, 4.0);
-        float nh = max(0.0, dot(n, h));
-        float denom = nh * nh * (a2 - 1.0) + 1.0;
-        float d = a2 / max(0.0001, PI * denom * denom);
-        float k = (rough + 1.0) * (rough + 1.0) / 8.0;
-        float g = nv / (nv * (1.0 - k) + k) * nl / max(0.001, nl * (1.0 - k) + k);
-        color += min(vec3(2.0), f * d * g / max(0.004, 4.0 * nv * max(nl, 0.001))) * nl * 0.75;
-        color += environment(reflect(-v, n), rough) * f * (1.0 - rough * 0.65);
-        color = color / (1.0 + color * 0.2);
-        outColor = vec4(pow(max(color, vec3(0.0)), vec3(1.0 / 2.2)), 1.0);
+        vec3 color = daylight(base, rough, metal, n, v, daylightAt(vWorld));
+        outColor = vec4(displayDaylight(color), 1.0);
         outInfo = uInfo;
       }
     `,

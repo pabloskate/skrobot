@@ -166,7 +166,7 @@ interface FeetPhase {
 }
 
 /** A pose's offsets from another (the turns of pelvis, torso and head; the arms' and knees' directions) at `at`, and how fast they were changing: they die away from there. */
-interface Blend {
+export interface Blend {
   at: number;
   offset: V3[];
   rate: V3[];
@@ -205,13 +205,13 @@ export interface KickOutPlan {
   after: FeetPhase | null;
 }
 
-const minJerk = (x: number) => {
+export const minJerk = (x: number) => {
   const s = clamp01(x);
   return s * s * s * (10 + s * (-15 + 6 * s));
 };
 
 /** Cubic Hermite between two points with velocities over `span` seconds, at `s` (0 → 1). */
-function hermite3(p0: V3, v0: V3, p1: V3, v1: V3, span: number, s: number): V3 {
+export function hermite3(p0: V3, v0: V3, p1: V3, v1: V3, span: number, s: number): V3 {
   const s2 = s * s;
   const s3 = s2 * s;
   const h00 = 2 * s3 - 3 * s2 + 1;
@@ -752,7 +752,7 @@ function offsets(from: BodyPose, to: BodyPose): V3[] {
 }
 
 /** Going from one motion (`from`, up to `at`) into another (`to`, from `at`): the offsets between them then, and how fast each was changing on its own side. */
-function blendAt(at: number, from: (t: number) => BodyPose, to: (t: number) => BodyPose, over = BLEND_T): Blend {
+export function blendAt(at: number, from: (t: number) => BodyPose, to: (t: number) => BodyPose, over = BLEND_T): Blend {
   const h = 1 / 240;
   // The one motion as it came up to `at` (a step it takes right there is the other's to make), the other as it leaves.
   const before = at - 1e-6;
@@ -765,7 +765,7 @@ function blendAt(at: number, from: (t: number) => BodyPose, to: (t: number) => B
 }
 
 /** A pose with a blend's offsets, dying away, put back on. */
-function blended(pose: BodyPose, blend: Blend | null, t: number): BodyPose {
+export function blended(pose: BodyPose, blend: Blend | null, t: number): BodyPose {
   const tau = blend ? t - blend.at : -1;
   if (!blend || tau < 0 || tau > 10 * blend.over) return pose;
   const o = blend.offset.map((x, i) => decay3(x, blend.rate[i], tau, blend.over));

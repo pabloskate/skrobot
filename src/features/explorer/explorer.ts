@@ -4,6 +4,7 @@ import {
   GRIND_BASES,
   GRIND_EXIT_TRICKS,
   KICK_OUT_DROP_T,
+  SLIP_BACK_DROP_T,
   SCENE_ORBIT_BOUNDS,
   SCENE_ZOOM,
   STAGE_SETS,
@@ -117,17 +118,18 @@ export interface ExplorerState {
   rail: RailChoice;
   /** At a spot with more than one way down, what a flatground trick goes over: its stairs, or (Hollywood) the fence beside them. */
   obstacle: Obstacle;
-  /** Who skates it: the robot, the realistic human, or the alien. */
+  /** Who skates it: the original and realistic robots, the realistic human, or the alien. */
   skater: Skater;
   /** How the attempt is missed instead (see Outcome), where the mode has that miss. Null lands it. */
   fall: Outcome | null;
 }
 
 /**
- * How an attempt ends when it isn't landed: a flatground or gap trick caught wrong and kicked out; a grind jumped off,
- * forward along the rail or out to the side, and rolled out.
+ * How an attempt ends when it isn't landed: a flatground or gap trick caught wrong and kicked out, or landed with the
+ * weight back so the board shoots out ahead and the rider sits down; a grind jumped off, forward along the rail or out
+ * to the side, and rolled out.
  */
-export type Outcome = 'kickout' | 'jump-forward' | 'jump-side';
+export type Outcome = 'kickout' | 'slipback' | 'jump-forward' | 'jump-side';
 
 export interface OutcomeOption {
   fall: Outcome | null;
@@ -138,7 +140,11 @@ export interface OutcomeOption {
 
 const LANDED: OutcomeOption = { fall: null, label: 'Land', hint: 'ridden away' };
 const OUTCOME_OPTIONS: Record<ExplorerMode, readonly OutcomeOption[]> = {
-  flatground: [LANDED, { fall: 'kickout', label: 'Kick out', hint: 'caught wrong, kicked away' }],
+  flatground: [
+    LANDED,
+    { fall: 'kickout', label: 'Kick out', hint: 'caught wrong, kicked away' },
+    { fall: 'slipback', label: 'Slip back', hint: 'weight back, board shoots out' },
+  ],
   grinds: [
     LANDED,
     { fall: 'jump-forward', label: 'Jump forward', hint: 'jumped off ahead, rolled out' },
@@ -157,9 +163,9 @@ export function outcomeOf(state: Pick<ExplorerState, 'mode' | 'fall'>): Outcome 
 const RAIL_BAILS: Partial<Record<Outcome, RailBail>> = { 'jump-forward': 'forward', 'jump-side': 'side' };
 
 /** What the stage is told of an outcome: landed or not, the miss, and which way off a rail. */
-export function stageOutcome(fall: Outcome | null): { landed: boolean; fallVariant?: 'kickout'; railBail?: RailBail } {
+export function stageOutcome(fall: Outcome | null): { landed: boolean; fallVariant?: 'kickout' | 'slipback'; railBail?: RailBail } {
   if (fall == null) return { landed: true };
-  return { landed: false, fallVariant: 'kickout', railBail: RAIL_BAILS[fall] };
+  return { landed: false, fallVariant: fall === 'slipback' ? 'slipback' : 'kickout', railBail: RAIL_BAILS[fall] };
 }
 
 export const STANCES: readonly Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
@@ -434,18 +440,21 @@ export interface Timeline {
 /** The moments worth jumping to, and how long the trick runs (seconds). */
 export function timelineFor(state: ExplorerState, style: SkateStyle | undefined): Timeline {
   const kickOut = state.mode === 'flatground' && state.fall === 'kickout';
+  const slipBack = state.mode === 'flatground' && state.fall === 'slipback';
   if (state.mode === 'flatground') {
     // Down a drop the flight is the drop's; on flat ground the robot's own pop sets it.
     const drop = setInfo(state.set).terrain !== null;
-    const tl = drop ? setTimeline(state.set, style, true, state.obstacle, state.stance, stageTrick(state).base) : flatTimeline(style, !kickOut, kickOut);
+    const tl = drop
+      ? setTimeline(state.set, style, true, state.obstacle, state.stance, stageTrick(state).base)
+      : flatTimeline(style, !kickOut && !slipBack, kickOut, slipBack);
     return {
-      duration: kickOut && drop ? tl.land + KICK_OUT_DROP_T : tl.end,
+      duration: drop && kickOut ? tl.land + KICK_OUT_DROP_T : drop && slipBack ? tl.land + SLIP_BACK_DROP_T : tl.end,
       phases: [
         { label: 'Set up', time: 0 },
         { label: 'Pop', time: tl.pop + 0.06 },
         { label: 'Peak', time: tl.peak },
         { label: kickOut ? 'Kick out' : 'Catch', time: tl.catch },
-        { label: kickOut ? (drop ? 'Down' : 'Run out') : 'Land', time: tl.land },
+        { label: kickOut ? (drop ? 'Down' : 'Run out') : slipBack ? 'Slip' : 'Land', time: tl.land },
       ],
     };
   }
@@ -752,19 +761,13 @@ function parseStand(value: string | null): TripodSpot | null {
   return { u, z, height: Math.max(0, height), ...(frame > 0 ? { frame } : {}) };
 }
 
-/** Public links use neutral names; internal IDs remain stable for existing links and the renderer. */
-const PUBLIC_SET_SLUGS: Partial<Record<StageSet, string>> = {
-  'sunset-car-wash': 'roof-to-bank',
-  'lyon-25': '25-stair',
-  'miami-triangle': 'triangle-bank',
-};
-
 /** The explorer state a URL query describes; anything missing or unknown keeps its default. */
-export function stateFromSearch(search: string): ExplorerState {
+export function stateFromSearch(search: string, defaultSet: StageSet = DEFAULT_STATE.set): ExplorerState {
   const params = new URLSearchParams(search);
   const stanceParam = params.get('stance');
   const camera = parseCamera(params.get('cam'));
-  const set = STAGE_SETS.find((option) => option.id === params.get('set') || PUBLIC_SET_SLUGS[option.id] === params.get('set'))?.id ?? DEFAULT_STATE.set;
+  // Public links use a spot's neutral slug where it has one; its id still opens, for existing links.
+  const set = STAGE_SETS.find((option) => option.id === params.get('set') || option.slug === params.get('set'))?.id ?? defaultSet;
   const pan = parsePan(params.get('pan'));
   const stand = setInfo(set).terrain ? parseStand(params.get('stand')) : null;
   const base: ExplorerState = {
@@ -780,7 +783,7 @@ export function stateFromSearch(search: string): ExplorerState {
     rail: setInfo(set).rails?.fixedLine || (params.get('rail') === 'side' && setInfo(set).rails?.sideGrinds !== false) ? 'side' : DEFAULT_STATE.rail,
     obstacle: setInfo(set).obstacles?.find((o) => o.id === params.get('obstacle'))?.id ?? DEFAULT_STATE.obstacle,
     skater: SKATERS.find((option) => option.id === params.get('skater'))?.id ?? DEFAULT_STATE.skater,
-    // Kept if it's a miss the mode named below has (a flatground trick's kick-out, a grind's jump off).
+    // Kept if it's a miss the mode named below has (a flatground trick's kick-out or slip back, a grind's jump off).
     fall: OUTCOME_OPTIONS.grinds.concat(OUTCOME_OPTIONS.flatground).find((o) => o.fall != null && o.fall === params.get('fall'))?.fall ?? null,
   };
   const grind = fromSlug(GRIND_CHOICES, params.get('grind'));
@@ -813,7 +816,7 @@ export function videoFilename(trickName: string, rate: number, mimeType = 'video
 }
 
 /** The URL query that reopens this state: only what's on the stage, defaults left out. */
-export function searchFromState(state: ExplorerState): string {
+export function searchFromState(state: ExplorerState, { includeSet = false } = {}): string {
   const params = new URLSearchParams();
   if (state.mode === 'flatground') {
     params.set('trick', slug(state.trick));
@@ -845,7 +848,7 @@ export function searchFromState(state: ExplorerState): string {
   }
   if (state.cameraSide && cameraHasSides(state.camera) && !state.stand) params.set('from', state.cameraSide);
   if (state.zoom !== defaultZoomForCamera(state.camera)) params.set('zoom', String(round(state.zoom, 2)));
-  if (state.set !== DEFAULT_STATE.set) params.set('set', PUBLIC_SET_SLUGS[state.set] ?? state.set);
+  if (includeSet || state.set !== DEFAULT_STATE.set) params.set('set', setInfo(state.set).slug ?? state.set);
   if (state.rail !== DEFAULT_STATE.rail) params.set('rail', state.rail);
   if (picksObstacle(state) && state.obstacle !== DEFAULT_STATE.obstacle) params.set('obstacle', state.obstacle);
   if (state.skater !== DEFAULT_STATE.skater) params.set('skater', state.skater);

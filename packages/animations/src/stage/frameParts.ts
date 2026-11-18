@@ -225,7 +225,8 @@ export const grownBy = (skater: Skater) => (skaterInfo(skater).person ? PERSON_S
  */
 export function posed(rig: Rig, skater: Skater, headPose?: HeadPose | null, ground?: number): Rig {
   const tilted = headPose ? { ...rig, head: tiltHead(rig.head, headPose.pitch, headPose.roll) } : rig;
-  return skaterInfo(skater).person ? humanRig(tilted, ground) : tilted;
+  const rider = skaterInfo(skater);
+  return rider.person ? humanRig(tilted, ground, rider.followPopArc ? rig.popArc : undefined) : tilted;
 }
 
 /** The body's shadow fades with the hips' height over the ground past this (world units), a little under where they ride. */

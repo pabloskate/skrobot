@@ -1,11 +1,11 @@
 /**
- * Who rides: the robot, the realistic human, or the green alien made from him
+ * Who rides: the original and realistic robots, the realistic human, or the green alien made from him
  * (same body and clothes).
  * All ride the same trick and board motion. The people wear a person's
  * proportions on the robot's rig (human/humanRig.ts); each one's meshes,
  * and the board they ride, are picked in three/renderer.ts.
  */
-export type Skater = 'robot' | 'realistic' | 'alien';
+export type Skater = 'robot' | 'realistic-robot' | 'realistic' | 'alien';
 
 export interface SkaterInfo {
   id: Skater;
@@ -13,11 +13,14 @@ export interface SkaterInfo {
   label: string;
   /** A person's proportions, grown from the robot's rig over the same feet. */
   person: boolean;
+  /** Retarget the airborne pelvis to the pop arc independently of the feet. */
+  followPopArc?: boolean;
 }
 
 export const SKATERS: readonly SkaterInfo[] = [
   { id: 'robot', label: 'Robot', person: false },
-  { id: 'realistic', label: 'Realistic', person: true },
+  { id: 'realistic-robot', label: 'Realistic Robot', person: false },
+  { id: 'realistic', label: 'Realistic', person: true, followPopArc: true },
   { id: 'alien', label: 'Alien', person: true },
 ];
 
