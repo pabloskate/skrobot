@@ -25,10 +25,11 @@ import { ANKLE_HEIGHT } from './body';
  * how long the attempt runs without solving anyone's body.
  */
 
-export type RailBail = 'forward' | 'side';
+export type RailBail = 'forward' | 'side' | 'stick';
 
 export const RAIL_BAIL_OPTIONS: ReadonlyArray<{ id: RailBail; label: string }> = [
   { id: 'forward', label: 'Jump forward' },
+  { id: 'stick', label: 'Rail Stick' },
   { id: 'side', label: 'Jump aside' },
 ];
 
@@ -41,6 +42,7 @@ export const RAIL_BAIL_T = 2.8;
  * is about 8 feet a second up; off a moving board, braced, rather less.
  */
 const JUMP = {
+  stick: { up: 0, along: 0, out: 0 },
   forward: { up: 6.5 * FOOT, along: 4 * FOOT, out: 0 },
   side: { up: 6.5 * FOOT, along: -1 * FOOT, out: 7.5 * FOOT },
 } as const;
@@ -176,7 +178,7 @@ export function planRailBail(plan: GrindPlan, bail: RailBail): RailBailPlan {
   const fits = (at: number) => {
     const land = landingFrom(plan, at, throwOf.along, throwOf.up, throwOf.out);
     if (!levelRoom(plan, land.along, land.across)) return null;
-    if (bail === 'forward' && (land.along < railEnd(plan) + PAST_END || !overEnd(plan, at, throwOf.along, throwOf.up))) return null;
+    if (bail !== 'side' && (land.along < railEnd(plan) + PAST_END || !overEnd(plan, at, throwOf.along, throwOf.up))) return null;
     return land;
   };
   let at = last;
