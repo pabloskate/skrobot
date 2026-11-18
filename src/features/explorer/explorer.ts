@@ -126,8 +126,8 @@ export interface ExplorerState {
 
 /**
  * How an attempt ends when it isn't landed: a flatground or gap trick caught wrong and kicked out, or landed with the
- * weight back so the board shoots out ahead and the rider sits down; a grind jumped off, forward along the rail or out
- * to the side, and rolled out.
+ * weight back so the board shoots out ahead and the rider sits down; a grind jumped off along the rail or out to the side,
+ * or slipped back on its landing.
  */
 export type Outcome = 'kickout' | 'slipback' | 'jump-forward' | 'jump-side';
 
@@ -139,16 +139,18 @@ export interface OutcomeOption {
 }
 
 const LANDED: OutcomeOption = { fall: null, label: 'Land', hint: 'ridden away' };
+const SLIP_BACK: OutcomeOption = { fall: 'slipback', label: 'Slip back', hint: 'weight back, board shoots out' };
 const OUTCOME_OPTIONS: Record<ExplorerMode, readonly OutcomeOption[]> = {
   flatground: [
     LANDED,
     { fall: 'kickout', label: 'Kick out', hint: 'caught wrong, kicked away' },
-    { fall: 'slipback', label: 'Slip back', hint: 'weight back, board shoots out' },
+    SLIP_BACK,
   ],
   grinds: [
     LANDED,
     { fall: 'jump-forward', label: 'Jump forward', hint: 'jumped off ahead, rolled out' },
     { fall: 'jump-side', label: 'Jump aside', hint: 'jumped off the side, rolled out' },
+    SLIP_BACK,
   ],
 };
 
@@ -440,7 +442,7 @@ export interface Timeline {
 /** The moments worth jumping to, and how long the trick runs (seconds). */
 export function timelineFor(state: ExplorerState, style: SkateStyle | undefined): Timeline {
   const kickOut = state.mode === 'flatground' && state.fall === 'kickout';
-  const slipBack = state.mode === 'flatground' && state.fall === 'slipback';
+  const slipBack = state.fall === 'slipback';
   if (state.mode === 'flatground') {
     // Down a drop the flight is the drop's; on flat ground the robot's own pop sets it.
     const drop = setInfo(state.set).terrain !== null;
@@ -480,7 +482,7 @@ export function timelineFor(state: ExplorerState, style: SkateStyle | undefined)
   const grind = grindTimelineFor(stageTrick(state), state.rider, style, true, 'slam', handrail);
   if (!grind) return { phases: [{ label: 'Set up', time: 0 }], duration: flatTimeline(style).end };
   return {
-    duration: grind.end,
+    duration: slipBack ? grind.land + SLIP_BACK_DROP_T : grind.end,
     phases: [
       { label: 'Set up', time: 0 },
       { label: 'Pop', time: grind.pop },
@@ -488,7 +490,7 @@ export function timelineFor(state: ExplorerState, style: SkateStyle | undefined)
       { label: 'Lock', time: grind.lock },
       { label: 'Pop off', time: grind.off },
       ...(grind.trickOut == null ? [] : [{ label: 'Trick out', time: grind.trickOut }]),
-      { label: 'Land', time: grind.land },
+      { label: slipBack ? 'Slip' : 'Land', time: grind.land },
     ],
   };
 }
@@ -783,7 +785,7 @@ export function stateFromSearch(search: string, defaultSet: StageSet = DEFAULT_S
     rail: setInfo(set).rails?.fixedLine || (params.get('rail') === 'side' && setInfo(set).rails?.sideGrinds !== false) ? 'side' : DEFAULT_STATE.rail,
     obstacle: setInfo(set).obstacles?.find((o) => o.id === params.get('obstacle'))?.id ?? DEFAULT_STATE.obstacle,
     skater: SKATERS.find((option) => option.id === params.get('skater'))?.id ?? DEFAULT_STATE.skater,
-    // Kept if it's a miss the mode named below has (a flatground trick's kick-out or slip back, a grind's jump off).
+    // Kept if it's a miss the mode named below has (both modes can slip back on landing).
     fall: OUTCOME_OPTIONS.grinds.concat(OUTCOME_OPTIONS.flatground).find((o) => o.fall != null && o.fall === params.get('fall'))?.fall ?? null,
   };
   const grind = fromSlug(GRIND_CHOICES, params.get('grind'));

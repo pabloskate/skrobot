@@ -6,6 +6,7 @@ import { smoothstep, type V3 } from '../math';
 import { bodyDims } from '../motion/fall/body';
 import { boardAt, boardRigOf } from '../motion/fall/boardBody';
 import { TAKEOVER_LEAD, hipsAt, kickOutAt, planKickOut, type KickOutPlan, type KickOutSetup } from '../motion/fall/kickOut';
+import { SLIP_BACK_LEAD, planSlipBack, slipBackAt, slipBackHips, type SlipBackFrame, type SlipBackPlan } from '../motion/fall/slipBack';
 import { UP } from '../motion/fall/footing';
 import { handrailHeight, railTopY, railTrack, travel, type GrindPlan } from '../motion/grind';
 import { BAR_HALF, BAR_TOP_Y, BAR_Z } from '../motion/grindDefinitions';
@@ -16,7 +17,7 @@ import { GRAVITY } from '../units';
 import { ROLL_ABOVE, type RailBailPlan } from '../motion/fall/railBail';
 import { STEP_OFF_JUMP } from '../motion/fall/stepOff';
 import { craneDownhill, ledgeAcross, placeOnLedge, railRig, shadowLevel, shiftRig } from './downhill';
-import { followAt, followRider, lowestOver, SHADOW_SEAM_T, type Follow } from './kickOutFrame';
+import { followAt, followHips, followRider, lowestOver, SHADOW_SEAM_T, type Follow } from './kickOutFrame';
 import { stageArms } from './armLift';
 import { groundHull, grownBy, kickedUp, onTheGround, posed, riderShadows, type StageFrame } from './frameParts';
 import type { StagePlan } from './stage';
@@ -141,23 +142,28 @@ function setupFor(stage: StagePlan): KickOutSetup {
   };
 }
 
+function railCamera(stage: StagePlan, takeover: number) {
+  const grind = stage.grind!;
+  const h = 1 / 240;
+  const scroll = (t: number) => scrollAt(stage, t);
+  // A ledge's frame follows the board across its line as well; a rail's and the bar's only along.
+  const across = (t: number) => (grind.handrail && stage.rail?.yaw ? ledgeAcross(grind, t) : 0);
+  return {
+    x: scroll(takeover),
+    vx: (scroll(takeover + h) - scroll(takeover - h)) / (2 * h),
+    z: across(takeover),
+    vz: (across(takeover + h) - across(takeover - h)) / (2 * h),
+  };
+}
+
 /** The bail planned for a stage, once, with the camera that follows it. */
 function planned(stage: StagePlan): Planned {
   const known = plans.get(stage);
   if (known) return known;
   const grind = stage.grind!;
   const plan = planKickOut(setupFor(stage));
-  const h = 1 / 240;
   const { takeover } = plan;
-  const scroll = (t: number) => scrollAt(stage, t);
-  // A ledge's frame follows the board across its line as well; a rail's and the bar's only along.
-  const across = (t: number) => (grind.handrail && stage.rail?.yaw ? ledgeAcross(grind, t) : 0);
-  const follow = followRider(plan, {
-    x: scroll(takeover),
-    vx: (scroll(takeover + h) - scroll(takeover - h)) / (2 * h),
-    z: across(takeover),
-    vz: (across(takeover + h) - across(takeover - h)) / (2 * h),
-  });
+  const follow = followRider(plan, railCamera(stage, takeover));
   // The board's first touch of the ground, not the rail it left (or, a ledge's top being its ground, once it's off it).
   const ground = groundOf(grind);
   let boardDown = Infinity;
@@ -201,17 +207,72 @@ export function railBailFrame(stage: StagePlan, t: number, rate: number, attempt
   };
 }
 
-/** Dust kicked up at `from` at `p` (in a frame), left where it was. */
-const lineDustOf = (clock: number, from: number, p: V3, strength: number, ground: number) => kickedUp(clock, from, p.x, strength, p.z, ground);
-
 /** The crane's lift as the grind had it at the jump, eased down as the rider comes off the rail onto the ground. */
 const LIFT_EASE = 0.35;
 
 function ownFrame(stage: StagePlan, t: number, rate: number, attempt: (t: number) => StageFrame): StageFrame {
   const { plan, follow, boardDown } = planned(stage);
-  const grind = stage.grind!;
   const clock = Math.min(t, stage.end);
   const at = kickOutAt(plan, clock);
+  const first = plan.run.footfalls[0];
+  const boardSpot = boardRigOf(boardAt(plan.board, Math.min(boardDown, stage.end))).center;
+  const hits = [
+    ...(Number.isFinite(boardDown) ? [{ t: boardDown, at: boardSpot, strength: 0.6 }] : []),
+    ...(plan.roll ? plan.roll.hits.map(hit => ({ ...hit, strength: Math.max(0.25, hit.strength * 0.8) }))
+      : [{ t: first.on, at: first.at, strength: 0.45 }]),
+  ];
+  return projectRailFall(stage, t, attempt, {
+    at, follow, takeover: plan.takeover, firstDown: first.on, hits,
+    wheelBefore: boardAt(plan.board, Math.max(plan.takeover, clock - rate / 60)).wheel,
+    hipsAtTime: time => hipsAt(plan, time).hips,
+  });
+}
+
+const slips = new WeakMap<StagePlan, { plan: SlipBackPlan; follow: Follow }>();
+
+/** A slip on the landing out of the grind, starting from its actual board and rider pose. */
+export function railSlipFrame(stage: StagePlan, t: number, rate: number, attempt: (t: number) => StageFrame): StageFrame {
+  const grind = stage.grind!;
+  if (t < grind.land - SLIP_BACK_LEAD) return attempt(t);
+  let slip = slips.get(stage);
+  if (!slip) {
+    const plan = planSlipBack({
+      body: bodyDims(stage.skater), regular: time => grindRigAt(stage, time),
+      wheel: time => wheelRoll(Math.abs(scrollAt(stage, time)), Infinity, grind.spec.dir, 0),
+      gravity: GRAVITY, ground: groundOf(grind), touchdown: grind.land, end: stage.end,
+      drag: grind.handrail?.rail.brush && ((x, z) => grind.handrail!.rail.brush!(x - X0, z)),
+    });
+    const follow = followHips(
+      { takeover: plan.takeover, end: stage.end, dt: plan.dt, hips: time => slipBackHips(plan, time) },
+      railCamera(stage, plan.takeover),
+    );
+    slip = { plan, follow };
+    slips.set(stage, slip);
+  }
+  const { plan, follow } = slip;
+  const clock = Math.min(stage.end, t);
+  return projectRailFall(stage, t, attempt, {
+    at: slipBackAt(plan, clock), follow, takeover: plan.takeover, firstDown: grind.land, hits: plan.hits,
+    wheelBefore: slipBackAt(plan, Math.max(plan.takeover, clock - rate / 60)).wheel,
+    hipsAtTime: time => slipBackHips(plan, time).hips,
+  });
+}
+
+interface RailFallSample {
+  at: SlipBackFrame;
+  follow: Follow;
+  takeover: number;
+  firstDown: number;
+  wheelBefore: number;
+  hits: SlipBackPlan['hits'];
+  hipsAtTime: (time: number) => V3;
+}
+
+/** Place either fall in the grind's frame, including its camera, rail and terrain shadows. */
+function projectRailFall(stage: StagePlan, t: number, attempt: (t: number) => StageFrame, sample: RailFallSample): StageFrame {
+  const { at, follow, takeover, firstDown, wheelBefore, hits, hipsAtTime } = sample;
+  const grind = stage.grind!;
+  const clock = Math.min(t, stage.end);
   const camera = followAt(follow, clock);
   const ride = grind.handrail;
   const ledge = ride && stage.rail?.yaw ? stage.rail : null;
@@ -220,21 +281,12 @@ function ownFrame(stage: StagePlan, t: number, rate: number, attempt: (t: number
   const toFrame = (p: V3): V3 => ({ x: p.x + by.x, y: p.y, z: p.z + by.z });
   const local = shiftRig(at.rig, by);
   const scale = bodyDims(stage.skater).scale;
-  const ground = plan.setup.ground;
-  const { takeover } = plan;
-  const firstDown = plan.run.footfalls[0].on;
-
-  const wheelBefore = boardAt(plan.board, Math.max(takeover, clock - rate / 60)).wheel;
-
-  // Dust where the board comes down and where the first foot lands (or everywhere the rolling body hits).
-  const puff = (from: number, p: V3, strength: number) => {
-    const q = toFrame(p);
-    return kickedUp(clock, from, q.x, strength, q.z, ground(p.x, p.z));
-  };
-  const first = plan.run.footfalls[0];
-  const hits = plan.roll ? plan.roll.hits.flatMap((hit) => puff(hit.t, hit.at, Math.max(0.25, hit.strength * 0.8))) : puff(first.on, first.at, 0.45);
-  const boardSpot = boardRigOf(boardAt(plan.board, Math.min(boardDown, stage.end))).center;
-  const dust = [...(Number.isFinite(boardDown) ? puff(boardDown, boardSpot, 0.6) : []), ...hits];
+  const ground = groundOf(grind);
+  const dustAt = (place: (p: V3) => V3) => hits.flatMap(hit => {
+    const q = place(hit.at);
+    return kickedUp(clock, hit.t, q.x, hit.strength, q.z, ground(hit.at.x, hit.at.z));
+  });
+  const dust = dustAt(toFrame);
 
   // The crane sinks only as far as a low head needs, from the feet down.
   const head = at.rig.head.origin;
@@ -274,10 +326,10 @@ function ownFrame(stage: StagePlan, t: number, rate: number, attempt: (t: number
 
   // Down a handrail: the crane follows the board down the rail up to the jump, then the rider's hips down onto the ground under them.
   const atJump = handrailHeight(grind, takeover);
-  const hipsAtJump = hipsAt(plan, takeover).hips.y;
+  const hipsAtJump = hipsAtTime(takeover).y;
   const level = (time: number) => {
     if (time < takeover) return handrailHeight(grind, time);
-    const hips = hipsAt(plan, Math.min(time, stage.end)).hips;
+    const hips = hipsAtTime(Math.min(time, stage.end));
     const flying = atJump + (hipsAtJump - hips.y);
     const under = ride.rail.ground(hips.x - X0, hips.z);
     return flying + (under - flying) * smoothstep((time - takeover) / Math.max(0.1, firstDown - takeover + LIFT_EASE));
@@ -288,9 +340,7 @@ function ownFrame(stage: StagePlan, t: number, rate: number, attempt: (t: number
     // Laid onto the set as the grind's frames are: the ledge's own frame, its middle where the camera's following.
     const along = { x: -camera.x, y: 0, z: 0 };
     const onLine = (p: V3): V3 => ({ x: p.x + along.x, y: p.y, z: p.z });
-    const lineDust = [...(Number.isFinite(boardDown) ? lineDustOf(clock, boardDown, onLine(boardSpot), 0.6, ground(boardSpot.x, boardSpot.z)) : []),
-      ...(plan.roll ? plan.roll.hits.flatMap((hit) => lineDustOf(clock, hit.t, onLine(hit.at), Math.max(0.25, hit.strength * 0.8), ground(hit.at.x, hit.at.z)))
-        : lineDustOf(clock, first.on, onLine(first.at), 0.45, ground(first.at.x, first.at.z)))];
+    const lineDust = dustAt(onLine);
     const placed = placeOnLedge(ledge, grind, camera.x, camera.z, shiftRig(at.rig, along), lineDust);
     const shadowY = shadowLevel(placed.rig, 0, 1, placed.ground);
     return {

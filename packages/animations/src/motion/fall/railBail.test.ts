@@ -5,14 +5,15 @@ import { TIP_X } from '../../board/deck';
 import { BOARD_WIDTH_SCALE } from '../../board/boardDimensions';
 import { add3, scale3, sub3, type V3 } from '../../math';
 import { railBailPlan } from '../../stage/railBailFrame';
+import { hipsOf } from '../../stage/frameParts';
 import { planStage, stageFrame, type StagePlan } from '../../stage/stage';
 import { soundtrackFor } from '../../sound/soundtrack';
 import { setHandrail, setInfo, type RailChoice, type StageSet } from '../../sets/sets';
-import { SWEEP_TIMEOUT, sweep } from '../../testing';
+import { isFiniteFrame, SWEEP_TIMEOUT, sweep } from '../../testing';
 import type { RiderStance } from '../../types';
 import { FOOT, GRAVITY } from '../../units';
 import { railTopY, type GrindPlan } from '../grind';
-import { BAR_HALF, BAR_TOP_Y, BAR_Z } from '../grindDefinitions';
+import { BAR_HALF, BAR_TOP_Y, BAR_Z, joinGrindBase } from '../grindDefinitions';
 import { DECK_HALF_WIDTH, SHOE_HALF_LENGTH, moveFrame, type Rig } from '../skeleton';
 import { resolveSkateStyle } from '../style';
 import { X0 } from '../trick';
@@ -385,6 +386,23 @@ describe('which way the rider jumps', () => {
       expect(timeline.end).toBeCloseTo(stage.end, 9);
       expect(timeline.lock).toBeCloseTo(stage.grind!.lockAt, 9);
     }
+  });
+
+  it.each(['regular', 'goofy'] as const)('slips back on landing a Hollywood High 360 flip into crooks (%s)', riderStance => {
+    const base = joinGrindBase('360 Flip', 'Frontside Crooked Grind');
+    const trick = { id: base, name: base, base, stance: 'regular' as const };
+    const options = { riderStance, style, fall: 'slipback' as const, shankProgress: 0.5, set: 'hollywood-high' as const };
+    const slip = planStage(trick, { ...options, landed: false });
+    const landed = planStage(trick, { ...options, landed: true });
+    const grind = slip.grind!;
+    expect(grind.fail).toBeNull();
+    expect(stageFrame(slip, grind.lockAt, 1).rig.board.center).toEqual(stageFrame(landed, grind.lockAt, 1).rig.board.center);
+    const down = stageFrame(slip, grind.land, 1);
+    const end = stageFrame(slip, slip.end, 1);
+    expect(isFiniteFrame(down)).toBe(true);
+    expect(isFiniteFrame(end)).toBe(true);
+    expect(end.rig.board.center.x - hipsOf(end.rig).x).toBeGreaterThan(FOOT);
+    expect(hipsOf(end.rig).y).toBeGreaterThan(hipsOf(down.rig).y);
   });
 
   it('leaves a landed grind and a slip off it as they were', () => {

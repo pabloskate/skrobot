@@ -19,7 +19,7 @@ import { planStairs, type StairPlan } from './drop';
 import { hasObstacle, ledgeFor, railLineFor, setGrindSpec, setHandrail, setInfo, setTerrain, type Obstacle, type RailChoice, type RailLine, type StageSet } from '../sets/sets';
 import { railFrame, stairFrame } from './downhill';
 import { attemptRig, isKickOut, kickOutFrame, kickOutPlan } from './kickOutFrame';
-import { railBailFrame } from './railBailFrame';
+import { railBailFrame, railSlipFrame } from './railBailFrame';
 import { isSlipBack, slipBackFrame, slipBackPlan } from './slipBackFrame';
 import { gazeAt } from './gaze';
 import { rideAttempt, stageArms } from './armLift';
@@ -115,13 +115,12 @@ export function planStage(
   const handrail = setHandrail(set, trick, riderStance, choice);
   // A grind kicked out is ridden as landed up to where the rider jumps off the rail.
   const jumpsOff = !landed && options.fall === 'kickout' && grindSpec != null && grinds;
-  // A grind doesn't slip back: missed that way, it slams.
-  const fall = options.fall === 'slipback' && grindSpec != null && grinds ? 'slam' : options.fall;
-  const grind = grindSpec && grinds ? planGrind(grindSpec, mechanics, style, landed || jumpsOff, fall, handrail) : null;
+  const fall = options.fall;
+  const slipBack = !landed && fall === 'slipback';
+  const grind = grindSpec && grinds ? planGrind(grindSpec, mechanics, style, landed || jumpsOff || slipBack, fall, handrail) : null;
   const railBail = jumpsOff && grind ? planRailBail(grind, options.railBail ?? 'forward') : null;
   // A kick-out down a drop flies the landed attempt's arc up to its takeover; a slip back lands it.
   const kickOut = !landed && fall === 'kickout' && !grind;
-  const slipBack = !landed && fall === 'slipback' && !grind;
   const stairs = terrain && !grind ? planStairs(style, landed || kickOut || slipBack, terrain, trickSpec.stance, trick.base) : null;
   // Down a drop a board turning under the rider is caught short of round, and the feet guide it the rest of the way.
   const spec = stairs ? { ...trickSpec, guided: true } : trickSpec;
@@ -140,7 +139,7 @@ export function planStage(
     railBail,
     stepOff: hop == null ? null : { at: hop, down: hop + STEP_OFF_DOWN },
     shankProgress,
-    end: railBail?.end ?? grind?.end ?? (stairs
+    end: railBail?.end ?? (grind && slipBack ? grind.land + SLIP_BACK_DROP_T : grind?.end) ?? (stairs
       ? (kickOut ? stairs.land + KICK_OUT_DROP_T : slipBack ? stairs.land + SLIP_BACK_DROP_T : stairs.end)
       : ROLL_IN + flightTime(style) + (landed ? LAND_T : kickOut ? KICK_OUT_T : slipBack ? SLIP_BACK_T : FALL_T)),
     skater,
@@ -168,6 +167,9 @@ export function stageFrame(stage: StagePlan, t: number, rate: number, headPose?:
 
 function frameAt(stage: StagePlan, t: number, rate: number, headPose?: HeadPose | null): StageFrame {
   // A kick-out is the landed attempt with its board off line up to the takeover, and its own from there.
+  if (stage.grind && !stage.landed && stage.fall === 'slipback') {
+    return railSlipFrame(stage, t, rate, at => attemptAt(stage, null, at, rate, headPose));
+  }
   if (stage.railBail && t >= stage.railBail.at) return railBailFrame(stage, t, rate, (at) => attemptAt(stage, null, at, rate, headPose));
   // Stepping off a landing: off a rail as a bail's run, off a gap as a kick-out's.
   if (stage.stepOff && t >= stage.stepOff.at) {

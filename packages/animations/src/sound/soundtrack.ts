@@ -120,7 +120,7 @@ function attemptSoundtrack(stage: StagePlan): Soundtrack {
     if (grind.fail == null) {
       cues.push(
         { kind: 'popOff', at: grind.off },
-        { kind: 'land', at: grind.land, weight: grind.handrail ? HANDRAIL_LANDING : 1 },
+        { kind: landed ? 'land' : 'crash', at: grind.land, weight: grind.handrail ? HANDRAIL_LANDING : 1 },
       );
     } else {
       cues.push({ kind: 'crash', at: down, weight: grind.handrail ? HANDRAIL_LANDING : 1 });
@@ -128,9 +128,9 @@ function attemptSoundtrack(stage: StagePlan): Soundtrack {
     return {
       cues,
       slide: grind.spec.slide,
-      roll: wheels(grind.pop, down, grind.fail == null),
+      roll: wheels(grind.pop, down, landed),
       grind: (t) => (t >= grind.lockAt && t < leave ? 1 : 0),
-      speed: rolling((t) => grindSpeed(grind, t), down, grind.fail == null),
+      speed: rolling((t) => grindSpeed(grind, t), down, landed),
     };
   }
   const pop = stairs?.pop ?? ROLL_IN;
