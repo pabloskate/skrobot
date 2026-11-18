@@ -6278,6 +6278,16 @@ main:has(.rps-arena) > .screen {
   line-height: 1.15;
 }
 
+/* Give longer outcome lists a second row on narrow screens. */
+.explorer-outcome-field .explorer-segmented:has(> :nth-child(5)) {
+  flex-wrap: wrap;
+  border-radius: 20px;
+}
+
+.explorer-outcome-field .explorer-segmented:has(> :nth-child(5)) button {
+  flex: 1 0 auto;
+}
+
 .explorer-field-label {
   color: var(--ink);
   font-size: 13px;
