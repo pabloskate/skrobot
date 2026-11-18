@@ -171,7 +171,7 @@ function planned(stage: StagePlan): Planned {
   // The board's first touch of the ground, not the rail it left (or, a ledge's top being its ground, once it's off it).
   const ground = groundOf(grind);
   let boardDown = Infinity;
-  for (let t = takeover + (grind.handrail?.rail.ledge ? LEDGE_LEAVE : 0); !plan.setup.boardStuck && t <= stage.end; t += plan.board.dt) {
+  for (let t = takeover + (grind.handrail?.rail.ledge ? LEDGE_LEAVE : 0); t <= stage.end; t += plan.board.dt) {
     const b = boardRigOf(boardAt(plan.board, t));
     const corners = [-40, 40].flatMap((x) => [-10, 10].map((z) => b.point({ x, y: 4, z })));
     if (corners.some((p) => ground(p.x, p.z) - p.y < DOWN_WITHIN && railTop(grind, p.x, p.z, p.y) === Infinity)) {

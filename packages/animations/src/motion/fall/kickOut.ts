@@ -441,6 +441,10 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
   };
   const shoveOf = (dir: V3, push: number) => (t: number): V3 => {
     const k = clamp01((t - contact) / PUSH_T);
+    if (setup.boardStuck) {
+      // Loading the trapped edge sends the hips past the pipe toward the checked shoe.
+      return scale3(across, -Math.sign(freeSide || 1) * 3 * FOOT * smoothstep((t - takeover) / 0.07));
+    }
     return add3(scale3(dir, (-push * (1 - Math.cos(Math.PI * k))) / 2 / RIDER_MASS), jumpOf(t));
   };
   const heading0 = facing0;
@@ -688,7 +692,24 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
       }
     }
   }
-  const board = setup.boardStuck ? freeTrack : boardFor(pushDir, push, setup.end + 0.1);
+  let board: BoardTrack;
+  if (setup.boardStuck) {
+    // The deck hangs under the checked shoe, then tips off the pipe as that foot unloads.
+    const side = -Math.sign(freeSide || 1);
+    const released = {
+      ...atTakeover,
+      velocity: scale3(across, side * 3 * FOOT),
+      spin: scale3(travel, side * 2),
+    };
+    board = simulateBoard(released, takeover, setup.end, {
+      gravity, ground: boardGround, hangers, slope: setup.boardSlope, drag: setup.drag,
+    });
+    const hold = Math.round(0.065 / board.dt);
+    board.poses = [...Array<BoardMotion>(hold).fill(atTakeover), ...board.poses];
+    board.touchdown += hold * board.dt;
+  } else {
+    board = boardFor(pushDir, push, setup.end + 0.1);
+  }
   const run = runWith(pushDir, push);
 
   const plan: KickOutPlan = { ...shared, board, push, run, roll: null };
@@ -938,10 +959,12 @@ function kickShoeAt(plan: KickOutPlan, t: number, land: { at: V3; q: Quat; on: n
   const { takeover, contact, release } = plan;
   const shoe0 = plan.startShoes[plan.kick];
   if (plan.setup.boardStuck || plan.setup.railSlipSpeed) {
-    // Both feet come loose at release. Carry this shoe into its first stride or roll.
-    const dt = land.on - takeover;
-    const s = clamp01((t - takeover) / dt);
-    return { at: hermite3(shoe0.at, shoe0.velocity, land.at, { x: 0, y: 0, z: 0 }, dt, s), q: qslerp(shoe0.q, land.q, minJerk(s)) };
+    // At a snag the loaded shoe checks briefly; on a sideways slip it releases immediately.
+    const checked = plan.setup.boardStuck ? Math.min(0.045, (land.on - takeover) / 4) : 0;
+    if (t < takeover + checked) return shoe0;
+    const dt = land.on - takeover - checked;
+    const s = clamp01((t - takeover - checked) / dt);
+    return { at: hermite3(shoe0.at, checked ? { x: 0, y: 0, z: 0 } : shoe0.velocity, land.at, { x: 0, y: 0, z: 0 }, dt, s), q: qslerp(shoe0.q, land.q, minJerk(s)) };
   }
   if (t < contact) {
     // Down onto the board where it will be.
@@ -1462,7 +1485,12 @@ function onFeetAt(plan: KickOutPlan, phase: FeetPhase, t: number, turnKnees = tr
     return qexp(decay3(o, sub3(ratePrev, ownRate), tau));
   };
   const pelvis = qnorm(qmul(rotOffset(start.pelvis, rate.rot.pelvis, pelvisAt), pelvisAt(t)));
-  const torso = qnorm(qmul(rotOffset(start.torso, rate.rot.torso, torsoAt), torsoAt(t)));
+  let torso = qnorm(qmul(rotOffset(start.torso, rate.rot.torso, torsoAt), torsoAt(t)));
+  if (setup.boardStuck && from === takeover) {
+    // Momentum pitches the shoulders along the rail, even on a sideways boardslide.
+    const pitch = smoothstep(tau / 0.15) * (1 - smoothstep((t - firstDown) / 0.18));
+    torso = qmul(qaxis(cross3(UP, phase.travel), 0.78 * pitch), torso);
+  }
 
   // ----- Feet -----
   let shoes = [shoeAt(plan, run, 0, t), shoeAt(plan, run, 1, t)] as [ShoePose, ShoePose];

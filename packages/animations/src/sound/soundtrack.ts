@@ -2,7 +2,8 @@ import { grindSpeed, travel } from '../motion/grind';
 import { ROLL_IN, flightTime } from '../motion/trick';
 import { stairSpeed } from '../stage/drop';
 import type { StagePlan } from '../stage/stage';
-import { railBailBoardDown } from '../stage/railBailFrame';
+import { boardMotionAt } from '../motion/fall/boardBody';
+import { railBailBoardDown, railBailPlan } from '../stage/railBailFrame';
 
 /**
  * What an attempt sounds like, on its own clock: the moments that make a
@@ -93,21 +94,24 @@ export function soundtrackFor(stage: StagePlan): Soundtrack {
 function attemptSoundtrack(stage: StagePlan): Soundtrack {
   const { grind, stairs, landed } = stage;
   if (grind && stage.railBail) {
-    // The scrape cuts out at release. A snag knocks against the rail and holds the board there.
+    // The scrape ends at the snag; the loose board clatters when it actually comes down.
     const leave = stage.railBail.at;
     const stuck = stage.railBail.bail === 'stick';
-    const boardDown = stuck ? Infinity : railBailBoardDown(stage);
-    const down = stuck || Number.isFinite(boardDown) ? boardDown : leave + grind.drop;
+    const boardDown = railBailBoardDown(stage);
+    const down = Number.isFinite(boardDown) ? boardDown : leave + grind.drop;
+    const loose = stuck && Number.isFinite(boardDown) ? boardMotionAt(railBailPlan(stage).board, down).velocity : null;
+    const speedAfterSnag = loose ? Math.hypot(loose.x, loose.z) : 0;
     return {
       cues: [
         { kind: 'pop', at: grind.pop },
         { kind: 'lock', at: grind.lockAt },
-        stuck ? { kind: 'lock', at: leave } : { kind: 'crash', at: down, weight: grind.handrail ? HANDRAIL_LANDING : 1 },
+        ...(stuck ? [{ kind: 'lock' as const, at: leave }] : []),
+        { kind: 'crash', at: down, weight: grind.handrail ? HANDRAIL_LANDING : 1 },
       ],
       slide: grind.spec.slide,
       roll: wheels(grind.pop, down, false),
       grind: (t) => (t >= grind.lockAt && t < leave ? 1 : 0),
-      speed: rolling((t) => stuck && t >= leave ? 0 : grindSpeed(grind, Math.min(t, leave)), down, false),
+      speed: rolling((t) => stuck && t >= leave ? (t < down ? 0 : speedAfterSnag) : grindSpeed(grind, Math.min(t, leave)), down, false),
     };
   }
   if (grind) {

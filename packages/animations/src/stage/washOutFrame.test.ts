@@ -40,7 +40,23 @@ describe('Hollywood High 16 backside 180 wash out', () => {
       expect(boardClearance(frame.rig, p => ground(p.x, p.z))).toBeCloseTo(0);
       expect(bodyClearance(frame.rig, bodyDims(stage.skater), ground)).toBeGreaterThan(-0.01);
     }
+    const firstFrame = sample(1 / 60);
+    expect(Math.abs(firstFrame.rig.board.center.z - touch.rig.board.center.z)).toBeGreaterThan(1);
+    const contact = (leg: number) => {
+      const start = touch.rig.legs[leg].shoe.origin.z - touch.rig.board.center.z;
+      return Math.abs(firstFrame.rig.legs[leg].shoe.origin.z - firstFrame.rig.board.center.z - start);
+    };
+    expect(Math.min(contact(0), contact(1))).toBeLessThan(0.8);
+    let lowestHip = hipsOf(sample(0.15).rig).y;
+    for (let t = 0.15; t <= 0.8; t += 1 / 60) {
+      const y = hipsOf(sample(t).rig).y;
+      expect(y).toBeGreaterThan(lowestHip - 1);
+      lowestHip = Math.max(lowestHip, y);
+    }
     const down = sample(WASH_OUT_T);
+    const hip = hipsOf(down.rig);
+    const floor = ASPHALT - terrainSurface(stairs.terrain, down.scroll + hip.x - X0, down.stairs!.across + hip.z);
+    expect(floor - hip.y).toBeLessThan(17);
     const direction = stage.mechanics.orientationSign;
     expect((down.rig.board.center.z - touch.rig.board.center.z) * direction).toBeGreaterThan(45);
     expect((hipsOf(down.rig).z - down.rig.board.center.z) * direction).toBeLessThan(-55);

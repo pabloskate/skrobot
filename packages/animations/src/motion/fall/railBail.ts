@@ -43,7 +43,6 @@ export const RAIL_BAIL_T = 2.8;
  * is about 8 feet a second up; off a moving board, braced, rather less.
  */
 const JUMP = {
-  stick: { up: 0, along: 0, out: 0 },
   forward: { up: 6.5 * FOOT, along: 4 * FOOT, out: 0 },
   side: { up: 6.5 * FOOT, along: -1 * FOOT, out: 7.5 * FOOT },
 } as const;
@@ -173,6 +172,11 @@ function levelRoom(plan: GrindPlan, along: number, across: number): boolean {
  */
 export function planRailBail(plan: GrindPlan, bail: RailBail): RailBailPlan {
   const grindT = plan.off - plan.lockAt;
+  if (bail === 'stick') {
+    const at = plan.lockAt + grindT * 0.56;
+    const down = landingFrom(plan, at, 0, 0, 0).t;
+    return { bail, at, jump: { up: 0, along: 0, out: 0 }, side: sideOf(plan), down, end: at + RAIL_BAIL_T };
+  }
   if (bail === 'slip-off') {
     // Lose the lock in mid-grind. The hips carry on downhill and tip toward the approach side.
     const at = plan.lockAt + grindT * 0.58;
