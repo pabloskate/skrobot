@@ -1,4 +1,4 @@
-import type { DropTerrain } from '../elToro/stairs';
+import type { DropTerrain } from '../terrain';
 import { SET_FOOT as F } from '../setScale';
 import type { SpotFilmers } from '../tripods';
 /** Original Carlsbad High grass gap, not the replacement campus stairs.

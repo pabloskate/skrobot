@@ -4,7 +4,7 @@ import { BAR_HALF } from '../../motion/grindDefinitions';
 import { GLSL_DAYLIGHT } from '../../three/daylight';
 import { GLSL_TARGETS, sceneMaterial } from '../../three/materials';
 import { POST_HALF, POST_INSET } from '../bar';
-import { EL_TORO_NOISE } from '../elToro/elToroMaterials';
+import { SPOT_NOISE } from '../spotMaterials';
 
 /** Square hollow section with polished running edges and oxide on its sheltered faces. */
 export function quayGrindBar(length: number, top: number) {
@@ -21,7 +21,7 @@ export function quayGrindBar(length: number, top: number) {
   `, /* glsl */ `
     ${GLSL_TARGETS}
     ${GLSL_DAYLIGHT}
-    ${EL_TORO_NOISE}
+    ${SPOT_NOISE}
     in vec3 vLocal;
     in vec3 vWorld;
     in vec3 vNormal;

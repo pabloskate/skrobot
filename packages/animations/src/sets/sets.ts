@@ -5,8 +5,10 @@ import { resolveRiderMechanics, type RiderMechanics } from '../motion/stance';
 import { flatTimeline, type AttemptTimeline } from '../motion/trick';
 import type { RiderStance, SkateStyle, Stance, Trick } from '../types';
 import { CENTER_Z, FAR_RAIL_Z, HILL_RAIL_Z } from './elToro/elToroLayout';
-import { EL_TORO_RAIL, EL_TORO_TERRAIN, SET_FOOT, stairTimeline, type DropTerrain } from './elToro/stairs';
-import { SET_SCALE, stageHandrail, stageTerrain } from './setScale';
+import { EL_TORO_RAIL, EL_TORO_TERRAIN } from './elToro/stairs';
+import { stairTimeline } from '../stage/drop';
+import type { DropTerrain } from './terrain';
+import { SET_SCALE, stageHandrail, stageTerrain, SET_FOOT } from './setScale';
 import { HOLLYWOOD_DROP, HOLLYWOOD_FENCE_TERRAIN, HOLLYWOOD_RUN, HOLLYWOOD_LANE_Z, HOLLYWOOD_RAIL, HOLLYWOOD_CENTER_Z, HOLLYWOOD_LEFT_RAIL_Z, HOLLYWOOD_RIGHT_RAIL_Z, hollywoodGround } from './hollywood/hollywoodLayout';
 import { HOLLYWOOD_12_DROP, HOLLYWOOD_12_RUN, HOLLYWOOD_12_LANE_Z, HOLLYWOOD_12_RAIL, hollywood12Ground, hollywood12Surface } from './hollywood/hollywoodLayout';
 import { WALLENBERG_DROP, WALLENBERG_DROP_IN, WALLENBERG_RUN, WALLENBERG_LANE_Z, wallenbergGround, wallenbergSurface } from './wallenberg/wallenbergLayout';
@@ -93,7 +95,7 @@ export interface SetInfo {
   lineLabel?: string;
   /**
    * The drop a flatground trick goes down here (stairs, a gap, a bank;
-   * sets/elToro/stairs.ts plans it), travel fixed downhill whatever the
+   * stage/drop.ts plans it), travel fixed downhill whatever the
    * stance; the default one where `obstacles` offers a choice; null on a
    * flat spot.
    */

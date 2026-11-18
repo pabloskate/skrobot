@@ -1,10 +1,10 @@
 import { DoubleSide, GLSL3, ShaderMaterial, Vector2, Vector3, Vector4 } from 'three';
-import { glslRgb, SUN } from '../../three/materials';
-import { SET_FOOT, SET_SCALE } from '../setScale';
-import { LOOK_BOX_SHADOW_GLSL, LOOK_REFLECT_GLSL, lookSurfaceTest, surfacesGlsl, type resolveLook } from '../surfaces';
+import { glslRgb, SUN } from '../three/materials';
+import { SET_FOOT, SET_SCALE } from './setScale';
+import { LOOK_BOX_SHADOW_GLSL, LOOK_REFLECT_GLSL, lookSurfaceTest, surfacesGlsl, type resolveLook } from './surfaces';
 
 /** Deterministic, world-anchored materials: no texture downloads or camera-facing decals. */
-export const EL_TORO_NOISE = /* glsl */ `
+export const SPOT_NOISE = /* glsl */ `
 float hash(vec2 p) {
   vec3 q = fract(vec3(p.xyx) * 0.1031);
   q += dot(q, q.yzx + 33.33);
@@ -27,7 +27,7 @@ float grain(vec2 p) {
 `;
 
 /** Baked mesh attributes stay compatible with the existing two-target outline renderer. */
-export function elToroPropMaterial(look?: ReturnType<typeof resolveLook>) {
+export function spotPropMaterial(look?: ReturnType<typeof resolveLook>) {
   const material = new ShaderMaterial({
     glslVersion: GLSL3,
     side: DoubleSide,
@@ -63,7 +63,7 @@ export function elToroPropMaterial(look?: ReturnType<typeof resolveLook>) {
       in vec2 vBand;
       flat in vec4 vInfo;
       const vec3 SUN = vec3(${SUN.x.toFixed(5)}, ${SUN.y.toFixed(5)}, ${SUN.z.toFixed(5)});
-      ${EL_TORO_NOISE}
+      ${SPOT_NOISE}
       void main() {
         vec3 n = normalize(vNormal);
         vec2 p = abs(n.y) > 0.65 ? vLocal.xz : abs(n.z) > 0.5 ? vLocal.xy : vLocal.zy;
@@ -178,7 +178,7 @@ function withLook(material: ShaderMaterial, look: ReturnType<typeof resolveLook>
 }
 
 /** Southern California daylight and distant hills, without the plaza's graphic city backdrop. */
-export function elToroSkyMaterial() {
+export function spotSkyMaterial() {
   return new ShaderMaterial({
     glslVersion: GLSL3,
     depthTest: false,
@@ -199,7 +199,7 @@ export function elToroSkyMaterial() {
       uniform vec3 uRight;
       uniform vec3 uUp;
       uniform vec3 uBack;
-      ${EL_TORO_NOISE}
+      ${SPOT_NOISE}
       void main() {
         vec2 uv = gl_FragCoord.xy / uRes;
         vec3 ray = normalize(uRight * mix(uFrustum.x, uFrustum.y, uv.x)

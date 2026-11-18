@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { FOOT, GRAVITY } from '../../units';
 import { rad } from '../../math';
-import { EL_TORO_TERRAIN, carveLean, planStairs, stairDistance, stairTrack, type DropTerrain } from './stairs';
+import { EL_TORO_TERRAIN } from './stairs';
+import { carveLean, planStairs, stairDistance, stairTrack } from '../../stage/drop';
+import type { DropTerrain } from '../terrain';
 
 /** A run-up that comes in 30 degrees off the line toward -z and carves onto it. */
 const CARVE = { yaw: -30, over: 20 * FOOT, straight: 9 * FOOT };

@@ -31,7 +31,7 @@ The spot tests check foot-to-stage scaling, launch/planter separation, the pale 
 
 ## Realistic look (November 2026)
 
-UC Davis is drawn under the realistic look shared with El Toro, Hollywood High, Carlsbad Gap and Wallenberg (`UC_DAVIS_LOOK` in `ucDavis3d.ts`, built on `CARLSBAD_LOOK`; `sets/surfaces.ts` lights and textures each face by its surface). The scene is the spot in its classic filmed state. The layout, physics, tricks and cameras are unchanged (`ucDavisLayout.ts`, including the tuning in `97112d0`).
+UC Davis is drawn under the realistic look shared with El Toro, Hollywood High, Carlsbad Gap and Wallenberg (`UC_DAVIS_LOOK` in `ucDavis3d.ts`, built on `BASE_LOOK`; `sets/surfaces.ts` lights and textures each face by its surface). The scene is the spot in its classic filmed state. The layout, physics, tricks and cameras are unchanged (`ucDavisLayout.ts`, including the tuning in `97112d0`).
 
 Sources inspected for this pass, read by eye and never shipped as textures: Kyle Camarillo's Joslin photograph (the panels, buffed tags, plinth, board-formed planter, ivy with drifts of dead leaves, the trodden path, the conifer, the curb onto weathered pavement); the two photographs on PDF page 12 of Henry Luc's study (the side view: exposed-aggregate fascia over a ribbed soffit, the louvred pale wall, globe lamps, lawns and oaks; the view from the takeoff: the pale coping, river stones, the plaza below with racks of bikes under oaks and white campus trucks at its edge); and the Dern Brothers' episode (thumbnail, and frames at about 0:20, 0:45, 1:10, 5:20, 6:40, 7:25, 7:45, 7:50, 8:20 and 8:45: the 2023 state of the bank, the white hallway wall, globe lamps, the taller pale blocks around the quad, the asphalt drive beyond the sidewalk).
 

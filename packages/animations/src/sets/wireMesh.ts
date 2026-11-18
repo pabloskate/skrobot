@@ -68,7 +68,7 @@ export function wireMeshMaterial({ spacing, radius, color }: WireMesh) {
         float down = vPanel.x - vPanel.y;
         float covered = 1.0 - (1.0 - family(up, fwidth(up))) * (1.0 - family(down, fwidth(down)));
         if (covered <= 0.0) discard;
-        // The air thickens it with distance, as it does the baked props (sets/elToro/elToroMaterials.ts).
+        // The air thickens it with distance, as it does the baked props (sets/spotMaterials.ts).
         float haze = 0.72 * smoothstep(2400.0, 12000.0, length(vWorld - cameraPosition) / ${SET_SCALE.toFixed(5)});
         outColor = vec4(mix(${glslRgb(color)}, ${glslRgb('#c6d0cc')}, haze), covered);
       }

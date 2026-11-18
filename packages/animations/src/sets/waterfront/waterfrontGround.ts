@@ -1,7 +1,7 @@
 import { GLSL3, ShaderMaterial, Vector2, Vector3 } from 'three';
 import { X0 } from '../../motion/trick';
 import { glslRgb } from '../../three/materials';
-import { EL_TORO_NOISE } from '../elToro/elToroMaterials';
+import { SPOT_NOISE } from '../spotMaterials';
 import { SET_FOOT, SET_SCALE } from '../setScale';
 import { WATER_Z } from './waterfrontLayout';
 
@@ -17,7 +17,7 @@ uniform vec2 uRes;
 uniform float uScroll;
 uniform sampler2D uShadow;
 uniform vec3 uShadowOpacity;
-${EL_TORO_NOISE}
+${SPOT_NOISE}
 
 // Pixel-filter a strip of full world width 2 * radius. Narrow joints and grate
 // slots keep their average coverage when viewed down the length of the wharf.

@@ -1,5 +1,5 @@
 import type { Handrail } from '../../motion/grind';
-import { BOARD_ALONG_TRICKS, type DropTerrain } from '../elToro/stairs';
+import { BOARD_ALONG_TRICKS, type DropTerrain } from '../terrain';
 import { SET_FOOT } from '../setScale';
 import type { SpotFilmers } from '../tripods';
 

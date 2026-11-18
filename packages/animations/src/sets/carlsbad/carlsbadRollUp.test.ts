@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DoubleSide, Mesh, MeshBasicMaterial, Raycaster, Vector3 } from 'three';
 import { rad } from '../../math';
-import { planStairs, stairTrack } from '../elToro/stairs';
+import { planStairs, stairTrack } from '../../stage/drop';
 import { buildCarlsbadGeometry } from './carlsbadGeometry';
 import {
   CARLSBAD_FOOT as F,

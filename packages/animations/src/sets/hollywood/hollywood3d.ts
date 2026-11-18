@@ -3,8 +3,7 @@ import { buildFenceExtensions } from './hollywoodFenceShapes';
 import { buildStreet } from './hollywoodStreet';
 import { Bake, NO_INK, type Ink, type Paint } from '../../three/bake';
 import { INK_PROP, rgb } from '../../three/materials';
-import { CARLSBAD_LOOK } from '../carlsbad/carlsbad3d';
-import { stairContacts, surfaceInk, SURFACE, type SpotLook, type ContactLine } from '../surfaces';
+import { BASE_LOOK, stairContacts, surfaceInk, SURFACE, type SpotLook, type ContactLine } from '../surfaces';
 import type { Vec3 } from '../../camera/view';
 import { ClassicSpot3D, type ClassicSpotConfig } from '../classicSpot3d';
 import { hollywoodCanopies, HOLLYWOOD_PALMS, HOLLYWOOD_TREES } from './hollywoodTrees';
@@ -626,7 +625,7 @@ function lettering(props: Baker, text: string, x: number, y: number, z: number, 
 
 /** Shared daylight; only the ridden stair's procedural wear changes with the frame. */
 export const HOLLYWOOD_LOOK: SpotLook = {
-  ...CARLSBAD_LOOK,
+  ...BASE_LOOK,
   marks: [{ x: [-14, -0.5], z: [-7, -1] }, { x: [18, 45], z: [-7, 6] }],
   markDepth: 0.1,
   gum: 4,
@@ -635,8 +634,6 @@ export const HOLLYWOOD_LOOK: SpotLook = {
   // Old Highland Avenue asphalt: 3/8 in stones worn into view (refs 44, 13, 36).
   asphalt: { scale: 0.03, contrast: 0.16 },
   foliage: true,
-  // Carlsbad's wing sash is Carlsbad's alone.
-  sash: undefined,
   stairs: {
     x: [0, HOLLYWOOD_RUN / F], z: [HOLLYWOOD_LEFT_Z / F, HOLLYWOOD_RIGHT_Z / F],
     top: 0, tread: HOLLYWOOD_TREAD / F, riser: HOLLYWOOD_RISER / F,

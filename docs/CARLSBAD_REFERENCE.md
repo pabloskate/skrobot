@@ -214,7 +214,7 @@ playable line. Both explorers keep the existing tricks, stances, outcomes,
 share URLs and video export.
 
 A run-up that carves in off the line is an opt-in of the shared drop terrain
-(`carveIn` in `sets/elToro/stairs.ts`); the pop, flight and landing are the
+(`carveIn` in `sets/terrain.ts`, planned by `stage/drop.ts`); the pop, flight and landing are the
 same as a straight run-up's. Shadow-casting boxes may stand at an angle in
 the look, which is how the wing and its eave shade the walk.
 

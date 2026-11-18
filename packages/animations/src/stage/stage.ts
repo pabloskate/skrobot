@@ -15,7 +15,7 @@ import {
 } from '../motion/trick';
 import type { Skater } from '../riders/skaters';
 import { barShadowParts } from '../sets/bar';
-import { planStairs, type StairPlan } from '../sets/elToro/stairs';
+import { planStairs, type StairPlan } from './drop';
 import { hasObstacle, ledgeFor, railLineFor, setGrindSpec, setHandrail, setInfo, setTerrain, type Obstacle, type RailChoice, type RailLine, type StageSet } from '../sets/sets';
 import { railFrame, stairFrame } from './downhill';
 import { attemptRig, isKickOut, kickOutFrame, kickOutPlan } from './kickOutFrame';

@@ -1,13 +1,13 @@
 import type { Vec3 } from '../../camera/view';
 import { NO_INK, type Bake, type Ink, type Paint } from '../../three/bake';
-import { mixHex, normalOf, solidBox, tag, part, tube, valueNoise } from '../wallenberg/wallenbergKit';
+import { mixHex, normalOf, solidBox, tag, part, tube, valueNoise } from '../lookKit';
 import { wallQuad, type WallAt } from '../surfaces';
 import { MIAMI_FOOT } from './miamiLayout';
 
 /**
  * Shared pieces for Triangle Bank's bake under the realistic look (light: 'shader'): paint is the authored,
  * sunlit colour, laid flat, and the look lights and textures each face by its surface (sets/surfaces.ts). The
- * generic helpers are Wallenberg's kit; the rest place faces by plan corners, as the park is laid out.
+ * generic helpers are the shared look kit's (sets/lookKit.ts); the rest place faces by plan corners, as the park is laid out.
  */
 
 export { mixHex, normalOf, solidBox, tag, part, tube, valueNoise };

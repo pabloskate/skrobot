@@ -9,7 +9,7 @@ import { TRICK_BASES, X0 } from '../../motion/trick';
 import { LEAN_PAST_TOUCHDOWN } from '../../stage/bank';
 import { planStage, stageFrame, type StageFrame } from '../../stage/stage';
 import type { RiderStance, Stance } from '../../types';
-import { routeHeight } from '../elToro/stairs';
+import { routeHeight } from '../../stage/drop';
 import { SET_SCALE } from '../setScale';
 import { setInfo, setTerrain, setTimeline, type Obstacle } from '../sets';
 import { sweep, sweepHz } from '../../testing';

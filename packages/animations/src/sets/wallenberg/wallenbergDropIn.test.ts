@@ -5,7 +5,8 @@ import { resolveSkateStyle } from '../../motion/style';
 import { ROLL_IN, X0 } from '../../motion/trick';
 import { planStage, stageFrame } from '../../stage/stage';
 import type { RiderStance, Stance } from '../../types';
-import { dropInEnd, terrainSurface } from '../elToro/stairs';
+import { dropInEnd } from '../../stage/drop';
+import { terrainSurface } from '../terrain';
 import { SET_FOOT, WALLENBERG_DROP_IN, WALLENBERG_RAMP } from './wallenbergLayout';
 import { SET_SCALE } from '../setScale';
 

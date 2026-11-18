@@ -3,7 +3,7 @@ import type { Vec3 } from '../../camera/view';
 import { SUN } from '../../three/materials';
 import { ClassicSpot3D } from '../classicSpot3d';
 import { crownSpheres } from '../props/trees';
-import { MAX_CANOPIES, type Canopy, type SpotLook } from '../surfaces';
+import { BASE_LOOK, MAX_CANOPIES, type Canopy, type SpotLook } from '../surfaces';
 import { buildCarlsbadGeometry, CARLSBAD_SASH } from './carlsbadGeometry';
 import {
   CARLSBAD_DROP, CARLSBAD_FILMERS, CARLSBAD_FOOT as F, CARLSBAD_LANE_Z, CARLSBAD_RUN,
@@ -13,17 +13,7 @@ import { carlsbadTrees } from './carlsbadTrees';
 
 /** Bright Southern California midday (BUILD_SPEC.md §2), tuned against refs/163, 03, 154. */
 export const CARLSBAD_LOOK: SpotLook = {
-  ink: '#6f6c66',
-  propShadows: true,
-  light: 'shader',
-  fill: { sky: 0.7, bounce: 0.9 },
-  soffit: 0.6,
-  haze: { color: '#cdd5d6', from: 45, to: 900, amount: 0.5 },
-  // A softer sun edge than the default: the block wall's and the eave's shade no longer cut like a stencil.
-  penumbra: 0.03,
-  boxContact: 1.6,
-  // Broadleaf crowns in full sun: their shade on the pad is nearly as deep as a wall's.
-  dapple: 0.85,
+  ...BASE_LOOK,
   // Urethane marks where boards roll to the lip, land and roll away (refs/155, 03).
   marks: [{ x: [-14, -0.5], z: [-3, 3] }, { x: [13.5, 34], z: [-6, 4.5] }],
   // The wing windows' steel sash, drawn on the glass so far windows don't flicker.

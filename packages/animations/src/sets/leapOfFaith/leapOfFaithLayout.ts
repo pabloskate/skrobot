@@ -1,4 +1,5 @@
-import { BOARD_ALONG_TRICKS, SET_FOOT, type DropTerrain } from '../elToro/stairs';
+import { BOARD_ALONG_TRICKS, type DropTerrain } from '../terrain';
+import { SET_FOOT } from '../setScale';
 import type { SpotFilmers } from '../tripods';
 
 /** Point Loma High's original 1997 courtyard gap. The requested 14.3 ft is

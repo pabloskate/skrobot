@@ -1,8 +1,7 @@
 import { ClassicSpot3D } from '../classicSpot3d';
 import type { SceneCamera, TripodId } from '../../camera/camera';
 import type { StageFrame } from '../../stage/stage';
-import { CARLSBAD_LOOK } from '../carlsbad/carlsbad3d';
-import type { SpotLook } from '../surfaces';
+import { BASE_LOOK, type SpotLook } from '../surfaces';
 import { buildWallenbergGeometry } from './wallenbergGeometry';
 import { WALLENBERG_DROP, WALLENBERG_FILMERS, WALLENBERG_LANE_Z, WALLENBERG_RUN, wallenbergGround } from './wallenbergLayout';
 import { wallenbergView } from './wallenbergCamera';
@@ -14,7 +13,7 @@ import { WALLENBERG_CARS, WALLENBERG_TREES } from './wallenbergTrees';
  * photograph, the 2024 group photograph): the realistic look, with the gym's painted block and brick.
  */
 export const WALLENBERG_LOOK: SpotLook = {
-  ...CARLSBAD_LOOK,
+  ...BASE_LOOK,
   haze: { color: '#cfd8dd', from: 45, to: 800, amount: 0.55 },
   // The curbs' caps carry their own wear (wallenbergWear.ts); the treads are asphalt, which the marks never
   // touch.
@@ -29,7 +28,6 @@ export const WALLENBERG_LOOK: SpotLook = {
   // Schoolyard asphalt, sealed and worn smooth.
   asphalt: { scale: 0.025, contrast: 0.12 },
   foliage: true,
-  sash: undefined,
 };
 
 /**

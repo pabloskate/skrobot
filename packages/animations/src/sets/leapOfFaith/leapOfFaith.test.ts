@@ -8,7 +8,7 @@ import { resolveSkateStyle } from '../../motion/style';
 import { X0 } from '../../motion/trick';
 import { planStage, stageFrame, type StageFrame } from '../../stage/stage';
 import type { RiderStance, Stance } from '../../types';
-import { planStairs, stairTrack } from '../elToro/stairs';
+import { planStairs, stairTrack } from '../../stage/drop';
 import { SET_SCALE, stageTerrain } from '../setScale';
 import { LeapOfFaith3D } from './leapOfFaith3d';
 import { Bake } from '../../three/bake';

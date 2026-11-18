@@ -13,7 +13,8 @@ import {
   RAIL_EXT, RAIL_MID, RAIL_R, RAIL_TOP, RIDER_LANE_Z, WALL_THICK, WALL_Z, hill,
 } from './elToroLayout';
 import { buildElToroLandscape, type ElToroShrubFoot } from './elToroLandscape';
-import { RISER, SET_FOOT as F, STAIR_DROP, STAIR_RUN, STAIR_STEPS, TREAD, nosingLine, stairGround } from './stairs';
+import { RISER, STAIR_DROP, STAIR_RUN, STAIR_STEPS, TREAD, nosingLine, stairGround } from './stairs';
+import { SET_FOOT as F } from '../setScale';
 
 /**
  * El Toro's scenery for ClassicSpot3D, in set units: u down the stairs is

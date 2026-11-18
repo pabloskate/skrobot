@@ -1,11 +1,9 @@
 import type { Vec3 } from '../../camera/view';
 import { Bake, NO_INK, type Ink, type Paint } from '../../three/bake';
-import { INK_PROP } from '../../three/materials';
-import { SURFACE, type SurfaceName } from '../surfaces';
 import { SET_FOOT } from './wallenbergLayout';
-import { normalOf } from '../lookKit';
+import { normalOf, tag } from '../lookKit';
 
-export { floor, mixHex, normalOf, solidBox, valueNoise } from '../lookKit';
+export { floor, mixHex, normalOf, part, solidBox, tag, valueNoise } from '../lookKit';
 
 /**
  * Shared pieces for Wallenberg's bake under the realistic look (light: 'shader'): paint is the authored,
@@ -16,14 +14,6 @@ export const F = SET_FOOT;
 export const INCH = SET_FOOT / 12;
 export const UP: Vec3 = [0, 1, 0];
 
-/** An uninked face of one surface. */
-export const tag = (surface: SurfaceName | number, id = 0): Ink => ({
-  id, priority: 0, width: 0, kind: 0, solid: typeof surface === 'number' ? surface : SURFACE[surface],
-});
-/** An outlined part of one surface: the four curbs, the gym, the stairs, so each reads as its own obstacle. */
-export const part = (id: number, surface: SurfaceName | number, priority = 2, width = 0.14): Ink => ({
-  id, priority, width, kind: INK_PROP, solid: typeof surface === 'number' ? surface : SURFACE[surface],
-});
 /** Painted block walls: the look's masonry courses (solid 10). */
 export const BLOCK = 10;
 /** Foliage masses, leaves patterned on them in three dimensions (solid 13, the look's `foliage`). */

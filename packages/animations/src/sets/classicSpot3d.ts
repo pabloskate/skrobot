@@ -3,7 +3,7 @@ import { DISTANCE, type SceneCamera, type TripodId } from '../camera/camera';
 import { stageView, tripodView, type StageView, type Vec3 } from '../camera/view';
 import type { StageFrame } from '../stage/stage';
 import type { Obstacle } from './sets';
-import { elToroPropMaterial, elToroSkyMaterial } from './elToro/elToroMaterials';
+import { spotPropMaterial, spotSkyMaterial } from './spotMaterials';
 import { StreetProps, type StreetPropPlacements } from './props/streetProps';
 import { wireMeshMaterial, type WireMesh } from './wireMesh';
 import type { SpotShade } from '../three/daylight';
@@ -76,7 +76,7 @@ type Look = ReturnType<typeof resolveLook>;
 
 /** Weathered baked surfaces receive the rider's projected shadow on their actual height. */
 function groundMaterial() {
-  const material = elToroPropMaterial();
+  const material = spotPropMaterial();
   Object.assign(material.uniforms, {
     uShadow: { value: null }, uShadowY: { value: 0 },
     uShadowOpacity: { value: new Vector3() },
@@ -144,7 +144,7 @@ function groundMaterial() {
  * stock, then soft box shadows and tree dapple, and contact darkening.
  */
 function lookGroundMaterial(look: Look) {
-  const material = elToroPropMaterial({ ...look, propShadows: false });
+  const material = spotPropMaterial({ ...look, propShadows: false });
   Object.assign(material.uniforms, {
     uShadow: { value: null }, uShadowY: { value: 0 },
     uShadowOpacity: { value: new Vector3() },
@@ -233,7 +233,7 @@ export class ClassicSpot3D {
   readonly shadowGeometry = null;
   readonly propInk: string;
   readonly riderShade?: SpotShade;
-  private readonly sky = elToroSkyMaterial();
+  private readonly sky = spotSkyMaterial();
   private readonly solid: ShaderMaterial;
   private readonly surface: ShaderMaterial;
   private readonly scenery = new Group();
@@ -250,7 +250,7 @@ export class ClassicSpot3D {
     sky.renderOrder = -100;
     const look = config.look ? resolveLook(config.look) : null;
     this.propInk = look?.ink ?? '#70766e';
-    this.solid = elToroPropMaterial(look ?? undefined);
+    this.solid = spotPropMaterial(look ?? undefined);
     this.surface = look ? lookGroundMaterial(look) : groundMaterial();
     const built = config.build();
     const u = this.surface.uniforms;

@@ -3,7 +3,7 @@ import { mixHex } from '../../math';
 import { Bake, NO_INK, type Ink, type Paint } from '../../three/bake';
 import { hash2 } from '../setKit';
 import { hill } from './elToroLayout';
-import { SET_FOOT as F } from './stairs';
+import { SET_FOOT as F } from '../setScale';
 
 /** Where a shrub stands on the ground, and how far its crown reaches: the ground darkens round its foot. */
 export interface ElToroShrubFoot {

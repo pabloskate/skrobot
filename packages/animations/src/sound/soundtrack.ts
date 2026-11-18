@@ -1,6 +1,6 @@
 import { grindSpeed, travel } from '../motion/grind';
 import { ROLL_IN, flightTime } from '../motion/trick';
-import { stairSpeed } from '../sets/elToro/stairs';
+import { stairSpeed } from '../stage/drop';
 import type { StagePlan } from '../stage/stage';
 import { railBailBoardDown } from '../stage/railBailFrame';
 

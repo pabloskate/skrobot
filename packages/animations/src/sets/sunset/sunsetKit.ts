@@ -1,12 +1,11 @@
 import type { Vec3 } from '../../camera/view';
 import { NO_INK, type Bake, type Ink, type Paint } from '../../three/bake';
-import { INK_PROP } from '../../three/materials';
 import { SET_FOOT } from '../setScale';
-import { SURFACE, wallVertex, type SurfaceName, type WallKind } from '../surfaces';
+import { wallVertex, type WallKind } from '../surfaces';
 import * as layout from './sunsetLayout';
-import { normalOf } from '../lookKit';
+import { normalOf, tag } from '../lookKit';
 
-export { floor, mixHex, normalOf, solidBox, valueNoise } from '../lookKit';
+export { floor, mixHex, normalOf, part, solidBox, tag, valueNoise } from '../lookKit';
 
 /**
  * Shared pieces for Roof to Bank's bake under the realistic look (light: 'shader'): paint is the authored,
@@ -101,14 +100,6 @@ export const sunsetFloor = (x: number, z: number) => floorY(x / SCALE, z / SCALE
 
 /* ----- Inks ----- */
 
-/** An uninked face of one surface. */
-export const tag = (surface: SurfaceName | number, id = 0): Ink => ({
-  id, priority: 0, width: 0, kind: 0, solid: typeof surface === 'number' ? surface : SURFACE[surface],
-});
-/** An outlined part of one surface: the canopy, a planter, a building, so each reads as its own form. */
-export const part = (id: number, surface: SurfaceName | number, priority = 2, width = 0.14): Ink => ({
-  id, priority, width, kind: INK_PROP, solid: typeof surface === 'number' ? surface : SURFACE[surface],
-});
 /** Painted block walls: the look's masonry courses (solid 10). */
 export const BLOCK = 10;
 /** Foliage masses, leaves patterned on them in three dimensions (solid 13, the look's `foliage`). */

@@ -9,7 +9,7 @@ import { planStage, stageFrame } from '../../stage/stage';
 import { FOOT } from '../../units';
 import { SET_SCALE } from '../setScale';
 import { setInfo, setTimeline } from '../sets';
-import { stairTrack } from '../elToro/stairs';
+import { stairTrack } from '../../stage/drop';
 import { UcDavis3D } from './ucDavis3d';
 import { buildUcDavisGeometry } from './ucDavisGeometry';
 import {

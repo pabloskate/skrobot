@@ -7,7 +7,7 @@ import { X0 } from '../../motion/trick';
 import { planStage, stageFrame, type StageFrame, type StagePlan } from '../../stage/stage';
 import { isFiniteFrame, sweepHz } from '../../testing';
 import type { RiderStance, Stance } from '../../types';
-import { terrainSurface } from '../elToro/stairs';
+import { terrainSurface } from '../terrain';
 import { setInfo, setTimeline } from '../sets';
 import { SET_SCALE } from '../setScale';
 import {

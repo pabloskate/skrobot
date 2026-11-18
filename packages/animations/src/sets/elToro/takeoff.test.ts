@@ -7,7 +7,8 @@ import type { RiderStance, Stance } from '../../types';
 import { INCH } from '../../units';
 import { STAGE_SETS, setTerrain, setTimeline, type Obstacle } from '../sets';
 import { sweep } from '../../testing';
-import { planStairs, popsFromLeadingEnd, terrainSurface } from './stairs';
+import { planStairs, popsFromLeadingEnd } from '../../stage/drop';
+import { terrainSurface } from '../terrain';
 
 /**
  * Where a gap trick leaves the ground. A nollie pops off the nose and a fakie

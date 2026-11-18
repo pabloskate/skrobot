@@ -5,7 +5,7 @@ import { lambert, tone } from '../camera/camera';
 import { Bake, celShade, DAYLIGHT, daylight, daylightIrradiance, NO_INK } from '../three/bake';
 import { rgb, SUN } from '../three/materials';
 import { ClassicSpot3D, type ClassicSpotConfig } from './classicSpot3d';
-import { elToroPropMaterial } from './elToro/elToroMaterials';
+import { spotPropMaterial } from './spotMaterials';
 import { canopiesFromTrees, lookSurfaceTest, MAX_CANOPIES, MAX_CONTACTS, resolveLook, stairContacts, SURFACE, surfaceInk, surfacesGlsl, WALL, wallQuad, wallVertex, type SpotLook } from './surfaces';
 import { SET_FOOT } from './setScale';
 
@@ -169,8 +169,8 @@ describe('the realistic look is opt in', () => {
     const spot = new ClassicSpot3D(spotConfig());
     const [ground, props] = materials(spot);
     expect(spot.propInk).toBe('#70766e');
-    expect(props.fragmentShader).toBe(elToroPropMaterial().fragmentShader);
-    expect(props.vertexShader).toBe(elToroPropMaterial().vertexShader);
+    expect(props.fragmentShader).toBe(spotPropMaterial().fragmentShader);
+    expect(props.vertexShader).toBe(spotPropMaterial().vertexShader);
     for (const m of [ground, props]) {
       for (const word of ['lookSurface', 'lookContact', 'lookDapple', 'lookBoxShadow', 'lookMasonry', 'lookLit', 'lookSkyOpen', 'uLook', 'vAo']) {
         expect(m.fragmentShader).not.toContain(word);
@@ -267,7 +267,7 @@ describe('the realistic look is opt in', () => {
     const plain = resolveLook({ light: 'shader' }), worn = resolveLook({ light: 'shader', walls: WALLS });
     expect(surfacesGlsl(plain)).not.toContain('lookWallWear');
     expect(surfacesGlsl(plain)).not.toContain('lookOnWall');
-    const material = elToroPropMaterial(plain), own = elToroPropMaterial(worn);
+    const material = spotPropMaterial(plain), own = spotPropMaterial(worn);
     try {
       expect(material.vertexShader).not.toContain('vWall');
       expect(material.fragmentShader).not.toContain('vWall');

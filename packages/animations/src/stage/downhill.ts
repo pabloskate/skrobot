@@ -13,18 +13,8 @@ import { solveRig } from '../motion/rig';
 import { LAND_OMEGA, SQUAT_FLOOR, moveFrame, type LegRig, type Rig } from '../motion/skeleton';
 import { GROUND, X0, boardRise, computeFrame, flightTime } from '../motion/trick';
 import { bankRig } from './bank';
-import {
-  landingImpact,
-  landingJolt,
-  rideHeight,
-  stairClock,
-  stairDeckHeight,
-  stairTrack,
-  carveLean,
-  terrainSurface,
-  stairLift,
-  type StairPlan,
-} from '../sets/elToro/stairs';
+import { landingImpact, landingJolt, rideHeight, stairClock, stairDeckHeight, stairTrack, carveLean, stairLift, type StairPlan } from './drop';
+import { terrainSurface } from '../sets/terrain';
 import { stageArms } from './armLift';
 import { dustPuffs, expressionAt, grindExpression, groundLift, grownBy, hipsOf, onTheGround, posed, riderShadows, DUST_T, SHADOW_HIPS, type Puff, type StageFrame } from './frameParts';
 import type { StagePlan } from './stage';

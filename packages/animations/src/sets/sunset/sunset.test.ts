@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { DoubleSide, Mesh, MeshBasicMaterial, Raycaster, Vector3 } from 'three';
 import { projectThree, stageView } from '../../camera/view';
-import { SET_FOOT } from '../elToro/stairs';
+import { SET_FOOT } from '../setScale';
 import { Bake } from '../../three/bake';
 import { MAX_CANOPIES, MAX_CONTACTS, WALL } from '../surfaces';
 import { BANK_INK, buildSunsetGeometry } from './sunset3d';

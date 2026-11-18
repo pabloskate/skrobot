@@ -7,7 +7,7 @@ import { resolveSkateStyle } from '../../motion/style';
 import { TRICK_BASES, X0 } from '../../motion/trick';
 import { planStage, stageFrame, type StageFrame } from '../../stage/stage';
 import type { RiderStance, Stance } from '../../types';
-import { landingYaw } from '../elToro/stairs';
+import { landingYaw } from '../terrain';
 import { SET_SCALE } from '../setScale';
 import { FOOT } from '../../units';
 import { setInfo, setTerrain, setTimeline } from '../sets';

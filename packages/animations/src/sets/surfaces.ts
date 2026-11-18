@@ -213,6 +213,25 @@ export interface SpotLook {
   foliage?: boolean;
 }
 
+/**
+ * What every spot drawn under the realistic look starts from: bright midday light and shade, with nothing that
+ * belongs to one place. A spot spreads this and adds its own surfaces, wear, marks and haze; an option a spot
+ * doesn't name stays off.
+ */
+export const BASE_LOOK: SpotLook = {
+  ink: '#6f6c66',
+  propShadows: true,
+  light: 'shader',
+  fill: { sky: 0.7, bounce: 0.9 },
+  soffit: 0.6,
+  haze: { color: '#cdd5d6', from: 45, to: 900, amount: 0.5 },
+  // A softer sun edge than the default: a wall's and an eave's shade no longer cut like a stencil.
+  penumbra: 0.03,
+  boxContact: 1.6,
+  // Broadleaf crowns in full sun: their shade on paving is nearly as deep as a wall's.
+  dapple: 0.85,
+};
+
 /** The look's defaults, as compiled. */
 export function resolveLook(look: SpotLook) {
   return {
@@ -319,7 +338,7 @@ export function lookSurfaceTest(look: Partial<Pick<Look, 'lockers' | 'brick' | '
 
 /**
  * Procedural surfaces, chosen by solid (14-21), in the look's fill light. Needs
- * EL_TORO_NOISE (hash, noise, weather, grain), SUN and three's
+ * SPOT_NOISE (hash, noise, weather, grain), SUN and three's
  * cameraPosition. `q` is the face's planar coordinate in feet, `local` its
  * position in feet, `n` its normal, `world` the stage position.
  * Every feature finer than a pixel fades (grain's own fade, or `resolves`).

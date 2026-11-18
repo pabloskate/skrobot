@@ -1,14 +1,14 @@
 import type { SceneCamera, TripodId } from '../../camera/camera';
 import type { StageView } from '../../camera/view';
 import type { StageFrame } from '../../stage/stage';
-import { CARLSBAD_LOOK } from '../carlsbad/carlsbad3d';
 import { ClassicSpot3D } from '../classicSpot3d';
-import type { SpotLook } from '../surfaces';
+import { BASE_LOOK, type SpotLook } from '../surfaces';
 import { elToroTripodView, elToroView } from './elToroCamera';
 import { buildElToroGeometry } from './elToroGeometry';
 import { CENTER_Z, EL_TORO_FILMERS, FAR_RAIL_Z, HILL_EDGE, HILL_RAIL_Z, LIP_AWAY, RIDER_LANE_Z, WALL_Z } from './elToroLayout';
 import { elToroCanopies, elToroTrees } from './elToroTrees';
-import { RISER, SET_FOOT, STAIR_DROP, STAIR_RUN, TREAD, stairGround } from './stairs';
+import { RISER, STAIR_DROP, STAIR_RUN, TREAD, stairGround } from './stairs';
+import { SET_FOOT } from '../setScale';
 
 /**
  * El Toro in the same Southern California midday as Carlsbad, twenty miles
@@ -22,7 +22,7 @@ import { RISER, SET_FOOT, STAIR_DROP, STAIR_RUN, TREAD, stairGround } from './st
  * as are the leaves patterned round its modelled shrubs and hedges.
  */
 export const EL_TORO_LOOK: SpotLook = {
-  ...CARLSBAD_LOOK,
+  ...BASE_LOOK,
   marks: [{ x: [-14, -0.5], z: [9, 15] }, { x: [24, 55], z: [4, 15] }],
   // A thinner haze than Carlsbad's: the far blocks sit back without washing out.
   haze: { color: '#cfd6d6', from: 60, to: 1100, amount: 0.42 },
@@ -39,8 +39,6 @@ export const EL_TORO_LOOK: SpotLook = {
   mortar: '#c4b49a',
   lockers: { door: 1, tier: 9.5 / 8, from: 9.5 / 16 },
   foliage: true,
-  // Carlsbad's wing sash is Carlsbad's alone.
-  sash: undefined,
 };
 
 /**

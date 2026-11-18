@@ -6,8 +6,9 @@ import { DEFAULT_SCENE_CAMERA } from '../../camera/camera';
 import { BOTTOM_LOCAL, TOP_LOCAL } from '../../board/deck';
 import { cross3, dot3, type V3 } from '../../math';
 import { SQUAT_FLOOR } from '../../motion/skeleton';
-import { EL_TORO_TERRAIN, SET_FOOT, RISER, STAIR_DROP, STAIR_RUN, STAIR_STEPS, TREAD, planStairs, stairClock, stairGround, stairTimeline } from './stairs';
-import { SET_SCALE, stageTerrain } from '../setScale';
+import { EL_TORO_TERRAIN, RISER, STAIR_DROP, STAIR_RUN, STAIR_STEPS, TREAD, stairGround } from './stairs';
+import { planStairs, stairClock, stairTimeline } from '../../stage/drop';
+import { SET_SCALE, stageTerrain, SET_FOOT } from '../setScale';
 import { FOOT } from '../../units';
 import { resolveSkateStyle } from '../../motion/style';
 import type { RiderStance, Robot, Stance, Trick } from '../../types';
@@ -168,7 +169,7 @@ describe('El Toro', () => {
     for (const rider of RIDERS) {
       const regular = plan('Kickflip', { rider });
       const fakie = plan('Kickflip', { rider, stance: 'fakie' });
-      // Same clock and landing; the leading tail pops short of the lip, so the takeoff is further back (stairs.ts).
+      // Same clock and landing; the leading tail pops short of the lip, so the takeoff is further back (stage/drop.ts).
       expect(fakie.stairs!.pop).toBe(regular.stairs!.pop);
       expect(fakie.stairs!.land).toBe(regular.stairs!.land);
       expect(fakie.stairs!.takeoff.x).toBeLessThan(regular.stairs!.takeoff.x);

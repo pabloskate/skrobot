@@ -3,7 +3,7 @@ import { Bake, type Ink, type Paint } from '../../three/bake';
 import type { Vec3 } from '../../camera/view';
 import { glslRgb } from '../../three/materials';
 import { GLSL_DAYLIGHT } from '../../three/daylight';
-import { EL_TORO_NOISE } from '../elToro/elToroMaterials';
+import { SPOT_NOISE } from '../spotMaterials';
 import { SET_SCALE } from '../setScale';
 
 /** Surface numbers live only in the bake. Waterfront props write no ink into the stage's outline pass. */
@@ -78,7 +78,7 @@ export function quayMaterial() {
       in vec3 vColor;
       flat in int vSurface;
       ${GLSL_DAYLIGHT}
-      ${EL_TORO_NOISE}
+      ${SPOT_NOISE}
       void main() {
         vec3 n = normalize(vNormal);
         vec3 eye = normalize(cameraPosition - vWorld);

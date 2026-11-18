@@ -1,4 +1,4 @@
-import { SET_FOOT } from './stairs';
+import { SET_FOOT } from '../setScale';
 import { Bake, NO_INK, type Ink } from '../../three/bake';
 import { SURFACE } from '../surfaces';
 import type { Vec3 } from '../../camera/view';

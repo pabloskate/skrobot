@@ -1,6 +1,5 @@
 import { ClassicSpot3D } from '../classicSpot3d';
-import { CARLSBAD_LOOK } from '../carlsbad/carlsbad3d';
-import type { SpotLook } from '../surfaces';
+import { BASE_LOOK, type SpotLook } from '../surfaces';
 import { buildLeapOfFaithGeometry } from './leapOfFaithGeometry';
 import { LEAP_OF_FAITH_TREES, LEAP_OF_FAITH_CARS } from './leapOfFaithTrees';
 import { LEAP_OF_FAITH_PAINT as PAINT } from './leapOfFaithPalette';
@@ -15,7 +14,7 @@ import {
  * Carlsbad's own windows or skating marks.
  */
 export const LEAP_OF_FAITH_LOOK: SpotLook = {
-  ...CARLSBAD_LOOK,
+  ...BASE_LOOK,
   // Little bounce: the shaded court is red-brown, and the deep undercroft and the gallery's underside sit dark
   // in the 1998 frames. The open sky lights what it reaches; under a box overhead, only as much of it as the
   // box leaves open, so the undercroft's back wall darkens toward its ceiling.
