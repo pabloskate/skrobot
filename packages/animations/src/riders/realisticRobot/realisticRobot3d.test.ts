@@ -113,7 +113,7 @@ describe('the realistic robot', () => {
     board.dispose();
   });
 
-  it('seats both ends of each actuator on its rig joints and fits the original tapered envelope', () => {
+  it('seats both ends of each limb on its rig joints and fits the cartoon robot\'s tapered envelope', () => {
     const rider = new RealisticRobot3D(LOOK);
     for (const plan of [stage('Kickflip'), stage('Kickflip', { landed: false }), stage('Boardslide', { riderStance: 'goofy' })]) {
       const frame = stageFrame(plan, plan.end * 0.45, 1);
@@ -139,7 +139,7 @@ describe('the realistic robot', () => {
             const ax = a.clone().lerp(b, t);
             maxWidth = Math.max(maxWidth, mesh.localToWorld(p).distanceTo(ax) / (ra + t * (rb - ra)));
           }
-          // The old links occupied 90% of the clearance radius.
+          // A plain sleeve, 90% of the clearance radius all the way along, as the cartoon robot's limbs are.
           expect(maxWidth).toBeCloseTo(0.9, 5);
         }
         expect(part(rider.group, side + '-shoe').getWorldPosition(new Vector3()).toArray()).toEqual(toThree(leg.shoe.origin));

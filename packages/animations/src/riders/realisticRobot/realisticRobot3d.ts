@@ -1,4 +1,5 @@
 import { Group, Mesh, SphereGeometry, type BufferAttribute, type BufferGeometry, type ShaderMaterial } from 'three';
+import { PALETTE } from '../../camera/camera';
 import { add3, dot3, mixHex, norm3, rad, smoothstep, sub3 } from '../../math';
 import type { Expression, RobotLook } from '../look';
 import { ARM_RADII, FOREARM, LEG_RADII, SHIN, THIGH, UPPER_ARM, shiftFrame, type Rig } from '../../motion/skeleton';
@@ -8,12 +9,16 @@ import { shoeGeometries } from '../shoe3d';
 import { dirToThree, toThree } from '../../camera/view';
 import { hipsFrame, Limb, placeBetween, placeFrame, placePoint, staticMesh } from '../placement';
 import {
-  chestMaterial, ChestContact, earMaterial, faceMaterial, gripMaterial, headMaterial, jointMaterial,
-  linkMaterial, metalMaterial, SCREEN, shellPaint, shoeUpperMaterial, soleMaterial, VISOR_BEZEL,
+  chestMaterial, ChestContact, faceMaterial, headMaterial, SCREEN, shoeUpperMaterial, smoothMaterial,
+  softMaterial, soleMaterial, VISOR_BEZEL,
 } from './robotMaterials';
-import { ballGeometry, earGeometry, KNEE_R, linkGeometry, mittGeometry, SHOULDER_R, socketGeometries } from './robotParts';
+import { ballGeometry, earGeometry, KNEE_R, limbGeometry, mittGeometry, SHOULDER_R, socketGeometries } from './robotParts';
 
-/** Hard-surface skater on the original robot rig. Every bearing sits at its corresponding motion joint. */
+/**
+ * The cartoon robot (robot/robot3d.ts) as a real moulded toy in daylight: the same smooth shell,
+ * plain soft limbs with a ball at each joint, shell shoulder caps and mitts, and button ears.
+ * Nothing mechanical shows. Every ball sits at its motion joint.
+ */
 
 const HEAD: BoxSpec = { f: 14, u: 15, s: 18, r: 8.5 };
 /** The grid the screen is painted on: this much of the head's front round the screen and its bezel, this far off the shell. */
@@ -86,9 +91,11 @@ export class RealisticRobot3D {
   private disposed = false;
 
   constructor(private readonly look: RobotLook, light = new RiderDaylight()) {
-    const paint = shellPaint(look.body);
-    const graphite = mixHex('#39454b', look.body, 0.09);
-    const sole = '#c7bda9';
+    const paint = look.body;
+    // Soft-touch graphite for everything the cartoon robot draws in its limb colour, and the shell's own enamel.
+    const soft = softMaterial(mixHex(PALETTE.limb, look.body, 0.16), light);
+    const shell = smoothMaterial(paint, 0.44, 0.16, light);
+    const sole = PALETTE.wheel;
     this.group.name = 'realistic-robot';
 
     this.torso = part('chest', roundedBoxGeometry(TORSO, 5, TORSO_RINGS), chestMaterial(paint, this.contact, light));
@@ -100,12 +107,12 @@ export class RealisticRobot3D {
     this.head.add(part('visor', frontDecalGeometry(
       HEAD, SCREEN.extent[0] + around, SCREEN.center[1] - SCREEN.extent[1] - around, SCREEN.center[1] + SCREEN.extent[1] + around, VISOR_GRID.lift,
     ), this.face));
-    const steel = metalMaterial('#606d71', 0.32, 0.78, light);
-    this.neck = new Limb(steel);
+    this.neck = new Limb(soft);
     this.group.add(this.torso, this.head, this.neck.mesh);
 
     const feet = look.variant === 2 ? [] : ANTENNA[look.variant];
-    const beacon = metalMaterial(look.accent, 0.26, 0.16, light);
+    const steel = smoothMaterial(PALETTE.limb, 0.32, 0.78, light);
+    const beacon = smoothMaterial(look.accent, 0.26, 0.16, light);
     if (look.variant === 2) {
       this.crest = part('crest', roundedBoxGeometry({ f: 8.5, u: 3.2, s: 2, r: 1.8 }), beacon);
       this.group.add(this.crest);
@@ -116,33 +123,27 @@ export class RealisticRobot3D {
       this.antenna.push({ stalk, tip });
       this.group.add(stalk.mesh, tip);
     }
-    for (const g of socketGeometries(HEAD, look.variant, feet.map((a) => a.foot))) this.head.add(part('antenna-socket', g, steel));
-    const ear = earMaterial(light);
-    for (const side of [-1, 1] as const) this.head.add(part('ear', earGeometry(HEAD, side), ear));
+    for (const g of socketGeometries(HEAD, look.variant, feet.map((a) => a.foot))) this.head.add(part('antenna-socket', g, soft));
+    for (const side of [-1, 1] as const) this.head.add(part('ear', earGeometry(HEAD, side), soft));
 
-    // Mirrored components come off the same tools and share both geometry and finish.
-    const link = (a: number, b: number, length: number) => linkGeometry(a * LIMB_SLIM, b * LIMB_SLIM, length);
-    const upper = link(ARM_RADII.shoulder, ARM_RADII.elbow, UPPER_ARM);
-    const fore = link(ARM_RADII.elbow, ARM_RADII.wrist, FOREARM);
-    const thigh = link(LEG_RADII.hip, LEG_RADII.knee, THIGH);
-    const shin = link(LEG_RADII.knee, LEG_RADII.ankle, SHIN);
+    // Mirrored parts come out of the same mould and share both geometry and finish.
+    const limb = (a: number, b: number, length: number) => limbGeometry(a * LIMB_SLIM, b * LIMB_SLIM, length);
+    const upper = limb(ARM_RADII.shoulder, ARM_RADII.elbow, UPPER_ARM);
+    const fore = limb(ARM_RADII.elbow, ARM_RADII.wrist, FOREARM);
+    const thigh = limb(LEG_RADII.hip, LEG_RADII.knee, THIGH);
+    const shin = limb(LEG_RADII.knee, LEG_RADII.ankle, SHIN);
     const shoulder = ballGeometry(SHOULDER_R);
-    const elbow = ballGeometry(ARM_RADII.elbow * LIMB_SLIM);
-    // The hip and ankle articulate in every direction on spherical ball ends.
-    const hip = new SphereGeometry(LEG_RADII.hip * LIMB_SLIM, 28, 20);
     const knee = ballGeometry(KNEE_R);
-    const ankle = new SphereGeometry(LEG_RADII.ankle * LIMB_SLIM, 28, 20);
+    // The elbow, hip and ankle are as wide as the limb they end, so it bends as one soft piece.
+    const elbow = ballGeometry(ARM_RADII.elbow * LIMB_SLIM);
+    const hip = ballGeometry(LEG_RADII.hip * LIMB_SLIM);
+    const ankle = ballGeometry(LEG_RADII.ankle * LIMB_SLIM);
     const mitt = mittGeometry();
-    const tube = linkMaterial(graphite, light);
-    const bearing = jointMaterial(graphite, light);
-    const ballFinish = metalMaterial(graphite, 0.39, 0.64, light);
-    const shoulderCap = jointMaterial(paint, light);
-    const grip = gripMaterial(paint, light);
     const arm = (side: string): ArmParts => {
       const parts = {
-        shoulder: part(side + '-shoulder', shoulder, shoulderCap), elbow: part(side + '-elbow', elbow, bearing),
-        upper: part(side + '-upper-arm', upper, tube), fore: part(side + '-forearm', fore, tube),
-        hand: part(side + '-hand', mitt, grip),
+        shoulder: part(side + '-shoulder', shoulder, shell), elbow: part(side + '-elbow', elbow, soft),
+        upper: part(side + '-upper-arm', upper, soft), fore: part(side + '-forearm', fore, soft),
+        hand: part(side + '-hand', mitt, shell),
       };
       this.group.add(...Object.values(parts));
       return parts;
@@ -156,9 +157,9 @@ export class RealisticRobot3D {
       shoe.matrixAutoUpdate = false;
       shoe.add(part(side + '-sole', shoeShape.sole, rubber), part(side + '-upper', shoeShape.upper, suede));
       const parts = {
-        hip: part(side + '-hip', hip, ballFinish), thigh: part(side + '-thigh', thigh, tube),
-        knee: part(side + '-knee', knee, bearing), shin: part(side + '-shin', shin, tube),
-        ankle: part(side + '-ankle', ankle, ballFinish), shoe,
+        hip: part(side + '-hip', hip, soft), thigh: part(side + '-thigh', thigh, soft),
+        knee: part(side + '-knee', knee, soft), shin: part(side + '-shin', shin, soft),
+        ankle: part(side + '-ankle', ankle, soft), shoe,
       };
       this.group.add(...Object.values(parts));
       return parts;
@@ -190,8 +191,8 @@ export class RealisticRobot3D {
       const parts = this.arms[arm.side];
       placeBetween(parts.upper, arm.shoulder, arm.elbow);
       placeBetween(parts.fore, arm.elbow, arm.hand);
-      placeFrame(parts.shoulder, { ...rig.torso, origin: arm.shoulder });
-      placeFrame(parts.elbow, { ...rig.torso, origin: arm.elbow });
+      placePoint(parts.shoulder, arm.shoulder);
+      placePoint(parts.elbow, arm.elbow);
       this.contact.aimArm(arm.side === 'left' ? 0 : 1, toThree(arm.shoulder), toThree(arm.elbow));
       // The glove carries straight on down the forearm.
       placeBetween(parts.hand, arm.hand, add3(arm.hand, norm3(sub3(arm.hand, arm.elbow))));
@@ -201,7 +202,7 @@ export class RealisticRobot3D {
       placeBetween(parts.thigh, leg.hip, leg.knee);
       placeBetween(parts.shin, leg.knee, leg.ankle);
       placePoint(parts.hip, leg.hip);
-      placeFrame(parts.knee, { ...hips, origin: leg.knee });
+      placePoint(parts.knee, leg.knee);
       placePoint(parts.ankle, leg.ankle);
       placeFrame(parts.shoe, leg.shoe);
     }

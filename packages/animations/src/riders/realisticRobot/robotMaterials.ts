@@ -5,6 +5,7 @@ import { LOOK_REFLECT_GLSL } from '../../sets/surfaces';
 import { SET_SCALE } from '../../sets/setScale';
 import { GLSL_DAYLIGHT, RiderDaylight } from '../../three/daylight';
 import { GLSL_TARGETS, inkInfo, INK_NONE, rgb, sceneMaterial } from '../../three/materials';
+import { SCREEN_HEX } from '../robot/robotMaterials';
 import type { ShoeShape } from '../shoe3d';
 
 /** All dimensions are in the existing part's own frame (x forward, y up, z across). */
@@ -72,17 +73,6 @@ float grain(vec3 p) {
   p += dot(p, p.yzx + 19.19);
   return (fract((p.x + p.y) * p.z) - 0.5) * (1.0 - smoothstep(0.35, 1.0, footprint));
 }
-// Short rub marks where a casing meets the pavement. They follow the casting around its bevel.
-float edgeWear(vec3 p, vec3 normal) {
-  vec3 axis = abs(normalize(normal));
-  float bevel = smoothstep(0.08, 0.28, 1.0 - max(axis.x, max(axis.y, axis.z)));
-  vec2 uv = vec2(p.x * 0.56 + p.z * 0.33, p.y + p.z * 0.12);
-  vec2 cell = floor(uv * vec2(0.48, 3.0));
-  float seed = fract(sin(dot(cell, vec2(32.71, 17.39))) * 19483.57);
-  vec2 q = fract(uv * vec2(0.48, 3.0)) - 0.5;
-  float mark = fill(length(q * vec2(1.1, 2.5)) - 0.36);
-  return bevel * mark * smoothstep(0.80, 0.96, seed) * (1.0 - smoothstep(0.22, 0.72, fwidth(uv.y)));
-}
 // A pressed edge or inset in the existing skin, with relief measured in stage units.
 vec3 relief(float height) {
   vec3 n = normalize(vNormal);
@@ -98,29 +88,12 @@ void finish(vec3 light) {
   outColor = vec4(displayDaylight(light), 1.0);
   outInfo = uInfo;
 }
-// A flush steel fastener with a recessed hex drive. xy is the plate's tangent plane.
-float hexDrive(vec2 p) {
-  p = abs(p);
-  return max(p.x, dot(p, vec2(0.5, 0.8660254)));
-}
-void fastener(vec2 p, float radius, float face, inout vec3 base, inout float rough, inout float metal, inout float height) {
-  float rim = fill(length(p) - radius) * face;
-  float head = fill(length(p) - radius * 0.79) * face;
-  float drive = fill(hexDrive(p) - radius * 0.34) * face;
-  base = mix(mix(mix(base, GASKET, rim), ALLOY * 0.72, head), GASKET * 0.55, drive);
-  rough = mix(rough, 0.34, head);
-  metal = mix(metal, 0.82, head - drive);
-  height += -0.22 * rim + 0.19 * head - 0.22 * drive;
-}
 `;
 
 const surface = (body: string, fragment: string, light: RiderDaylight, uniforms: Record<string, IUniform> = {}) =>
   sceneMaterial(VERT, SURFACE + fragment, {
     ...light.uniforms, uBase: { value: new Color(body) }, uInfo: { value: inkInfo(6, 70, 0, INK_NONE) }, ...uniforms,
   });
-
-/** The coat takes its color from the robot's roster paint, mixed with a little neutral enamel. */
-export const shellPaint = (body: string) => mixHex(body, '#879394', 0.16);
 
 const luma = (hex: string) => {
   const lin = rgb(hex).map((s) => (s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4));
@@ -140,6 +113,7 @@ export function eyeGlow(accent: string): string {
 const FACE = /* glsl */ `
 ${LOOK_REFLECT_GLSL}
 uniform vec3 uGlow;
+uniform vec3 uGlass;
 uniform int uExpression;
 /** One eye, centred at c, drawn for the expression; side is -1 or 1 (outward). */
 float eye(vec2 p, vec2 c, float side) {
@@ -172,7 +146,7 @@ void main() {
   vec2 lens = (p - ${v2(...SCREEN.center)}) / ${v2(...SCREEN.extent)};
   vec3 n = relief(-0.17 * bezel + (0.26 + 0.52 * max(0.0, 1.0 - dot(lens, lens))) * glass);
   vec3 base = mix(uBase, GASKET, bezel);
-  base = mix(base, vec3(0.005, 0.012, 0.017), glass);
+  base = mix(base, uGlass, glass);
   base = mix(base, ALLOY * 0.58, lip);
   vec2 exposure = daylightAt(vWorld);
   vec3 reflected = shade(base, mix(0.55, 0.17, glass), 0.70 * lip, n, exposure);
@@ -197,15 +171,18 @@ void main() {
 `;
 
 export function faceMaterial(paint: string, accent: string, light = new RiderDaylight()) {
-  return surface(paint, FACE, light, { uGlow: { value: new Color(eyeGlow(accent)) }, uExpression: { value: 0 } });
+  return surface(paint, FACE, light, {
+    uGlow: { value: new Color(eyeGlow(accent)) },
+    uGlass: { value: new Color(SCREEN_HEX) },
+    uExpression: { value: 0 },
+  });
 }
 
-/** Two joined castings, a line of recessed rear vents, and four retaining screws. */
+/** One smooth moulding, with a line of pressed vents across the back as on the cartoon robot. */
 const HEAD = /* glsl */ `
 void main() {
   vec2 p = vLocal.zy;
   float back = smoothstep(0.44, 0.78, -normalize(vLocalNormal).x);
-  float parting = fill(abs(vLocal.x + 4.1) - 0.16);
   float slots = 100.0;
   for (int i = 0; i < ${HEAD_VENTS.count}; i++) {
     float y = ${f(HEAD_VENTS.up)} + (float(i) - ${f((HEAD_VENTS.count - 1) / 2)}) * ${f(HEAD_VENTS.gap)};
@@ -213,15 +190,8 @@ void main() {
   }
   float vent = fill(slots) * back;
   float g = grain(vLocal * 2.5);
-  vec3 base = mix(uBase * (1.0 + 0.07 * g), GASKET, 0.73 * parting);
-  base = mix(base, GASKET * 0.38, vent);
-  float rough = 0.43 + 0.07 * g, metal = 0.16;
-  float wear = edgeWear(vLocal, vLocalNormal);
-  base = mix(base, ALLOY, wear * 0.58);
-  metal = mix(metal, 0.80, wear);
-  float h = -0.24 * parting - 0.48 * vent;
-  fastener(abs(p) - vec2(10.5, 8.6), 0.72, back, base, rough, metal, h);
-  finish(shade(base, rough, metal, relief(h), daylightAt(vWorld)));
+  vec3 base = mix(uBase * (1.0 + 0.07 * g), uBase * 0.42, vent);
+  finish(shade(base, 0.43 + 0.07 * g, 0.16, relief(-0.3 * vent), daylightAt(vWorld)));
 }
 `;
 
@@ -275,23 +245,14 @@ float armOcclusion(vec3 a, vec3 b, vec3 n) {
   return clamp(0.5 + 0.5 * dot(n, d) / len, 0.0, 1.0) * uArmR * uArmR / (len * len);
 }
 void main() {
-  float facing = normalize(vLocalNormal).x;
-  float front = smoothstep(0.35, 0.78, facing), back = smoothstep(0.35, 0.78, -facing);
+  float back = smoothstep(0.35, 0.78, -normalize(vLocalNormal).x);
   vec2 p = vLocal.zy;
+  // The battery hatch's pressed outline, the one line on the shell, as on the cartoon robot.
   float hatch = roundRect(p, ${v2(BACK_HATCH.side, BACK_HATCH.up)}, ${v2(...BACK_HATCH.half)}, ${f(BACK_HATCH.r)});
-  float seam = max(fill(abs(hatch) - 0.18) * back, fill(abs(vLocal.y + 13.4) - 0.21));
-  // Two short pressed intake louvers low on the front panel.
-  float vents = roundRect(vec2(p.x + 3.4, abs(p.y + 7.3) - 1.0), vec2(0.0), vec2(4.1, 0.35), 0.34);
-  float opening = fill(vents) * front;
+  float seam = fill(abs(hatch) - 0.18) * back;
   float g = grain(vLocal * 2.5);
-  vec3 base = mix(uBase * (1.0 + 0.07 * g), GASKET, 0.72 * seam);
-  base = mix(base, GASKET * 0.5, opening);
-  float rough = 0.45 + 0.07 * g, metal = 0.16, h = -0.25 * seam - 0.45 * opening;
-  float wear = edgeWear(vLocal, vLocalNormal) * (1.0 - smoothstep(-14.0, -6.0, p.y));
-  base = mix(base, ALLOY, wear * 0.65);
-  metal = mix(metal, 0.80, wear);
-  fastener(vec2(abs(p.x) - 9.0, p.y - 12.7), 0.68, front, base, rough, metal, h);
-  fastener(abs(p - vec2(0.0, ${f(BACK_HATCH.up)})) - vec2(3.9, 5.65), 0.57, back, base, rough, metal, h);
+  vec3 base = mix(uBase * (1.0 + 0.07 * g), uBase * 0.42, seam);
+  float rough = 0.45 + 0.07 * g, metal = 0.16, h = -0.25 * seam;
 
   vec3 n = relief(h);
   vec3 head = uHeadToUnit * (uHeadCenter - vWorld);
@@ -316,8 +277,8 @@ export function chestMaterial(paint: string, against: ChestContact, light: Rider
   });
 }
 
-/** The simpler fittings share a program. The neck and antenna have smooth drawn-metal surfaces. */
-export function metalMaterial(hex: string, rough: number, metal: number, light: RiderDaylight) {
+/** The plain hard parts share a program: the shell's shoulder caps and mitts, and the antenna. */
+export function smoothMaterial(hex: string, rough: number, metal: number, light: RiderDaylight) {
   return surface(hex, /* glsl */ `
     uniform float uRough;
     uniform float uMetal;
@@ -325,57 +286,22 @@ export function metalMaterial(hex: string, rough: number, metal: number, light: 
   `, light, { uRough: { value: rough }, uMetal: { value: metal } });
 }
 
-/** The joint cover, captive race and recessed drive follow the joint's transverse axis. */
-export const jointMaterial = (hex: string, light: RiderDaylight) => surface(hex, /* glsl */ `
+/**
+ * Soft-touch rubber: the limbs with their joints, the neck and the ears. Seen edge-on a hard
+ * finish mirrors the sky, which turned a limb pointing at the camera grey; rubber scatters
+ * instead, so it is lit as if never seen at less than a slant.
+ */
+export const softMaterial = (hex: string, light: RiderDaylight) => surface(hex, /* glsl */ `
 void main() {
-  vec3 axis = normalize(vLocal);
-  float cap = smoothstep(0.64, 0.71, abs(axis.z));
-  float hub = fill(length(axis.xy) - 0.42);
-  float drive = fill(hexDrive(axis.xy) - 0.19);
-  vec3 base = mix(uBase, GASKET, cap);
-  base = mix(mix(base, ALLOY * 0.68, hub), GASKET * 0.6, drive);
-  finish(shade(base, mix(0.42, 0.29, hub), mix(0.32, 0.86, hub - drive), relief(-0.22 * drive), daylightAt(vWorld)));
-}
-`, light);
-
-/** A dark anodized tube, a machined lip, and the steel journal visible at its distal end. */
-export const linkMaterial = (hex: string, light: RiderDaylight) => surface(hex, /* glsl */ `
-void main() {
-  float x = vLocal.x;
-  float tube = fill(0.14 - x) * fill(x - 0.75);
-  float lip = fill(abs(x - 0.717) - 0.026);
-  float journal = fill(0.75 - x) * fill(x - 0.94);
-  vec3 base = mix(GASKET, uBase, tube);
-  base = mix(base, ALLOY * 0.70, max(journal, lip));
-  finish(shade(base, mix(0.42, 0.28, journal), mix(0.30, 0.86, max(journal, lip)), normalize(vNormal), daylightAt(vWorld)));
-}
-`, light);
-
-export const earMaterial = (light: RiderDaylight) => surface('#506067', /* glsl */ `
-void main() {
-  vec2 p = vLocal.xy + vec2(1.0, 0.0);
-  float r = length(p);
-  float insert = fill(r - 3.5);
-  float bore = fill(hexDrive(p) - 1.45);
-  vec3 base = mix(mix(uBase, ALLOY * 0.73, insert), GASKET * 0.6, bore);
-  finish(shade(base, mix(0.30, 0.55, bore), 0.79 * (1.0 - bore), relief(-0.28 * bore), daylightAt(vWorld)));
-}
-`, light);
-
-export const gripMaterial = (paint: string, light: RiderDaylight) => surface(paint, /* glsl */ `
-void main() {
-  // The wrist's rolled collar, then an elastomer pad over the end of the gripper.
-  float cuff = fill(vLocal.x + 1.7);
-  float pad = fill(2.25 - vLocal.x);
-  float grooves = fill(abs(abs(vLocal.x - 3.75) - 0.48) - 0.12) * pad;
-  vec3 base = mix(mix(uBase, ALLOY * 0.56, cuff), GASKET * (1.4 - 0.6 * grooves), pad);
-  finish(shade(base, mix(0.43 - 0.13 * cuff, 0.81, pad), 0.16 + 0.65 * cuff, relief(-0.16 * grooves), daylightAt(vWorld)));
+  vec3 n = normalize(vNormal);
+  vec3 view = normalize(normalize(cameraPosition - vWorld) + 0.45 * n);
+  finish(daylight(uBase, 0.55, 0.0, n, view, daylightAt(vWorld)));
 }
 `, light);
 
 /** Suede upper, stitched eyestay and flat woven laces, over the original rubber toe cap. */
 export function shoeUpperMaterial(accent: string, sole: string, cap: ShoeShape['toeCap'], light: RiderDaylight) {
-  return surface(mixHex(accent, '#604e48', 0.19), /* glsl */ `
+  return surface(accent, /* glsl */ `
     uniform vec3 uSole;
     uniform float uSplit;
     uniform vec3 uRise;
