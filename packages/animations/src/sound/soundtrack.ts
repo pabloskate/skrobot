@@ -2,7 +2,8 @@ import { grindSpeed, travel } from '../motion/grind';
 import { ROLL_IN, flightTime } from '../motion/trick';
 import { stairSpeed } from '../stage/drop';
 import type { StagePlan } from '../stage/stage';
-import { railBailBoardDown } from '../stage/railBailFrame';
+import { boardMotionAt } from '../motion/fall/boardBody';
+import { railBailBoardDown, railBailPlan } from '../stage/railBailFrame';
 
 /**
  * What an attempt sounds like, on its own clock: the moments that make a
@@ -93,20 +94,24 @@ export function soundtrackFor(stage: StagePlan): Soundtrack {
 function attemptSoundtrack(stage: StagePlan): Soundtrack {
   const { grind, stairs, landed } = stage;
   if (grind && stage.railBail) {
-    // Jumping off: the grind scrapes up to the jump, and the board left on the rail clatters down on its own.
+    // The scrape ends at the snag; the loose board clatters when it actually comes down.
     const leave = stage.railBail.at;
+    const stuck = stage.railBail.bail === 'stick';
     const boardDown = railBailBoardDown(stage);
     const down = Number.isFinite(boardDown) ? boardDown : leave + grind.drop;
+    const loose = stuck && Number.isFinite(boardDown) ? boardMotionAt(railBailPlan(stage).board, down).velocity : null;
+    const speedAfterSnag = loose ? Math.hypot(loose.x, loose.z) : 0;
     return {
       cues: [
         { kind: 'pop', at: grind.pop },
         { kind: 'lock', at: grind.lockAt },
+        ...(stuck ? [{ kind: 'lock' as const, at: leave }] : []),
         { kind: 'crash', at: down, weight: grind.handrail ? HANDRAIL_LANDING : 1 },
       ],
       slide: grind.spec.slide,
       roll: wheels(grind.pop, down, false),
       grind: (t) => (t >= grind.lockAt && t < leave ? 1 : 0),
-      speed: rolling((t) => grindSpeed(grind, Math.min(t, leave)), down, false),
+      speed: rolling((t) => stuck && t >= leave ? (t < down ? 0 : speedAfterSnag) : grindSpeed(grind, Math.min(t, leave)), down, false),
     };
   }
   if (grind) {
@@ -120,7 +125,7 @@ function attemptSoundtrack(stage: StagePlan): Soundtrack {
     if (grind.fail == null) {
       cues.push(
         { kind: 'popOff', at: grind.off },
-        { kind: 'land', at: grind.land, weight: grind.handrail ? HANDRAIL_LANDING : 1 },
+        { kind: landed ? 'land' : 'crash', at: grind.land, weight: grind.handrail ? HANDRAIL_LANDING : 1 },
       );
     } else {
       cues.push({ kind: 'crash', at: down, weight: grind.handrail ? HANDRAIL_LANDING : 1 });
@@ -128,9 +133,9 @@ function attemptSoundtrack(stage: StagePlan): Soundtrack {
     return {
       cues,
       slide: grind.spec.slide,
-      roll: wheels(grind.pop, down, grind.fail == null),
+      roll: wheels(grind.pop, down, landed),
       grind: (t) => (t >= grind.lockAt && t < leave ? 1 : 0),
-      speed: rolling((t) => grindSpeed(grind, t), down, grind.fail == null),
+      speed: rolling((t) => grindSpeed(grind, t), down, landed),
     };
   }
   const pop = stairs?.pop ?? ROLL_IN;
@@ -139,7 +144,7 @@ function attemptSoundtrack(stage: StagePlan): Soundtrack {
   return {
     cues: [
       { kind: 'pop', at: pop },
-      landed ? { kind: 'land', at: down, weight } : { kind: 'crash', at: down, weight },
+      { kind: landed || stage.fall === 'washout' ? 'land' : 'crash', at: down, weight },
     ],
     slide: false,
     roll: wheels(pop, down, landed),

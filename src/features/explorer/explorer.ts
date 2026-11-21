@@ -5,6 +5,7 @@ import {
   GRIND_EXIT_TRICKS,
   KICK_OUT_DROP_T,
   SLIP_BACK_DROP_T,
+  WASH_OUT_T,
   SCENE_ORBIT_BOUNDS,
   SCENE_ZOOM,
   STAGE_SETS,
@@ -126,10 +127,10 @@ export interface ExplorerState {
 
 /**
  * How an attempt ends when it isn't landed: a flatground or gap trick caught wrong and kicked out, or landed with the
- * weight back so the board shoots out ahead and the rider sits down; a grind jumped off, forward along the rail or out
- * to the side, and rolled out.
+ * weight back so the board shoots out ahead and the rider sits down; a grind jumped off along the rail or out to the side,
+ * slipped sideways out of lock, or slipped back on its landing.
  */
-export type Outcome = 'kickout' | 'slipback' | 'jump-forward' | 'jump-side';
+export type Outcome = 'kickout' | 'slipback' | 'jump-forward' | 'jump-side' | 'rail-stick' | 'rail-slip-off' | 'washout';
 
 export interface OutcomeOption {
   fall: Outcome | null;
@@ -139,33 +140,47 @@ export interface OutcomeOption {
 }
 
 const LANDED: OutcomeOption = { fall: null, label: 'Land', hint: 'ridden away' };
+const SLIP_BACK: OutcomeOption = { fall: 'slipback', label: 'Slip back', hint: 'weight back, board shoots out' };
 const OUTCOME_OPTIONS: Record<ExplorerMode, readonly OutcomeOption[]> = {
   flatground: [
     LANDED,
     { fall: 'kickout', label: 'Kick out', hint: 'caught wrong, kicked away' },
-    { fall: 'slipback', label: 'Slip back', hint: 'weight back, board shoots out' },
+    SLIP_BACK,
   ],
   grinds: [
     LANDED,
+    { fall: 'rail-slip-off', label: 'Slip off', hint: 'board slips sideways out of lock' },
     { fall: 'jump-forward', label: 'Jump forward', hint: 'jumped off ahead, rolled out' },
+    { fall: 'rail-stick', label: 'Stick', hint: 'board hangs up, rider carries on ahead' },
     { fall: 'jump-side', label: 'Jump aside', hint: 'jumped off the side, rolled out' },
+    SLIP_BACK,
   ],
 };
 
 /** The ways an attempt can end in this mode. */
-export const outcomeOptions = (mode: ExplorerMode): readonly OutcomeOption[] => OUTCOME_OPTIONS[mode];
+const GAP_OUTCOMES: readonly OutcomeOption[] = [...OUTCOME_OPTIONS.flatground, {
+  fall: 'washout', label: 'Wash out', hint: 'land sideways, wheels skid out',
+}];
 
-/** How the attempt on the stage ends: its outcome if the mode has it, else landed. */
-export function outcomeOf(state: Pick<ExplorerState, 'mode' | 'fall'>): Outcome | null {
-  return OUTCOME_OPTIONS[state.mode].some((option) => option.fall === state.fall) ? state.fall : null;
+export function outcomeOptions(mode: ExplorerMode, set?: StageSet): readonly OutcomeOption[] {
+  if (set && mode === 'flatground' && setInfo(set).terrain) return GAP_OUTCOMES;
+  if (set && mode === 'grinds' && setInfo(set).ledges) {
+    return OUTCOME_OPTIONS.grinds.filter(option => option.fall !== 'rail-slip-off' && option.fall !== 'rail-stick');
+  }
+  return OUTCOME_OPTIONS[mode];
 }
 
-const RAIL_BAILS: Partial<Record<Outcome, RailBail>> = { 'jump-forward': 'forward', 'jump-side': 'side' };
+/** How the attempt on the stage ends: its outcome if the mode has it, else landed. */
+export function outcomeOf(state: Pick<ExplorerState, 'mode' | 'set' | 'fall'>): Outcome | null {
+  return outcomeOptions(state.mode, state.set).some((option) => option.fall === state.fall) ? state.fall : null;
+}
+
+const RAIL_BAILS: Partial<Record<Outcome, RailBail>> = { 'rail-stick': 'stick', 'rail-slip-off': 'slip-off', 'jump-forward': 'forward', 'jump-side': 'side' };
 
 /** What the stage is told of an outcome: landed or not, the miss, and which way off a rail. */
-export function stageOutcome(fall: Outcome | null): { landed: boolean; fallVariant?: 'kickout' | 'slipback'; railBail?: RailBail } {
+export function stageOutcome(fall: Outcome | null): { landed: boolean; fallVariant?: 'kickout' | 'slipback' | 'washout'; railBail?: RailBail } {
   if (fall == null) return { landed: true };
-  return { landed: false, fallVariant: fall === 'slipback' ? 'slipback' : 'kickout', railBail: RAIL_BAILS[fall] };
+  return { landed: false, fallVariant: fall === 'slipback' || fall === 'washout' ? fall : 'kickout', railBail: RAIL_BAILS[fall] };
 }
 
 export const STANCES: readonly Stance[] = ['regular', 'fakie', 'switch', 'nollie'];
@@ -280,13 +295,14 @@ export const DEFAULT_STATE: Readonly<ExplorerState> = Object.freeze({
 
 /** Move to another spot; gap-only spots open the saved gap trick, and an obstacle the new spot lacks goes back to its stairs. */
 export function withSet(state: ExplorerState, set: StageSet): ExplorerState {
+  const mode = setInfo(set).grinds ? state.mode : 'flatground';
   return restrictRailApproach({
     ...state,
     set,
     // A tripod stood in one spot means nothing in another.
     stand: set === state.set ? state.stand : undefined,
-    mode: setInfo(set).grinds ? state.mode : 'flatground',
-    fall: setInfo(set).grinds ? state.fall : outcomeOf({ mode: 'flatground', fall: state.fall }),
+    mode,
+    fall: outcomeOf({ set, mode, fall: state.fall }),
     rail: setInfo(set).rails?.fixedLine ? 'side' : setInfo(set).rails?.sideGrinds === false ? 'center' : state.rail,
     obstacle: hasObstacle(set, state.obstacle) ? state.obstacle : DEFAULT_STATE.obstacle,
   });
@@ -440,7 +456,8 @@ export interface Timeline {
 /** The moments worth jumping to, and how long the trick runs (seconds). */
 export function timelineFor(state: ExplorerState, style: SkateStyle | undefined): Timeline {
   const kickOut = state.mode === 'flatground' && state.fall === 'kickout';
-  const slipBack = state.mode === 'flatground' && state.fall === 'slipback';
+  const washOut = outcomeOf(state) === 'washout';
+  const slipBack = state.fall === 'slipback';
   if (state.mode === 'flatground') {
     // Down a drop the flight is the drop's; on flat ground the robot's own pop sets it.
     const drop = setInfo(state.set).terrain !== null;
@@ -448,13 +465,13 @@ export function timelineFor(state: ExplorerState, style: SkateStyle | undefined)
       ? setTimeline(state.set, style, true, state.obstacle, state.stance, stageTrick(state).base)
       : flatTimeline(style, !kickOut && !slipBack, kickOut, slipBack);
     return {
-      duration: drop && kickOut ? tl.land + KICK_OUT_DROP_T : drop && slipBack ? tl.land + SLIP_BACK_DROP_T : tl.end,
+      duration: washOut ? tl.land + WASH_OUT_T : drop && kickOut ? tl.land + KICK_OUT_DROP_T : drop && slipBack ? tl.land + SLIP_BACK_DROP_T : tl.end,
       phases: [
         { label: 'Set up', time: 0 },
         { label: 'Pop', time: tl.pop + 0.06 },
         { label: 'Peak', time: tl.peak },
         { label: kickOut ? 'Kick out' : 'Catch', time: tl.catch },
-        { label: kickOut ? (drop ? 'Down' : 'Run out') : slipBack ? 'Slip' : 'Land', time: tl.land },
+        { label: kickOut ? (drop ? 'Down' : 'Run out') : washOut ? 'Wash out' : slipBack ? 'Slip' : 'Land', time: tl.land },
       ],
     };
   }
@@ -471,8 +488,8 @@ export function timelineFor(state: ExplorerState, style: SkateStyle | undefined)
           { label: 'Pop', time: bail.pop },
           ...(bail.trickIn == null ? [] : [{ label: 'Trick in', time: bail.trickIn }]),
           { label: 'Lock', time: bail.lock },
-          { label: 'Jump off', time: bail.bail },
-          { label: 'Roll', time: bail.down },
+          { label: railBail === 'stick' ? 'Stick' : railBail === 'slip-off' ? 'Slip off' : 'Jump off', time: bail.bail },
+          { label: railBail === 'slip-off' ? 'Down' : 'Roll', time: bail.down },
         ],
       };
     }
@@ -480,7 +497,7 @@ export function timelineFor(state: ExplorerState, style: SkateStyle | undefined)
   const grind = grindTimelineFor(stageTrick(state), state.rider, style, true, 'slam', handrail);
   if (!grind) return { phases: [{ label: 'Set up', time: 0 }], duration: flatTimeline(style).end };
   return {
-    duration: grind.end,
+    duration: slipBack ? grind.land + SLIP_BACK_DROP_T : grind.end,
     phases: [
       { label: 'Set up', time: 0 },
       { label: 'Pop', time: grind.pop },
@@ -488,7 +505,7 @@ export function timelineFor(state: ExplorerState, style: SkateStyle | undefined)
       { label: 'Lock', time: grind.lock },
       { label: 'Pop off', time: grind.off },
       ...(grind.trickOut == null ? [] : [{ label: 'Trick out', time: grind.trickOut }]),
-      { label: 'Land', time: grind.land },
+      { label: slipBack ? 'Slip' : 'Land', time: grind.land },
     ],
   };
 }
@@ -783,8 +800,8 @@ export function stateFromSearch(search: string, defaultSet: StageSet = DEFAULT_S
     rail: setInfo(set).rails?.fixedLine || (params.get('rail') === 'side' && setInfo(set).rails?.sideGrinds !== false) ? 'side' : DEFAULT_STATE.rail,
     obstacle: setInfo(set).obstacles?.find((o) => o.id === params.get('obstacle'))?.id ?? DEFAULT_STATE.obstacle,
     skater: SKATERS.find((option) => option.id === params.get('skater'))?.id ?? DEFAULT_STATE.skater,
-    // Kept if it's a miss the mode named below has (a flatground trick's kick-out or slip back, a grind's jump off).
-    fall: OUTCOME_OPTIONS.grinds.concat(OUTCOME_OPTIONS.flatground).find((o) => o.fall != null && o.fall === params.get('fall'))?.fall ?? null,
+    // Kept if it's a miss the mode named below has (both modes can slip back on landing).
+    fall: OUTCOME_OPTIONS.grinds.concat(GAP_OUTCOMES).find((o) => o.fall != null && o.fall === params.get('fall'))?.fall ?? null,
   };
   const grind = fromSlug(GRIND_CHOICES, params.get('grind'));
   if (!grind) {

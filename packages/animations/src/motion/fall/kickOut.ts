@@ -118,6 +118,10 @@ export interface KickOutSetup {
    * takeover, the board holding their weight till then. The board is under the feet, not slipping out.
    */
   jump?: V3;
+  /** A rail snag holds the board at takeover while the rider carries on with the grind's velocity. */
+  boardStuck?: boolean;
+  /** Signed lateral deck speed at loss of rail contact. Both shoes release without a kick. */
+  railSlipSpeed?: number;
   /** What the board meets, if not the rider's `ground`: with the rail it was left on, over it (`y`, a point's height). Its hangers meet it too. */
   boardGround?: (x: number, z: number, y: number) => number;
   /** How far `boardGround` falls (y, down) for each unit along x under a point, where it's a handrail's slope the board rides down. */
@@ -340,11 +344,12 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
   }
   const error = setup.glued ? () => IDENTITY : missBy(lost);
   const atTakeover = boardMotion(setup, error, takeover);
-  if (setup.glued && !setup.jump) {
+  if (setup.glued && !setup.jump && !setup.boardStuck) {
     // The board slips out from under the feet: it rolls off its toeside rail and swings, the way a missed ollie squirts out.
     const slip = ((MISS_DEG * 0.75 * Math.PI) / 180) / (contact - takeover);
     atTakeover.spin = add3(atTakeover.spin, qrot(atTakeover.q, { x: slip, y: slip * 0.35, z: 0 }));
   }
+  if (setup.railSlipSpeed) atTakeover.velocity.z += setup.railSlipSpeed;
   atTakeover.wheel = setup.wheel(takeover);
 
   // ----- The rider at the takeover -----
@@ -374,7 +379,9 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
   // Where the foot finds the board: the highest point of the deck's cross-section under it, when it gets there.
   const boardGround = setup.boardGround ?? ground;
   const hangers = setup.boardGround != null;
-  const freeTrack = simulateBoard(atTakeover, takeover, contact + 0.05, { gravity, ground: boardGround, hangers, slope: setup.boardSlope, drag: setup.drag });
+  const freeTrack: BoardTrack = setup.boardStuck
+    ? { start: takeover, dt: h, poses: [atTakeover], touchdown: Infinity }
+    : simulateBoard(atTakeover, takeover, contact + 0.05, { gravity, ground: boardGround, hangers, slope: setup.boardSlope, drag: setup.drag });
   const atContact = boardAt(freeTrack, contact);
   const toLocal = (p: V3) => qrot(qconj(atTakeover.q), sub3(p, atTakeover.center));
   const footX = Math.max(-26, Math.min(26, toLocal(start.shoes[kick].at).x));
@@ -434,6 +441,10 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
   };
   const shoveOf = (dir: V3, push: number) => (t: number): V3 => {
     const k = clamp01((t - contact) / PUSH_T);
+    if (setup.boardStuck) {
+      // Loading the trapped edge sends the hips past the pipe toward the checked shoe.
+      return scale3(across, -Math.sign(freeSide || 1) * 3 * FOOT * smoothstep((t - takeover) / 0.07));
+    }
     return add3(scale3(dir, (-push * (1 - Math.cos(Math.PI * k))) / 2 / RIDER_MASS), jumpOf(t));
   };
   const heading0 = facing0;
@@ -648,7 +659,7 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
   // Out, the other way across (which may clear sooner), and where neither clears, back, either way.
   const ways = [dirOf(outward), dirOf(-outward), dirOf(outward, PUSH_DIR.back), dirOf(-outward, PUSH_DIR.back)];
   let pushDir = ways[0];
-  let push = leastFor(pushDir);
+  let push = setup.boardStuck || setup.railSlipSpeed ? 0 : leastFor(pushDir);
   const tryWay = (dir: V3) => {
     const otherPush = leastFor(dir);
     if (otherPush < push) {
@@ -681,7 +692,24 @@ export function planKickOut(setup: KickOutSetup): KickOutPlan {
       }
     }
   }
-  const board = boardFor(pushDir, push, setup.end + 0.1);
+  let board: BoardTrack;
+  if (setup.boardStuck) {
+    // The deck hangs under the checked shoe, then tips off the pipe as that foot unloads.
+    const side = -Math.sign(freeSide || 1);
+    const released = {
+      ...atTakeover,
+      velocity: scale3(across, side * 3 * FOOT),
+      spin: scale3(travel, side * 2),
+    };
+    board = simulateBoard(released, takeover, setup.end, {
+      gravity, ground: boardGround, hangers, slope: setup.boardSlope, drag: setup.drag,
+    });
+    const hold = Math.round(0.065 / board.dt);
+    board.poses = [...Array<BoardMotion>(hold).fill(atTakeover), ...board.poses];
+    board.touchdown += hold * board.dt;
+  } else {
+    board = boardFor(pushDir, push, setup.end + 0.1);
+  }
   const run = runWith(pushDir, push);
 
   const plan: KickOutPlan = { ...shared, board, push, run, roll: null };
@@ -930,6 +958,14 @@ function kickEnds(plan: KickOutPlan): KickEnds {
 function kickShoeAt(plan: KickOutPlan, t: number, land: { at: V3; q: Quat; on: number }): ShoePose {
   const { takeover, contact, release } = plan;
   const shoe0 = plan.startShoes[plan.kick];
+  if (plan.setup.boardStuck || plan.setup.railSlipSpeed) {
+    // At a snag the loaded shoe checks briefly; on a sideways slip it releases immediately.
+    const checked = plan.setup.boardStuck ? Math.min(0.045, (land.on - takeover) / 4) : 0;
+    if (t < takeover + checked) return shoe0;
+    const dt = land.on - takeover - checked;
+    const s = clamp01((t - takeover - checked) / dt);
+    return { at: hermite3(shoe0.at, checked ? { x: 0, y: 0, z: 0 } : shoe0.velocity, land.at, { x: 0, y: 0, z: 0 }, dt, s), q: qslerp(shoe0.q, land.q, minJerk(s)) };
+  }
   if (t < contact) {
     // Down onto the board where it will be.
     const { meet, meetV } = kickEnds(plan);
@@ -981,7 +1017,7 @@ function shoeAt(plan: KickOutPlan, run: RunOut, i: 0 | 1, t: number): ShoePose {
     const { at: landAt, q: landQ } = restOf(plan, land);
     if (i === plan.kick) return kickShoeAt(plan, t, { at: landAt, q: landQ, on: land.on });
     const arrive = { x: 0, y: 0.35 * Math.max(0, runOutAt(run, land.on - 0.01).velocity.y), z: 0 };
-    if (plan.setup.jump) {
+    if (plan.setup.jump && !plan.setup.railSlipSpeed) {
       // Jumping off a rail, the free foot stays on the deck, carried with it, while the legs throw the body up off it;
       // it comes away as the other meets the board to kick it off, and reaches for the ground from there.
       const leaves = plan.contact;
@@ -1449,7 +1485,12 @@ function onFeetAt(plan: KickOutPlan, phase: FeetPhase, t: number, turnKnees = tr
     return qexp(decay3(o, sub3(ratePrev, ownRate), tau));
   };
   const pelvis = qnorm(qmul(rotOffset(start.pelvis, rate.rot.pelvis, pelvisAt), pelvisAt(t)));
-  const torso = qnorm(qmul(rotOffset(start.torso, rate.rot.torso, torsoAt), torsoAt(t)));
+  let torso = qnorm(qmul(rotOffset(start.torso, rate.rot.torso, torsoAt), torsoAt(t)));
+  if (setup.boardStuck && from === takeover) {
+    // Momentum pitches the shoulders along the rail, even on a sideways boardslide.
+    const pitch = smoothstep(tau / 0.15) * (1 - smoothstep((t - firstDown) / 0.18));
+    torso = qmul(qaxis(cross3(UP, phase.travel), 0.78 * pitch), torso);
+  }
 
   // ----- Feet -----
   let shoes = [shoeAt(plan, run, 0, t), shoeAt(plan, run, 1, t)] as [ShoePose, ShoePose];

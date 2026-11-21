@@ -268,6 +268,10 @@ function touches(rig: Rig, body: BodyDims, ground: (x: number, z: number) => num
   return out;
 }
 
+export function bodyClearance(rig: Rig, body: BodyDims, ground: (x: number, z: number) => number): number {
+  return Math.min(...touches(rig, body, ground).map(touch => touch.gap));
+}
+
 /** How far into the ground the trunk (chest, shoulders and hips) is at its deepest; negative, how far clear of it. */
 export function trunkInGround(rig: Rig, body: BodyDims, ground: (x: number, z: number) => number): number {
   let deepest = -Infinity;

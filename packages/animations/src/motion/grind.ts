@@ -266,8 +266,8 @@ const TAIL_POP_FEET = [10, -POP_FOOT_X] as const;
 const NOSE_POP_FEET = [POP_FOOT_X, -8] as const;
 
 /** Street decay after a slip (as the shared fall physics) and where the board ends up. */
-const FALL_DECAY: Record<FallVariant, number> = { slam: 2.4, bail: 1.3, shank: 1.9, kickout: 1.3, slipback: 2.4 };
-const BOARD_LEAVE: Record<FallVariant, number> = { slam: 85, bail: -70, shank: 38, kickout: -70, slipback: 85 };
+const FALL_DECAY: Record<FallVariant, number> = { slam: 2.4, bail: 1.3, shank: 1.9, kickout: 1.3, slipback: 2.4, washout: 2.4 };
+const BOARD_LEAVE: Record<FallVariant, number> = { slam: 85, bail: -70, shank: 38, kickout: -70, slipback: 85, washout: 85 };
 /** How far beside the bar a fallen rider lands, and how high a slipping board kicks up. */
 export const FALL_CLEAR = 32;
 /**

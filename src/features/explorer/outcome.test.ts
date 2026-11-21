@@ -14,11 +14,47 @@ describe('outcome', () => {
     expect(stageOutcome(null)).toEqual({ landed: true });
   });
 
-  it('offers a kick-out and a slip back on flatground and a jump off either way on a grind', () => {
+  it('offers a slip back in both modes alongside their own bail options', () => {
     expect(outcomeOptions('flatground').map((o) => o.fall)).toEqual([null, 'kickout', 'slipback']);
-    expect(outcomeOptions('grinds').map((o) => o.fall)).toEqual([null, 'jump-forward', 'jump-side']);
+    expect(outcomeOptions('grinds').map((o) => o.fall)).toEqual([null, 'rail-slip-off', 'jump-forward', 'rail-stick', 'jump-side', 'slipback']);
     // The grind's labels are the package's.
-    expect(outcomeOptions('grinds').slice(1).map((o) => o.label)).toEqual(RAIL_BAIL_OPTIONS.map((o) => o.label));
+    expect(outcomeOptions('grinds').filter(o => stageOutcome(o.fall).railBail).map((o) => o.label)).toEqual(RAIL_BAIL_OPTIONS.map((o) => o.label));
+  });
+
+  it('shares Rail Stick on the Hollywood High boardslide and clears it on gaps and ledges', () => {
+    const state = stateFromSearch('?grind=boardslide&set=hollywood-high&fall=rail-stick');
+    expect(stageOutcome(state.fall).railBail).toBe('stick');
+    expect(stateFromSearch(searchFromState(state))).toEqual(state);
+    expect(timelineFor(state, undefined).phases.map(p => p.label)).toContain('Stick');
+    expect(withMode(state, 'flatground').fall).toBeNull();
+    expect(withSet(state, 'miami-triangle').fall).toBeNull();
+  });
+
+  it('shares the Hollywood High rail slip and clears it on a gap or ledge', () => {
+    const state = stateFromSearch('?grind=crooked-grind&in=360-flip&set=hollywood-high&fall=rail-slip-off');
+    expect(state.fall).toBe('rail-slip-off');
+    expect(stateFromSearch(searchFromState(state))).toEqual(state);
+    expect(timelineFor(state, undefined).phases.map(p => p.label)).toEqual(['Set up', 'Pop', 'Trick in', 'Lock', 'Slip off', 'Down']);
+    expect(withMode(state, 'flatground').fall).toBeNull();
+    expect(withSet(state, 'miami-triangle').fall).toBeNull();
+    expect(outcomeOptions('grinds', 'miami-triangle').some(o => o.fall === state.fall)).toBe(false);
+  });
+
+  it('shares a Hollywood 16 wash out and clears it on the rail or flat', () => {
+    const state = stateFromSearch('?trick=backside-180&set=hollywood-high&fall=washout');
+    expect(state).toMatchObject({ mode: 'flatground', trick: 'Backside 180', fall: 'washout', obstacle: 'stairs' });
+    expect(stateFromSearch(searchFromState(state))).toEqual(state);
+    expect(stageOutcome(outcomeOf(state))).toMatchObject({ landed: false, fallVariant: 'washout' });
+    expect(timelineFor(state, undefined).phases.map(p => p.label)).toEqual(['Set up', 'Pop', 'Peak', 'Catch', 'Wash out']);
+    expect(outcomeOptions('flatground', state.set).map(o => o.label)).toContain('Wash out');
+    const rail = dreamSpot(state.set).lines.find(line => line.mode === 'grinds')!;
+    for (const invalid of [withDreamLine(state, rail), withSet(state, 'plaza'),
+      stateFromSearch('?trick=backside-180&set=waterfront&fall=washout'),
+      stateFromSearch('?grind=50-50-grind&set=hollywood-high&fall=washout')]) {
+      expect(invalid.fall).toBeNull();
+      expect(outcomeOptions(invalid.mode, invalid.set).map(o => o.fall)).not.toContain('washout');
+      expect(searchFromState(invalid)).not.toContain('fall=');
+    }
   });
 
   it('round-trips a flatground kick-out through the link as it did', () => {
@@ -35,14 +71,19 @@ describe('outcome', () => {
     expect(state).toMatchObject({ mode: 'flatground', fall: 'slipback' });
     expect(stateFromSearch(searchFromState(state))).toEqual(state);
     expect(stageOutcome('slipback')).toEqual({ landed: false, fallVariant: 'slipback', railBail: undefined });
-    // A grind doesn't slip back.
-    expect(stateFromSearch('?grind=50-50-grind&set=el-toro&fall=slipback').fall).toBeNull();
     for (const set of ['el-toro', 'plaza'] as const) {
       const slipped = withSet(state, set);
       const landed = { ...slipped, fall: null };
       expect(timelineFor(slipped, undefined).duration).toBeGreaterThan(timelineFor(landed, undefined).duration + 0.5);
       expect(timelineFor(slipped, undefined).phases.map((p) => p.label)).toContain('Slip');
     }
+  });
+
+  it('shares the Hollywood High crooked grind with its flip-in, camera and slip on landing', () => {
+    const state = stateFromSearch('?grind=crooked-grind&in=360-flip&cam=-15.8_11.2_1&zoom=0.9&set=hollywood-high&fall=slipback');
+    expect(state.fall).toBe('slipback');
+    expect(stateFromSearch(searchFromState(state))).toEqual(state);
+    expect(timelineFor(state, undefined).phases.map(p => p.label)).toEqual(['Set up', 'Pop', 'Trick in', 'Lock', 'Pop off', 'Slip']);
   });
 
   it.each([['jump-forward', 'forward'], ['jump-side', 'side']] as const)('round-trips a grind jumped off (%s) through the link', (fall, bail) => {

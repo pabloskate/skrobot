@@ -25,10 +25,12 @@ import { ANKLE_HEIGHT } from './body';
  * how long the attempt runs without solving anyone's body.
  */
 
-export type RailBail = 'forward' | 'side';
+export type RailBail = 'forward' | 'side' | 'stick' | 'slip-off';
 
 export const RAIL_BAIL_OPTIONS: ReadonlyArray<{ id: RailBail; label: string }> = [
+  { id: 'slip-off', label: 'Slip off' },
   { id: 'forward', label: 'Jump forward' },
+  { id: 'stick', label: 'Stick' },
   { id: 'side', label: 'Jump aside' },
 ];
 
@@ -170,13 +172,25 @@ function levelRoom(plan: GrindPlan, along: number, across: number): boolean {
  */
 export function planRailBail(plan: GrindPlan, bail: RailBail): RailBailPlan {
   const grindT = plan.off - plan.lockAt;
+  if (bail === 'stick') {
+    const at = plan.lockAt + grindT * 0.56;
+    const down = landingFrom(plan, at, 0, 0, 0).t;
+    return { bail, at, jump: { up: 0, along: 0, out: 0 }, side: sideOf(plan), down, end: at + RAIL_BAIL_T };
+  }
+  if (bail === 'slip-off') {
+    // Lose the lock in mid-grind. The hips carry on downhill and tip toward the approach side.
+    const at = plan.lockAt + grindT * 0.58;
+    const drift = { up: 0, along: 0, out: 4 * FOOT };
+    const down = landingFrom(plan, at, drift.along, drift.up, drift.out).t;
+    return { bail, at, jump: drift, side: sideOf(plan), down, end: at + RAIL_BAIL_T };
+  }
   const first = plan.lockAt + Math.max(LOCKED_LEAST, LOCKED_SHARE * grindT);
   const last = Math.max(first, plan.off - BEFORE_OFF);
   const throwOf = JUMP[bail];
   const fits = (at: number) => {
     const land = landingFrom(plan, at, throwOf.along, throwOf.up, throwOf.out);
     if (!levelRoom(plan, land.along, land.across)) return null;
-    if (bail === 'forward' && (land.along < railEnd(plan) + PAST_END || !overEnd(plan, at, throwOf.along, throwOf.up))) return null;
+    if (bail !== 'side' && (land.along < railEnd(plan) + PAST_END || !overEnd(plan, at, throwOf.along, throwOf.up))) return null;
     return land;
   };
   let at = last;
@@ -212,7 +226,7 @@ export function railBailTimelineFor(
   rail: Handrail | null = null,
 ): RailBailTimeline | null {
   const spec = grindSpecFor(trick, { ledge: rail?.ledge != null });
-  if (!spec) return null;
+  if (!spec || ((bail === 'slip-off' || bail === 'stick') && rail?.ledge)) return null;
   // Planned as the stage plans it: the grind ridden as landed up to the jump.
   const plan = planGrind(spec, resolveRiderMechanics(riderStance, trick.stance), resolveSkateStyle(style), true, 'kickout', rail);
   const jump = planRailBail(plan, bail);
