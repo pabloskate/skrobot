@@ -6,7 +6,7 @@ import { Bake, celShade, DAYLIGHT, daylight, daylightIrradiance, NO_INK } from '
 import { rgb, SUN } from '../three/materials';
 import { ClassicSpot3D, type ClassicSpotConfig } from './classicSpot3d';
 import { spotPropMaterial } from './spotMaterials';
-import { canopiesFromTrees, lookSurfaceTest, MAX_CANOPIES, MAX_CONTACTS, resolveLook, stairContacts, SURFACE, surfaceInk, surfacesGlsl, WALL, wallQuad, wallVertex, type SpotLook } from './surfaces';
+import { canopiesFromTrees, lookSurfaceTest, MAX_CANOPIES, MAX_CONTACTS, resolveLook, scrubPaint, stairContacts, SURFACE, surfaceInk, surfacesGlsl, WALL, wallQuad, wallVertex, type SpotLook } from './surfaces';
 import { SET_FOOT } from './setScale';
 
 const UP: Vec3 = [0, 1, 0];
@@ -102,9 +102,9 @@ describe('look helpers', () => {
 
   it('adds brick, asphalt and sash after lockers', () => {
     expect(SURFACE).toMatchObject({ lockers: 22, brick: 23, asphalt: 24, sash: 25 });
-    expect(Math.max(...Object.values(SURFACE))).toBe(SURFACE.pavers);
+    expect(Math.max(...Object.values(SURFACE))).toBe(SURFACE.scrub);
     // Each decodes from a baked face as the shader does.
-    for (const solid of [SURFACE.brick, SURFACE.asphalt, SURFACE.sash]) {
+    for (const solid of [SURFACE.brick, SURFACE.asphalt, SURFACE.sash, SURFACE.pavers, SURFACE.scrub]) {
       const bake = new Bake();
       bake.quad([0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1], UP, { color: '#808080' }, { ...surfaceInk('concrete'), kind: 3, solid });
       expect(Math.floor((bake.geometry().getAttribute('aInfo').getW(0) * 255) / 4 + 0.01)).toBe(solid);
@@ -260,6 +260,39 @@ describe('the realistic look is opt in', () => {
     const along = PAVERS.joint / (PAVERS.size + PAVERS.joint), share = along + (1 - along) * along;
     for (let i = 0; i < 3; i++) expect((1 - share) * paver[i] + share * sand[i]).toBeCloseTo(1, 3);
     expect(sand.every((m) => m > 1)).toBe(true);
+  });
+
+  it('compiles scrub only for a spot whose look sets it, tested first, reading its shares back out of the paint', () => {
+    const SCRUB = { grass: '#bea164', brush: '#4b5636', dirt: '#bbb39d', size: 2.6 };
+    const PAVERS = { size: 0.7, joint: 0.02, jointColor: '#cdbba7', paint: '#b98a72' };
+    expect(SURFACE.scrub).toBe(27);
+    // Every other spot's shaders stay exactly as they were.
+    for (const look of [{}, { pavers: PAVERS }, { brick: BRICK, asphalt: ASPHALT, walls: { bare: '#a7a69c' } }]) {
+      expect(surfacesGlsl(resolveLook({ ...look, scrub: undefined }))).toBe(surfacesGlsl(resolveLook(look)));
+      expect(surfacesGlsl(resolveLook(look))).not.toContain('lookScrub');
+    }
+    expect(lookSurfaceTest(resolveLook({ scrub: SCRUB }))).toBe('surface > 13.5 && surface < 21.5 || abs(surface - 27.0) < 0.5');
+    const glsl = surfacesGlsl(resolveLook({ scrub: SCRUB, pavers: PAVERS }));
+    const body = glsl.slice(glsl.indexOf('vec3 lookSurface('));
+    // Its solid is the last, so it's tested before pavers, which would take it; like turf it's projected from above.
+    expect(body).toContain('return lookScrub(c, local.xz, n);');
+    expect(body.indexOf('return lookScrub(')).toBeLessThan(body.indexOf('return lookPavers('));
+    // The paint carries the shares of brush and dirt, and the shader's inverse reads them back.
+    const [coverRow, bareRow] = [...glsl.matchAll(/dot\(paint, vec3\(([^)]*)\)\)/g)].map((m) => m[1].split(',').map(Number));
+    const vec = (name: string) => (name === 'cover' ? coverRow : bareRow);
+    const grass = rgb(SCRUB.grass);
+    for (const [cover, bare] of [[0, 0], [0.75, 0.2], [0.3, 0.5], [0, 1], [0.1, 0.05]]) {
+      const paint = rgb(scrubPaint(SCRUB, cover, bare)).map((v, i) => v - grass[i]);
+      const read = (w: number[]) => w.reduce((sum, v, i) => sum + v * paint[i], 0);
+      expect(read(vec('cover'))).toBeCloseTo(cover, 1);
+      expect(read(vec('bare'))).toBeCloseTo(bare, 1);
+    }
+    // No more dirt than the open ground holds.
+    expect(scrubPaint(SCRUB, 0.8, 0.8)).toBe(scrubPaint(SCRUB, 0.8, 0.2));
+    // Compiled in as constants: no uniforms of its own.
+    const plain = materials(new ClassicSpot3D(spotConfig({ propShadows: true })));
+    const scrubbed = materials(new ClassicSpot3D(spotConfig({ propShadows: true, scrub: SCRUB })));
+    scrubbed.forEach((m, i) => expect(fragmentVectors(m.fragmentShader)).toBe(fragmentVectors(plain[i].fragmentShader)));
   });
 
   it('compiles wall wear only for a spot whose look sets it, leaving every other spot\'s shaders as they were', () => {

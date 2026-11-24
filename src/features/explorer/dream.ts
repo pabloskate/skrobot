@@ -94,9 +94,11 @@ export function withDreamLine(state: ExplorerState, line: DreamLine): ExplorerSt
 
 /** Go to another spot, starting on its first line. */
 export function withDreamSpot(state: ExplorerState, set: StageSet): ExplorerState {
+  // Still on the shot the last spot opened on: this one opens on its own.
+  const reopen = state.camera === openingShot(state.set) && state.camera !== openingShot(set) && setInfo(set).tripods.length > 0;
   const moved = withSet(state, set);
   if (set === 'waterfront') moved.rail = 'center';
-  return withDreamLine(withDreamCamera(moved), dreamSpot(set).lines[0]);
+  return withDreamLine(withDreamCamera(reopen ? withShot(moved, openingShot(set)) : moved), dreamSpot(set).lines[0]);
 }
 
 /** The end a trick out of this grind pops off: the tail where it's on the bar, as most are. */
@@ -110,10 +112,16 @@ export function withDreamGrind(state: ExplorerState, grind: string): ExplorerSta
 /** Landmarks open from the bottom tripod. The waterfront opens facing the harbor. */
 const CLASSIC_SHOT: CameraPresetId = 'tripod-bottom';
 
+/** The shot a visit to this spot opens on: the bottom tripod, or the filmer the spot names. */
+const openingShot = (set: StageSet): CameraPresetId => `tripod-${setInfo(set).opens ?? 'bottom'}`;
+
 function withDreamCamera(state: ExplorerState): ExplorerState {
   if (typeof state.camera !== 'string') return state;
   const hasTripods = setInfo(state.set).tripods.length > 0;
-  if (hasTripods && state.camera === 'classic') return { ...state, camera: CLASSIC_SHOT, zoom: CLASSIC_SHOT_ZOOM };
+  if (hasTripods && state.camera === 'classic') {
+    const shot = openingShot(state.set);
+    return { ...state, camera: shot, zoom: cameraPreset(shot).zoom ?? 1 };
+  }
   if (!hasTripods && cameraPreset(state.camera).tripod) return withShot(state, 'classic');
   return state;
 }

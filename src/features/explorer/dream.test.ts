@@ -28,7 +28,7 @@ import {
 
 describe('Dream Tricks', () => {
   it('offers the landmarks and waterfront, each with its skateable lines', () => {
-    expect(DREAM_SPOTS.map((spot) => spot.id)).toEqual(['el-toro', 'hollywood-high', 'carlsbad-gap', 'wallenberg', 'sunset-car-wash', 'lyon-25', 'leap-of-faith', 'miami-triangle', 'uc-davis-gap', 'emage-20', 'waterfront']);
+    expect(DREAM_SPOTS.map((spot) => spot.id)).toEqual(['el-toro', 'hollywood-high', 'carlsbad-gap', 'wallenberg', 'sunset-car-wash', 'lyon-25', 'leap-of-faith', 'miami-triangle', 'uc-davis-gap', 'emage-20', 'water-tower-gap', 'waterfront']);
     for (const spot of DREAM_SPOTS) {
       const info = setInfo(spot.id);
       expect(info.terrain === null, spot.id).toBe(spot.id === 'waterfront');
@@ -224,6 +224,22 @@ describe('Dream Tricks', () => {
     expect(dreamStateFromSearch('?trick=kickflip&cam=follow').camera).toBe('follow');
   });
 
+  it('opens the water tower gap from the hillside, where the whole line shows, and other spots from the bottom', () => {
+    // From down in the slot the roofs hide everything but the air, so a visit opens on the video's angle.
+    const arrived = withDreamSpot(DREAM_DEFAULT, 'water-tower-gap');
+    expect(arrived.camera).toBe('tripod-side');
+    expect(withDreamSpot(arrived, 'el-toro').camera).toBe('tripod-bottom');
+    expect(dreamStateFromSearch('?trick=kickflip&set=water-tower-gap').camera).toBe('tripod-side');
+    expect(dreamStateFromSearch('?trick=kickflip&set=water-tower-gap&cam=classic').camera).toBe('tripod-side');
+    // A shot the viewer chose goes with them, here and away again.
+    expect(dreamStateFromSearch('?trick=kickflip&set=water-tower-gap&cam=tripod-bottom').camera).toBe('tripod-bottom');
+    expect(withDreamSpot({ ...DREAM_DEFAULT, camera: 'tripod-top' }, 'water-tower-gap').camera).toBe('tripod-top');
+    expect(withDreamSpot({ ...arrived, camera: 'follow' }, 'el-toro').camera).toBe('follow');
+    // Between spots that open alike, nothing about the shot is reset.
+    const zoomed = { ...DREAM_DEFAULT, zoom: 1.4 };
+    expect(withDreamSpot(zoomed, 'hollywood-high').zoom).toBe(1.4);
+  });
+
   it('keeps the filmer-at-the-bottom framing instead of the explorer\'s classic pull-back', () => {
     expect(DREAM_DEFAULT.zoom).toBe(1);
     expect(dreamStateFromSearch('').zoom).toBe(1);
@@ -260,7 +276,8 @@ describe('Dream Tricks', () => {
 
     it('starts a dragged tripod from where the spot\'s own filmer stands', () => {
       for (const spot of DREAM_SPOTS.filter((spot) => spot.id !== 'waterfront')) {
-        const own = spotStands(spot.id, { obstacle: 'stairs' })!.bottom;
+        // The filmer the visit opens on: the bottom one, or the spot's own choice.
+        const own = spotStands(spot.id, { obstacle: 'stairs' })![setInfo(spot.id).opens ?? 'bottom'];
         const from = presetStand(withDreamSpot(DREAM_DEFAULT, spot.id), () => own.y - 4 * FOOT);
         expect(from, spot.id).toMatchObject({ u: own.u, z: own.z, frame: own.frame });
         expect(from!.height, spot.id).toBeCloseTo(4 * FOOT, 6);

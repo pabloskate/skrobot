@@ -10,6 +10,7 @@ import { Miami3D } from '../sets/miami/miami3d';
 import { UcDavis3D } from '../sets/ucDavis/ucDavis3d';
 import { Carlsbad3D } from '../sets/carlsbad/carlsbad3d';
 import { Emage3D } from '../sets/emage/emage3d';
+import { WaterTower3D } from '../sets/waterTower/waterTower3d';
 import { Plaza3D } from '../sets/plaza3d';
 import { Waterfront3D } from '../sets/waterfront/waterfront3d';
 
@@ -28,4 +29,5 @@ export const SET_PIECES: Record<StageSet, () => SetPiece> = {
   'uc-davis-gap': () => new UcDavis3D(),
   'carlsbad-gap': () => new Carlsbad3D(),
   'emage-20': () => new Emage3D(),
+  'water-tower-gap': () => new WaterTower3D(),
 };

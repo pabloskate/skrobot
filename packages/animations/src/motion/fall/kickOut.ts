@@ -148,6 +148,8 @@ const LEVEL_TIE = 0.25;
 
 /** The least a rolling knee's middle keeps over the ground (world units). */
 const KNEE_OVER_GROUND = 0.5;
+/** The most a knee's bend is turned up to keep it out of the ground (in legs, added to it straight up). */
+const KNEE_UP_MOST = 2;
 
 /** How long the legs take to throw the body off a rail (seconds): a jump's push. */
 export const JUMP_T = 0.16;
@@ -1408,12 +1410,15 @@ function rollingAt(plan: KickOutPlan, roll: Roll, t: number): KickOutFrame {
   const board = boardRigOf(boardPose);
   const rig = rigOf(pose, body, board, plan.toeDir, 1);
   for (const legRig of rig.legs) {
-    // A knee the solve would put into the ground (coming over fast, folded) is turned up out of it, its foot and hip kept.
+    // A knee the solve would put into the ground (coming over fast, folded) is turned up out of it, its foot and hip kept:
+    // by the least that clears it, so it's turned up smoothly as the ground comes to it (turned in quarter legs, it jumped).
     const pole = sub3(legRig.knee, legRig.hip);
-    legRig.knee = twoBone(legRig.hip, legRig.ankle, body.thigh, body.shin, pole);
-    for (let n = 1; n <= 8 && setup.ground(legRig.knee.x, legRig.knee.z) - legRig.knee.y < KNEE_OVER_GROUND; n++) {
-      legRig.knee = twoBone(legRig.hip, legRig.ankle, body.thigh, body.shin, add3(pole, scale3(UP, n * 0.25 * leg)));
-    }
+    const kneeAt = (up: number) => twoBone(legRig.hip, legRig.ankle, body.thigh, body.shin, add3(pole, scale3(UP, up * leg)));
+    const clears = (up: number) => {
+      const knee = kneeAt(up);
+      return setup.ground(knee.x, knee.z) - knee.y >= KNEE_OVER_GROUND;
+    };
+    legRig.knee = kneeAt(clears(0) || !clears(KNEE_UP_MOST) ? (clears(0) ? 0 : KNEE_UP_MOST) : bisect(0, KNEE_UP_MOST, 14, clears).hi);
   }
   // The eyes go from the ground ahead, coming down, to where the face points as the head tucks.
   const ahead = add3(pose.hips, scale3(roll.travel, 1.6 * leg));
