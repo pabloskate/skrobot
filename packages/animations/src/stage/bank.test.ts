@@ -9,6 +9,7 @@ import type { RiderStance, Stance } from '../types';
 import { sub3, type V3 } from '../math';
 import { solePenetration } from '../board/footContact';
 import { sweep, sweepHz } from '../testing';
+import type { BankRide } from '../sets/terrain';
 import { planStage, stageFrame } from './stage';
 
 /** The bank landings: Sunset's roof to its bank, and Miami's gap onto the triangular bank, which rolls off a raised edge. */
@@ -127,5 +128,55 @@ describe('bank landing anatomy', () => {
     }
     expect(failures.slice(0, 12)).toEqual([]);
   });
+
+  it('preserves bone lengths, knee continuity, sole clearance, and shared board/ankles through bank manuals and nose manuals', () => {
+    const failures: string[] = [];
+    for (const bankRide of ['manual', 'nose-manual'] as BankRide[]) {
+      for (const riderStance of ['regular', 'goofy'] as RiderStance[]) {
+        for (const stance of ['regular', 'fakie', 'switch', 'nollie'] as Stance[]) {
+          for (const base of sweep(TRICK_BASES)) {
+            const trick = { id: base, name: base, base, stance };
+            const baseOptions = {
+              set: 'miami-triangle' as StageSet,
+              bankRide,
+              riderStance,
+              landed: true,
+              style: resolveSkateStyle(),
+              fall: 'slam' as const,
+              shankProgress: 0.65,
+            };
+            const robot = planStage(trick, { ...baseOptions, skater: 'robot' });
+            const human = planStage(trick, { ...baseOptions, skater: 'realistic' });
+            const start = robot.stairs!.land - 0.16;
+            for (let t = start; t <= robot.end; t += 1 / sweepHz(45)) {
+              const rFrame = stageFrame(robot, t, 1).rig;
+              const hFrame = stageFrame(human, t, 1).rig;
+              const context = `${bankRide}/${riderStance}/${stance}/${base} at ${t.toFixed(3)}`;
+              if (distance(rFrame.board.center, hFrame.board.center) > 1e-6) failures.push(`${context}: board differs`);
+              for (let i = 0; i < 2; i++) {
+                const rl = rFrame.legs[i], hl = hFrame.legs[i];
+                if (distance(rl.ankle, hl.ankle) > 1e-6) failures.push(`${context}: ankle differs`);
+                const rErr = Math.max(Math.abs(distance(rl.hip, rl.knee) - THIGH), Math.abs(distance(rl.knee, rl.ankle) - SHIN));
+                const hErr = Math.max(Math.abs(distance(hl.hip, hl.knee) - HUMAN_THIGH), Math.abs(distance(hl.knee, hl.ankle) - HUMAN_SHIN));
+                if (rErr > 1e-5) failures.push(`${context} robot leg ${rl.side}: ${rErr.toFixed(4)}`);
+                if (hErr > 1e-5) failures.push(`${context} human leg ${hl.side}: ${hErr.toFixed(4)}`);
+                if (solePenetration(rFrame, rl) > 1e-5) failures.push(`${context} robot sole ${rl.side}`);
+                if (solePenetration(hFrame, hl) > 1e-5) failures.push(`${context} human sole ${hl.side}`);
+              }
+              if (t >= robot.stairs!.land) {
+                const before = stageFrame(human, t - 1e-5, 1).rig;
+                const after = stageFrame(human, t + 1e-5, 1).rig;
+                for (let i = 0; i < 2; i++) {
+                  const move = distance(before.legs[i].knee, after.legs[i].knee);
+                  if (move > 0.05) failures.push(`${context} knee jump ${move.toFixed(3)}`);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    expect(failures.slice(0, 12)).toEqual([]);
+  }, 120_000);
 
 });

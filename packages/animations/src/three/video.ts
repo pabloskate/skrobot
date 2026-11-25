@@ -14,6 +14,7 @@ import type { RailBail } from '../motion/fall/railBail';
 import { resolveSkateStyle } from '../motion/style';
 import { DEFAULT_SCENE_CAMERA, type SceneCamera, type TripodId } from '../camera/camera';
 import type { Obstacle, RailChoice, StageSet } from '../sets/sets';
+import type { BankRide } from '../sets/terrain';
 import type { Skater } from '../riders/skaters';
 import { SceneRenderer } from './renderer';
 import type { RenderQuality } from './cinematic';
@@ -56,6 +57,8 @@ export interface TrickVideoOptions {
   rail?: RailChoice;
   /** What a gap trick goes over where the set has a choice, as on the live stage. */
   obstacle?: Obstacle;
+  /** On a bank that supports it, whether the landing is ridden on four wheels, manual, or nose manual. */
+  bankRide?: BankRide;
   /** The same robot or realistic human selected in the live scene. */
   skater?: Skater;
   /** Playback speed: at 0.25 the trick fills four times as long a video. */
@@ -113,6 +116,7 @@ export async function recordTrickVideo({
   skater = 'robot',
   rail = 'center',
   obstacle = 'stairs',
+  bankRide = 'ride',
   rate = 1,
   quality = 'standard',
   width: requestedWidth = quality === 'cinematic' ? 1920 : 1280,
@@ -139,7 +143,7 @@ export async function recordTrickVideo({
   const ctx = film.getContext('2d');
   if (!ctx) throw new VideoUnsupportedError();
   const style = resolveSkateStyle(robot.skateStyle);
-  const stage = planStage(trick, { landed, riderStance, style, fall: fallVariant, shankProgress: 0.5, skater, set, rail, obstacle, railBail });
+  const stage = planStage(trick, { landed, riderStance, style, fall: fallVariant, shankProgress: 0.5, skater, set, rail, obstacle, bankRide, railBail });
   const glCanvas = document.createElement('canvas');
   const scene = new SceneRenderer(glCanvas, lookFor(robot, skater), set, quality);
   scene.setSize(width, height, quality === 'cinematic' ? Math.min(1.5, 2560 / width) : 1);
@@ -195,9 +199,9 @@ export async function recordTrickVideo({
 /** Same moment, camera and rig in both export finishes. No encoder or live-stage changes. */
 export async function renderTrickPreview(options: TrickVideoOptions): Promise<{ standard: string; cinematic: string }> {
   const { robot, trick, skater = 'robot', set = 'plaza', riderStance = 'regular', landed = true, fallVariant = 'slam', railBail,
-    rail = 'center', obstacle = 'stairs', camera = DEFAULT_SCENE_CAMERA, zoom = 1, tripod = null, signal } = options;
+    rail = 'center', obstacle = 'stairs', bankRide = 'ride', camera = DEFAULT_SCENE_CAMERA, zoom = 1, tripod = null, signal } = options;
   const stage = planStage(trick, { landed, riderStance, style: resolveSkateStyle(robot.skateStyle),
-    fall: fallVariant, shankProgress: 0.5, skater, set, rail, obstacle, railBail });
+    fall: fallVariant, shankProgress: 0.5, skater, set, rail, obstacle, bankRide, railBail });
   const previewTime = stage.grind ? (stage.grind.lockAt + stage.grind.off) / 2 : stage.end * 0.45;
   const frame = stageFrame(stage, previewTime, options.rate ?? 1);
   const width = 960;

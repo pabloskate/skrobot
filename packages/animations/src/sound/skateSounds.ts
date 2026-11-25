@@ -6,7 +6,8 @@ import { cuesBetween, type SoundCue, type Soundtrack } from './soundtrack';
  * there is nothing to load and every hit comes out a little different: the
  * tail's crack and the deck's wooden knock at the pop, the trucks clanking
  * onto the rail and scraping along it (a smoother hiss for a slide, the deck
- * on the rail), the thump and clack of the wheels coming down, a board
+ * on the rail), the thump and clack of the wheels coming down (again where
+ * a bank's raised edge drops them onto the ground past it), a board
  * clattering away from a slam, and the low rumble of the wheels in between.
  * Where the app serves recordings of the wheels and the rail
  * (TRICK_SOUND_FILES), those play instead of their synthesized stand-ins.
@@ -356,13 +357,13 @@ function playCue(ctx: BaseAudioContext, out: AudioNode, cue: SoundCue, when: num
       knock(ctx, out, when, { from: hz(600 * v), to: hz(300 * v), drop: s(0.03), gain: 0.14, decay: s(0.06), type: 'triangle' });
       break;
     case 'land': {
-      // The wheels clacking down — the back pair a beat after the front — the
-      // deck's slap, the thump of the rider's weight (deeper off a drop), and
-      // the trucks' hardware rattling.
+      // The wheels clacking down — the back pair a beat after the front,
+      // unless it's a manual's one truck — the deck's slap, the thump of the
+      // rider's weight (deeper off a drop), and the trucks' hardware rattling.
       const w = cue.weight;
       const strike = Math.sqrt(w);
       hiss(ctx, out, when, { band: hz(1500 * v), q: 1.1, gain: 1.4 * strike, decay: s(0.09) });
-      hiss(ctx, out, when + s(0.02), { band: hz(1250 * v), q: 1.1, gain: 0.9 * strike, decay: s(0.08) });
+      if (!cue.oneTruck) hiss(ctx, out, when + s(0.02), { band: hz(1250 * v), q: 1.1, gain: 0.9 * strike, decay: s(0.08) });
       knock(ctx, out, when, { from: hz(300 * v), to: hz(140 * v), drop: s(0.04), gain: 0.28 * strike, decay: s(0.11), type: 'triangle' });
       knock(ctx, out, when, { from: hz(130), to: hz(55), drop: s(0.08), gain: 0.16 * w, decay: s(0.12 + 0.08 * w) });
       hiss(ctx, out, when + s(0.008), { band: hz(3600), q: 7, gain: 0.35 * strike, decay: s(0.14) });

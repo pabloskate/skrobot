@@ -4,7 +4,8 @@ import { resolveSkateStyle } from '../motion/style';
 import type { Robot, Trick } from '../types';
 import { GRIND_BASES } from '../motion/grindDefinitions';
 import type { StageSet } from '../sets/sets';
-import { cuesBetween, soundtrackFor, type Soundtrack } from './soundtrack';
+import type { BankRide } from '../sets/terrain';
+import { cuesBetween, soundtrackFor, type SoundCue, type Soundtrack } from './soundtrack';
 import { planStage, type StagePlan } from '../stage/stage';
 
 /**
@@ -20,7 +21,7 @@ const robot: Robot = {
   skateStyle: { popHeight: 0.92, rotationSpeed: 1.08, flickStrength: 0.95 },
 };
 const trick = (base: string): Trick => ({ id: base, name: base, base, stance: 'regular' });
-const plan = (base: string, { landed = true, fall = 'slam' as FallVariant, set = 'plaza' as StageSet } = {}): StagePlan =>
+const plan = (base: string, { landed = true, fall = 'slam' as FallVariant, set = 'plaza' as StageSet, bankRide = 'ride' as BankRide } = {}): StagePlan =>
   planStage(trick(base), {
     landed,
     riderStance: 'regular',
@@ -28,6 +29,7 @@ const plan = (base: string, { landed = true, fall = 'slam' as FallVariant, set =
     fall,
     shankProgress: 0.65,
     set,
+    bankRide,
   });
 const kinds = (track: Soundtrack) => track.cues.map((cue) => cue.kind);
 const sample = (stage: StagePlan, level: (t: number) => number) => {
@@ -88,6 +90,35 @@ describe('soundtrackFor', () => {
     expect(weight(plan('Kickflip', { set: 'el-toro' }))).toBeGreaterThan(weight(plan('Kickflip')));
     const stairs = plan('Kickflip', { set: 'el-toro' }).stairs!;
     expect(soundtrackFor(plan('Kickflip', { set: 'el-toro' })).cues.map((cue) => cue.at)).toEqual([stairs.pop, stairs.land]);
+  });
+
+  it('touches down twice at Triangle Bank: lightly on the bank, then harder on the plaza off its raised edge', () => {
+    for (const bankRide of ['ride', 'manual', 'nose-manual'] as const) {
+      const stage = plan('Kickflip', { set: 'miami-triangle', bankRide });
+      const stairs = stage.stairs!;
+      const [floor] = stairs.ledges;
+      const track = soundtrackFor(stage);
+      expect(track.cues.map(({ kind, at }) => [kind, at])).toEqual([['pop', stairs.pop], ['land', stairs.land], ['land', floor.t]]);
+      const [, onBank, onFloor] = track.cues as Array<Extract<SoundCue, { kind: 'land' }>>;
+      // The bank falls away under the rider and takes less of the fall than flat ground; the plaza takes all of its drop.
+      expect(onBank.weight).toBeLessThan(1);
+      expect(onFloor.weight).toBeGreaterThan(1);
+      // A manual comes down on one truck, and all four meet the plaza.
+      expect(onBank.oneTruck ?? false).toBe(bankRide !== 'ride');
+      expect(onFloor.oneTruck).toBeUndefined();
+      // Wheels roll down the bank (quieter on a manual's two), fall silent off its edge, and roll away on the plaza.
+      for (const { t, v } of sample(stage, track.roll)) {
+        if (t < stairs.pop || t >= floor.t) expect(v).toBe(1);
+        else if (t < stairs.land || t >= stairs.lip!) expect(v).toBe(0);
+        else if (bankRide === 'ride') expect(v).toBe(1);
+        else {
+          expect(v).toBeGreaterThan(0);
+          expect(v).toBeLessThan(1);
+        }
+      }
+    }
+    // A fall onto the bank is one crash.
+    expect(kinds(soundtrackFor(plan('Kickflip', { set: 'miami-triangle', landed: false })))).toEqual(['pop', 'crash']);
   });
 
   it('slides wood on metal when the deck rides the rail, grinds metal on metal when the trucks do', () => {

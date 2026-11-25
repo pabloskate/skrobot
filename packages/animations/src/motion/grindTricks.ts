@@ -1,6 +1,6 @@
 import type { SkateStyle, Stance } from '../types';
 import { flickExtension, orientTrickRotation, type RiderMechanics } from './stance';
-import { ROLL_IN, catchFraction, computeFrame, flightTime, specFor, type Frame, type Spec } from './trick';
+import { ROLL_IN, catchFraction, computeFrame, flicks, flightTime, specFor, type Frame, type Spec } from './trick';
 import { solveRig, tiltAxis, wrapLetGo, wrapScoop } from './rig';
 import { SHOE_TOESIDE, type Rig } from './skeleton';
 import { add3, rotX, rotY, rotZ, smoothstep, sub3, turnAbout, type V3 } from '../math';
@@ -383,7 +383,7 @@ export function hopFrame(hop: HopPlan, t: number, onRail: number | null = null):
     // Flatground snaps the foot out with the pop; the hop is over in half the
     // time and the legs are already folded around it, so the flick eases out
     // over the first quarter of the spin instead.
-    flickOut: hop.trick.spec.flipDir ? flickExtension(rotation) * smoothstep(rotation / 0.25) : 0,
+    flickOut: flicks(hop.trick.spec) ? flickExtension(rotation) * smoothstep(rotation / 0.25) : 0,
   };
 }
 

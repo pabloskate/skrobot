@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FOOT, setInfo, specFor, spotStands } from '@skrobot/animations';
-import { outEndsFor, sceneCamera, sceneTripod, stageTrick, withCamera, withShot, FLATGROUND_TIERS, GRIND_CHOICES } from './explorer';
+import { outEndsFor, picksBankRide, sceneCamera, sceneTripod, stageTrick, withCamera, withShot, FLATGROUND_TIERS, GRIND_CHOICES } from './explorer';
 import {
   DREAM_DEFAULT,
   DREAM_SPOTS,
@@ -102,6 +102,30 @@ describe('Dream Tricks', () => {
     expect(triangle).toMatchObject({ mode: 'flatground', obstacle: 'triangle', trick: 'Kickflip' });
     expect(dreamLine(triangle).label).toBe('Over the triangle');
     expect(dreamLine(withDreamSpot(triangle, 'miami-triangle')).label).toBe('Gap to bank');
+  });
+
+  it('offers ride, manual, and nose manual on Triangle Bank’s gap to bank, shares them, and clears them on other lines', () => {
+    const gapToBank = withDreamSpot(DREAM_DEFAULT, 'miami-triangle');
+    expect(picksBankRide(gapToBank)).toBe(true);
+    expect(gapToBank.bankRide).toBe('ride');
+    for (const [bankRide, suffix] of [['manual', 'Manual'], ['nose-manual', 'Nose Manual']] as const) {
+      const next = { ...gapToBank, trick: 'Backside 360', bankRide };
+      expect(stageTrick(next).name).toBe(`Backside 360 to ${suffix}`);
+      expect(stageTrick(next).base).toBe('Backside 360');
+      const search = dreamSearchFromState(next);
+      expect(new URLSearchParams(search).get('bank')).toBe(bankRide);
+      expect(dreamStateFromSearch(search)).toEqual(next);
+      // Switching to Over the triangle, Down an edge, or another spot clears the bank manual.
+      const over = withDreamLine(next, dreamSpot('miami-triangle').lines[1]);
+      expect(picksBankRide(over)).toBe(false);
+      expect(over.bankRide).toBe('ride');
+      const edge = withDreamLine(next, dreamSpot('miami-triangle').lines[2]);
+      expect(picksBankRide(edge)).toBe(false);
+      expect(edge.bankRide).toBe('ride');
+      expect(withDreamSpot(next, 'el-toro').bankRide).toBe('ride');
+    }
+    expect(dreamStateFromSearch('?trick=kickflip&set=triangle-bank&obstacle=triangle&bank=manual').bankRide).toBe('ride');
+    expect(dreamStateFromSearch('?trick=kickflip&set=el-toro&bank=nose-manual').bankRide).toBe('ride');
   });
 
   it('keeps both Hollywood flights under one spot and switches between all five lines', () => {

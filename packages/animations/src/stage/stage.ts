@@ -15,8 +15,9 @@ import {
 } from '../motion/trick';
 import type { Skater } from '../riders/skaters';
 import { barShadowParts } from '../sets/bar';
-import { planStairs, type StairPlan } from './drop';
+import { dropStyle, planStairs, type StairPlan } from './drop';
 import { hasObstacle, ledgeFor, railLineFor, setGrindSpec, setHandrail, setInfo, setTerrain, type Obstacle, type RailChoice, type RailLine, type StageSet } from '../sets/sets';
+import type { BankRide } from '../sets/terrain';
 import { railFrame, stairFrame } from './downhill';
 import { attemptRig, isKickOut, kickOutFrame, kickOutPlan } from './kickOutFrame';
 import { railBailFrame, railSlipFrame } from './railBailFrame';
@@ -65,7 +66,10 @@ export interface StagePlan {
   stairs: StairPlan | null;
   /** What that gap trick goes over where the set has a choice (Hollywood's stairs or fence); null otherwise. */
   obstacle: Obstacle | null;
+  /** How a bank landing is ridden where the spot supports it: all four wheels, manual, or nose manual. */
+  bankRide: BankRide;
   mechanics: RiderMechanics;
+  /** The rider's style as it is ridden here: down a drop the board turns a little quicker (drop.ts dropStyle). */
   style: SkateStyle;
   landed: boolean;
   fall: FallVariant;
@@ -98,11 +102,13 @@ export function planStage(
     rail?: RailChoice;
     /** Where the set has several ways down: what a gap trick goes over (the stairs, or Hollywood's fence). */
     obstacle?: Obstacle;
+    /** On a bank that supports it (Triangle Bank): ride all four wheels, manual, or nose manual down the bank. */
+    bankRide?: BankRide;
     /** How a missed grind leaves the rail. Defaults to a forward jump. */
     railBail?: RailBail;
   },
 ): StagePlan {
-  const { riderStance, style, shankProgress, skater = 'robot', set = 'plaza', rail: choice = 'center', obstacle } = options;
+  const { riderStance, style, shankProgress, skater = 'robot', set = 'plaza', rail: choice = 'center', obstacle, bankRide = 'ride' } = options;
   const trickSpec = specFor(trick);
   const grindSpec = setGrindSpec(set, trick);
   const mechanics = resolveRiderMechanics(riderStance, trickSpec.stance);
@@ -126,9 +132,9 @@ export function planStage(
   const railBail = jumpsOff && grind ? planRailBail(grind, options.railBail ?? 'forward') : null;
   // A kick-out down a drop flies the landed attempt's arc up to its takeover; a slip back lands it.
   const kickOut = !landed && fall === 'kickout' && !grind;
-  const stairs = terrain && !grind ? planStairs(style, landed || kickOut || slipBack || washOut, terrain, trickSpec.stance, trick.base) : null;
-  // Down a drop a board turning under the rider is caught short of round, and the feet guide it the rest of the way.
-  const spec = stairs ? { ...trickSpec, guided: true } : trickSpec;
+  const stairs = terrain && !grind ? planStairs(style, landed || kickOut || slipBack || washOut, terrain, trickSpec.stance, trick.base, landed ? bankRide : 'ride') : null;
+  // A board turning under a square rider is caught short of round, and the feet guide it the rest of the way.
+  const spec = !grind ? { ...trickSpec, guided: true } : trickSpec;
   const over = stairs && setInfo(set).obstacles ? (obstacle && hasObstacle(set, obstacle) ? obstacle : 'stairs') : null;
   const hop = landed ? (grind ? grind.stepOff : stairs?.stepOff) ?? null : null;
   const stage: StagePlan = {
@@ -137,8 +143,10 @@ export function planStage(
     rail: ledge && line ? { line, z: ledge.z, x: ledge.x, yaw: ledge.yaw } : rails && line ? { line, z: rails.z[line] } : null,
     stairs,
     obstacle: over,
+    bankRide: stairs?.bankRide ?? 'ride',
     mechanics,
-    style,
+    // A kick-out keeps the even pace: its fall takes over just before the catch (kickOutFrame.ts), and is solved from there.
+    style: stairs && !kickOut ? dropStyle(stairs, style) : style,
     landed,
     fall,
     railBail,
@@ -173,7 +181,7 @@ export function stageFrame(stage: StagePlan, t: number, rate: number, headPose?:
 function frameAt(stage: StagePlan, t: number, rate: number, headPose?: HeadPose | null): StageFrame {
   // A kick-out is the landed attempt with its board off line up to the takeover, and its own from there.
   if (!stage.landed && stage.fall === 'washout' && stage.stairs) {
-    return washOutFrame(stage, stage.stairs, t, at => attemptAt(stage, ON_LINE, at, rate, headPose));
+    return washOutFrame(stage, stage.stairs, t, rate, at => attemptAt(stage, ON_LINE, at, rate, headPose));
   }
   if (stage.grind && !stage.landed && stage.fall === 'slipback') {
     return railSlipFrame(stage, t, rate, at => attemptAt(stage, null, at, rate, headPose));

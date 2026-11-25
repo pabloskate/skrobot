@@ -13,7 +13,8 @@ import { solveRig } from '../motion/rig';
 import { LAND_OMEGA, SQUAT_FLOOR, moveFrame, type LegRig, type Rig } from '../motion/skeleton';
 import { GROUND, X0, boardRise, computeFrame, flightTime } from '../motion/trick';
 import { bankRig } from './bank';
-import { landingImpact, landingJolt, rideHeight, stairClock, stairDeckHeight, stairTrack, carveLean, stairLift, type StairPlan } from './drop';
+import { manualRig, manualStance } from './manual';
+import { landingImpact, landingJolt, rideHeight, spinClock, stairClock, stairDeckHeight, stairTrack, carveLean, stairLift, type StairPlan } from './drop';
 import { terrainSurface } from '../sets/terrain';
 import { stageArms } from './armLift';
 import { dustPuffs, expressionAt, grindExpression, groundLift, grownBy, hipsOf, onTheGround, posed, riderShadows, DUST_T, SHADOW_HIPS, type Puff, type StageFrame } from './frameParts';
@@ -207,7 +208,7 @@ export interface StairRig {
 /**
  * The rider and board of a gap trick at clock `t`. The trick and the rider
  * are solved exactly as on flat ground, on the stairs' stretched clock
- * (stairClock), turned together for a backwards approach and onto the
+ * (stairClock; the trick's rotation on its even one, spinClock), turned together for a backwards approach and onto the
  * route's heading, then carried down the drop together; the street rolls at
  * the route's speed. `offLine` changes the
  * solved rider on the board before it's turned and carried down (a kick-out
@@ -224,7 +225,7 @@ export function stairRig(
 ): StairRig {
   const { spec, mechanics, style, fall, shankProgress } = stage;
   const clock = Math.max(0, Math.min(t, stage.end));
-  const at = (time: number) => computeFrame(stairClock(stairs, time), spec, landed, fall, shankProgress, style);
+  const at = (time: number) => computeFrame(stairClock(stairs, time), spec, landed, fall, shankProgress, style, false, spinClock(stairs, time));
   const f = at(clock);
   // Distance down the stairs (the lip at 0), and the street rolled by it.
   const track = (time: number) => stairTrack(stairs, time, time < 0 ? time : at(Math.min(time, stage.end)).streetDist);
@@ -245,17 +246,23 @@ export function stairRig(
     const along = dir * (p.x - X0);
     return ASPHALT - (ground(u + along * cos - p.z * sin, route.z + along * sin + p.z * cos) - drop);
   };
-  const flat = solveRig(f, spec, mechanics, style, landed ? 'landed' : fall, landingLoad(landingJolt(stairs), clock - stairs.land));
+  // A bank manual is balanced by the foot over its contact truck: the uphill one, or a nose manual's downhill one.
+  const noseAtDownhill = (spec.dir === 1) !== (Math.round(Math.abs(spec.bodyYaw) / 180) % 2 === 1);
+  const balance = (stairs.bankRide === 'nose-manual') === noseAtDownhill ? 'nose' : 'tail';
+  const stance = landed ? manualStance(stairs, clock, balance) : undefined;
+  const flat = solveRig(f, spec, mechanics, style, landed ? 'landed' : fall, landingLoad(landingJolt(stairs), clock - stairs.land), stance);
   const heading = spec.dir === -1 ? 180 : 0;
   const downhill = heading ? reverseHeading(flat) : flat;
   // Down a roll-in the rider is pitched onto the ramp after (bankRig): on the board, it's flat ground.
   const rolling = stairs.dropIn != null && clock <= stairs.pop;
   const solved = clearFeet(onTheGround(offLine ? offLine(downhill) : downhill, stairs.terrain.slope || rolling ? undefined : stepUnder));
   const absorbed = absorbDrop(solved, stairs, clock, rise);
-  const upright = posed(stageArms(stage, t, absorbed), stage.skater, headPose);
+  const baseBoardY = absorbed.board.center.y;
+  const balanced = landed ? manualRig(absorbed, stairs, clock, mechanics.frontArm) : absorbed;
+  const upright = posed(stageArms(stage, t, balanced), stage.skater, headPose);
   // Carving in off the line, the rider leans into the turn over the board (carveLean).
   const leaned = leanRig(upright, carveLean(stairs, clock), { x: X0, y: upright.board.center.y, z: upright.board.center.z });
-  const banked = bankRig(leaned, stairs, clock, u, route.yaw);
+  const banked = bankRig(leaned, stairs, clock, u, route.yaw, baseBoardY);
   const carried = shiftRig(banked, { x: 0, y: -drop, z: 0 });
   // Feet already cleared the grip before the rigid bank transform. Resolve
   // terrain contact by carrying this complete posed skeleton, not by solving

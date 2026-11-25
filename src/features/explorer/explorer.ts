@@ -1,4 +1,5 @@
 import {
+  BANK_RIDES,
   DEFAULT_SCENE_CAMERA,
   FOOT,
   GRIND_BASES,
@@ -17,6 +18,7 @@ import {
   setGrindSpec,
   setHandrail,
   setInfo,
+  setTerrain,
   tripodSide,
   canExitGrind,
   clampOrbitCamera,
@@ -32,6 +34,7 @@ import {
   setTimeline,
   flatTimeline,
   wrapOrbitYaw,
+  type BankRide,
   type CameraSide,
   type FilmedLine,
   type Obstacle,
@@ -68,7 +71,14 @@ import {
 
 export type ExplorerMode = 'flatground' | 'grinds';
 export type GrindSide = 'Frontside' | 'Backside';
-export type { CameraSide };
+export type { BankRide, CameraSide };
+export { BANK_RIDES };
+
+export const BANK_RIDE_LABELS: Record<BankRide, string> = {
+  ride: 'Ride',
+  manual: 'Manual',
+  'nose-manual': 'Nose manual',
+};
 
 /** A trick popped out of a grind, and the end of the board it pops off. */
 export interface GrindOut {
@@ -119,6 +129,8 @@ export interface ExplorerState {
   rail: RailChoice;
   /** At a spot with more than one way down, what a flatground trick goes over: its stairs, or (Hollywood) the fence beside them. */
   obstacle: Obstacle;
+  /** On a bank that supports it (Triangle Bank's gap to bank), how the rider rides the bank: four wheels, manual, or nose manual. */
+  bankRide: BankRide;
   /** Who skates it: the original and realistic robots, the realistic human, or the alien. */
   skater: Skater;
   /** How the attempt is missed instead (see Outcome), where the mode has that miss. Null lands it. */
@@ -289,13 +301,15 @@ export const DEFAULT_STATE: Readonly<ExplorerState> = Object.freeze({
   set: 'waterfront',
   rail: 'center',
   obstacle: 'stairs',
+  bankRide: 'ride',
   skater: 'robot',
   fall: null,
 });
 
 /** Move to another spot; gap-only spots open the saved gap trick, and an obstacle the new spot lacks goes back to its stairs. */
 export function withSet(state: ExplorerState, set: StageSet): ExplorerState {
-  const mode = setInfo(set).grinds ? state.mode : 'flatground';
+  const mode = setInfo(set).grinds ? state.mode : 'flatground' as const;
+  const obstacle = hasObstacle(set, state.obstacle) ? state.obstacle : DEFAULT_STATE.obstacle;
   return restrictRailApproach({
     ...state,
     set,
@@ -304,7 +318,8 @@ export function withSet(state: ExplorerState, set: StageSet): ExplorerState {
     mode,
     fall: outcomeOf({ set, mode, fall: state.fall }),
     rail: setInfo(set).rails?.fixedLine ? 'side' : setInfo(set).rails?.sideGrinds === false ? 'center' : state.rail,
-    obstacle: hasObstacle(set, state.obstacle) ? state.obstacle : DEFAULT_STATE.obstacle,
+    obstacle,
+    bankRide: bankRideOf({ mode, set, obstacle, bankRide: state.bankRide }),
   });
 }
 
@@ -312,11 +327,19 @@ export function withSet(state: ExplorerState, set: StageSet): ExplorerState {
 export const picksObstacle = (state: Pick<ExplorerState, 'mode' | 'set'>) =>
   state.mode === 'flatground' && (setInfo(state.set).obstacles?.length ?? 0) > 1;
 
+/** Whether the current line lands on a bank where the rider can choose ride, manual, or nose manual. */
+export const picksBankRide = (state: Pick<ExplorerState, 'mode' | 'set' | 'obstacle'>) =>
+  state.mode === 'flatground' && setTerrain(state.set, state.obstacle)?.manuals === true;
+
+/** How the rider rides the bank on stage: the chosen manual where the line supports it, else four wheels. */
+export const bankRideOf = (state: Pick<ExplorerState, 'mode' | 'set' | 'obstacle' | 'bankRide'>): BankRide =>
+  (picksBankRide(state) ? state.bankRide : 'ride');
+
 /** Switch between gap/flatground tricks and grinds where the spot supports them. */
 export function withMode(state: ExplorerState, mode: ExplorerMode): ExplorerState {
   const next = { ...state, mode: mode === 'grinds' && !setInfo(state.set).grinds ? 'flatground' as const : mode };
   // A miss the other mode doesn't have goes back to landed.
-  return restrictRailApproach({ ...next, fall: outcomeOf(next) });
+  return restrictRailApproach({ ...next, fall: outcomeOf(next), bankRide: bankRideOf(next) });
 }
 
 /** Keeps a trick out only if the grind rides the end it pops off. */
@@ -346,7 +369,13 @@ const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(
 
 /** The trick on the stage, shaped for TrickScene3D. */
 export function stageTrick(state: ExplorerState): Pick<Trick, 'id' | 'name' | 'base' | 'stance'> {
-  if (state.mode === 'flatground') return flatgroundTrick(state.trick, state.stance);
+  if (state.mode === 'flatground') {
+    const trick = flatgroundTrick(state.trick, state.stance);
+    const bank = bankRideOf(state);
+    if (bank === 'ride') return trick;
+    const suffix = bank === 'manual' ? 'Manual' : 'Nose Manual';
+    return { ...trick, id: `${trick.id}-${bank}`, name: `${trick.name} to ${suffix}` };
+  }
   const base = grindBase(state);
   return { id: `${slug(base)}-${state.stance}`, name: `${STANCE_LEAD[state.stance]}${base}`, base, stance: state.stance };
 }
@@ -393,7 +422,12 @@ export function trickSteps(state: ExplorerState): TrickStep[] {
   if (state.mode === 'flatground') {
     const trick = flatgroundTrick(state.trick, state.stance);
     const description = trickDescription(trick);
-    return description ? [{ label: trick.name, detail: description }] : [];
+    const bank = bankRideOf(state);
+    if (bank === 'ride') return description ? [{ label: trick.name, detail: description }] : [];
+    const bankDetail = bank === 'manual'
+      ? 'Catch it over the gap, land onto the back truck to manual down the bank, and level out off the low edge.'
+      : 'Catch it over the gap, dip onto the front truck to nose manual down the bank, and level out off the low edge.';
+    return [{ label: stageTrick(state).name, detail: description ? `${description} ${bankDetail}` : bankDetail }];
   }
   const spec = setGrindSpec(state.set, stageTrick(state));
   if (!spec) return [];
@@ -799,6 +833,7 @@ export function stateFromSearch(search: string, defaultSet: StageSet = DEFAULT_S
     set,
     rail: setInfo(set).rails?.fixedLine || (params.get('rail') === 'side' && setInfo(set).rails?.sideGrinds !== false) ? 'side' : DEFAULT_STATE.rail,
     obstacle: setInfo(set).obstacles?.find((o) => o.id === params.get('obstacle'))?.id ?? DEFAULT_STATE.obstacle,
+    bankRide: BANK_RIDES.find((option) => option === params.get('bank')) ?? DEFAULT_STATE.bankRide,
     skater: SKATERS.find((option) => option.id === params.get('skater'))?.id ?? DEFAULT_STATE.skater,
     // Kept if it's a miss the mode named below has (both modes can slip back on landing).
     fall: OUTCOME_OPTIONS.grinds.concat(GAP_OUTCOMES).find((o) => o.fall != null && o.fall === params.get('fall'))?.fall ?? null,
@@ -868,6 +903,7 @@ export function searchFromState(state: ExplorerState, { includeSet = false } = {
   if (includeSet || state.set !== DEFAULT_STATE.set) params.set('set', setInfo(state.set).slug ?? state.set);
   if (state.rail !== DEFAULT_STATE.rail) params.set('rail', state.rail);
   if (picksObstacle(state) && state.obstacle !== DEFAULT_STATE.obstacle) params.set('obstacle', state.obstacle);
+  if (picksBankRide(state) && state.bankRide !== DEFAULT_STATE.bankRide) params.set('bank', state.bankRide);
   if (state.skater !== DEFAULT_STATE.skater) params.set('skater', state.skater);
   const fall = outcomeOf(state);
   if (fall) params.set('fall', fall);

@@ -216,14 +216,14 @@ function postureAt(theta: number): Posture {
 // ----- The body's shape, for the ground -----
 
 /** The robot's chest and head (robot3d.ts), as rounded boxes: half-extents along their frames' (fwd, up, side), rounding, and how far up its frame the chest sits. */
-const CHEST = { half: [11, 21, 15.5] as const, r: 10.5, raise: 4 };
-const ROBOT_HEAD = { half: [14, 15, 18] as const, r: 8.5 };
+export const CHEST = { half: [11, 21, 15.5] as const, r: 10.5, raise: 4 };
+export const ROBOT_HEAD = { half: [14, 15, 18] as const, r: 8.5 };
 /**
  * A person's skull, as a ball (measured on the model as built, grown to the person by MODEL_SCALE): where the drawn
  * skeleton (riders/realistic) has it off the head frame's origin, a little back and down it, as far along (fwd, up) as
  * it sits, and big enough for the neck's give either side.
  */
-const PERSON_SKULL = { f: -4 * MODEL_SCALE, u: -7 * MODEL_SCALE, r: 12.5 * MODEL_SCALE } as const;
+export const PERSON_SKULL = { f: -4 * MODEL_SCALE, u: -7 * MODEL_SCALE, r: 12.5 * MODEL_SCALE } as const;
 
 type Part = 'chest' | 'head' | 'arm0' | 'arm1' | 'hand0' | 'hand1' | 'leg0' | 'leg1' | 'foot0' | 'foot1';
 

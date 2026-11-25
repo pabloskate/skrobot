@@ -7,6 +7,7 @@ import { useTrickPlayback } from './useTrickPlayback';
 import { randomFallVariant, randomShankProgress, type FallVariant } from '../motion/trick';
 import { DEFAULT_SCENE_CAMERA, type SceneCamera, type TripodId } from '../camera/camera';
 import { type Obstacle, type RailChoice, type StageSet } from '../sets/sets';
+import type { BankRide } from '../sets/terrain';
 import type { RailBail } from '../motion/fall/railBail';
 import type { LeadIn } from '../types';
 import type { Skater } from '../riders/skaters';
@@ -61,6 +62,8 @@ interface Props {
   rail?: RailChoice;
   /** Where the set has several ways down (Hollywood): what a gap trick goes over, the stairs or the fence. */
   obstacle?: Obstacle;
+  /** On a bank that supports it (Triangle Bank): ride all four wheels, manual, or nose manual down the bank. */
+  bankRide?: BankRide;
   /** Who rides: the original robot (its look from `robot`), the realistic robot, the realistic human, or the alien. */
   skater?: Skater;
   /** Play the attempt's sounds while its clock runs: the pop, the wheels, a grind or slide, the landing. Off by default. */
@@ -98,6 +101,7 @@ export default function TrickScene3D({
   skater = 'robot',
   rail = 'center',
   obstacle = 'stairs',
+  bankRide = 'ride',
   sound = false,
   onLoading,
 }: Props) {
@@ -107,10 +111,10 @@ export default function TrickScene3D({
   const [shankProgress] = useState(randomShankProgress);
   const fall = forcedFall ?? fallVariant ?? randomizedFall;
   const stage = useMemo(
-    () => planStage(trick, { landed, riderStance, style, fall, shankProgress, skater, set, rail, obstacle, railBail }),
+    () => planStage(trick, { landed, riderStance, style, fall, shankProgress, skater, set, rail, obstacle, bankRide, railBail }),
     // The trick's name and id don't change what is skated.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [robot, trick.base, trick.stance, landed, riderStance, style, fall, shankProgress, skater, set, rail, obstacle, railBail],
+    [robot, trick.base, trick.stance, landed, riderStance, style, fall, shankProgress, skater, set, rail, obstacle, bankRide, railBail],
   );
   const {
     time, firstRun, isPlaying, staticTime, speedToggleVisible, effectivePlaybackRate,
@@ -154,6 +158,7 @@ export default function TrickScene3D({
       data-skater={skater}
       data-rail={stage.rail?.line}
       data-obstacle={stage.obstacle ?? undefined}
+      data-bank-ride={stage.bankRide !== 'ride' ? stage.bankRide : undefined}
       data-rider-stance={riderStance}
       data-nose-foot={stage.mechanics.noseFoot}
       data-toe-side={stage.mechanics.orientationSign}

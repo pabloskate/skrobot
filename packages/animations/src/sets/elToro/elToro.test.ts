@@ -7,11 +7,11 @@ import { BOTTOM_LOCAL, TOP_LOCAL } from '../../board/deck';
 import { cross3, dot3, type V3 } from '../../math';
 import { SQUAT_FLOOR } from '../../motion/skeleton';
 import { EL_TORO_TERRAIN, RISER, STAIR_DROP, STAIR_RUN, STAIR_STEPS, TREAD, stairGround } from './stairs';
-import { planStairs, stairClock, stairTimeline } from '../../stage/drop';
+import { planStairs, spinClock, stairClock, stairTimeline } from '../../stage/drop';
 import { SET_SCALE, stageTerrain, SET_FOOT } from '../setScale';
 import { FOOT } from '../../units';
 import { resolveSkateStyle } from '../../motion/style';
-import type { RiderStance, Robot, Stance, Trick } from '../../types';
+import type { RiderStance, Robot, SkateStyle, Stance, Trick } from '../../types';
 import { ElToro3D } from './elToro3d';
 import { planStage, stageFrame, type StageFrame, type StagePlan } from '../../stage/stage';
 import { stageArmLift } from '../../stage/armLift';
@@ -36,12 +36,12 @@ const robotWith = (popHeight: number): Robot => ({
   skateStyle: { popHeight, rotationSpeed: 1.08, flickStrength: 0.95 },
 });
 const trick = (base: string, stance: Stance = 'regular'): Trick => ({ id: base, name: base, base, stance });
-const plan = (base: string, options: { stance?: Stance; rider?: RiderStance; pop?: number; landed?: boolean; set?: 'el-toro' | 'plaza' } = {}): StagePlan => {
+const plan = (base: string, options: { stance?: Stance; rider?: RiderStance; pop?: number; landed?: boolean; set?: 'el-toro' | 'plaza'; style?: SkateStyle } = {}): StagePlan => {
   const r = robotWith(options.pop ?? 0.92);
   return planStage(trick(base, options.stance), {
     landed: options.landed ?? true,
     riderStance: options.rider ?? 'regular',
-    style: resolveSkateStyle(r.skateStyle),
+    style: options.style ?? resolveSkateStyle(r.skateStyle),
     fall: 'slam',
     shankProgress: 0.65,
     set: options.set ?? 'el-toro',
@@ -129,7 +129,8 @@ describe('El Toro', () => {
       for (const stance of ['regular', 'fakie'] as Stance[]) {
         for (const rider of RIDERS) {
           const stairs = plan(base, { stance, rider });
-          const flat = plan(base, { stance, rider, set: 'plaza' });
+          // The flatground trick at the pace it's turned down the drop (drop.ts dropStyle).
+          const flat = plan(base, { stance, rider, set: 'plaza', style: stairs.style });
           const heading = stance === 'fakie' ? 180 : 0;
           const unturn = (p: V3): V3 => heading ? { x: 2 * X0 - p.x, y: p.y, z: -p.z } : p;
           // From the flatground roll-in on (before it, the stairs' run-up has no flatground frame).
@@ -140,10 +141,14 @@ describe('El Toro', () => {
               return armsLifted(stageFrame(stage, at, 1).rig, [-lift[0], -lift[1]]);
             };
             const down = bare(stairs, t);
-            const level = bare(flat, stairClock(stairs.stairs!, t));
-            expect(down.board.flipDeg).toBeCloseTo(level.board.flipDeg, 6);
-            expect(down.board.yawDeg - heading).toBeCloseTo(level.board.yawDeg, 6);
-            expect(down.bodyYawDeg - heading).toBeCloseTo(level.bodyYawDeg, 6);
+            // The trick's rotation is the flatground one on its own even clock (spinClock)…
+            const turned = bare(flat, spinClock(stairs.stairs!, t));
+            expect(down.board.flipDeg).toBeCloseTo(turned.board.flipDeg, 6);
+            expect(down.board.yawDeg - heading).toBeCloseTo(turned.board.yawDeg, 6);
+            expect(down.bodyYawDeg - heading).toBeCloseTo(turned.bodyYawDeg, 6);
+            // …and the rider the flatground one wherever the pop's head start isn't in the stair clock.
+            if (Math.abs(spinClock(stairs.stairs!, t) - stairClock(stairs.stairs!, t)) > 1e-9) continue;
+            const level = turned;
             expect(down.headYawDeg - heading).toBeCloseTo(level.headYawDeg, 6);
             // Carried down by one offset (the board alone may be lifted clear of the lip).
             const offset = down.legs[0].hip.y - level.legs[0].hip.y;
@@ -160,6 +165,26 @@ describe('El Toro', () => {
           expect(stairs.end - flat.end).toBeCloseTo(stairs.stairs!.pop - ROLL_IN + stairs.stairs!.flight - flatFlight, 6);
         }
       }
+    }
+  });
+
+  it('turns the board at one pace from the pop to the catch, however the pop snaps', () => {
+    for (const base of ['Kickflip', 'Heelflip', '360 Flip', 'Varial Kickflip', 'Backside 180', 'Frontside Flip']) {
+      const stage = plan(base);
+      const { pop, flight } = stage.stairs!;
+      const step = flight / 40;
+      const turn = (t: number) => {
+        const { board, bodyYawDeg } = stageFrame(stage, t, 1).rig;
+        return [board.flipDeg, board.yawDeg, bodyYawDeg];
+      };
+      // Up to half the flight: before any catch, and across the stretch the stair clock runs fast and then slow over.
+      const paces: number[][] = [];
+      for (let t = pop + step; t < pop + flight * 0.5; t += step) {
+        const from = turn(t - step);
+        paces.push(turn(t).map((deg, i) => (deg - from[i]) / step));
+      }
+      for (const pace of paces) pace.forEach((rate, i) => expect(rate, `${base} ${['flip', 'yaw', 'body'][i]}`).toBeCloseTo(paces[0][i], 6));
+      expect(Math.max(...paces[0].map(Math.abs))).toBeGreaterThan(100);
     }
   });
 
@@ -200,8 +225,10 @@ describe('El Toro', () => {
       // A board turning under a square rider is caught short down a drop and guided round (the next test), so no 360 Flip here.
       for (const base of ['Kickflip', 'Heelflip', 'Frontside 180', 'Backside 180', 'Late Backside Shuvit', 'Impossible']) {
         const stairs = plan(base, { stance: 'fakie', rider });
-        const flat = plan(base, { stance: 'fakie', rider, set: 'plaza' });
-        const t = stairs.stairs!.pop + stairs.stairs!.flight * 0.45;
+        const flat = plan(base, { stance: 'fakie', rider, set: 'plaza', style: stairs.style });
+        // Past the middle of the flight, where the pop's head start is out of the stair clock and the whole rider is flatground's.
+        const t = stairs.stairs!.pop + stairs.stairs!.flight * 0.6;
+        expect(spinClock(stairs.stairs!, t)).toBeCloseTo(stairClock(stairs.stairs!, t), 9);
         const down = stageFrame(stairs, t, 1).rig;
         const level = stageFrame(flat, stairClock(stairs.stairs!, t), 1).rig;
         const offset = down.legs[0].hip.y - level.legs[0].hip.y;
@@ -232,22 +259,28 @@ describe('El Toro', () => {
 
   it('catches a board turning under a square rider short of round, the feet guiding it the rest of the way to touchdown', () => {
     const style = resolveSkateStyle(robotWith(0.92).skateStyle);
-    const caughtAt = catchFraction(style);
     const flat = flatTimeline(style);
     const local = (frame: StageFrame, v: V3) => [{ x: 1, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }, { x: 0, y: 0, z: 1 }].map((axis) => dot3(v, frame.rig.board.dir(axis)));
     for (const [base, yaw] of [['360 Flip', 360], ['360 Shuvit', 360], ['Varial Kickflip', 180], ['Hardflip', 180], ['Inward Heelflip', 180], ['Pop Shuvit', 180]] as const) {
-      // Short of round by the turn left at the pace that eases to a stop at touchdown, never more than 35°.
-      const short = Math.min(35, (yaw * (1 - caughtAt)) / (1 + caughtAt));
       for (const stance of STANCES) {
         for (const rider of RIDERS) {
           const stage = plan(base, { stance, rider });
           const { pop, flight } = stage.stairs!;
+          // Caught sooner in the drop's long flight than in a hop's (drop.ts dropStyle)…
+          const caughtAt = catchFraction(stage.style);
+          expect(caughtAt).toBeLessThan(catchFraction(style));
+          // …short of round by the turn left at the pace that eases to a stop at touchdown, never more than 45°.
+          const short = Math.min(45, (yaw * (1 - caughtAt)) / (1 + caughtAt));
           const at = (q: number) => stageFrame(stage, pop + q * flight, 1);
           // Fakie starts the board turned 180° (the stage rolls it tail first), so count the turn from the pop.
           const turned = (q: number) => at(q).rig.board.yawDeg - at(0).rig.board.yawDeg;
           const dir = Math.sign(turned(caughtAt));
           const touchdown = at(1 - 1e-9);
           expect(Math.abs(turned(caughtAt))).toBeCloseTo(yaw - short, 6);
+          // Halfway from catch to touchdown, a meaningful share of the guided turn still remains instead of burning out right after catch.
+          const midRemaining = yaw - Math.abs(turned((caughtAt + 1) / 2));
+          expect(midRemaining).toBeGreaterThan(short * 0.25);
+          expect(midRemaining).toBeLessThan(short * 0.5);
           expect(Math.abs(turned(1 - 1e-9))).toBeCloseTo(yaw, 3);
           let last = turned(caughtAt - 0.02);
           for (let q = caughtAt; q < 1; q += 0.01) {
@@ -268,10 +301,13 @@ describe('El Toro', () => {
           }
         }
       }
-      // On flatground the short hop leaves nothing to guide: it's round at the catch.
+      // Flatground also catches short of round and guides into touchdown, though later in the flight than down a drop.
       const level = plan(base, { set: 'plaza' });
+      const levelCaughtAt = catchFraction(level.style);
+      const levelShort = Math.min(45, (yaw * (1 - levelCaughtAt)) / (1 + levelCaughtAt));
       const levelYaw = (t: number) => stageFrame(level, t, 1).rig.board.yawDeg;
-      expect(Math.abs(levelYaw(flat.pop + caughtAt * (flat.land - flat.pop)) - levelYaw(flat.pop))).toBeCloseTo(yaw, 6);
+      expect(Math.abs(levelYaw(flat.pop + levelCaughtAt * (flat.land - flat.pop)) - levelYaw(flat.pop))).toBeCloseTo(yaw - levelShort, 6);
+      expect(Math.abs(levelYaw(flat.land - 1e-9) - levelYaw(flat.pop))).toBeCloseTo(yaw, 3);
     }
   });
 

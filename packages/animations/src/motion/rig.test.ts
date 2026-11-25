@@ -15,6 +15,7 @@ import {
   W,
   type FallVariant,
   TRICK_BASES,
+  flicks,
 } from './trick';
 import { SKATE_STYLE_BOUNDS, resolveSkateStyle } from './style';
 import { flickExtension, orientTrickRotation, resolveRiderMechanics } from './stance';
@@ -24,7 +25,7 @@ import type { RiderStance, Robot, Stance, Trick } from '../types';
 import { WHEEL_R, WHEEL_SPIN } from '../board/board';
 import { cameraLift, makeCamera } from '../camera/camera';
 import { solveRig } from './rig';
-import { DECK_HALF_WIDTH, SHIN, SHOE_HALF_LENGTH, STANCE_BODY_YAW, THIGH, tiltHead, type Rig } from './skeleton';
+import { DECK_HALF_WIDTH, SHIN, SHOE_HALF_HEIGHT, SHOE_HALF_LENGTH, STANCE_BODY_YAW, THIGH, tiltHead, type Rig } from './skeleton';
 import { dot3, sub3, type V3 } from '../math';
 
 /**
@@ -76,7 +77,7 @@ describe('Rider on the trick', () => {
             expect(rig.bodyYawDeg, label).toBeCloseTo(turned.bodyYawDeg - STANCE_BODY_YAW * mechanics.orientationSign, 1);
             // The flicking foot swings out to the heel or toe side the trick flicks off.
             const toeSide = mechanics.orientationSign * (mechanics.bodyYawDegrees === 0 ? 1 : -1);
-            const flick = spec.flipDir && f.motion.flight >= 0 && f.motion.flight < 1
+            const flick = flicks(spec) && f.motion.flight >= 0 && f.motion.flight < 1
               ? -spec.flipDir * toeSide * 9 * style.flickStrength * flickExtension(f.motion.rotation)
               : 0;
             expect(rig.flickZ, label).toBeCloseTo(flick, 1);
@@ -244,13 +245,61 @@ describe('Rider body physics', () => {
     for (const base of ['Varial Kickflip', 'Varial Heelflip']) expect(noseUp(base), base).toBeLessThan(15);
     expect(noseUp('Hardflip')).toBeGreaterThan(45);
     expect(noseUp('Inward Heelflip')).toBeLessThan(30);
+    // Pressed, not levelled: further up on end than the inward heelflip it turns as.
+    expect(noseUp('Pressure Flip')).toBeGreaterThan(noseUp('Inward Heelflip') + 8);
+    expect(noseUp('Pressure Flip')).toBeLessThan(noseUp('Hardflip'));
+  });
+
+  it('presses a pressure flip with the popping foot, where an inward heelflip is flicked off the other heel', () => {
+    for (const rider of RIDERS) {
+      for (const stance of STANCES) {
+        const mechanics = resolveRiderMechanics(rider, stance);
+        const other = mechanics.popFoot === 'left' ? 'right' : 'left';
+        const label = `${rider} ${stance}`;
+        const legOf = (base: string, side: string, p: number) => {
+          const rig = rigAt(base, stance, rider, 'landed', ROLL_IN + FLIP_T * p);
+          return { rig, leg: rig.legs.find((leg) => leg.side === side)! };
+        };
+        // An inward heelflip's other foot kicks its heel out past the toeside rail.
+        const heel = legOf('Inward Heelflip', other, 0.2);
+        expect(heel.leg.flicking, label).toBe(true);
+        expect(heel.rig.flickOut, label).toBeGreaterThan(0.9);
+        // A pressure flip's does nothing: it never flicks, and stays in its lane.
+        for (const p of [0.1, 0.2, 0.3]) {
+          const lifted = legOf('Pressure Flip', other, p);
+          expect(lifted.leg.flicking, label).toBe(false);
+          expect(lifted.rig.flickOut, label).toBe(0);
+          expect(Math.abs(lifted.leg.ankle.z), label).toBeLessThan(DECK_HALF_WIDTH);
+        }
+        // Its popping foot is the one that flips the board: still pressing the
+        // corner when an inward heelflip's has let its tail go, toes pointed
+        // down after the rail they drive and gone back toward heelside with it.
+        const pressed = legOf('Pressure Flip', mechanics.popFoot, 0.11);
+        const popped = legOf('Inward Heelflip', mechanics.popFoot, 0.11);
+        expect(pressed.leg.flicking, label).toBe(true);
+        const toesDown = (at: typeof pressed) => at.leg.shoe.at(SHOE_HALF_LENGTH, 0, 0).y - at.leg.shoe.at(-SHOE_HALF_LENGTH, 0, 0).y;
+        expect(toesDown(pressed), label).toBeGreaterThan(8);
+        expect(Math.abs(toesDown(popped)), label).toBeLessThan(1);
+        // Through the strike the toes stay on the rail they drive, where a
+        // popped trick's foot is already coming up off its tail.
+        const offCorner = (base: string, p: number) => {
+          const at = legOf(base, mechanics.popFoot, p);
+          const corner = at.rig.board.point({ x: mechanics.popFoot === mechanics.noseFoot ? 34 : -34, y: 0, z: at.rig.toeDir * DECK_HALF_WIDTH });
+          const toes = sub3(at.leg.shoe.at(SHOE_HALF_LENGTH, -SHOE_HALF_HEIGHT, 0), corner);
+          return Math.hypot(toes.x, toes.y, toes.z);
+        };
+        const stood = offCorner('Pressure Flip', -0.01);
+        expect(offCorner('Pressure Flip', 0.06), label).toBeLessThan(stood + 4);
+        expect(offCorner('Inward Heelflip', 0.06), label).toBeGreaterThan(stood + 10);
+      }
+    }
   });
 
   it('catches a tilted spin as the deck a flat one leaves: no jump where the lean hands back', () => {
     const axes: V3[] = [{ x: 1, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }, { x: 0, y: 0, z: 1 }];
     for (const rotationSpeed of [SKATE_STYLE_BOUNDS.rotationSpeed.min, 1, SKATE_STYLE_BOUNDS.rotationSpeed.max]) {
       const spinStyle = resolveSkateStyle({ popHeight: 1, rotationSpeed, flickStrength: 1 });
-      for (const base of sweep(['Hardflip', 'Inward Heelflip', '360 Hardflip', '360 Inward Heelflip', 'Ghetto Bird'])) {
+      for (const base of sweep(['Hardflip', 'Inward Heelflip', 'Pressure Flip', '360 Hardflip', '360 Inward Heelflip', 'Ghetto Bird'])) {
         for (const rider of RIDERS) {
           for (const stance of STANCES) {
             const spec = specFor(trickOf(base, stance));

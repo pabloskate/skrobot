@@ -10,6 +10,10 @@
 
 import type { BoardSweep } from '../motion/trick';
 
+/** How the rider rides a bank landing: all four wheels, on the back truck (manual), or on the front truck (nose manual). */
+export type BankRide = 'ride' | 'manual' | 'nose-manual';
+export const BANK_RIDES: readonly BankRide[] = ['ride', 'manual', 'nose-manual'];
+
 /** A fixed takeoff and its actual landing surface: a set lays it out in set units, the planner takes it in the stage's (stageTerrain). */
 export interface DropTerrain {
   drop: number;
@@ -64,6 +68,8 @@ export interface DropTerrain {
   trickPop?: Readonly<Record<BoardSweep, number>>;
   /** Signed height gradient. Omitted for discrete stairs with a flat landing. */
   slope?: (u: number) => number;
+  /** Whether a landed rider can hold a manual or nose manual down this bank. */
+  manuals?: boolean;
   /**
    * How far down the route (`u`) a landing can be ridden: past it there's no
    * room (Emage's river bank), so a landed rider steps off the board before

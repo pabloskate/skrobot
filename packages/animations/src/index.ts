@@ -58,6 +58,7 @@ export {
 export { tripodSide, spotStands, type FilmedLine, type SpotStand } from './sets/tripods';
 /** The sets (spots) a trick can be staged at, and what each changes: stairs and other obstacles, handrails, tripods. */
 export { STAGE_SETS, hasObstacle, railApproachAllowed, railLineFor, setGrindSpec, setHandrail, setInfo, setLocation, setFlights, setTerrain, setTimeline, type Obstacle, type RailChoice, type RailLine, type SetInfo, type SpotCard, type SpotLine, type SpotProfile, type SetObstacle, type SetRails, type StageSet } from './sets/sets';
+export { BANK_RIDES, type BankRide } from './sets/terrain';
 /** The stage's yardstick (the 31-inch deck) and gravity, and the moments of a trick down a drop. */
 export { FOOT, GRAVITY, INCH } from './units';
 export { stairTimeline, type StairTimeline } from './stage/drop';

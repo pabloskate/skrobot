@@ -12,6 +12,7 @@ import type { RiderStance, Stance } from '../../types';
 import { routeHeight } from '../../stage/drop';
 import { SET_SCALE } from '../setScale';
 import { setInfo, setTerrain, setTimeline, type Obstacle } from '../sets';
+import type { BankRide } from '../terrain';
 import { sweep, sweepHz, STANCES, RIDERS } from '../../testing';
 import { buildMiamiGeometry, Miami3D } from './miami3d';
 import {
@@ -22,10 +23,10 @@ import {
   miamiGround, miamiSlabHalf, miamiSlabTop, miamiSlope, miamiSurface, miamiTerraceHalf, miamiTerraceInset, onMiamiSlab,
 } from './miamiLayout';
 
-const attempt = (base: string, obstacle: Obstacle = 'stairs', stance: Stance = 'regular', riderStance: RiderStance = 'regular', options: { popHeight?: number; landed?: boolean; skater?: 'robot' | 'realistic' } = {}) => planStage(
+const attempt = (base: string, obstacle: Obstacle = 'stairs', stance: Stance = 'regular', riderStance: RiderStance = 'regular', options: { popHeight?: number; landed?: boolean; skater?: 'robot' | 'realistic'; bankRide?: BankRide } = {}) => planStage(
   { id: base, name: base, base, stance },
   {
-    set: 'miami-triangle', obstacle, landed: options.landed ?? true, riderStance, skater: options.skater,
+    set: 'miami-triangle', obstacle, bankRide: options.bankRide, landed: options.landed ?? true, riderStance, skater: options.skater,
     style: resolveSkateStyle({ popHeight: options.popHeight ?? 0.45, rotationSpeed: 1.16, flickStrength: 0.88 }),
     fall: 'slam', shankProgress: 0.65,
   },
@@ -185,6 +186,64 @@ describe('Triangle Bank: the established riding challenge', () => {
       expect(end.rig.board.dir({ x: 1, y: 0, z: 0 }).y).toBeCloseTo(0, 3);
       for (const height of trucks(end)) expect(height, context).toBeLessThan(0.5);
     }
+  });
+
+  it('holds a manual or nose manual down the bank on one truck, then levels out off the low edge onto the plaza', () => {
+    for (const bankRide of ['manual', 'nose-manual'] as const) {
+      for (const skater of ['robot', 'realistic'] as const) {
+        for (const base of ['Kickflip', 'Backside 180', 'Backside 360']) {
+          for (const stance of STANCES) for (const rider of RIDERS) {
+            const context = `${bankRide}/${skater}/${base}/${stance}/${rider}`;
+            const stage = attempt(base, 'stairs', stance, rider, { skater, bankRide });
+            const plan = stage.stairs!;
+            expect(stage.bankRide, context).toBe(bankRide);
+            expect(plan.lip, context).not.toBeNull();
+            expect(plan.ledges, context).toHaveLength(1);
+            // Mid-bank: contact truck sits on the slab while the opposite truck rides clearly lifted off it.
+            const midT = (plan.land + plan.lip!) / 2;
+            const mid = stageFrame(stage, midT, 1);
+            const [uphill, downhill] = trucks(mid);
+            if (bankRide === 'manual') {
+              expect(uphill, `${context} uphill`).toBeLessThan(0.5);
+              expect(uphill, `${context} uphill`).toBeGreaterThan(-0.2);
+              expect(downhill, `${context} downhill`).toBeGreaterThan(8);
+            } else {
+              expect(downhill, `${context} downhill`).toBeLessThan(0.5);
+              expect(downhill, `${context} downhill`).toBeGreaterThan(-0.2);
+              expect(uphill, `${context} uphill`).toBeGreaterThan(8);
+            }
+            // The balancing shoe stands past the contact truck, on the tail (manual) or nose (nose manual).
+            const shoesAlong = ({ rig }: StageFrame) => {
+              const along = rig.board.dir({ x: 1, y: 0, z: 0 });
+              const downAxis = along.x >= 0 ? along : { x: -along.x, y: -along.y, z: -along.z };
+              return rig.legs.map((l) => {
+                const d = { x: l.shoe.origin.x - rig.board.center.x, y: l.shoe.origin.y - rig.board.center.y, z: l.shoe.origin.z - rig.board.center.z };
+                return d.x * downAxis.x + d.y * downAxis.y + d.z * downAxis.z;
+              });
+            };
+            const shoeAlong = shoesAlong(mid);
+            if (bankRide === 'manual') expect(Math.min(...shoeAlong), `${context} tail foot`).toBeLessThan(-(WHEEL_X + 8));
+            else expect(Math.max(...shoeAlong), `${context} nose foot`).toBeGreaterThan(WHEEL_X + 8);
+            // The feet catch the board there: over their spots while still in the air, and never shuffled
+            // along the grip once they're standing on it (that would move the board).
+            const caught = shoesAlong(stageFrame(stage, plan.land - 0.08 * plan.flight, 1));
+            const touchdown = shoesAlong(stageFrame(stage, plan.land, 1));
+            const atLip = shoesAlong(stageFrame(stage, plan.lip!, 1));
+            for (let i = 0; i < 2; i++) {
+              expect(Math.abs(caught[i] - shoeAlong[i]), `${context} foot ${i} at the catch`).toBeLessThan(3);
+              expect(Math.abs(touchdown[i] - shoeAlong[i]), `${context} foot ${i} at touchdown`).toBeLessThan(0.1);
+              expect(Math.abs(atLip[i] - shoeAlong[i]), `${context} foot ${i} at the lip`).toBeLessThan(0.1);
+            }
+            // After dropping off the raised low edge, all four wheels land flat on the plaza.
+            const end = stageFrame(stage, stage.end, 1);
+            expect(end.rig.board.dir({ x: 1, y: 0, z: 0 }).y, context).toBeCloseTo(0, 3);
+            for (const height of trucks(end)) expect(height, `${context} end`).toBeLessThan(0.5);
+          }
+        }
+      }
+    }
+    // Over the triangle does not activate bank manuals.
+    expect(attempt('Kickflip', 'triangle', 'regular', 'regular', { bankRide: 'manual' }).bankRide).toBe('ride');
   });
 
   it('clears the rim, the wall and the slab’s apex with every trick, both ways round, on both lines', () => {

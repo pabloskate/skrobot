@@ -23,6 +23,7 @@ import {
   grindSidesFor,
   restrictRailApproach,
   outEndsFor,
+  picksBankRide,
   picksObstacle,
   sceneCamera,
   sceneTripod,
@@ -710,6 +711,18 @@ describe('classic spot selection', () => {
     expect(stateFromSearch('?trick=kickflip&set=hollywood-high&obstacle=triangle').obstacle).toBe('stairs');
     expect(withSet(over, 'hollywood-high').obstacle).toBe('stairs');
     expect(withSet(withSet(over, 'miami-triangle'), 'miami-triangle').obstacle).toBe('triangle');
+    // Only Gap to bank at Triangle Bank offers ride / manual / nose manual.
+    const onBank = flatState({ set: 'miami-triangle', obstacle: 'stairs', bankRide: 'nose-manual' });
+    expect(picksBankRide(onBank)).toBe(true);
+    expect(picksBankRide(over)).toBe(false);
+    expect(picksBankRide(grindState({ set: 'miami-triangle' }))).toBe(false);
+    expect(picksBankRide(flatState({ set: 'sunset-car-wash' }))).toBe(false);
+    expect(searchFromState(onBank)).toMatch(/bank=nose-manual/);
+    expect(stateFromSearch(searchFromState(onBank))).toEqual(onBank);
+    expect(searchFromState({ ...onBank, bankRide: 'ride' })).not.toMatch(/bank=/);
+    expect(withMode(onBank, 'grinds').bankRide).toBe('ride');
+    expect(withSet(onBank, 'el-toro').bankRide).toBe('ride');
+    expect(trickSteps(onBank)[0].detail).toContain('nose manual');
   });
 
   it('shares all new spots and offers their stationary filmers', () => {

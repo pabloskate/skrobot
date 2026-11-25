@@ -3,6 +3,7 @@ import { resolveSkateStyle } from '../motion/style';
 import type { FallVariant } from '../motion/trick';
 import type { Skater } from '../riders/skaters';
 import type { Obstacle, RailChoice, StageSet } from '../sets/sets';
+import type { BankRide } from '../sets/terrain';
 import type { RiderStance, SkateStyle, Trick } from '../types';
 import { planStage, stageFrame } from './stage';
 
@@ -32,6 +33,7 @@ export function riderPath(
     set: StageSet;
     rail?: RailChoice;
     obstacle?: Obstacle;
+    bankRide?: BankRide;
     railBail?: RailBail;
   },
 ): PathPoint[] {

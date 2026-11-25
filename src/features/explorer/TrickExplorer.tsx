@@ -5,11 +5,15 @@ import { TbArrowLeft, TbCheck, TbShare } from 'react-icons/tb';
 import { STAGE_SETS, setFlights, setInfo, setLocation, useSoundEffects, type RailChoice } from '@skrobot/animations';
 import { ROBOT_BY_ID, ROBOTS } from '@/features/robots';
 import {
+  BANK_RIDES,
+  BANK_RIDE_LABELS,
   CAMERA_SIDES,
+  bankRideOf,
   cameraLabel,
   cameraPreset,
   cameraPresetsFor,
   filmingSide,
+  picksBankRide,
   picksObstacle,
   railLine,
   sceneCamera,
@@ -60,6 +64,7 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
   const sound = useSoundEffects();
 
   const trick = stageTrick(state);
+  const bankRide = bankRideOf(state);
   const camera = sceneCamera(state);
   const tripod = sceneTripod(state);
   const timeline = timelineFor(state, RIDER.skateStyle);
@@ -117,7 +122,7 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
         </div>
         <div className="explorer-actions">
           <VideoButton
-            video={{ robot: RIDER, trick, riderStance: state.rider, ...stageOutcome(fall), camera, tripod, zoom: state.zoom, set: state.set, rail: state.rail, obstacle: state.obstacle, skater: state.skater, rate, sound }}
+            video={{ robot: RIDER, trick, riderStance: state.rider, ...stageOutcome(fall), camera, tripod, zoom: state.zoom, set: state.set, rail: state.rail, obstacle: state.obstacle, bankRide, skater: state.skater, rate, sound }}
           />
           <button type="button" className="explorer-share" onClick={share}>
             {shared ? <TbCheck aria-hidden /> : <TbShare aria-hidden />}
@@ -129,7 +134,7 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
       <div className="explorer-layout">
         <div className="explorer-stage-col">
           <ExplorerStage
-            key={`${trick.id}:${state.rider}:${state.obstacle}:${fall ?? 'landed'}`}
+            key={`${trick.id}:${state.rider}:${state.obstacle}:${bankRide}:${fall ?? 'landed'}`}
             robot={RIDER}
             trick={trick}
             rider={state.rider}
@@ -140,6 +145,7 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
             set={state.set}
             rail={state.rail}
             obstacle={state.obstacle}
+            bankRide={bankRide}
             skater={state.skater}
             fall={fall}
             cameraLabel={cameraLabel(state)}
@@ -265,9 +271,30 @@ export default function TrickExplorer({ initialSearch = '' }: { initialSearch?: 
                       role="radio"
                       aria-checked={state.obstacle === option.id}
                       className={state.obstacle === option.id ? 'active' : ''}
-                      onClick={() => setState({ ...state, obstacle: option.id })}
+                      onClick={() => setState({ ...state, obstacle: option.id, bankRide: bankRideOf({ ...state, obstacle: option.id }) })}
                     >
                       {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {picksBankRide(state) && (
+              <div className="explorer-field explorer-field-inline">
+                <span className="explorer-field-label" id="explorer-bank-ride-label">
+                  On the bank <small>{bankRide === 'ride' ? 'all four wheels' : bankRide === 'manual' ? 'back truck down the bank' : 'front truck down the bank'}</small>
+                </span>
+                <div className="explorer-segmented explorer-segmented-compact" role="radiogroup" aria-labelledby="explorer-bank-ride-label">
+                  {BANK_RIDES.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      role="radio"
+                      aria-checked={bankRide === option}
+                      className={bankRide === option ? 'active' : ''}
+                      onClick={() => setState({ ...state, bankRide: option })}
+                    >
+                      {BANK_RIDE_LABELS[option]}
                     </button>
                   ))}
                 </div>

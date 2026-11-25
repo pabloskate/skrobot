@@ -6,7 +6,10 @@ import { SKATERS, skaterInfo, setInfo, spotStands, useSoundEffects, type SceneCa
 import { groundUnder, planBounds, riderPath, spotPlan, type PathPoint } from '@skrobot/animations/three';
 import { ROBOT_BY_ID, ROBOTS } from '@/features/robots';
 import {
+  BANK_RIDES,
+  BANK_RIDE_LABELS,
   FLATGROUND_TIERS,
+  bankRideOf,
   grindSidesFor,
   GRIND_TIERS,
   INTO_CHOICES,
@@ -15,6 +18,7 @@ import {
   STANCES,
   filmedLine,
   flatgroundTrick,
+  picksBankRide,
   sceneCamera,
   sceneTripod,
   shuffle,
@@ -126,6 +130,7 @@ export default function DreamTricks({ initialSearch = '' }: { initialSearch?: st
   const mode = cameraMode(state);
   const spot = dreamSpot(state.set);
   const line = dreamLine(state);
+  const bankRide = bankRideOf(state);
   const search = dreamSearchFromState(state);
   const grinding = state.mode === 'grinds';
   const fall = outcomeOf(state);
@@ -151,11 +156,12 @@ export default function DreamTricks({ initialSearch = '' }: { initialSearch?: st
         set: state.set,
         rail: state.rail,
         obstacle: state.obstacle,
+        bankRide,
       }));
     },
     // The trick's id carries its base and stance.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [trick.id, outcome.landed, outcome.fallVariant, outcome.railBail, state.rider, state.skater, state.set, state.rail, state.obstacle],
+    [trick.id, outcome.landed, outcome.fallVariant, outcome.railBail, state.rider, state.skater, state.set, state.rail, state.obstacle, bankRide],
   );
   const actionOn = (path: readonly PathPoint[]) => actionPoint(path, timeline.phases);
   const pop = timeline.phases.find((phase) => phase.label === 'Pop')?.time ?? 0;
@@ -260,7 +266,7 @@ export default function DreamTricks({ initialSearch = '' }: { initialSearch?: st
         </div>
         <div className="explorer-actions">
           <VideoButton
-            video={{ robot: RIDER, trick, riderStance: state.rider, ...outcome, camera, tripod, zoom: state.zoom, set: state.set, rail: state.rail, obstacle: state.obstacle, skater: state.skater, rate, sound }}
+            video={{ robot: RIDER, trick, riderStance: state.rider, ...outcome, camera, tripod, zoom: state.zoom, set: state.set, rail: state.rail, obstacle: state.obstacle, bankRide, skater: state.skater, rate, sound }}
           />
           <button type="button" className="explorer-share" onClick={share}>
             {shared ? <TbCheck aria-hidden /> : <TbShare aria-hidden />}
@@ -273,7 +279,7 @@ export default function DreamTricks({ initialSearch = '' }: { initialSearch?: st
         {/* The picture and what's on it, in view whatever is being picked. */}
         <div className="dream-main" ref={main}>
           <DreamStage
-            key={`${trick.id}:${state.rider}:${state.obstacle}:${fall ?? 'landed'}`}
+            key={`${trick.id}:${state.rider}:${state.obstacle}:${bankRide}:${fall ?? 'landed'}`}
             robot={RIDER}
             trick={trick}
             rider={state.rider}
@@ -283,6 +289,7 @@ export default function DreamTricks({ initialSearch = '' }: { initialSearch?: st
             set={state.set}
             rail={state.rail}
             obstacle={state.obstacle}
+            bankRide={bankRide}
             skater={state.skater}
             fall={fall}
             duration={timeline.duration}
@@ -373,6 +380,19 @@ export default function DreamTricks({ initialSearch = '' }: { initialSearch?: st
                     ))}
                   </select>
                 </label>
+
+                {picksBankRide(state) && (
+                  <div className="dream-field">
+                    <span className="dream-field-label">On the bank</span>
+                    <Choice
+                      label="On the bank"
+                      options={BANK_RIDES}
+                      value={bankRide}
+                      onChange={(nextBankRide) => set({ bankRide: nextBankRide })}
+                      name={(option) => BANK_RIDE_LABELS[option]}
+                    />
+                  </div>
+                )}
 
                 {/* The ways to change the grind, after the grind itself. */}
                 {grinding && (

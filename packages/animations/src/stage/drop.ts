@@ -1,4 +1,4 @@
-import { FALL_T, LAND_T, ROLL_IN, boardSweep, flightTime, type AttemptTimeline } from '../motion/trick';
+import { FALL_T, LAND_T, ROLL_IN, boardSweep, catchFraction, flightTime, type AttemptTimeline } from '../motion/trick';
 import { resolveSkateStyle } from '../motion/style';
 import type { SkateStyle, Stance } from '../types';
 import { rad, smoothstep } from '../math';
@@ -6,7 +6,7 @@ import { WHEEL_X } from '../board/board';
 import { TIP_X } from '../board/deck';
 import { FOOT, GRAVITY, INCH } from '../units';
 import { STEP_OFF_T, stepOffAt } from '../motion/fall/stepOff';
-import { landingYaw, terrainSurface, type DropTerrain } from '../sets/terrain';
+import { landingYaw, terrainSurface, type BankRide, type DropTerrain } from '../sets/terrain';
 
 /**
  * The planner for any drop: the flight down a spot's terrain (sets/terrain.ts),
@@ -62,6 +62,10 @@ export interface StairPlan {
   rolloutLift: readonly number[] | null;
   /** Touchdowns after rolling off an edge: clock time, and the speed the deck meets the ground with (square to it). */
   ledges: readonly { t: number; impact: number }[];
+  /** Clock time the contact wheels leave a raised bank edge (Miami's slab); null without one. */
+  lip: number | null;
+  /** How the rider rides a bank landing: all four wheels, manual, or nose manual. */
+  bankRide: BankRide;
   /** Clock time of the pop (the tail, or the leading end of a nollie or fakie, striking short of the lip) and of touchdown. */
   pop: number;
   /** Where the board's middle is at the pop, down the stairs and across them. */
@@ -130,7 +134,8 @@ export function trickPop(terrain: DropTerrain, base?: string): number | null {
   return base === undefined ? Math.max(pops.along, pops.across, pops.wrap) : pops[boardSweep(base)];
 }
 
-export function planStairs(style: Pick<SkateStyle, 'popHeight'>, landed: boolean, terrain: DropTerrain, stance: Stance = 'regular', base?: string): StairPlan {
+export function planStairs(style: Pick<SkateStyle, 'popHeight'>, landed: boolean, terrain: DropTerrain, stance: Stance = 'regular', base?: string, bankRide: BankRide = 'ride'): StairPlan {
+  const ride: BankRide = landed && terrain.manuals ? bankRide : 'ride';
   const popHeight = trickPop(terrain, base) ?? Math.max(style.popHeight, terrain.pop ?? 0);
   const rise = Math.sqrt(2 * GRAVITY * POP_RISE * popHeight);
   const landingX = terrain.run + terrain.landPast;
@@ -150,11 +155,15 @@ export function planStairs(style: Pick<SkateStyle, 'popHeight'>, landed: boolean
   const land = pop + flight;
   let rollout: number[] | null = null;
   let rolloutLift: number[] | null = null;
+  let lip: number | null = null;
   const ledges: { t: number; impact: number }[] = [];
   if (terrain.slope && landed) {
     rollout = [landingX];
     rolloutLift = [terrain.ground(landingX)];
     const gradient = -terrain.slope(landingX);
+    // In a manual or nose manual the rolling support is the contact truck, so the board
+    // stays supported on a raised slab until that truck rolls past the lip.
+    const contact = ride === 'ride' ? 0 : (ride === 'manual' ? -WHEEL_X : WHEEL_X) / Math.hypot(1, gradient);
     // Impact removes velocity normal to the bank; downhill momentum survives.
     // Wheels face downhill at touchdown. Impact scrubs the cross-bank component.
     let downhillSpeed = (velocity.x + (GRAVITY * flight - rise) * gradient) / Math.hypot(1, gradient);
@@ -167,7 +176,7 @@ export function planStairs(style: Pick<SkateStyle, 'popHeight'>, landed: boolean
         air.y -= GRAVITY / ROLLOUT_HZ;
         x += air.x / ROLLOUT_HZ;
         y += air.y / ROLLOUT_HZ;
-        const floor = terrain.ground(x);
+        const floor = contact ? Math.min(terrain.ground(x), terrain.ground(x + contact)) : terrain.ground(x);
         if (y <= floor) {
           // Back down: the hit scrubs the speed square to the ground, as on the bank.
           const slope = -terrain.slope(x);
@@ -178,7 +187,7 @@ export function planStairs(style: Pick<SkateStyle, 'popHeight'>, landed: boolean
           air = null;
         }
       } else {
-        const slope = -terrain.slope(x);
+        const slope = -terrain.slope(contact ? x + contact : x);
         const n = Math.hypot(1, slope);
         downhillSpeed += GRAVITY * slope / n / ROLLOUT_HZ;
         const dx = downhillSpeed / n / ROLLOUT_HZ;
@@ -186,11 +195,13 @@ export function planStairs(style: Pick<SkateStyle, 'popHeight'>, landed: boolean
         // curving into the flat stays under it; a ledge falls away from it.
         const along = y - slope * dx;
         x += dx;
-        const floor = terrain.ground(x);
-        if (floor < along - LEDGE) {
+        const checkFloor = terrain.ground(x + contact);
+        const expected = along - slope * contact;
+        if (checkFloor < expected - LEDGE) {
+          if (lip == null) lip = land + (i + 1) / ROLLOUT_HZ;
           air = { x: downhillSpeed / n, y: -downhillSpeed * slope / n };
           y = along;
-        } else y = floor;
+        } else y = contact ? checkFloor + slope * contact : checkFloor;
       }
       rollout.push(x);
       rolloutLift.push(y);
@@ -204,6 +215,8 @@ export function planStairs(style: Pick<SkateStyle, 'popHeight'>, landed: boolean
     rollout,
     rolloutLift,
     ledges,
+    lip,
+    bankRide: ride,
     pop,
     takeoff,
     land,
@@ -342,6 +355,42 @@ function flightClock(plan: StairPlan, u: number): number {
   return s * u + ahead * (1 - k * k * (3 - 2 * k));
 }
 
+/**
+ * The flatground clock the trick's rotation turns on at a moment on the
+ * stairs (computeFrame's spinT): the stair clock, but stretched evenly from
+ * pop to touchdown. The strike's head start is for the pop's snap; riding
+ * it, the flip and shuv left the pop at flatground speed and then slowed
+ * through the middle of the flight as the clock gave the time back, where a
+ * board in the air turns at one pace until it's caught.
+ */
+export function spinClock(plan: StairPlan, t: number): number {
+  if (t <= plan.pop || t >= plan.land) return stairClock(plan, t);
+  return ROLL_IN + (plan.clockFlight / plan.flight) * (t - plan.pop);
+}
+
+/**
+ * How much of a longer hang a trick's own pace keeps up with: 0, and it is
+ * stretched over the whole flight, done as far down a big drop as down a
+ * small one; 1, and it turns as fast as on the flat however far there is to
+ * fall.
+ */
+const PACE_KEPT = 0.25;
+
+/**
+ * The style a trick is ridden with down the drop: the rider's own, turning
+ * the board a little quicker the longer the hang. A flick is as hard off the
+ * top of a set as on the flat, and nothing in the air slows the board, so the
+ * catch comes earlier in a long flight, not at the same share of every one:
+ * stretched evenly, a kickflip down twenty stairs was only round with more
+ * than half the drop behind it. A style's rotationSpeed is what sets the
+ * catch (trick.ts catchFraction), so the feet and a guided catch take the
+ * board when it is done. A kick-out is left on the even pace (stage.ts).
+ */
+export function dropStyle(plan: Pick<StairPlan, 'flight' | 'clockFlight'>, style: SkateStyle): SkateStyle {
+  const stretch = Math.max(1, plan.flight / plan.clockFlight);
+  return { ...style, rotationSpeed: style.rotationSpeed * stretch ** PACE_KEPT };
+}
+
 /** A rollout sample's value at clock time `t` after touchdown. */
 function alongRollout(values: readonly number[], plan: StairPlan, t: number): number {
   const at = Math.max(0, (t - plan.land) * ROLLOUT_HZ);
@@ -397,9 +446,17 @@ export function stairLift(plan: StairPlan, t: number, rise: number, distance?: n
  * the extra impact the drop puts through the legs.
  */
 export function landingImpact(plan: StairPlan, rise: number): number {
+  return Math.max(0, touchdownSpeed(plan) - (4 * rise) / plan.flight);
+}
+
+/**
+ * The speed (world units a second) the deck meets its landing with, square
+ * to it: all of the fall onto the flat, less onto a bank that falls away
+ * under the rider, more onto one that rises to meet them.
+ */
+export function touchdownSpeed(plan: StairPlan): number {
   const slope = -(plan.terrain.slope?.(plan.terrain.run + plan.terrain.landPast) ?? 0);
-  const normalSpeed = (GRAVITY * plan.flight - plan.rise - plan.velocity.x * slope) / Math.hypot(1, slope);
-  return Math.max(0, normalSpeed - (4 * rise) / plan.flight);
+  return (GRAVITY * plan.flight - plan.rise - plan.velocity.x * slope) / Math.hypot(1, slope);
 }
 
 /** Drops at or under this land without a jolt; one this high lands the hardest. */
@@ -592,11 +649,14 @@ export type StairTimeline = AttemptTimeline;
  * base (where the drop sets each trick's pop).
  */
 export function stairTimeline(style: SkateStyle | undefined, landed: boolean, terrain: DropTerrain, stance: Stance = 'regular', base?: string): StairTimeline {
-  const plan = planStairs(resolveSkateStyle(style), landed, terrain, stance, base);
+  const resolved = resolveSkateStyle(style);
+  const plan = planStairs(resolved, landed, terrain, stance, base);
+  const peakFrac = (plan.rise / GRAVITY) / plan.flight;
+  const caughtAt = Math.min(0.95, Math.max(peakFrac + 0.05, catchFraction(dropStyle(plan, resolved))));
   return {
     pop: plan.pop,
     peak: plan.pop + plan.rise / GRAVITY,
-    catch: plan.pop + plan.flight * 0.88,
+    catch: plan.pop + plan.flight * caughtAt,
     land: plan.land,
     end: plan.end,
   };

@@ -69,20 +69,36 @@ interface Spec {
   tilt: number;
   /**
    * Caught short of its shuv, the feet guiding the last of it round to
-   * touchdown (guideShort), as a board turning under a square rider is down
-   * a drop. There the long hang would otherwise leave the board finished,
-   * hanging, before the feet come down on it. The stage sets it for a gap.
+   * touchdown (guideShort), for a board turning under a square rider. The
+   * stage sets it for flatground and gap tricks so the board doesn't sit
+   * finished in the air before touchdown.
    */
   guided: boolean;
+  /**
+   * A pressure flip: nothing flicks. The popping foot, set in the toeside
+   * pocket of its end, drives that corner down into the ground and back,
+   * and that one press rolls the deck, turns it and stands it up together.
+   * The other foot only lifts straight up out of its way and comes back
+   * last, so the popping foot catches it (stance.ts trickMechanics, the
+   * rig's pressHold). An inward heelflip turns the same way round, but
+   * popped and levelled, its roll flicked off the other foot's heel.
+   */
+  pressure: boolean;
 }
 
 /**
  * The most of its shuv a guided catch (Spec.guided) leaves the board to turn
  * (degrees): about as far as the legs can steer a deck under hips that stay
- * square. A 360 flip down a big set is caught 20–40° short of round and
- * guided the rest of the way into the landing.
+ * square. A 360 flip is caught up to 45° short of round and guided the rest
+ * of the way into the landing.
  */
-const GUIDE_MAX = 35;
+const GUIDE_MAX = 45;
+/**
+ * Ease-out exponent for the guided turn from catch to touchdown: the feet
+ * check the board's free spin on catch and steer the remaining angle smoothly
+ * to zero angular speed at touchdown instead of dumping it right after catch.
+ */
+const GUIDE_EASE = 1.6;
 
 /**
  * Share of the catch clock a counter shuv's trick is caught by
@@ -99,6 +115,13 @@ const COUNTER_SHUV_TURNED = 0.4;
 const HARDFLIP_TILT = 55;
 /** The heel flick keeps an inward heel's shuv much flatter than a hardflip. */
 const INWARD_HEEL_TILT = 20;
+/**
+ * A pressure flip's. The press that rolls the deck is the one that pitches
+ * its nose up, and no front foot levels it, so it always goes some way up on
+ * end: more than the inward heelflip it otherwise turns as, less than a
+ * hardflip, which is kicked down between the legs.
+ */
+const PRESSURE_TILT = 35;
 /** A 360 hardflip's lean: its whole turn stands the deck on end twice. */
 const HARDFLIP_360_TILT = 40;
 /** A 360 inward heelflip's: the heel's flatter flick keeps more of it level. */
@@ -141,7 +164,7 @@ const TRICK_MOTIONS: Readonly<Record<string, TrickMotion>> = {
   'Hardflip': { flips: 1, yaw: 180, flipDir: 1, spinDir: -1, tilt: HARDFLIP_TILT },
   'Dolphin Flip': { flips: 1, yaw: 180, flipDir: 1, spinDir: 1, forwardFlip: true },
   'Varial Heelflip': { flips: 1, yaw: 180, flipDir: -1, spinDir: -1 },
-  'Pressure Flip': { flips: 1, yaw: 180, flipDir: -1, spinDir: 1 },
+  'Pressure Flip': { flips: 1, yaw: 180, flipDir: -1, spinDir: 1, tilt: PRESSURE_TILT, pressure: true },
   'Inward Heelflip': { flips: 1, yaw: 180, flipDir: -1, spinDir: 1, tilt: INWARD_HEEL_TILT },
   '360 Flip': { flips: 1, yaw: 360, flipDir: 1, spinDir: 1 },
   '360 Double Kickflip': { flips: 2, yaw: 360, flipDir: 1, spinDir: 1 },
@@ -224,6 +247,7 @@ function specFor(trick: Trick): Spec {
     counterShuv: false,
     tilt: 0,
     guided: false,
+    pressure: false,
   };
   const spec = { ...base, ...TRICK_MOTIONS[trick.base] };
   return { ...spec, bodySpinDir: spec.bodySpinDir || spec.spinDir };
@@ -255,16 +279,12 @@ function guideShort(spec: Spec, caughtAt: number): number {
 /**
  * 0 → 1: how far round its shuv a guided board is `p` of the way through the
  * flight. It turns steadily to `short` degrees short by the catch, then
- * slows under the feet and stops, round, at touchdown. The turn left goes as
- * a power of the flight left, the one that keeps the board's pace through
- * the catch: 2, a steady slowing, unless GUIDE_MAX has held the short down,
- * when the feet slow it harder as they take it and ease it in after.
+ * slows under the feet along GUIDE_EASE and stops, round, at touchdown.
  */
 function guidedShuv(spec: Spec, p: number, short: number, caughtAt: number): number {
   const steady = 1 - short / spec.yaw;
   if (p <= caughtAt) return (steady * p) / caughtAt;
-  const k = (steady * spec.yaw * (1 - caughtAt)) / (short * caughtAt);
-  return 1 - (short / spec.yaw) * (1 - clamp01((p - caughtAt) / (1 - caughtAt))) ** k;
+  return 1 - (short / spec.yaw) * (1 - clamp01((p - caughtAt) / (1 - caughtAt))) ** GUIDE_EASE;
 }
 
 /**
@@ -406,6 +426,27 @@ function lateScoopHold(spec: Spec, flight: number, style: Readonly<SkateStyle>):
   if (push <= 0) return 0;
   return smoothstep(clamp01(push / 0.15)) * (1 - smoothstep(clamp01((push - LATE_SHUV_LET_GO) / (1 - LATE_SHUV_LET_GO))));
 }
+
+/** Whether a foot flicks the trick's flip: every flip but a pressure flip's, which is pressed. */
+const flicks = (spec: Spec) => spec.flipDir !== 0 && !spec.pressure;
+
+/**
+ * Share of its turn a pressure flip's foot stays on the corner it presses,
+ * and by which it has let go: it drives the tail down and back until the
+ * board is spinning, a quarter of the way round, and only then comes up.
+ */
+const PRESS_HELD = 0.1;
+const PRESS_LET_GO = 0.26;
+
+/**
+ * 1 → 0: how firmly a pressure flip's popping foot is still on the corner it
+ * presses, `rotation` (0 → 1) of the way round, `flight` of the way through
+ * the air. 0 for any other trick.
+ */
+function pressHold(spec: Spec, flight: number, rotation: number): number {
+  if (!spec.pressure || flight < 0 || flight >= 1) return 0;
+  return 1 - smoothstep(clamp01((rotation - PRESS_HELD) / (PRESS_LET_GO - PRESS_HELD)));
+}
 const LAND_T = 0.95 * SPEED_SCALE;
 // Falls share the landing's "impact → settle" budget so a miss doesn't feel
 // like a second, slower animation system. A touch longer than LAND_T for the
@@ -419,8 +460,16 @@ const KICK_OUT_DROP_T = 3;
 const SLIP_BACK_T = 2;
 /** Down a drop: the slide's a long one. */
 const SLIP_BACK_DROP_T = 2.6;
-/** Time after wheel contact for a sideways skid, fall and slide to rest. */
-export const WASH_OUT_T = 1.65;
+/**
+ * Seconds after wheel contact a wash out (stage/washOutFrame.ts) has the rider down on one hip and starting to tumble, and
+ * by when the ground has stopped them, back on their feet.
+ */
+export const WASH_OUT_ROLL_START = 0.42;
+export const WASH_OUT_ROLL_END = 1.6;
+/** Seconds the rider takes to stand up out of the squat they come up into; they start as they stop. */
+export const WASH_OUT_STAND_T = 0.65;
+/** The fall, the tumble, standing up and a look after the board. */
+export const WASH_OUT_T = WASH_OUT_ROLL_END + WASH_OUT_STAND_T + 0.5;
 const HOLD = 0.35 * SPEED_SCALE; // freeze on the final frame before onDone
 
 /** The moments of an attempt (seconds): the pop, the top of the hop, the catch, touchdown, and the end. */
@@ -434,12 +483,13 @@ export interface AttemptTimeline {
 
 /** A flatground trick's moments for a robot's style (its pop sets the hang time); a kick-out or a slip back runs on past touchdown. */
 export function flatTimeline(style: Readonly<SkateStyle> | undefined, landed = true, kickOut = false, slipBack = false): AttemptTimeline {
-  const flight = flightTime(resolveSkateStyle(style));
+  const resolved = resolveSkateStyle(style);
+  const flight = flightTime(resolved);
   const land = ROLL_IN + flight;
   return {
     pop: ROLL_IN,
     peak: ROLL_IN + flight / 2,
-    catch: ROLL_IN + flight * 0.88,
+    catch: ROLL_IN + flight * Math.min(0.95, catchFraction(resolved)),
     land,
     end: land + (landed ? LAND_T : kickOut ? KICK_OUT_T : slipBack ? SLIP_BACK_T : FALL_T),
   };
@@ -506,8 +556,13 @@ interface Frame {
    *  dive, bodyYawDeg = skater around the vertical axis; a counter shuv
    *  and a guided catch also name their shuvDeg (RawTrickRotation). */
   spin3d: { flipDeg: number; yawDeg: number; forwardPitchDeg: number; bodyYawDeg: number; shuvDeg?: number };
-  /** Shared phase clocks for renderer-only motion such as lateral flick. */
-  motion: { flight: number; rotation: number };
+  /**
+   * Shared phase clocks for renderer-only motion such as lateral flick:
+   * `flight` of the way through the air, `rotation` of the way round, and
+   * `spin`, the share of the flight the rotation's own clock is at (the
+   * same as `flight` unless computeFrame was given a `spinT`).
+   */
+  motion: { flight: number; rotation: number; spin: number };
   footL: Pt;
   footR: Pt;
   armFront: number;
@@ -593,6 +648,18 @@ function feetForFlip(
     return fromPopAndFlick(
       { x: popBaseX, y: baselineY - lift * 6 },
       { x: flickBaseX + flickOutward * 6 * up * (1 - down), y: baselineY - 30 * up * (1 - down) },
+    );
+  } else if (spec.pressure) {
+    // Pressure flip: nothing flicks. The popping foot stays low on the
+    // corner it presses (the rig keeps it there: pressHold), then follows the
+    // other foot up and is back down first, to catch it. The other foot is
+    // sucked straight up off the pop, no slide and no reach, and held up
+    // until the board has come round.
+    const up = smoothstep(clamp01(p / 0.22));
+    const back = smoothstep(clamp01((p - 0.8) / 0.2));
+    return fromPopAndFlick(
+      { x: popBaseX, y: baselineY - lift * 14 * (1 - frontFootCatchPlant(p)) },
+      { x: flickBaseX, y: baselineY - 24 * up * (1 - back) },
     );
   } else if (spec.flips && spec.yaw && !spec.forwardFlip && spec.yaw < 360) {
     // Varial / hardflip: kickflip-style flick + mild scoop. Dolphin keeps the
@@ -726,6 +793,15 @@ function computeFrame(
   skateStyle: Readonly<SkateStyle> = DEFAULT_SKATE_STYLE,
   /** Turn a 180 shuv at one speed to its catch, as a hop onto or off a bar does, instead of easing into it. */
   evenShuv = false,
+  /**
+   * The clock the board's flip and shuv and the body's spin turn on, where
+   * it isn't `t`. Down a drop the pop snaps at flatground speed and the rest
+   * of the flight catches up with it (stage/drop.ts flightClock), but a board
+   * in the air turns at one pace: flicked or scooped, nothing speeds it up or
+   * slows it down until the feet take it. The feet that flick and catch it
+   * go by this clock too.
+   */
+  spinT = t,
 ): Frame {
   let boardX = X0;
   let boardY = GROUND;
@@ -750,6 +826,7 @@ function computeFrame(
   let bodyYawDeg = 0;
   const flipT = flightTime(skateStyle);
   const flightProgress = (t - ROLL_IN) / flipT;
+  const spinProgress = (spinT - ROLL_IN) / flipT;
   let rotationProgress = 0;
 
   const popAngle = spec.nollie ? 60 : -60;
@@ -805,17 +882,18 @@ function computeFrame(
     // under-rotated at p=1 and snap into the landed pose on the next frame.
     const catchAt = catchFraction(skateStyle);
     const caughtAt = spec.counterShuv ? catchAt * COUNTER_SHUV_CATCH : catchAt;
-    const catchP = clamp01(p / caughtAt);
+    const turning = clamp01(spinProgress);
+    const catchP = clamp01(turning / caughtAt);
     // A "late" shuvit holds the board flat off the pop, then whips the rotation
     // through in the back half of the flight (the late scoop). Its yaw runs on a
     // delayed clock; everything else (pop arc, catch) stays on catchP.
     // A late shuv runs on its own clock (lateShuvClock): pushed round by the
     // popping foot, then turning evenly until it's caught just before touchdown.
-    const lateShuv = spec.late && !spec.flips ? lateShuvClock(p, skateStyle) : null;
+    const lateShuv = spec.late && !spec.flips ? lateShuvClock(turning, skateStyle) : null;
     const rawSpinP = lateShuv
       ? lateShuv.turn
       : spec.late
-        ? clamp01((p - 0.38) / (0.30 / skateStyle.rotationSpeed))
+        ? clamp01((turning - 0.38) / (0.30 / skateStyle.rotationSpeed))
         : catchP;
     // Full shuvs use the tre flip's immediate, linear scoop clock.
     // Only 180 shuvs retain the eased spin into their catch, on flatground: a
@@ -829,7 +907,7 @@ function computeFrame(
     // catch. The flip, and the shuv's own turn about its leaning axis, are
     // done by then, as any catch's are.
     const short = guideShort(spec, caughtAt);
-    const shuvP = short ? guidedShuv(spec, p, short, caughtAt) : spinP;
+    const shuvP = short ? guidedShuv(spec, turning, short, caughtAt) : spinP;
     
     // Shank: the trick dies mid-rotation. Flip and body spin (yaw) share the
     // same per-attempt progress (35–90%) so an under-rotated kickflip 180
@@ -854,7 +932,7 @@ function computeFrame(
     // has the whole rider's momentum behind it: it turns steadily until
     // touchdown, carrying the board round with it, and never stops in the air.
     // A counter shuv's turn eases in round the trick and on past its catch.
-    const bodyP = spec.counterShuv ? counterTurnProgress(p, caughtAt) : p;
+    const bodyP = spec.counterShuv ? counterTurnProgress(turning, caughtAt) : turning;
     const boardYaw = boardYawDeg(spec, shuvP, bodyP);
     if (spec.yaw) {
       const c = Math.cos(rad(boardYaw * shankYawScale));
@@ -1230,7 +1308,7 @@ function computeFrame(
     board: { x: boardX, y: boardY, rot: boardRot, sx, sy, griptape: sy >= 0 },
     body: { x: bodyX, y: bodyY, sx: bodySX, rot: bodyRot },
     spin3d: { flipDeg, yawDeg, forwardPitchDeg, bodyYawDeg, ...((spec.counterShuv || guidesShuv(spec, catchFraction(skateStyle))) && { shuvDeg }) },
-    motion: { flight: flightProgress, rotation: rotationProgress },
+    motion: { flight: flightProgress, rotation: rotationProgress, spin: spinProgress },
     footL,
     footR,
     armFront,
@@ -1246,6 +1324,8 @@ export {
   computeFrame,
   catchFraction,
   lateScoopHold,
+  flicks,
+  pressHold,
   guidesShuv,
   knee,
   clampFootReach,

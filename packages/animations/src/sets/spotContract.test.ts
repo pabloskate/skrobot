@@ -1,7 +1,7 @@
 import { Mesh } from 'three';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SKATE_STYLE } from '../motion/style';
-import { TRICK_BASES } from '../motion/trick';
+import { TRICK_BASES, catchFraction } from '../motion/trick';
 import { routeHeight } from '../stage/drop';
 import { planStage, stageFrame } from '../stage/stage';
 import { RIDERS, STANCES, SWEEP_TIMEOUT, isFiniteFrame, sweep, sweepHz, trickNamed, wheelClearance } from '../testing';
@@ -94,6 +94,22 @@ describe.each(STAGE_SETS.map((spot) => [spot.id, spot] as const))('spot contract
       });
       expect(problems.slice(0, 10)).toEqual([]);
     }, SWEEP_TIMEOUT);
+
+    it('has a kickflip round sooner in the flight the longer it hangs, and never later than on the flat', () => {
+      const level = catchFraction(DEFAULT_SKATE_STYLE);
+      for (const rider of RIDERS) {
+        const stage = attempt(set, 'Kickflip', { rider });
+        const { pop, flight, clockFlight } = stage.stairs!;
+        const caughtAt = catchFraction(stage.style);
+        // A flick is as hard off a drop as on the flat: the catch is no later in a long flight, and well before touchdown.
+        expect(caughtAt).toBeLessThanOrEqual(level);
+        if (flight > 1.2 * clockFlight) expect(caughtAt).toBeLessThan(level - 0.03);
+        expect(caughtAt).toBeGreaterThan(0.6);
+        const flipped = (q: number) => Math.abs(stageFrame(stage, pop + q * flight, 1).rig.board.flipDeg);
+        expect(flipped(caughtAt + 1e-6)).toBeCloseTo(360, 3);
+        expect(flipped(caughtAt - 0.03)).toBeLessThan(355);
+      }
+    });
 
     it('rides a gap trick away finite, with its wheels on the landing', () => {
       const terrain = spot.terrain!;

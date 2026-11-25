@@ -89,16 +89,19 @@ export function resolveRiderMechanics(
 }
 
 /**
- * The rider's mechanics for one trick. A late flip is ollied flat first,
- * then flipped by the popping foot coming back for the board (the back foot
- * off the tail, a nollie's front foot off the nose): that foot flicks, not
- * the other one.
+ * The rider's mechanics for one trick: which foot flips the board. A late
+ * flip is ollied flat first, then flipped by the popping foot coming back
+ * for the board (the back foot off the tail, a nollie's front foot off the
+ * nose): that foot flicks, not the other one. A pressure flip is flipped by
+ * the popping foot too, pressing its corner of the board down (trick.ts
+ * Spec.pressure): it sets up for the flip, and the other foot does nothing.
  */
 export function trickMechanics(
   mechanics: RiderMechanics,
-  spec: { readonly late: boolean; readonly flips: number },
+  spec: { readonly late: boolean; readonly flips: number; readonly pressure: boolean },
 ): RiderMechanics {
-  if (!spec.late || !spec.flips || mechanics.flickFoot === mechanics.popFoot) return mechanics;
+  const popFlips = spec.pressure || (spec.late && spec.flips > 0);
+  if (!popFlips || mechanics.flickFoot === mechanics.popFoot) return mechanics;
   return { ...mechanics, flickFoot: mechanics.popFoot };
 }
 

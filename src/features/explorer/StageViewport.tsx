@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
 import { setInfo, useSoundEffects } from '@skrobot/animations';
-import type { Obstacle, RailChoice, RiderStance, Robot, SceneCamera, Skater, StageSet, Trick, TripodId } from '@skrobot/animations';
+import type { BankRide, Obstacle, RailChoice, RiderStance, Robot, SceneCamera, Skater, StageSet, Trick, TripodId } from '@skrobot/animations';
 import { TrickScene3D } from '@skrobot/animations/three';
 import { ZOOM_STEP, stageOutcome, turnCamera, zoomBy, type Outcome } from './explorer';
 import type { Playhead } from './usePlayhead';
@@ -40,6 +40,8 @@ export interface StageScene {
   rail: RailChoice;
   /** At a spot with several ways down, what a flatground trick goes over. */
   obstacle: Obstacle;
+  /** On a bank that supports it, whether the landing is ridden on four wheels, manual, or nose manual. */
+  bankRide?: BankRide;
   /** Who skates: the robot, the realistic human, or the alien. */
   skater: Skater;
   /** The attempt missed instead of landed: kicked out, or jumped off a rail (see Outcome). Absent lands it. */
@@ -226,6 +228,7 @@ export default function StageViewport({ scene, playhead, rate, onCamera, onZoom,
             set={scene.set}
             rail={scene.rail}
             obstacle={scene.obstacle}
+            bankRide={scene.bankRide}
             skater={scene.skater}
             sound={sound && playhead.playing && !loading}
             onDone={ignoreDone}

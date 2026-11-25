@@ -1,6 +1,7 @@
 import { grindSpeed, travel } from '../motion/grind';
 import { ROLL_IN, flightTime } from '../motion/trick';
-import { stairSpeed } from '../stage/drop';
+import { stairSpeed, touchdownSpeed } from '../stage/drop';
+import { GRAVITY } from '../units';
 import type { StagePlan } from '../stage/stage';
 import { boardMotionAt } from '../motion/fall/boardBody';
 import { railBailBoardDown, railBailPlan } from '../stage/railBailFrame';
@@ -21,8 +22,11 @@ export type SoundCue =
   | { kind: 'lock'; at: number }
   /** Popping off the end of the rail. */
   | { kind: 'popOff'; at: number }
-  /** Four wheels back down with the rider on: `weight` 1 off a flatground pop, more off a drop. */
-  | { kind: 'land'; at: number; weight: number }
+  /**
+   * The wheels back down with the rider on: `weight` 1 off a flatground pop, more off a drop, less onto a bank.
+   * All four, unless `oneTruck`: a manual's touchdown, on the two wheels it rides.
+   */
+  | { kind: 'land'; at: number; weight: number; oneTruck?: true }
   /** The board coming down without its rider and clattering away. */
   | { kind: 'crash'; at: number; weight: number };
 
@@ -46,6 +50,20 @@ export interface Soundtrack {
 /** Landing weights off the stairs' nine feet and the bottom of El Toro's handrail. */
 const STAIRS_LANDING = 1.5;
 const HANDRAIL_LANDING = 1.3;
+/** The lightest a touchdown sounds, however gently a bank takes it. */
+const SOFTEST_LANDING = 0.5;
+/** A manual's two wheels roll quieter than all four. */
+const ONE_TRUCK_ROLL = 0.7;
+
+/**
+ * A touchdown's weight on sloping ground, from the speed the deck meets it
+ * with (square to it) against a flatground pop's: a bank falling away under
+ * the rider takes little of the fall (Triangle Bank's slab lands lighter
+ * than flat ground), and the level ground past it takes all of a drop off
+ * its edge. Never heavier than the stairs'.
+ */
+const landingWeight = (speed: number, stage: StagePlan) =>
+  Math.min(STAIRS_LANDING, Math.max(SOFTEST_LANDING, speed / ((GRAVITY * flightTime(stage.style)) / 2)));
 /** A board that got away rolls lighter without its rider, and slows to a stop. */
 const RIDERLESS_ROLL = 0.5;
 const RIDERLESS_STOP = 0.45;
@@ -140,14 +158,22 @@ function attemptSoundtrack(stage: StagePlan): Soundtrack {
   }
   const pop = stairs?.pop ?? ROLL_IN;
   const down = stairs?.land ?? ROLL_IN + flightTime(stage.style);
-  const weight = stairs ? STAIRS_LANDING : 1;
+  const weight = !stairs ? 1 : stairs.terrain.slope ? landingWeight(touchdownSpeed(stairs), stage) : STAIRS_LANDING;
+  // A bank ridden in a manual is landed, and rolled, on one truck.
+  const oneTruck = landed && stairs != null && stairs.bankRide !== 'ride';
+  // Rolling off a bank's raised edge, the wheels are in the air again until they meet the ground past it:
+  // a second touchdown, as hard as that drop.
+  const lip = stairs?.lip ?? Infinity;
+  const ledges = landed && stairs ? stairs.ledges : [];
+  const rolled = wheels(pop, down, landed);
   return {
     cues: [
       { kind: 'pop', at: pop },
-      { kind: landed || stage.fall === 'washout' ? 'land' : 'crash', at: down, weight },
+      landed || stage.fall === 'washout' ? { kind: 'land', at: down, weight, ...(oneTruck && { oneTruck }) } : { kind: 'crash', at: down, weight },
+      ...ledges.map((ledge): SoundCue => ({ kind: 'land', at: ledge.t, weight: landingWeight(ledge.impact, stage) })),
     ],
     slide: false,
-    roll: wheels(pop, down, landed),
+    roll: (t) => (ledges.length && t >= lip && t < ledges[0].t ? 0 : rolled(t) * (oneTruck && t >= down && t < lip ? ONE_TRUCK_ROLL : 1)),
     grind: quiet,
     speed: rolling(stairs ? (t) => stairSpeed(stairs, t) : () => CRUISE, down, landed),
   };

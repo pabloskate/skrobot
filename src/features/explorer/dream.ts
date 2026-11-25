@@ -1,6 +1,7 @@
 import { FOOT, STAGE_SETS, setFlights, setInfo, setLocation, spotStands, wrapOrbitYaw, type Obstacle, type PopEnd, type RailChoice, type SceneCamera, type SpotLine, type StageSet, type TripodSpot } from '@skrobot/animations';
 import {
   DEFAULT_STATE,
+  bankRideOf,
   cameraPreset,
   cameraPresetsFor,
   filmedLine,
@@ -87,9 +88,10 @@ export function dreamLine(state: ExplorerState): DreamLine {
 /** Hit something else at the spot, keeping the trick or grind picked for each. */
 export function withDreamLine(state: ExplorerState, line: DreamLine): ExplorerState {
   const moved = line.set ? withSet(state, line.set) : state;
-  return line.mode === 'flatground'
+  const next = line.mode === 'flatground'
     ? { ...withMode(moved, 'flatground'), obstacle: line.obstacle }
     : { ...withMode(moved, 'grinds'), rail: line.rail, obstacle: line.obstacle };
+  return { ...next, bankRide: bankRideOf(next) };
 }
 
 /** Go to another spot, starting on its first line. */

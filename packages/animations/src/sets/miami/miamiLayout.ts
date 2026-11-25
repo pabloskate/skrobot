@@ -228,6 +228,7 @@ export const MIAMI_BANK_TERRAIN: DropTerrain = {
   ground: miamiGround,
   surface: miamiSurface,
   slope: miamiSlope,
+  manuals: true,
   entry: { x: MIAMI_POP_X, z: 0, yaw: 0 },
   pop: 1.1,
 };

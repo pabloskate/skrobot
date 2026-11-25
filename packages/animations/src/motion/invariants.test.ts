@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   boardYawDeg,
+  flicks,
   computeFrame,
   specFor,
   GROUND,
@@ -21,7 +22,7 @@ import {
   SKATE_STYLE_BOUNDS,
   resolveSkateStyle,
 } from './style';
-import { orientTrickRotation, resolveRiderMechanics } from './stance';
+import { orientTrickRotation, resolveRiderMechanics, trickMechanics } from './stance';
 import type { RiderStance, SkateStyle, Stance, Trick } from '../types';
 import { STANCES } from '../testing';
 
@@ -223,6 +224,24 @@ describe('specFor', () => {
     expect(pressure.yaw).toBe(inwardHeel.yaw);
     expect(pressure.spinDir).toBe(inwardHeel.spinDir);
     expect(pressure.spinDir).toBe(-varialHeel.spinDir);
+  });
+
+  it('a pressure flip is pressed by the popping foot, not flicked, and goes further up on end', () => {
+    for (const stance of STANCES) {
+      const pressure = specFor(trick('Pressure Flip', stance));
+      const inwardHeel = specFor(trick('Inward Heelflip', stance));
+      expect(pressure.pressure).toBe(true);
+      expect(inwardHeel.pressure).toBe(false);
+      expect(flicks(pressure)).toBe(false);
+      expect(flicks(inwardHeel)).toBe(true);
+      expect(pressure.tilt).toBeGreaterThan(inwardHeel.tilt);
+      expect(pressure.tilt).toBeLessThan(specFor(trick('Hardflip', stance)).tilt);
+      for (const rider of ['regular', 'goofy'] as const) {
+        const mechanics = resolveRiderMechanics(rider, stance);
+        expect(trickMechanics(mechanics, pressure).flickFoot).toBe(mechanics.popFoot);
+        expect(trickMechanics(mechanics, inwardHeel).flickFoot).not.toBe(mechanics.popFoot);
+      }
+    }
   });
 
   it.each(['360 Shuvit', 'Frontside 360 Shuvit'])('%s follows a tre flip scoop without the flip', (base) => {
