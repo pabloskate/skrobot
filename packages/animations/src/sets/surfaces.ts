@@ -1,4 +1,5 @@
 import type { Vec3 } from '../camera/view';
+import { mixHex } from '../math';
 import { glslRgb, rgb, SUN } from '../three/materials';
 import { DAYLIGHT, type Bake, type Ink, type Paint } from '../three/bake';
 import { treeHeight, type TreePlacement } from './props/trees';
@@ -65,6 +66,12 @@ export const SURFACE = {
    * `pavers` compiles it; elsewhere a face carrying it is shaded as plain paint.
    */
   pavers: 26,
+  /**
+   * A dry hillside under chaparral, projected from above like turf: golden grass, dark rounded bushes crowding
+   * in drifts with their shade beside them, and pale dirt between. A face's paint says how much brush and bare
+   * dirt it carries (`scrubPaint`). Only a spot whose look sets `scrub` compiles it; elsewhere it is plain paint.
+   */
+  scrub: 27,
 } as const;
 export type SurfaceName = keyof typeof SURFACE;
 
@@ -192,6 +199,11 @@ export interface SpotLook {
    */
   pavers?: { size: number; joint: number; jointColor: string; paint: string; spread?: number };
   /**
+   * The scrub surface (SURFACE.scrub): the dry `grass`, the `brush` (chaparral's dark leaves in sun) and the bare
+   * `dirt` it is mixed from, and `size` the bushes' spread in feet (default 6). Paint each face with `scrubPaint`.
+   */
+  scrub?: { grass: string; brush: string; dirt: string; size?: number };
+  /**
    * Weathering on concrete and painted-render walls baked with `wallQuad` or `wallVertex`, drawn per pixel from
    * where the pixel is on its wall (along it, above its foot, below its top edge): coats of paint in roller
    * patches, paint flaked back to the concrete where boards hit, splash-back at the foot, runs from the top
@@ -260,6 +272,7 @@ export function resolveLook(look: SpotLook) {
     asphalt: look.asphalt,
     sash: look.sash,
     pavers: look.pavers,
+    scrub: look.scrub,
     walls: look.walls,
     foliage: look.foliage ?? false,
   };
@@ -328,10 +341,11 @@ const vec3s = (c: readonly number[]) => `vec3(${c.map((v) => v.toFixed(3)).join(
  * when the spot sets them, and brick, asphalt and sash each only where the spot sets it. Any other solid keeps the stock
  * paint shading, so a face tagged with a surface its spot doesn't configure is plain paint.
  */
-export function lookSurfaceTest(look: Partial<Pick<Look, 'lockers' | 'brick' | 'asphalt' | 'sash' | 'pavers'>>) {
+export function lookSurfaceTest(look: Partial<Pick<Look, 'lockers' | 'brick' | 'asphalt' | 'sash' | 'pavers' | 'scrub'>>) {
   const own = [
     look.brick ? ' || abs(surface - 23.0) < 0.5' : '', look.asphalt ? ' || abs(surface - 24.0) < 0.5' : '',
     look.sash ? ' || abs(surface - 25.0) < 0.5' : '', look.pavers ? ' || abs(surface - 26.0) < 0.5' : '',
+    look.scrub ? ' || abs(surface - 27.0) < 0.5' : '',
   ].join('');
   return `surface > 13.5 && surface < ${look.lockers ? '22.5' : '21.5'}${own}`;
 }
@@ -343,7 +357,7 @@ export function lookSurfaceTest(look: Partial<Pick<Look, 'lockers' | 'brick' | '
  * position in feet, `n` its normal, `world` the stage position.
  * Every feature finer than a pixel fades (grain's own fade, or `resolves`).
  */
-export function surfacesGlsl(look: Pick<Look, 'sky' | 'bounce'> & Partial<Pick<Look, 'propShadows' | 'marks' | 'markDepth' | 'stairs' | 'gum' | 'mortar' | 'lockers' | 'brick' | 'asphalt' | 'sash' | 'pavers' | 'walls'>>) {
+export function surfacesGlsl(look: Pick<Look, 'sky' | 'bounce'> & Partial<Pick<Look, 'propShadows' | 'marks' | 'markDepth' | 'stairs' | 'gum' | 'mortar' | 'lockers' | 'brick' | 'asphalt' | 'sash' | 'pavers' | 'scrub' | 'walls'>>) {
   const flat = [0, 1, 2].map((i) => SUN.y * DAYLIGHT.sunTint[i] + look.sky * DAYLIGHT.skyTint[i]);
   // With prop shadows, glass looks for the boxes its reflection runs into (an eave over the window).
   const reflectBlocked = look.propShadows
@@ -360,7 +374,10 @@ export function surfacesGlsl(look: Pick<Look, 'sky' | 'bounce'> & Partial<Pick<L
   const stairs = look.stairs ? '  if (surface < 15.5) return lookStairWear(lookConcrete(c, q, n), local, n);\n' : '';
   const lockers = look.lockers ? '  if (surface > 21.5) return lookLockers(c, q, n);\n' : '';
   const sash = look.sash ? '  if (surface > 24.5) return lookSash(c, n, world, q, local);\n' : '';
-  // Pavers take the last solid, so they're tested before sash and everything below it.
+  // Scrub takes the last solid, so it's tested before pavers and everything below it; like turf it is projected
+  // from above.
+  const scrub = look.scrub ? '  if (surface > 26.5) return lookScrub(c, local.xz, n);\n' : '';
+  // Pavers take the next, so they're tested before sash and everything below it.
   const pavers = look.pavers ? '  if (surface > 25.5) return lookPavers(c, q, n);\n' : '';
   // Sash, asphalt and brick come before lockers, which take every solid past roofing.
   // Upright, it is a wall of exposed aggregate: the same stones read two and a half times as coarse, without the
@@ -656,7 +673,7 @@ vec3 lookRoofing(vec3 c, vec3 n, vec3 local) {
   return c * (1.0 + 0.22 * ridge - 0.38 * shade);
 }
 
-${look.stairs ? lookStairWearGlsl(look.stairs) : ''}${look.walls ? lookWallWearGlsl(look.walls) : ''}${look.lockers ? lookLockersGlsl(look.lockers) : ''}${look.brick ? lookBrickGlsl(look.brick) : ''}${look.asphalt ? lookAsphaltGlsl(look.asphalt) : ''}${look.sash ? lookSashGlsl(look.sash) : ''}${look.pavers ? lookPaversGlsl(look.pavers) : ''}vec3 lookSurface(vec3 c, float surface, vec2 q, vec3 n, vec3 world, vec3 local) {
+${look.stairs ? lookStairWearGlsl(look.stairs) : ''}${look.walls ? lookWallWearGlsl(look.walls) : ''}${look.lockers ? lookLockersGlsl(look.lockers) : ''}${look.brick ? lookBrickGlsl(look.brick) : ''}${look.asphalt ? lookAsphaltGlsl(look.asphalt) : ''}${look.sash ? lookSashGlsl(look.sash) : ''}${look.pavers ? lookPaversGlsl(look.pavers) : ''}${look.scrub ? lookScrubGlsl(look.scrub) : ''}vec3 lookSurface(vec3 c, float surface, vec2 q, vec3 n, vec3 world, vec3 local) {
   // Turf is projected from above, so a steep bank never stretches it or seams where faces turn.
   if (surface < 14.5) return lookGrass(c, local.xz);
 ${stairs}  if (surface < 15.5) return lookConcrete(c, q, n);
@@ -666,7 +683,7 @@ ${stairs}  if (surface < 15.5) return lookConcrete(c, q, n);
   if (surface < 19.5) return lookSiding(c, q, n);
   // Soil, like turf, is projected from above.
   if (surface < 20.5) return lookSoil(c, local.xz, n);
-${pavers}${sash}${asphalt}${brick}${lockers}  return lookRoofing(c, n, local);
+${scrub}${pavers}${sash}${asphalt}${brick}${lockers}  return lookRoofing(c, n, local);
 }
 `;
 }
@@ -1126,6 +1143,126 @@ vec3 lookSash(vec3 c, vec3 n, vec3 world, vec2 q, vec3 local) {
   ${spans('w', 'hu', columns)}
   ${spans('local.y', 'hy', rows)}
   return mix(glass, ${glslRgb(frame)} * lookDaylight(n), bar);
+}
+`;
+}
+
+/**
+ * The paint for a face of scrub (SURFACE.scrub): `cover` the share of it under brush, `bare` the share of the
+ * open ground that is dirt (each 0-1; together at most 1). The shader reads both back out of the paint.
+ */
+export function scrubPaint(scrub: NonNullable<SpotLook['scrub']>, cover: number, bare: number): string {
+  const c = Math.min(1, Math.max(0, cover)), d = Math.min(1 - c, Math.max(0, bare));
+  return c + d <= 0 ? scrub.grass : mixHex(scrub.grass, mixHex(scrub.brush, scrub.dirt, d / (c + d)), c + d);
+}
+
+/**
+ * A dry hillside under chaparral (SpotLook.scrub, SURFACE.scrub), from the 1997 frames of the slopes round the
+ * water tower gap (refs there: 09, 11, 13, 65, 66): golden grass with pale dirt showing through it, crowded with
+ * dark rounded bushes in drifts, thicker in some stands than others, each bush lit on its sunward side with its
+ * shade thrown on the grass beside it. The face's paint is a mix of the three colours (`scrubPaint`), read back
+ * out of the vertex colour (the unlit paint, vColor, which the look's material declares) so the daylight already
+ * on `c` stays. Every feature fades into the tone it adds before it goes subpixel: far off, a slope is its drifts
+ * of darker and paler tone, as it is in the footage.
+ */
+function lookScrubGlsl({ grass, brush, dirt, size = 6 }: NonNullable<SpotLook['scrub']>) {
+  const g = rgb(grass), b = rgb(brush), d = rgb(dirt);
+  // The least-squares inverse of paint = grass + cover (brush - grass) + bare (dirt - grass).
+  const u = b.map((v, i) => v - g[i]), w = d.map((v, i) => v - g[i]);
+  const dot = (p: readonly number[], q: readonly number[]) => p[0] * q[0] + p[1] * q[1] + p[2] * q[2];
+  const uu = dot(u, u), uw = dot(u, w), ww = dot(w, w), det = uu * ww - uw * uw;
+  const cover = u.map((v, i) => (ww * v - uw * w[i]) / det), bare = w.map((v, i) => (uu * v - uw * u[i]) / det);
+  const vec3n = (c: readonly number[]) => `vec3(${c.map(num).join(', ')})`;
+  // Three scatters of bushes, each a grid turned its own way: knee-high ones, the common size, and big shrubs.
+  const grids = [
+    { cell: 0.7 * size, turn: 0.0, salt: 3.0 },
+    { cell: 1.1 * size, turn: 0.64, salt: 17.0 },
+    { cell: 2.1 * size, turn: -0.37, salt: 41.0 },
+  ];
+  const scatter = grids.map(({ cell, turn, salt }, i) => /* glsl */ `
+  {
+    vec2 p = mat2(${num(Math.cos(turn))}, ${num(Math.sin(turn))}, ${num(-Math.sin(turn))}, ${num(Math.cos(turn))}) * q + ${num(i * 3.7)};
+    // Drawn while a bush is several pixels across; below that, the tone it adds, so none is lost to the edge's
+    // filtering on the way out.
+    float seen = resolves(q, ${num(2 / cell)});
+    vec2 dome; float tone;
+    float bush = lookBush(p, ${num(cell)}, presence, ${num(salt)}, dome, tone);
+    // Its shade on the ground on the side away from the sun, about its height off.
+    float shade = lookBush(p + mat2(${num(Math.cos(turn))}, ${num(Math.sin(turn))}, ${num(-Math.sin(turn))}, ${num(Math.cos(turn))}) * SUN.xz * ${num(0.24 * cell)} / max(SUN.y, 0.3), ${num(cell)}, presence, ${num(salt)}, shadeDome, shadeTone);
+    ground *= 1.0 - 0.3 * mix(SCRUB_AREA * presence * 0.4, shade * (1.0 - bush), seen);
+    float s = sqrt(max(0.0, 1.0 - dot(dome, dome)));
+    vec3 normal = normalize(n * (0.35 + 1.1 * s) + vec3(dome.x, 0.0, dome.y));
+    float lit = mix(0.8, (0.45 + 0.75 * max(dot(normal, SUN), 0.0)) / face, seen);
+    vec3 own = leaves * mix(vec3(1.0), vec3(1.16, 1.15, 1.06), smoothstep(0.55, 0.9, tone)) * (0.86 + 0.24 * fract(tone * 7.3));
+    // Darker at the rim, where the leaves thin over the shadow under it.
+    own *= lit * mix(0.86, 0.74 + 0.26 * s, seen);
+    layers[${i}] = vec4(own, mix(SCRUB_AREA * presence, bush, seen));
+  }`).join('');
+  return /* glsl */ `// Dry hillside scrub: see lookScrubGlsl.
+const vec3 SCRUB_GRASS = ${vec3n(g)}, SCRUB_BRUSH = ${vec3n(b)}, SCRUB_DIRT = ${vec3n(d)};
+// The mean share of a cell a bush covers, where there is one: its radius 0.25 to 0.45 of the cell, its lumpy
+// outline 0.84 of that on average.
+const float SCRUB_AREA = 0.283;
+// One bush in some cells of a grid cell feet square, kept inside its cell, there with odds presence: its cover
+// of the pixel (0-1), where in it the pixel is (dome, unit disc), and a 0-1 tone of its own.
+float lookBush(vec2 p, float cell, float presence, float salt, out vec2 dome, out float tone) {
+  vec2 id = floor(p / cell), f = (fract(p / cell) - 0.5) * cell;
+  float h = hash(id + salt);
+  tone = fract(h * 91.7);
+  dome = vec2(0.0);
+  if (fract(h * 3.17) > presence) return 0.0;
+  float r = cell * (0.25 + 0.2 * fract(h * 7.31));
+  vec2 at = (vec2(fract(h * 13.7), fract(h * 29.3)) - 0.5) * (cell - 2.0 * r);
+  vec2 d = f - at;
+  // A lumpy, ragged outline, never a coin.
+  float a = atan(d.y, d.x);
+  float edge = r * (0.84 + 0.1 * sin(a * 3.0 + h * 40.0) + 0.06 * sin(a * 5.0 + h * 17.0) + 0.05 * sin(a * 11.0 + h * 63.0));
+  dome = d / edge;
+  float dist = length(d) - edge;
+  float aa = max(fwidth(dist), 1e-3);
+  return 1.0 - smoothstep(-aa, aa, dist);
+}
+vec3 lookScrub(vec3 c, vec2 q, vec3 n) {
+  vec3 light = c / max(vColor, vec3(0.02));
+  vec3 paint = vColor - SCRUB_GRASS;
+  float cover = clamp(dot(paint, ${vec3n(cover)}), 0.0, 1.0), bare = clamp(dot(paint, ${vec3n(bare)}), 0.0, 1.0);
+  // Brush crowds in stands tens of feet across with thinner ground between, so the slope reads in drifts.
+  float drift = noise(q * 0.017 + 4.3) * 0.62 + noise(q * 0.053 + 1.1) * 0.38;
+  float stand = clamp(cover * (0.45 + 1.1 * drift), 0.0, 0.95);
+  // Each of the three scatters' odds of a bush in a cell, so that together they cover about that share (at most
+  // 63%; past that the brush closes over into undergrowth, below).
+  float presence = min(1.0, (1.0 - pow(1.0 - stand, 1.0 / 3.0)) / SCRUB_AREA);
+  // Grass, dry, paler and greyer by turns over yards.
+  vec3 straw = SCRUB_GRASS * (0.9 + 0.2 * weather(q * 0.031 + 2.0));
+  straw = mix(straw, straw * vec3(1.06, 1.05, 0.95), smoothstep(0.45, 0.8, noise(q * 0.13 + 5.5)));
+  // Bare dirt showing through the thin grass, more of it where the paint calls for it, drifting over yards.
+  float open_ = noise(q * 0.083 + 6.1) * 0.6 + noise(q * 0.29 + 0.4) * 0.4;
+  float dirt = clamp(bare + 0.9 * (open_ - 0.5), 0.0, 1.0);
+  vec3 soil = SCRUB_DIRT * (0.92 + 0.16 * noise(q * 0.4 + 3.3));
+  vec3 ground = mix(straw, soil, dirt);
+  // Low grey-green herbs and dead brush among the grass, in patches a few feet across.
+  float herbs = smoothstep(0.55, 0.8, noise(q * 0.37 + 9.4) * 0.65 + noise(q * 1.1 + 2.6) * 0.35);
+  ground = mix(ground, mix(ground, SCRUB_BRUSH * 1.25, 0.45), herbs * (0.3 + 0.5 * cover));
+  // Where the stand is thick the bushes run together: the ground between them is low brush in its own shade,
+  // ragged at its edges, so a dense slope reads as one dark mass as it does in the footage.
+  float under = smoothstep(0.36, 0.78, stand + 0.25 * (noise(q * 0.21 + 7.3) - 0.5));
+  ground = mix(ground, SCRUB_BRUSH * 0.66, 0.88 * under);
+  // Straw blades and clumps, close in.
+  vec2 r1 = mat2(0.8, -0.6, 0.6, 0.8) * q, r2 = mat2(0.28, 0.96, -0.96, 0.28) * q;
+  float blades = resolves(q, 3.0);
+  if (blades > 0.0) ground *= 1.0 + blades * (0.16 * (noise(r1 * vec2(3.0, 0.9) + 1.0) - 0.5) + 0.1 * (noise(r2 * 7.0) - 0.5));
+  // The leaves: dark grey-green, broken by twigs and the gaps between leaf clusters where they resolve.
+  vec3 leaves = SCRUB_BRUSH;
+  float twigs = resolves(q, 2.4);
+  if (twigs > 0.0) leaves *= 1.0 + twigs * (0.34 * (noise(r1 * 2.2 + 4.0) - 0.5) - 0.2 * smoothstep(0.35, 0.15, noise(r2 * 5.3 + 1.0)));
+  float face = 0.45 + 0.75 * max(dot(n, SUN), 0.0);
+  vec2 shadeDome; float shadeTone;
+  vec4 layers[3];
+${scatter}
+  // The big shrubs over the common ones over the knee-high ones.
+  vec3 col = ground;
+  for (int i = 0; i < 3; i++) col = mix(col, layers[i].rgb, layers[i].a);
+  return col * light;
 }
 `;
 }

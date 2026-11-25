@@ -66,6 +66,8 @@ export interface SetInfo {
   ledges?: Readonly<Record<'left' | 'right', PlacedLedge>>;
   /** Filmers standing still at the set, beside the crane that follows the rider. */
   tripods: readonly TripodId[];
+  /** The filmer a player's visit opens on; the bottom one where omitted. */
+  opens?: TripodId;
   /** Its card in the players' spot picker; a location without one isn't offered there. */
   card?: SpotCard;
   /** The ways to hit this flight, for the card; the first is where a visit starts. */

@@ -9,6 +9,7 @@ import { defineSpot } from './spot';
 import { SUNSET_SPOT } from './sunset/sunsetSpot';
 import { UC_DAVIS_SPOT } from './ucDavis/ucDavisSpot';
 import { WALLENBERG_SPOT } from './wallenberg/wallenbergSpot';
+import { WATER_TOWER_SPOT } from './waterTower/waterTowerSpot';
 import { WATERFRONT_SPOT } from './waterfront/waterfrontSpot';
 
 /**
@@ -35,6 +36,7 @@ export const SPOTS = [
   MIAMI_SPOT,
   UC_DAVIS_SPOT,
   EMAGE_SPOT,
+  WATER_TOWER_SPOT,
 ] as const;
 
 /** A spot's id. */

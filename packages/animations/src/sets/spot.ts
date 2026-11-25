@@ -1,3 +1,4 @@
+import type { TripodId } from '../camera/camera';
 import type { Handrail } from '../motion/grind';
 import type { DropTerrain } from './terrain';
 import type { SpotFilmers } from './tripods';
@@ -151,6 +152,8 @@ export interface SpotDefinition<Id extends string = string> {
   ledges?: Readonly<Record<'left' | 'right', PlacedLedge>>;
   /** Where its filmers stand (tripods.ts); omitted, the crane films everything here. */
   filmers?: SpotFilmers;
+  /** The filmer a player's visit opens on; the bottom one where omitted. */
+  opens?: TripodId;
   /** Its card in the players' spot picker; a location without one isn't offered there. */
   card?: SpotCard;
   /** The ways to hit this flight, for the card; the first is where a visit starts. */

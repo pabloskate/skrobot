@@ -19,6 +19,7 @@ import { Miami3D } from './miami/miami3d';
 import { Sunset3D } from './sunset/sunset3d';
 import { UcDavis3D } from './ucDavis/ucDavis3d';
 import { Wallenberg3D } from './wallenberg/wallenberg3d';
+import { WaterTower3D } from './waterTower/waterTower3d';
 
 interface Piece {
   group: Object3D;
@@ -39,6 +40,7 @@ const PIECES: Partial<Record<StageSet, () => Piece>> = {
   'uc-davis-gap': () => new UcDavis3D(),
   'carlsbad-gap': () => new Carlsbad3D(),
   'emage-20': () => new Emage3D(),
+  'water-tower-gap': () => new WaterTower3D(),
 };
 
 const LANDMARKS = STAGE_SETS.filter((set) => set.tripods.length > 0).map((set) => set.id);
